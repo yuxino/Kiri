@@ -34,12 +34,13 @@ def find(name, timeout=35, scroll=False):
                 except Exception:
                     pass
         if scroll:
-            # Settings loads asynchronously; keep scrolling until the actual
-            # target is visible instead of assuming one early wheel event stuck.
+            # Wheel over the right gutter of Settings. The middle of the page
+            # contains an independently scrolling OCR profile list, which can
+            # consume wheel events before the page reaches About.
             window = desktop.windows(process=process.pid, visible_only=True)[0]
             window.set_focus()
             bounds = window.rectangle()
-            mouse.scroll(coords=(bounds.left + int(bounds.width() * 0.75),
+            mouse.scroll(coords=(bounds.right - 24,
                                  bounds.top + int(bounds.height() * 0.65)), wheel_dist=-4)
         time.sleep(0.2)
     raise RuntimeError(f"Visible control not found: {name}")
