@@ -312,27 +312,91 @@ def screen_share(approve, label, desktop_reference):
     measurements = {}
     report.setdefault("portal_desktop_mean_errors", {})[label] = measurements
 
+    def chooser_controls():
+        # GTK 4 can leave SHOWING children in the AT-SPI cache after closing.
+        pyatspi.Registry.getDesktop(0).clear_cache()
+        candidates = []
+        diagnostics = []
+        for frame in accessible_nodes():
+            try:
+                # This is the GtkWindow title in GNOME 46 screencastdialog.ui,
+                # not the similarly named button in a Screenshot dialog.
+                if frame.name != "Share Screen" or frame.getRoleName() != "frame":
+                    continue
+                application = frame.getApplication().name
+                if application != "xdg-desktop-portal-gnome":
+                    continue
+                active = frame.getState().contains(pyatspi.STATE_ACTIVE)
+                diagnostic = {"application": application, "window": frame.name,
+                              "role": frame.getRoleName(), "active": active, "buttons": []}
+                diagnostics.append(diagnostic)
+                buttons = {}
+                queue = deque([frame])
+                visited = 0
+                while queue and visited < 500:
+                    node = queue.popleft()
+                    visited += 1
+                    queue.extend(node.getChildAtIndex(i) for i in range(node.childCount))
+                    if node.name not in ("Share", "Cancel") or node.getRoleName() != "push button":
+                        continue
+                    state = node.getState()
+                    action = node.queryAction()
+                    names = [action.getName(i) for i in range(action.nActions)]
+                    enabled = (state.contains(pyatspi.STATE_ENABLED)
+                               or state.contains(pyatspi.STATE_SENSITIVE))
+                    details = {"name": node.name, "role": node.getRoleName(), "enabled": enabled,
+                               "showing": state.contains(pyatspi.STATE_SHOWING), "actions": names}
+                    for key, coordinates in (("screen_bounds_xywh", pyatspi.DESKTOP_COORDS),
+                                             ("window_bounds_xywh", pyatspi.WINDOW_COORDS)):
+                        try:
+                            bounds = node.queryComponent().getExtents(coordinates)
+                            details[key] = [bounds.x, bounds.y, bounds.width, bounds.height]
+                        except Exception as error:
+                            details[key] = str(error)
+                    diagnostic["buttons"].append(details)
+                    if enabled and "click" in names:
+                        buttons[node.name] = (action, names.index("click"), details)
+                if "Share" in buttons and "Cancel" in buttons:
+                    candidates.append((active, len(diagnostics), buttons, diagnostic))
+            except Exception as error:
+                diagnostics.append({"error": str(error)})
+        measurements["windows"] = diagnostics
+        # Prefer the active, then newest dialog if GTK retains a previous one.
+        if candidates:
+            _active, _order, buttons, diagnostic = max(candidates, key=lambda item: item[:2])
+            return buttons, diagnostic
+        return None
+
     def chooser_visible():
-        share = controls("Share", enabled=True, role="push button")
-        if not (share and controls("Cancel", role="push button")):
+        candidate = chooser_controls()
+        if candidate is None:
             return False
         picture = screenshot(f"{label}-screencast-consent.png")
         error = scene_error(picture, reference)
-        bounds = pixel_box((share.x, share.y, share.x + share.width, share.y + share.height))
-        button_difference = ImageChops.difference(picture.crop(bounds), desktop_reference.crop(bounds))
-        button_error = sum(ImageStat.Stat(button_difference).mean) / 3
         measurements["chooser"] = round(error, 4)
-        measurements["share_button"] = round(button_error, 4)
-        # An old Share node plus the countdown is not a newly painted chooser.
-        return error > 10 and button_error > 10
+        # Exclude the central 320 logical pixels containing the 112px countdown
+        # and its 240px error callout. Stale nodes plus a countdown cannot pass.
+        center = desktop_reference.width / args.scale / 2
+        left, top, right, bottom = recording_region
+        side_boxes = ((left, top, center - 160, bottom), (center + 160, top, right, bottom))
+        side_errors = [sum(ImageStat.Stat(ImageChops.difference(
+            picture.crop(pixel_box(box)), desktop_reference.crop(pixel_box(box)))).mean) / 3
+            for box in side_boxes]
+        measurements["outside_countdown"] = [round(value, 4) for value in side_errors]
+        if error > 10 and max(side_errors) > 1.5:
+            return candidate
+        return None
 
-    wait_for(f"{label} real ScreenCast chooser", chooser_visible, timeout=25)
+    buttons, diagnostic = wait_for(f"{label} real ScreenCast chooser", chooser_visible, timeout=25)
     # GNOME selects the sole monitor. Require an operable native control, then
     # prove consent through the real chooser closing and the resulting media.
-    bounds = wait_for(f"{label} consent action", lambda: controls(
-        "Share" if approve else "Cancel", enabled=True, role="push button"))
+    action, index, details = buttons["Share" if approve else "Cancel"]
+    measurements["activated"] = {"window": diagnostic["window"], **details, "action": "click"}
     started = time.monotonic()
-    click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    # GTK 4.14 GetExtents(SCREEN) returns (0, 0, width, height) on Wayland.
+    # Its native GtkButton click action calls gtk_widget_activate instead.
+    if not action.doAction(index):
+        raise RuntimeError(f"{label} native {details['name']} action was rejected")
     move(1200, 760)
     matching_frames = 0
 
