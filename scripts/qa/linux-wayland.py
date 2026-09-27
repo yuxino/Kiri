@@ -325,7 +325,6 @@ def recording_acceptance():
 
     pause(7)  # Let the ordinary completion preview expire before capture.
     references = {"initial": recording_pattern("initial")}
-    staged_before = recording_files(".kiri-media-*.mp4")
     segments_before = recording_files("kiri-recording-*.mp4")
     count_before = len(assets())
     begin_recording()
@@ -340,8 +339,8 @@ def recording_acceptance():
         click(1240, 760)
         begin_recording()
     first_started = screen_share(True, "initial-recording")
-    wait_for("authorized encoder writes frames", lambda: any(
-        path.stat().st_size > 32 for path in recording_files(".kiri-media-*.mp4") - staged_before))
+    # filesink buffers small, static recordings until EOS. Measure from the
+    # consent click and prove frames/timing by decoding the finalized MP4.
     pause(3)
     screenshot("recording-running.png")
     pause_requested = time.monotonic()
@@ -354,11 +353,8 @@ def recording_acceptance():
     pause(3)
     paused_seconds = time.monotonic() - paused_at
     references["resumed"] = recording_pattern("resumed")
-    staged_before = recording_files(".kiri-media-*.mp4")
     subprocess.run([str(args.executable), "--toggle-recording-pause"], check=True, timeout=10)
     second_started = screen_share(True, "resumed-recording")
-    wait_for("resumed encoder writes frames", lambda: any(
-        path.stat().st_size > 32 for path in recording_files(".kiri-media-*.mp4") - staged_before))
     pause(3)
     screenshot("recording-resumed.png")
     stop_requested = time.monotonic()
