@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      linux_candidate_run_id:
+        description: 'Completed build run containing the Linux candidate to recheck'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,6 +21,7 @@ concurrency:
 jobs:
   countdown-ui:
     name: Countdown renderer checks
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -49,6 +56,7 @@ jobs:
 
   test-rust:
     name: Rust tests (macOS)
+    if: github.event_name != 'workflow_dispatch'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -61,6 +69,7 @@ jobs:
 
   build-linux:
     name: Build, test and package Linux (Ubuntu 24.04 / X11)
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -128,6 +137,8 @@ jobs:
           if-no-files-found: warn
       - name: Build Debian package without updater signing
         run: pnpm tauri build --bundles deb --config src-tauri/tauri.linux.conf.json
+      - name: Record the actual source commit and package checksum
+        run: python3 scripts/qa/linux-package-provenance.py write --package-dir src-tauri/target/release/bundle/deb
       - name: Install and inspect the Debian package
         run: |
           packages=(src-tauri/target/release/bundle/deb/*.deb)
@@ -156,14 +167,19 @@ jobs:
         if: ${{ always() && hashFiles('src-tauri/target/release/bundle/deb/*.deb') != '' }}
         with:
           name: kiri-linux-deb
-          path: src-tauri/target/release/bundle/deb/*.deb
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/provenance.json
           retention-days: 5
           if-no-files-found: error
 
   test-linux-wayland:
     name: GNOME Wayland portal checks (Ubuntu 24.04 / scale ${{ matrix.scale }})
     needs: build-linux
-    if: ${{ !cancelled() && needs.build-linux.outputs.deb-artifact-id != '' }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.build-linux.outputs.deb-artifact-id != '') }}
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -176,6 +192,20 @@ jobs:
         with:
           name: kiri-linux-deb
           path: ${{ runner.temp }}/kiri-linux-deb
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.linux_candidate_run_id || github.run_id }}
+          digest-mismatch: error
+      - name: Verify package provenance and unchanged application sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIRI_CANDIDATE_RUN_ID: ${{ inputs.linux_candidate_run_id || github.run_id }}
+          KIRI_LINUX_DEB_DIR: ${{ runner.temp }}/kiri-linux-deb
+          KIRI_LINUX_WAYLAND_QA_DIR: ${{ runner.temp }}/kiri-linux-wayland-review
+        run: |
+          python3 scripts/qa/linux-package-provenance.py verify \
+            --package-dir "$KIRI_LINUX_DEB_DIR" \
+            --output "$KIRI_LINUX_WAYLAND_QA_DIR/package-provenance.json" \
+            --run-id "$KIRI_CANDIDATE_RUN_ID"
       - name: Install the candidate and GNOME desktop-test dependencies
         env:
           KIRI_LINUX_DEB_DIR: ${{ runner.temp }}/kiri-linux-deb
@@ -212,6 +242,7 @@ jobs:
 
   build-macos:
     name: Compile macOS app (${{ matrix.arch }})
+    if: github.event_name != 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -239,6 +270,7 @@ jobs:
 
   build-windows:
     name: Build and test Windows app (Server 2025)
+    if: github.event_name != 'workflow_dispatch'
     runs-on: windows-2025
     env:
       # Keep optimized runtime behavior, with symbols for native crash reports.

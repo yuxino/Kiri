@@ -153,11 +153,13 @@ def accessible_nodes():
         except Exception:
             continue
 
-def controls(name, enabled=False):
+def controls(name, enabled=False, role=None):
     for node in accessible_nodes():
         try:
             state = node.getState()
             if node.name != name or not state.contains(pyatspi.STATE_SHOWING):
+                continue
+            if role is not None and node.getRoleName() != role:
                 continue
             # GTK 4 maps disabled=false to SENSITIVE only; WebKit/GTK 3 also
             # expose ENABLED. Both represent an operable native control.
@@ -297,19 +299,55 @@ def recording_pattern(stage):
     GLib.timeout_add(33, tick)
     click(1240, 760)
     pause()
-    return screenshot(f"recording-source-{stage}.png").crop(pixel_box(recording_region))
+    return screenshot(f"recording-source-{stage}.png")
 
 
-def screen_share(approve, label):
-    wait_for(f"{label} real ScreenCast chooser", lambda: controls("Share") and controls("Cancel"), timeout=25)
-    screenshot(f"{label}-screencast-consent.png")
+def scene_error(picture, reference):
+    difference = ImageChops.difference(picture.crop(pixel_box(recording_region)), reference)
+    return sum(ImageStat.Stat(difference).mean) / 3
+
+
+def screen_share(approve, label, desktop_reference):
+    reference = desktop_reference.crop(pixel_box(recording_region))
+    measurements = {}
+    report.setdefault("portal_desktop_mean_errors", {})[label] = measurements
+
+    def chooser_visible():
+        share = controls("Share", enabled=True, role="push button")
+        if not (share and controls("Cancel", role="push button")):
+            return False
+        picture = screenshot(f"{label}-screencast-consent.png")
+        error = scene_error(picture, reference)
+        bounds = pixel_box((share.x, share.y, share.x + share.width, share.y + share.height))
+        button_difference = ImageChops.difference(picture.crop(bounds), desktop_reference.crop(bounds))
+        button_error = sum(ImageStat.Stat(button_difference).mean) / 3
+        measurements["chooser"] = round(error, 4)
+        measurements["share_button"] = round(button_error, 4)
+        # An old Share node plus the countdown is not a newly painted chooser.
+        return error > 10 and button_error > 10
+
+    wait_for(f"{label} real ScreenCast chooser", chooser_visible, timeout=25)
     # GNOME selects the sole monitor. Require an operable native control, then
     # prove consent through the real chooser closing and the resulting media.
-    bounds = wait_for(f"{label} consent action", lambda: controls("Share" if approve else "Cancel", enabled=True))
+    bounds = wait_for(f"{label} consent action", lambda: controls(
+        "Share" if approve else "Cancel", enabled=True, role="push button"))
     started = time.monotonic()
     click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
     move(1200, 760)
-    wait_for(f"{label} ScreenCast chooser closes", lambda: controls("Share") is None)
+    matching_frames = 0
+
+    def chooser_closed():
+        nonlocal matching_frames
+        # GTK 4 can retain SHOWING children after their window closes. Two
+        # successive real PipeWire frames must instead reveal the unchanged
+        # desktop scene. The same pixel gate also rejects stale chooser nodes
+        # before a new resume permission dialog has actually appeared.
+        error = scene_error(screenshot(f"{label}-consent-closed.png"), reference)
+        measurements["closed"] = round(error, 4)
+        matching_frames = matching_frames + 1 if error <= 1.5 else 0
+        return matching_frames >= 2
+
+    wait_for(f"{label} ScreenCast chooser closes", chooser_closed)
     return started
 
 
@@ -328,21 +366,23 @@ def recording_acceptance():
     from linux_recording_review import discover_video, inspect_recording
 
     pause(7)  # Let the ordinary completion preview expire before capture.
-    references = {"initial": recording_pattern("initial")}
+    initial_desktop = recording_pattern("initial")
+    references = {"initial": initial_desktop.crop(pixel_box(recording_region))}
     segments_before = recording_files("kiri-recording-*.mp4")
     count_before = len(assets())
     begin_recording()
     if args.scenario == "record-deny":
-        screen_share(False, "denied-recording")
+        screen_share(False, "denied-recording", initial_desktop)
         wait_for("ScreenCast denial reaches Kiri", lambda: "ScreenCast was cancelled or denied" in
                  (output / "kiri.log").read_text(errors="replace"))
         pause(2)
-        if len(assets()) != count_before or controls("Share"):
+        if len(assets()) != count_before or scene_error(
+                screenshot("recording-denied.png"), references["initial"]) > 1.5:
             raise RuntimeError("Denied recording saved an asset or repeated the chooser")
         report["checks"].append("real ScreenCast denial saves nothing and releases the recorder")
         click(1240, 760)
         begin_recording()
-    first_started = screen_share(True, "initial-recording")
+    first_started = screen_share(True, "initial-recording", initial_desktop)
     # filesink buffers small, static recordings until EOS. Measure from the
     # consent click and prove frames/timing by decoding the finalized MP4.
     pause(3)
@@ -352,13 +392,14 @@ def recording_acceptance():
     first_segment = wait_for("pause publishes a complete segment", lambda: next(iter(
         recording_files("kiri-recording-*.mp4") - segments_before), None), timeout=30)
     first_duration = discover_video(first_segment, references["initial"].size)
-    references["paused"] = recording_pattern("paused")
+    references["paused"] = recording_pattern("paused").crop(pixel_box(recording_region))
     paused_at = time.monotonic()
     pause(3)
     paused_seconds = time.monotonic() - paused_at
-    references["resumed"] = recording_pattern("resumed")
+    resumed_desktop = recording_pattern("resumed")
+    references["resumed"] = resumed_desktop.crop(pixel_box(recording_region))
     subprocess.run([str(args.executable), "--toggle-recording-pause"], check=True, timeout=10)
-    second_started = screen_share(True, "resumed-recording")
+    second_started = screen_share(True, "resumed-recording", resumed_desktop)
     pause(3)
     screenshot("recording-resumed.png")
     stop_requested = time.monotonic()

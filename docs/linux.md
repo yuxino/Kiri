@@ -211,6 +211,22 @@ desktop images, video, decoded-frame evidence, and service logs even on failure.
 These jobs are configured; passing evidence must come from their exact run.
 They do not establish physical-display, hardware-graphics, or IME acceptance.
 
+To iterate on desktop QA without rebuilding the app, dispatch the `build`
+workflow with `linux_candidate_run_id` set to an earlier build run that produced
+a successful `kiri-linux-deb` artifact. For example, replace `RUN_ID` below
+with that run's numeric ID; use a different `--ref` to test another QA branch:
+
+```bash
+gh workflow run build.yml --ref main -f linux_candidate_run_id=RUN_ID
+```
+
+This mode runs only the four GNOME jobs against the existing package. It
+verifies the package's actual checkout against the selected QA revision and
+rejects changes outside the permitted QA, documentation, and workflow files.
+The report records both revisions, the original run and artifact, the `.deb`
+hash, and the workflow diff. It is a new desktop test of the specified package,
+not a rebuild. Normal push and pull-request workflows still run all checks.
+
 | Gate | Evidence to retain | Status boundary |
 | --- | --- | --- |
 | Rust/frontend checks | Logs for the exact commit | Required on each candidate |
