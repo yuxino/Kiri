@@ -300,8 +300,10 @@ def recording_pattern(stage):
 def screen_share(approve, label):
     wait_for(f"{label} real ScreenCast chooser", lambda: controls("Share") and controls("Cancel"), timeout=25)
     screenshot(f"{label}-screencast-consent.png")
-    # GNOME selects the sole monitor. Never pre-grant portal permissions.
-    bounds = wait_for(f"{label} consent action", lambda: controls("Share" if approve else "Cancel", enabled=True))
+    # GNOME selects the sole monitor. GTK 4's AT-SPI state set does not expose
+    # ENABLED consistently; use the visible native button, then require the
+    # real chooser to close and the resulting media/denial checks to succeed.
+    bounds = wait_for(f"{label} consent action", lambda: controls("Share" if approve else "Cancel"))
     started = time.monotonic()
     click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
     move(1200, 760)

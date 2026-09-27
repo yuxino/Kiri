@@ -60,8 +60,8 @@ it is optional and is not required on GNOME.
 Recording makes a separate ScreenCast request. **Select the same display** as
 the frozen screenshot. Kiri checks the supplied stream dimensions before using
 the selected region. A denial, timeout, or inconsistent source must produce an
-error, not a recording from an arbitrary screen. GNOME portal consent and
-fractional scaling still need installed-desktop acceptance.
+error, not a recording from an arbitrary screen. CI exercises the GNOME portal
+and scaling on virtual displays; physical-desktop acceptance remains separate.
 
 Linux does not show a floating recording panel because the portal cannot
 reliably exclude it. Use Pause/Resume and Stop in the tray menu, or configure
@@ -99,9 +99,9 @@ cover MP4/GIF encoding and merging. Check the candidate's reports for results.
 
 | Feature | Current Linux implementation | Remaining acceptance or limit |
 | --- | --- | --- |
-| Screenshots and annotations | Region capture, editable marks, clipboard, local library | GNOME consent/cancel/retry and real desktop focus |
+| Screenshots and annotations | Region capture, editable marks, clipboard, local library | Physical-desktop focus, annotation, and IME acceptance |
 | Window selection | X11 hover and click selection | Wayland uses region drag |
-| Displays | X11 monitor selection; single-display Wayland | Wayland multiple displays unavailable; fractional scaling pending |
+| Displays | X11 monitor selection; single-display Wayland | Wayland multiple displays unavailable; physical fractional-scale acceptance pending |
 | Local OCR | System Tesseract with installed `eng`, `chi_sim`, `jpn` data | Real GNOME text/IME workflows; missing models show an error |
 | Remote OCR | Explicit send/retry, Secret Service credentials | Needs a configured profile and an unlocked secret store |
 | Recording | Silent MP4 or GIF, optional pointer, tray/command controls | Portal consent, pause/resume, timing, and control exclusion on real GNOME |
@@ -192,13 +192,24 @@ Both desktop checks must pass. It installs the package on Ubuntu
 24.04 and runs `bash scripts/qa/linux-wayland.sh /usr/bin/kiri`. The additional
 GNOME test dependencies are listed at the top of that script. Each consent
 scenario uses a fresh HOME/XDG profile, DBus session, and headless GNOME 46
-desktop with one virtual monitor and software rendering. The harness operates
-the real portal permission dialog, checks denial and approval, then exercises
-capture cancellation, repeat capture, and matching preview and saved pixels.
-The `linux-wayland-review` artifact retains package identity, reports, desktop
-images, and service logs even when the check fails. This job is configured;
-passing evidence must come from its run. It does not cover recording, physical
-displays, hardware graphics, or fractional scaling.
+desktop with one virtual monitor and software rendering. The four jobs apply
+100%, 125%, 150%, and 200% through GNOME's monitor configuration and read the
+result back; GTK scale environment overrides are removed. The logical desktop
+stays 1280×800 while its physical pixel dimensions change.
+
+The harness operates the real portal dialogs, checks screenshot denial,
+approval, cancellation, and repeat capture, and compares preview and saved
+pixels. A separate focused Wayland application receives the PNG clipboard and
+the text recognized through Kiri's local OCR UI. Recording starts through the
+GUI, requests ScreenCast consent, pauses, requests consent again on resume,
+and stops through the public desktop commands. The complete MP4 is decoded to
+check dimensions, timing, scene order, and the absence of paused frames or Kiri
+controls. Another scenario denies ScreenCast and retries in the same process.
+
+The `linux-wayland-review-scale-*` artifacts retain package identity, reports,
+desktop images, video, decoded-frame evidence, and service logs even on failure.
+These jobs are configured; passing evidence must come from their exact run.
+They do not establish physical-display, hardware-graphics, or IME acceptance.
 
 | Gate | Evidence to retain | Status boundary |
 | --- | --- | --- |
@@ -206,7 +217,7 @@ displays, hardware graphics, or fractional scaling.
 | GStreamer media tests | `linux-media-review` artifact | In-process native encoding; no ScreenCast consent proof |
 | `.deb` installation | Package SHA-256, control metadata, `ldd` output | CI install only; no public release implied |
 | X11 desktop smoke | `linux-native-review` report, screenshots, OCR result, and MP4 | Virtual desktop; no GNOME Wayland proof |
-| GNOME Wayland portal smoke | `linux-wayland-review` reports and screenshots | Virtual GNOME screenshot flow; no recording, hardware, or scaling proof |
+| GNOME Wayland desktop CI | `linux-wayland-review-scale-*` reports, screenshots, and MP4 | Virtual GNOME at four scales; no physical-display, GPU, or IME proof |
 | GNOME Wayland desktop | Exact installed package, display/scale, portal actions, sample exports | Pending manual acceptance |
 | Ubuntu X11 hardware | Exact installed package and screenshot/recording samples | Pending manual acceptance |
 
