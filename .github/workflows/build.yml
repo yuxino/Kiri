@@ -161,11 +161,15 @@ jobs:
           if-no-files-found: error
 
   test-linux-wayland:
-    name: GNOME Wayland portal checks (Ubuntu 24.04)
+    name: GNOME Wayland portal checks (Ubuntu 24.04 / scale ${{ matrix.scale }})
     needs: build-linux
     if: ${{ !cancelled() && needs.build-linux.outputs.deb-artifact-id != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scale: ['1', '1.25', '1.5', '2']
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -189,18 +193,19 @@ jobs:
             gnome-shell gnome-settings-daemon \
             xdg-desktop-portal xdg-desktop-portal-gnome pipewire wireplumber \
             libgl1-mesa-dri libegl-mesa0 dbus-x11 at-spi2-core python3-pyatspi \
-            python3-gi python3-pil gir1.2-gtk-3.0 gir1.2-gstreamer-1.0 \
+            python3-gi python3-gi-cairo python3-pil gir1.2-gtk-3.0 gir1.2-gstreamer-1.0 \
             gir1.2-gst-plugins-base-1.0 gstreamer1.0-pipewire
           test -x /usr/bin/kiri
-      - name: Exercise screenshot consent on an isolated GNOME Wayland desktop
-        timeout-minutes: 8
+      - name: Exercise capture and recording on an isolated GNOME Wayland desktop
+        timeout-minutes: 12
         env:
           KIRI_LINUX_WAYLAND_QA_DIR: ${{ runner.temp }}/kiri-linux-wayland-review
+          KIRI_QA_DISPLAY_SCALE: ${{ matrix.scale }}
         run: bash scripts/qa/linux-wayland.sh /usr/bin/kiri
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: linux-wayland-review
+          name: linux-wayland-review-scale-${{ matrix.scale }}
           path: ${{ runner.temp }}/kiri-linux-wayland-review/
           retention-days: 5
           if-no-files-found: warn
