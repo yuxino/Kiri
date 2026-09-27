@@ -33,7 +33,12 @@ def command(*args):
 
 
 def api(path, raw=False):
-    result = command("gh", "api", "--method", "GET", path)
+    flags = []
+    if raw and "--allow-escape-sequences" in command("gh", "api", "--help"):
+        # New gh versions reject ANSI in job logs even when stdout is piped.
+        # command() captures this body in memory; never print the raw log.
+        flags.append("--allow-escape-sequences")
+    result = command("gh", "api", "--method", "GET", *flags, path)
     return result if raw else json.loads(result)
 
 
