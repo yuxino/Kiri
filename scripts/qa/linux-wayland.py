@@ -159,7 +159,10 @@ def controls(name, enabled=False):
             state = node.getState()
             if node.name != name or not state.contains(pyatspi.STATE_SHOWING):
                 continue
-            if enabled and not state.contains(pyatspi.STATE_ENABLED):
+            # GTK 4 maps disabled=false to SENSITIVE only; WebKit/GTK 3 also
+            # expose ENABLED. Both represent an operable native control.
+            if enabled and not (state.contains(pyatspi.STATE_ENABLED)
+                                or state.contains(pyatspi.STATE_SENSITIVE)):
                 continue
             bounds = node.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
             if bounds.width > 0 and bounds.height > 0:
@@ -300,10 +303,9 @@ def recording_pattern(stage):
 def screen_share(approve, label):
     wait_for(f"{label} real ScreenCast chooser", lambda: controls("Share") and controls("Cancel"), timeout=25)
     screenshot(f"{label}-screencast-consent.png")
-    # GNOME selects the sole monitor. GTK 4's AT-SPI state set does not expose
-    # ENABLED consistently; use the visible native button, then require the
-    # real chooser to close and the resulting media/denial checks to succeed.
-    bounds = wait_for(f"{label} consent action", lambda: controls("Share" if approve else "Cancel"))
+    # GNOME selects the sole monitor. Require an operable native control, then
+    # prove consent through the real chooser closing and the resulting media.
+    bounds = wait_for(f"{label} consent action", lambda: controls("Share" if approve else "Cancel", enabled=True))
     started = time.monotonic()
     click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
     move(1200, 760)
