@@ -28,20 +28,30 @@ def find(name, timeout=35, scroll=False):
         for window in desktop.windows(process=process.pid, visible_only=True):
             for control in window.descendants():
                 try:
-                    if (re.fullmatch(name, control.window_text()) and control.is_visible()
-                            and control.is_enabled()):
+                    if not re.fullmatch(name, control.window_text()) or not control.is_enabled():
+                        continue
+                    if control.is_visible():
                         return control
+                    if scroll:
+                        # WebView2 exposes the off-screen button in UIA. Asking
+                        # that element to focus or scroll into view targets the
+                        # settings pane; wheel events at the window gutter can
+                        # miss its CSS scroll container.
+                        try:
+                            control.iface_scroll_item.ScrollIntoView()
+                        except Exception:
+                            control.set_focus()
+                        if control.is_visible():
+                            return control
                 except Exception:
                     pass
         if scroll:
-            # Settings loads asynchronously; keep scrolling until the actual
-            # target is visible instead of assuming one early wheel event stuck.
+            # Keep a physical-scroll fallback for WebView2 versions without
+            # UIA ScrollItem support. Aim inside the page, not at its gutter.
             window = desktop.windows(process=process.pid, visible_only=True)[0]
             window.set_focus()
             bounds = window.rectangle()
-            # Scroll the outer settings pane from its right gutter. The OCR
-            # controls near the center can consume wheel events themselves.
-            mouse.scroll(coords=(bounds.right - 24,
+            mouse.scroll(coords=(bounds.left + int(bounds.width() * 0.75),
                                  bounds.top + int(bounds.height() * 0.5)), wheel_dist=-4)
         time.sleep(0.2)
     raise RuntimeError(f"Visible control not found: {name}")
