@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import struct
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -18,8 +19,8 @@ async def main():
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(executable_path=os.environ.get('CHROME_BIN', '/usr/bin/google-chrome'))
             try:
-                # Logical viewport widths, languages and backing scales vary independently.
-                for width, height, scale in [(800, 600, 1), (640, 480, 1.5), (1512, 982, 2)]:
+                # Exercise backing scale independently from each logical viewport.
+                for width, height, scale in [(w, h, s) for w,h in [(800,600), (640,480), (1512,982)] for s in [1,1.25,1.5,2]]:
                     for language in ['en', 'zh-Hans', 'ja']:
                         translations = json.loads((ROOT / 'src/i18n' / (language + '.json')).read_text())
                         context = await browser.new_context(viewport={'width': width, 'height': height}, device_scale_factor=scale, locale=language)
@@ -34,6 +35,9 @@ async def main():
                                     MEDIA['frozen'] = (await page.screenshot(), 'image/png')
                                 else:
                                     assert command == 'save_png', command
+                                    data = bytes(args['bytes'])
+                                    assert data[:8].hex() == '89504e470d0a1a0a'
+                                    assert struct.unpack('>II', data[16:24]) == (round(140*scale), round(160*scale))
                             await context.expose_binding('__backend', backend)
                             await page.goto('http://127.0.0.1:8791/desktop.html')
                             await page.wait_for_function('typeof window.invoke === "function"')
@@ -48,7 +52,7 @@ async def main():
                             async def check(f):
                                 done = f.get_by_role('button', name=translations['Done — Copy to clipboard · Return'], exact=True)
                                 await done.wait_for()
-                                toolbar = done.locator('..')
+                                toolbar = f.locator('.kiri-capture-toolbar')
                                 # Wait for ResizeObserver placement to settle after tool reflow.
                                 await page.wait_for_timeout(100)
                                 geometry = await toolbar.evaluate('''el => {
@@ -60,7 +64,9 @@ async def main():
                                     assert r['x'] + r['width'] <= width - 7.5, geometry
                                     assert r['y'] + r['height'] <= height - 7.5, geometry
                                 return done, geometry
-                            for x, y in [(10, 10), (width-150, 10), (10, height-180), (width-150, height-180)]:
+                            # Four corners at 100%; each remaining scale repeats the exact edge regression.
+                            corners = [(10,10), (width-150,10), (10,height-180), (width-150,height-180)] if scale == 1 else [(width-150,height-180)]
+                            for x, y in corners:
                                 await page.evaluate('launchCapture()')
                                 f = page.frame_locator('#overlay')
                                 await f.locator('img').first.evaluate('(im)=>im.decode()')
@@ -72,11 +78,31 @@ async def main():
                                 # The original #65 selection is 650,420 -> 790,580.
                                 if x == width-150 and y == height-180:
                                     assert geometry['bar']['y'] + geometry['bar']['height'] <= y, geometry
-                                    if width == 800 and language == 'en':
+                                    if width == 800 and language == 'en' and scale == 1:
                                         await page.screenshot(path=str(OUT / 'toolbar-800x600-renderer-fixture.png'))
+                                    more = f.get_by_role('button', name=translations['More Actions'], exact=True)
+                                    assert await more.get_attribute('aria-expanded') == 'false'
+                                    await more.focus()
+                                    await more.press('Enter')
+                                    _, expanded = await check(f)
+                                    assert expanded['bar']['y'] + expanded['bar']['height'] <= y
+                                    assert await more.get_attribute('aria-expanded') == 'true'
+                                    await f.get_by_title(translations['Width (px)'], exact=True).fill(str(round(140*scale)))
+                                    await f.get_by_title(translations['Height (px)'], exact=True).fill(str(round(160*scale)))
+                                    # Return applies size rather than finishing capture.
+                                    await f.get_by_title(translations['Height (px)'], exact=True).press('Enter')
+                                    await done.wait_for()
+                                    await more.focus()
+                                    await more.press('Space')
+                                    _, collapsed = await check(f)
+                                    assert collapsed['bar']['height'] < expanded['bar']['height']
+                                    assert await more.get_attribute('aria-expanded') == 'false'
                                     for tool in ['Text (T)', 'Mosaic (M)', 'Pen (P)', 'Select (V)']:
                                         await f.get_by_role('button', name=translations[tool], exact=True).click()
-                                        done, _ = await check(f)
+                                        done, geometry = await check(f)
+                                        assert geometry['bar']['y'] + geometry['bar']['height'] <= y
+                                        assert await more.get_attribute('aria-expanded') == ('false' if tool == 'Select (V)' else 'true')
+                                        assert await done.get_attribute('title') == translations['Done — Copy to clipboard · Return']
                                     await done.click()
                                     await page.wait_for_function('state.calls.some(x=>x.c==="confirm_capture")')
                                     request = await page.evaluate('state.pendingAnnotation.selection')
@@ -91,7 +117,7 @@ async def main():
             finally:
                 await browser.close()
         (OUT / 'toolbar-check.json').write_text(json.dumps(report, indent=2)+'\n')
-        print('PASS: 36 corner selections, 9 tool-reflow and pointer-completion cases; renderer fixture only')
+        print('PASS: 63 corner/scale selections, 36 disclosure/size/tool-reflow and pointer-completion cases; renderer fixture only')
     finally:
         server.shutdown()
         server.server_close()
