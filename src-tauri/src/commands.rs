@@ -3773,7 +3773,7 @@ fn recording_channels(options: RecordingOptions) -> (RecorderSenders, EncoderRec
     )
 }
 
-fn recording_start_error_notice(error: &str) -> String {
+fn recording_start_error_notice(error: &str, resuming: bool) -> String {
     // Only known recovery guidance crosses the public notice boundary;
     // arbitrary native errors can contain implementation details.
     #[cfg(target_os = "macos")]
@@ -3782,9 +3782,13 @@ fn recording_start_error_notice(error: &str) -> String {
         "The selected display geometry changed. Start a new capture before recording."
             | "The selected display is no longer available. Start a new capture."
     ) {
-        return error.to_string();
+        return if resuming {
+            "The selected display changed or is no longer available. Stop and save the paused recording, then start a new capture.".into()
+        } else {
+            error.to_string()
+        };
     }
-    let _ = error;
+    let _ = (error, resuming);
     "Could not start screen recording.".into()
 }
 
@@ -4134,7 +4138,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
         Err(error) => {
             log::error!("recording: start_recorder failed: {error}");
             if reset_startup_if_current(&app, startup_token) {
-                emit_error(&app, recording_start_error_notice(&error), None);
+                emit_error(&app, recording_start_error_notice(&error, false), None);
                 return Err(error);
             }
             return Ok(());
@@ -4384,7 +4388,7 @@ pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
         Ok(started) => started,
         Err(error) => {
             log::error!("recording: start_recorder failed: {error}");
-            emit_error(&app, recording_start_error_notice(&error), None);
+            emit_error(&app, recording_start_error_notice(&error, true), None);
             recover_failed_resume(&app);
             return Err(error);
         }
@@ -5315,7 +5319,7 @@ mod command_security_tests {
     #[test]
     fn recording_notice_keeps_unknown_native_details_private() {
         assert_eq!(
-            super::recording_start_error_notice("native failure at /private/test.mp4"),
+            super::recording_start_error_notice("native failure at /private/test.mp4", false),
             "Could not start screen recording."
         );
     }
@@ -5327,7 +5331,11 @@ mod command_security_tests {
             "The selected display geometry changed. Start a new capture before recording.",
             "The selected display is no longer available. Start a new capture.",
         ] {
-            assert_eq!(super::recording_start_error_notice(message), message);
+            assert_eq!(super::recording_start_error_notice(message, false), message);
+            assert_eq!(
+                super::recording_start_error_notice(message, true),
+                "The selected display changed or is no longer available. Stop and save the paused recording, then start a new capture."
+            );
         }
     }
 

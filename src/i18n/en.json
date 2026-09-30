@@ -148,6 +148,7 @@
   "The selected display is no longer available.": "The selected display is no longer available.",
   "The selected display geometry changed. Start a new capture before recording.": "The selected display geometry changed. Start a new capture before recording.",
   "The selected display is no longer available. Start a new capture.": "The selected display is no longer available. Start a new capture.",
+  "The selected display changed or is no longer available. Stop and save the paused recording, then start a new capture.": "The selected display changed or is no longer available. Stop and save the paused recording, then start a new capture.",
   "The recording region is too small.": "The recording region is too small.",
   "No recording segments are available.": "No recording segments are available.",
   "Kiri could not create the GIF file.": "Kiri could not create the GIF file.",

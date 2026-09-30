@@ -148,6 +148,7 @@
   "The selected display is no longer available.": "所选显示器已不可用。",
   "The selected display geometry changed. Start a new capture before recording.": "所选显示器的布局或缩放已改变。请重新截图选择区域后再录制。",
   "The selected display is no longer available. Start a new capture.": "所选显示器已不可用。请重新截图选择区域。",
+  "The selected display changed or is no longer available. Stop and save the paused recording, then start a new capture.": "所选显示器已改变或不可用。请先停止并保存暂停的录屏，再重新截图选择区域。",
   "The recording region is too small.": "录屏区域太小。",
   "No recording segments are available.": "没有可用的录屏片段。",
   "Kiri could not create the GIF file.": "Kiri 无法创建 GIF 文件。",

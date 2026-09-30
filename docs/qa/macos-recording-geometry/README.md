@@ -15,7 +15,9 @@ The fix passes the frozen frame to the native recorder and resolves the same
 NSScreen on the main thread immediately before creating the SCK filter. A
 frame or backing-scale mismatch prevents starting a new stream, including on
 resume. Known errors appear in the normal error notice with explicit guidance
-to start a new capture. Unrelated native errors retain the generic notice.
+to start a new capture. On a failed resume, the notice first tells the user to
+stop and save the paused recording, since Capture remains blocked while
+a recording is paused. Unrelated native errors retain the generic notice.
 
 | Isolated boundary | Before | After |
 | --- | --- | --- |
