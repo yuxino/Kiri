@@ -48,6 +48,7 @@ import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
 import { RemoteOcrConsent } from "../ocr/RemoteOcrConsent";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
+import { captureToolbarPosition } from "./toolbar-layout.js";
 
 type Phase =
   | "mode-select"
@@ -778,21 +779,6 @@ export function OverlayWindow() {
     [completionLock, discardPreparedOcr, runOcr],
   );
 
-  // --- toolbar placement (spec §7.6) ---
-  // Defaults to 10pt below the selection, centered; flips above when the
-  // bottom would overflow; x/y clamped with an 8pt margin.
-  const toolbarAnchor = useMemo(() => {
-    if (!selection) return { x: 0, y: 0 };
-    const below = selection.y + selection.height + 10;
-    const above = selection.y - 10;
-    return {
-      x: selection.x + selection.width / 2,
-      // Spec §7.6: below the selection by default; flip above when the
-      // bottom edge would overflow (48 = toolbar height, 8 = margin).
-      y: below + 48 + 8 > bounds.height ? above : below,
-    };
-  }, [selection, bounds]);
-
   // --- render ---
   const selectingRect = drag && drag.moved && !resizeHandle ? normalized(drag.start, drag.current) : null;
   const displayRect = selection ?? selectingRect;
@@ -1145,9 +1131,9 @@ export function OverlayWindow() {
 
       {/* Toolbar — appears as soon as a region is chosen (spec §7.1); the
           region stays adjustable until a tool is picked, which locks it. */}
-      {(annotating || (phase === "selecting" && selection)) && (
+      {selection && (annotating || phase === "selecting") && (
         <Toolbar
-          anchor={toolbarAnchor}
+          selection={selection}
           bounds={bounds}
           tool={tool}
           setTool={(next) => {
@@ -1787,7 +1773,7 @@ function ToggleRow(props: {
 }
 
 interface ToolbarProps {
-  anchor: { x: number; y: number };
+  selection: Rect;
   bounds: Rect;
   tool: Tool;
   setTool(tool: Tool): void;
@@ -1820,7 +1806,7 @@ const TOOLS: { tool: Tool; icon: IconName; title: string }[] = [
 
 function Toolbar(props: ToolbarProps) {
   const {
-    anchor,
+    selection,
     bounds,
     tool,
     setTool,
@@ -1870,33 +1856,24 @@ function Toolbar(props: ToolbarProps) {
             ? { min: 12, max: 120, value: appearance.mosaicBrushDiameter, onChange: (v: number) => setAppearance({ ...appearance, mosaicBrushDiameter: v }) }
             : null;
 
-  const toolbarHeight = 48;
   const barRef = useRef<HTMLDivElement>(null);
-  const [barWidth, setBarWidth] = useState(420);
-  // Measure the real toolbar width so the centering clamp keeps the whole
-  // bar on screen (spec §7.6: translate, never shrink or wrap).
-  useEffect(() => {
+  const [barSize, setBarSize] = useState({ width: 420, height: 48 });
+  // Narrow viewports wrap controls; measure both dimensions after each reflow.
+  useLayoutEffect(() => {
     const el = barRef.current;
     if (!el) return;
-    const measure = () => setBarWidth(el.offsetWidth || 420);
+    const measure = () => setBarSize((previous) => {
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      return width === previous.width && height === previous.height
+        ? previous : { width, height };
+    });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [tool, appearance]);
-  // Spec §7.6: centered on the selection's midX; clamp so the bar's left
-  // and right edges stay ≥8pt inside the screen. y is already resolved.
-  const left = Math.min(
-    Math.max(8, anchor.x - barWidth / 2),
-    Math.max(8, bounds.x + bounds.width - barWidth - 8),
-  );
-  // Mode selector sits at the top-center (16 + ~44pt tall). Keep the
-  // toolbar BELOW that zone so the two HUDs never overlap: minimum top is
-  // 70 (mode selector zone), maximum keeps the bar inside the screen.
-  const top = Math.min(
-    Math.max(96, anchor.y),
-    Math.max(96, bounds.y + bounds.height - toolbarHeight - 8),
-  );
+  }, []);
+  const { left, top } = captureToolbarPosition(selection, bounds, barSize);
 
   const sep = <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.14)", margin: "0 3px", flexShrink: 0 }} />;
 
@@ -1912,6 +1889,10 @@ function Toolbar(props: ToolbarProps) {
           left,
           top,
           display: "flex",
+          flexWrap: "wrap",
+          width: "max-content",
+          maxWidth: Math.max(0, bounds.width - 16),
+          boxSizing: "border-box",
           alignItems: "center",
           gap: 3,
           padding: "6px 8px",
@@ -1980,7 +1961,7 @@ function Toolbar(props: ToolbarProps) {
           </>
         ) : null}
         {slider && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <input
               type="range"
               className="kiri-range"
@@ -2029,6 +2010,7 @@ function Toolbar(props: ToolbarProps) {
               alignItems: "center",
               gap: 3,
               padding: "2px 4px",
+              flexShrink: 0,
             }}
           >
             <input
