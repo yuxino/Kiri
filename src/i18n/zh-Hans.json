@@ -146,6 +146,8 @@
   "Screen Recording is off. Enable Kiri in System Settings, then quit and reopen it once.": "屏幕录制权限未开启。请在系统设置中启用 Kiri，然后退出并重新打开。",
   "The active display could not be captured.": "无法截取当前显示器。",
   "The selected display is no longer available.": "所选显示器已不可用。",
+  "The selected display geometry changed. Start a new capture before recording.": "所选显示器的布局或缩放已改变。请重新截图选择区域后再录制。",
+  "The selected display is no longer available. Start a new capture.": "所选显示器已不可用。请重新截图选择区域。",
   "The recording region is too small.": "录屏区域太小。",
   "No recording segments are available.": "没有可用的录屏片段。",
   "Kiri could not create the GIF file.": "Kiri 无法创建 GIF 文件。",

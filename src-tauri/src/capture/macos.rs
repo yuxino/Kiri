@@ -217,6 +217,10 @@ fn active_screen() -> Result<ActiveScreen> {
         .or_else(|| screens.firstObject())
         .ok_or_else(|| anyhow!("display unavailable"))?;
 
+    screen_geometry(&screen)
+}
+
+fn screen_geometry(screen: &NSScreen) -> Result<ActiveScreen> {
     let frame = screen.frame();
     let display_id = screen
         .deviceDescription()
@@ -244,12 +248,40 @@ fn active_screen() -> Result<ActiveScreen> {
 mod active_screen_tests {
     use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 
-    use super::appkit_frame_to_tauri;
+    use super::{appkit_frame_to_tauri, validate_recording_geometry};
 
     fn frame(x: f64, y: f64, width: f64, height: f64) -> CGRect {
         CGRect {
             origin: CGPoint { x, y },
             size: CGSize { width, height },
+        }
+    }
+
+    #[test]
+    fn recording_accepts_unchanged_negative_origin_retina_display() {
+        let frame = crate::core::geometry::Rect::new(-1512.0, -982.0, 1512.0, 982.0);
+        assert!(validate_recording_geometry(frame, 2.0, frame, 2.0).is_ok());
+    }
+
+    #[test]
+    fn recording_rejects_same_display_id_with_changed_layout_resolution_or_scale() {
+        let frozen = crate::core::geometry::Rect::new(-1512.0, -982.0, 1512.0, 982.0);
+        for (current, scale) in [
+            (crate::core::geometry::Rect::new(0.0, 0.0, 1512.0, 982.0), 2.0),
+            (crate::core::geometry::Rect::new(-1512.0, 0.0, 1512.0, 982.0), 2.0),
+            (crate::core::geometry::Rect::new(-1512.0, -982.0, 1920.0, 1080.0), 2.0),
+            (frozen, 1.0),
+        ] {
+            let error = validate_recording_geometry(frozen, 2.0, current, scale).unwrap_err();
+            assert!(error.to_string().contains("Start a new capture"));
+        }
+    }
+
+    #[test]
+    fn recording_rejects_invalid_backing_scale() {
+        let frame = crate::core::geometry::Rect::new(0.0, 0.0, 1512.0, 982.0);
+        for scale in [0.0, f64::NAN, f64::INFINITY] {
+            assert!(validate_recording_geometry(frame, scale, frame, scale).is_err());
         }
     }
 
@@ -272,6 +304,24 @@ mod active_screen_tests {
             crate::core::geometry::Rect::new(-1920.0, 900.0, 1920.0, 1080.0)
         );
     }
+}
+
+/// Compare in the same global logical coordinate space as the frozen overlay.
+/// This runs on main immediately before constructing the recording filter.
+fn validate_recording_geometry(
+    expected_frame: Rect,
+    expected_scale: f64,
+    current_frame: Rect,
+    current_scale: f64,
+) -> Result<()> {
+    if expected_frame != current_frame
+        || !expected_scale.is_finite()
+        || expected_scale < 1.0
+        || expected_scale != current_scale
+    {
+        bail!("The selected display geometry changed. Start a new capture before recording.");
+    }
+    Ok(())
 }
 
 fn shareable_content(_main_thread: MainThreadMarker) -> Result<Retained<SCShareableContent>> {
@@ -386,6 +436,8 @@ impl Drop for RecordingFilterPointer {
 
 fn recording_filter_pointer(
     display_id: u32,
+    expected_frame: Rect,
+    expected_scale: f64,
     own_process_id: i32,
     excepted_window_ids: Vec<u32>,
 ) -> Result<usize> {
@@ -428,8 +480,27 @@ fn recording_filter_pointer(
                             .iter()
                             .find(|display| unsafe { display.displayID() } == display_id)
                             .ok_or_else(|| {
-                                "The selected display is no longer available.".to_string()
+                                "The selected display is no longer available. Start a new capture.".to_string()
                             })?;
+                        // A display ID survives resolution, scale and layout changes.
+                        // The frozen selection and control windows still use the old
+                        // geometry, so refuse to start against a different layout.
+                        let screens = NSScreen::screens(_main_thread);
+                        let current = screens
+                            .iter()
+                            .filter_map(|screen| screen_geometry(&screen).ok())
+                            .find(|screen| screen.display_id == display_id)
+                            .ok_or_else(|| {
+                                "The selected display is no longer available. Start a new capture."
+                                    .to_string()
+                            })?;
+                        validate_recording_geometry(
+                            expected_frame,
+                            expected_scale,
+                            current.frame,
+                            current.backing_scale,
+                        )
+                        .map_err(|error| error.to_string())?;
                         let filter =
                             make_filter(&content, &display, own_process_id, &excepted_window_ids);
                         Ok(RecordingFilterPointer(Some(
@@ -682,6 +753,7 @@ impl MacRecordingSession {
     #[allow(clippy::too_many_arguments)]
     pub fn start(
         display_id: u32,
+        screen_frame: Rect,
         region: Rect,
         backing_scale: f64,
         options: RecordingOptions,
@@ -714,8 +786,13 @@ impl MacRecordingSession {
         // its retained ownership to the dedicated stream thread as a raw
         // pointer. No SCK content object is inspected on the Tokio worker.
         let own_process_id = std::process::id() as i32;
-        let filter_ptr =
-            recording_filter_pointer(display_id, own_process_id, excepted_window_ids.to_vec())?;
+        let filter_ptr = recording_filter_pointer(
+            display_id,
+            screen_frame,
+            backing_scale,
+            own_process_id,
+            excepted_window_ids.to_vec(),
+        )?;
         log::info!("MacRecordingSession: filter created");
 
         let width =

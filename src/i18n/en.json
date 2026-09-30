@@ -146,6 +146,8 @@
   "Screen Recording is off. Enable Kiri in System Settings, then quit and reopen it once.": "Screen Recording is off. Enable Kiri in System Settings, then quit and reopen it once.",
   "The active display could not be captured.": "The active display could not be captured.",
   "The selected display is no longer available.": "The selected display is no longer available.",
+  "The selected display geometry changed. Start a new capture before recording.": "The selected display geometry changed. Start a new capture before recording.",
+  "The selected display is no longer available. Start a new capture.": "The selected display is no longer available. Start a new capture.",
   "The recording region is too small.": "The recording region is too small.",
   "No recording segments are available.": "No recording segments are available.",
   "Kiri could not create the GIF file.": "Kiri could not create the GIF file.",

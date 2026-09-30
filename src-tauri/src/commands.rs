@@ -3773,6 +3773,21 @@ fn recording_channels(options: RecordingOptions) -> (RecorderSenders, EncoderRec
     )
 }
 
+fn recording_start_error_notice(error: &str) -> String {
+    // Only known recovery guidance crosses the public notice boundary;
+    // arbitrary native errors can contain implementation details.
+    #[cfg(target_os = "macos")]
+    if matches!(
+        error,
+        "The selected display geometry changed. Start a new capture before recording."
+            | "The selected display is no longer available. Start a new capture."
+    ) {
+        return error.to_string();
+    }
+    let _ = error;
+    "Could not start screen recording.".into()
+}
+
 fn start_recorder(
     app: &AppHandle,
     configuration: &RecordingConfiguration,
@@ -3788,6 +3803,7 @@ fn start_recorder(
     {
         let recorder = crate::capture::macos::MacRecordingSession::start(
             configuration.display_id,
+            configuration.screen_frame,
             configuration.region,
             configuration.backing_scale,
             configuration.options,
@@ -4118,7 +4134,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
         Err(error) => {
             log::error!("recording: start_recorder failed: {error}");
             if reset_startup_if_current(&app, startup_token) {
-                emit_error(&app, "Could not start screen recording.".into(), None);
+                emit_error(&app, recording_start_error_notice(&error), None);
                 return Err(error);
             }
             return Ok(());
@@ -4368,7 +4384,7 @@ pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
         Ok(started) => started,
         Err(error) => {
             log::error!("recording: start_recorder failed: {error}");
-            emit_error(&app, "Could not start screen recording.".into(), None);
+            emit_error(&app, recording_start_error_notice(&error), None);
             recover_failed_resume(&app);
             return Err(error);
         }
@@ -5295,6 +5311,25 @@ mod command_security_tests {
     use std::io::Cursor;
     use std::path::PathBuf;
     use std::sync::mpsc::TrySendError;
+
+    #[test]
+    fn recording_notice_keeps_unknown_native_details_private() {
+        assert_eq!(
+            super::recording_start_error_notice("native failure at /private/test.mp4"),
+            "Could not start screen recording."
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn recording_notice_preserves_display_recovery_guidance() {
+        for message in [
+            "The selected display geometry changed. Start a new capture before recording.",
+            "The selected display is no longer available. Start a new capture.",
+        ] {
+            assert_eq!(super::recording_start_error_notice(message), message);
+        }
+    }
 
     #[test]
     fn removing_missing_record_notifies_after_commit_even_when_cleanup_fails() {
