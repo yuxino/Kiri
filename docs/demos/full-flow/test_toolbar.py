@@ -80,27 +80,44 @@ async def main():
                                     assert geometry['bar']['y'] + geometry['bar']['height'] <= y, geometry
                                     if width == 800 and language == 'en' and scale == 1:
                                         await page.screenshot(path=str(OUT / 'toolbar-800x600-renderer-fixture.png'))
-                                    more = f.get_by_role('button', name=translations['More Actions'], exact=True)
-                                    assert await more.get_attribute('aria-expanded') == 'false'
-                                    await more.focus()
-                                    await more.press('Enter')
+                                    size_toggle = f.get_by_role('button', name=translations['Resize selection'], exact=True)
+                                    assert await size_toggle.get_attribute('aria-expanded') == 'false'
+                                    await size_toggle.focus()
+                                    await size_toggle.press('Enter')
                                     _, expanded = await check(f)
                                     assert expanded['bar']['y'] + expanded['bar']['height'] <= y
-                                    assert await more.get_attribute('aria-expanded') == 'true'
-                                    await f.get_by_title(translations['Width (px)'], exact=True).fill(str(round(140*scale)))
-                                    await f.get_by_title(translations['Height (px)'], exact=True).fill(str(round(160*scale)))
+                                    assert await size_toggle.get_attribute('aria-expanded') == 'true'
+                                    fields = f.locator('.kiri-capture-dimension')
+                                    assert await fields.count() == 2
+                                    for field in await fields.all():
+                                        r = await field.bounding_box()
+                                        assert r and r['x'] >= 0 and r['y'] >= 0, r
+                                        assert r['x'] + r['width'] <= width and r['y'] + r['height'] <= height, r
+                                    width_input = f.get_by_title(translations['Width (px)'], exact=True)
+                                    height_input = f.get_by_title(translations['Height (px)'], exact=True)
+                                    assert await width_input.input_value() == str(round(140*scale))
+                                    assert await height_input.input_value() == str(round(160*scale))
+                                    await width_input.fill(str(round(140*scale)))
+                                    await height_input.fill(str(round(160*scale)))
+                                    assert await height_input.evaluate('el => getComputedStyle(el).outlineStyle') == 'none'
                                     # Return applies size rather than finishing capture.
-                                    await f.get_by_title(translations['Height (px)'], exact=True).press('Enter')
+                                    await height_input.press('Enter')
                                     await done.wait_for()
-                                    await more.focus()
-                                    await more.press('Space')
+                                    await height_input.fill('1')
+                                    await height_input.press('Escape')
+                                    assert await height_input.input_value() == str(round(160*scale))
+                                    await done.wait_for()
+                                    await size_toggle.focus()
+                                    await size_toggle.press('Space')
                                     _, collapsed = await check(f)
-                                    assert collapsed['bar']['height'] < expanded['bar']['height']
-                                    assert await more.get_attribute('aria-expanded') == 'false'
+                                    assert collapsed['bar']['height'] == expanded['bar']['height']
+                                    assert await fields.count() == 0
+                                    assert await size_toggle.get_attribute('aria-expanded') == 'false'
                                     for tool in ['Text (T)', 'Mosaic (M)', 'Pen (P)', 'Select (V)']:
                                         await f.get_by_role('button', name=translations[tool], exact=True).click()
                                         done, geometry = await check(f)
                                         assert geometry['bar']['y'] + geometry['bar']['height'] <= y
+                                        more = f.get_by_role('button', name=translations['More Actions'], exact=True)
                                         assert await more.get_attribute('aria-expanded') == ('false' if tool == 'Select (V)' else 'true')
                                         assert await done.get_attribute('title') == translations['Done — Copy to clipboard · Return']
                                     await done.click()
