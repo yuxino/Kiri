@@ -19,7 +19,7 @@
   </p>
 </div>
 
-Kiri 是一款适用于 macOS、Windows 和 Linux 的截图与录屏工具。截图后可以画箭头、打马赛克、提取文字，图片和视频都保存在本机。
+<p align="center">Kiri 是一款适用于 macOS、Windows 和 Linux 的截图与录屏工具。截图后可以画箭头、打马赛克、提取文字，图片和视频都保存在本机。</p>
 
 ![Kiri 标注界面预览，使用新绘制的插画素材](docs/assets/readme-preview.png)
 

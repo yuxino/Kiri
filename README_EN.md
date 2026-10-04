@@ -19,7 +19,7 @@
   </p>
 </div>
 
-Kiri is a screenshot and screen recording app for macOS, Windows, and Linux. Annotate screenshots, copy text from images, and keep your captures on your computer.
+<p align="center">Kiri is a screenshot and screen recording app for macOS, Windows, and Linux. Annotate screenshots, copy text from images, and keep your captures on your computer.</p>
 
 ![Kiri annotation interface with an illustrated sample](docs/assets/readme-preview.png)
 
