@@ -37,6 +37,8 @@
 2. Choose Screenshot, Record, or OCR.
 3. Press `Enter` to confirm a screenshot or `Esc` to cancel. Screenshots are copied to your clipboard and saved in the library.
 
+Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
+
 Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
 
 [Setup & help](docs/usage.md) · [Video editing](docs/video-editing.md) · [Report a bug](https://github.com/yuxino/kiri/issues) · [Contributing](CONTRIBUTING.md)

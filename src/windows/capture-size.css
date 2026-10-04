@@ -1,0 +1,40 @@
+.kiri-capture-dimension {
+  position: absolute;
+  z-index: 8;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: #171717;
+  color: #fff;
+  cursor: text;
+  pointer-events: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.kiri-capture-dimension[data-interactive] { pointer-events: auto; }
+.kiri-capture-dimension[data-interactive]:hover { background: #303030; border-color: #777; }
+.kiri-capture-dimension:focus-within { background: #303030; border-color: #eee; }
+.kiri-capture-dimension-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: 600 12px var(--kiri-font-ui);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* The rounded label owns the focus indicator; keep the inner field frameless. */
+.kiri-capture-dimension-input:focus-visible { outline: none; }
+.kiri-capture-dimension-input::selection { background: #555; color: #fff; }
+@media (prefers-reduced-motion: reduce) {
+  .kiri-capture-dimension { transition: none; }
+}

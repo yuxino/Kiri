@@ -155,3 +155,4 @@ development.
 
 - [ADR 0071: Library navigation and floating feedback](adr/0071-library-navigation-and-floating-feedback.md)
 - [ADR 0072: Live annotation transform preview](adr/0072-live-annotation-transform-preview.md)
+- [ADR 0076: Inline capture size controls](adr/0076-inline-capture-size-controls.md)

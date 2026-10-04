@@ -52,6 +52,8 @@ import { QrOverlay } from "../qr/QrOverlay";
 import { RemoteOcrConsent } from "../ocr/RemoteOcrConsent";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
 import { captureToolbarPosition } from "./toolbar-layout.js";
+import { CaptureSizeControls } from "./CaptureSizeControls";
+import { resizeCapturePixels } from "./capture-size.js";
 
 type Phase =
   | "mode-select"
@@ -121,6 +123,7 @@ export function OverlayWindow() {
   const [phase, setPhase] = useState<Phase>("mode-select");
   const [mode, setMode] = useState<Mode>("screenshot");
   const [selection, setSelection] = useState<Rect | null>(null);
+  const [sizeControlsOpen, setSizeControlsOpen] = useState(false);
   const [hoverWindow, setHoverWindow] = useState<Rect | null>(null);
   const [drag, setDrag] = useState<{ start: Point; current: Point; moved: boolean } | null>(null);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
@@ -526,12 +529,12 @@ export function OverlayWindow() {
     [],
   );
 
-  // Escape first cancels an annotation edit, then the capture. The capture
-  // phase keeps the window action available from number controls as well.
+  // Size inputs cancel their draft before Escape can cancel the capture.
   useEffect(() => {
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (isTextComposition(e)) return;
+      if (e.target instanceof Element && e.target.closest(".kiri-capture-dimension-input")) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (completionLock.locked) return;
@@ -771,6 +774,7 @@ export function OverlayWindow() {
   );
 
   function afterSelection(sel: Rect) {
+    setSizeControlsOpen(false);
     if (modeRef.current === "screenshot") {
       // Spec §7.1: once a region is chosen, the toolbar appears immediately
       // but the region stays adjustable (phase stays .selecting, the
@@ -796,6 +800,7 @@ export function OverlayWindow() {
       discardQr();
       modeRef.current = next;
       setMode(next);
+      setSizeControlsOpen(false);
       setPhase("selecting");
       setDrag(null);
       setResizeHandle(null);
@@ -833,6 +838,9 @@ export function OverlayWindow() {
   const displayRect = selection ?? selectingRect;
   const activeDimRect = displayRect ?? hoverWindow;
   const annotating = phase === "annotating";
+  const canResizeSelection = (mode === "screenshot" && phase === "selecting") ||
+    (mode === "record" && (phase === "selecting" || phase === "record-options"));
+  const showSizeControls = sizeControlsOpen && canResizeSelection;
 
   return (
     <div
@@ -959,13 +967,24 @@ export function OverlayWindow() {
             }}
           />
           <SelectionHandles rect={displayRect} />
-          <SizeBadge
+          {!showSizeControls && <SizeBadge
             rect={displayRect}
             bounds={bounds}
             pixelScale={context?.scale ?? 1}
-          />
+          />}
         </>
       )}
+
+      {displayRect && showSizeControls && <CaptureSizeControls
+        rect={displayRect} bounds={bounds} scale={context?.scale ?? 1}
+        interactive={!!selection && !drag && !moveDrag && !resizeHandle && !completing}
+        onChange={(axis, pixels) => {
+          if (!selectionRef.current || !canResizeSelection || completionLock.locked) return;
+          const next = resizeCapturePixels(selectionRef.current, bounds, context?.scale ?? 1, axis, pixels);
+          selectionRef.current = next;
+          setSelection(next);
+        }}
+      />}
 
       {/* Selection border while annotating: heavier white + black keylines. */}
       {displayRect && phase === "annotating" && (
@@ -1172,6 +1191,8 @@ export function OverlayWindow() {
           systemAudioSupported={platformCaps.systemAudio}
           clickHighlightsSupported={platformCaps.clickHighlights}
           trayRecordingControls={platformCaps.manualUpdates}
+          sizeControlsOpen={sizeControlsOpen}
+          onToggleSize={() => setSizeControlsOpen(open => !open)}
           onChange={(next) => {
             // Spec (recording §3): persist each toggle change immediately.
             setRecordOptions(next);
@@ -1206,6 +1227,8 @@ export function OverlayWindow() {
           canUndo={canUndo}
           canRedo={canRedo}
           canSetSize={phase === "selecting"}
+          sizeControlsOpen={sizeControlsOpen}
+          onToggleSize={() => setSizeControlsOpen(open => !open)}
           disabled={completing}
           onUndo={() => canvasRef.current?.undo()}
           onRedo={() => canvasRef.current?.redo()}
@@ -1215,22 +1238,6 @@ export function OverlayWindow() {
           onTextFontBegin={() => canvasRef.current?.beginTextFontSizeAdjustment()}
           onTextFontLive={(value) => canvasRef.current?.setTextFontSizeLive(value)}
           onTextFontEnd={() => canvasRef.current?.endTextFontSizeAdjustment()}
-          onSetSize={(wPx, hPx) => {
-            if (phase !== "selecting" || !selectionRef.current) return;
-            const sc = context?.scale ?? 1;
-            const w = Math.min(wPx / sc, bounds.width);
-            const h = Math.min(hPx / sc, bounds.height);
-            const cur = selectionRef.current;
-            const x = Math.min(
-              Math.max(0, cur.x + (cur.width - w) / 2),
-              Math.max(0, bounds.width - w),
-            );
-            const y = Math.min(
-              Math.max(0, cur.y + (cur.height - h) / 2),
-              Math.max(0, bounds.height - h),
-            );
-            setSelection({ x, y, width: w, height: h });
-          }}
         />
       )}
 
@@ -1289,7 +1296,7 @@ function HintLabel(props: { text: string; top: number }) {
   );
 }
 
-function SelectionHandles(props: { rect: Rect }) {
+export function SelectionHandles(props: { rect: Rect }) {
   const { rect } = props;
   return (
     <>
@@ -1523,20 +1530,7 @@ function OcrPanel(props: {
   );
 }
 
-const sizeInputStyle: React.CSSProperties = {
-  width: 58,
-  height: 26,
-  boxSizing: "border-box",
-  borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.08)",
-  color: "#fff",
-  fontSize: 11,
-  textAlign: "center",
-  fontFamily: "var(--kiri-font-ui)",
-};
-
-function RecordOptionsPanel(props: {
+export function RecordOptionsPanel(props: {
   anchor: Rect;
   bounds: Rect;
   options: RecordingOptions;
@@ -1544,6 +1538,8 @@ function RecordOptionsPanel(props: {
   systemAudioSupported: boolean;
   clickHighlightsSupported: boolean;
   trayRecordingControls: boolean;
+  sizeControlsOpen: boolean;
+  onToggleSize(): void;
   onChange(options: RecordingOptions): void;
   onStart(): void;
   onCancel(): void;
@@ -1556,6 +1552,8 @@ function RecordOptionsPanel(props: {
     systemAudioSupported,
     clickHighlightsSupported,
     trayRecordingControls,
+    sizeControlsOpen,
+    onToggleSize,
     onChange,
     onStart,
     onCancel,
@@ -1601,7 +1599,7 @@ function RecordOptionsPanel(props: {
   // the panel feels attached; fall back to the centered position for big
   // selections.
   const below = anchor.y + anchor.height + 10;
-  const above = anchor.y - panelHeight - 10;
+  const above = anchor.y - panelHeight - 10 - (sizeControlsOpen ? 38 : 0);
   let top: number;
   if (anchor.height > bounds.height - 240 || anchor.width > bounds.width - 240) {
     top = centeredTop;
@@ -1749,6 +1747,8 @@ function RecordOptionsPanel(props: {
         </div>
       </div>
       <div style={{ display: "flex", flexShrink: 0, gap: 8 }}>
+        <ToolButton icon="slider.horizontal.3" title={t("Resize selection")}
+          active={sizeControlsOpen} expanded={sizeControlsOpen} onClick={onToggleSize} />
         <button type="button" className="kiri-primary-button" style={{ flex: 1, minWidth: 0, minHeight: 38, borderRadius: 10, overflowWrap: "anywhere" }} onClick={onStart}>
           {gifOutput ? t("Start GIF Recording") : t("Start Recording")}
         </button>
@@ -1839,6 +1839,8 @@ interface ToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   canSetSize: boolean;
+  sizeControlsOpen: boolean;
+  onToggleSize(): void;
   disabled: boolean;
   onUndo(): void;
   onRedo(): void;
@@ -1848,8 +1850,6 @@ interface ToolbarProps {
   onTextFontBegin?(): void;
   onTextFontLive?(value: number): void;
   onTextFontEnd?(): void;
-  /** Apply an exact pixel size to the selection (keeps its center). */
-  onSetSize(widthPx: number, heightPx: number): void;
 }
 
 const TOOLS: { tool: Tool; icon: IconName; title: string }[] = [
@@ -1874,7 +1874,7 @@ const toolbarRowStyle: React.CSSProperties = {
   padding: "6px 8px",
 };
 
-function Toolbar(props: ToolbarProps) {
+export function Toolbar(props: ToolbarProps) {
   const {
     selection,
     bounds,
@@ -1885,6 +1885,8 @@ function Toolbar(props: ToolbarProps) {
     canUndo,
     canRedo,
     canSetSize,
+    sizeControlsOpen,
+    onToggleSize,
     disabled,
     onUndo,
     onRedo,
@@ -1894,29 +1896,10 @@ function Toolbar(props: ToolbarProps) {
     onTextFontBegin,
     onTextFontLive,
     onTextFontEnd,
-    onSetSize,
   } = props;
 
-  // Quick pixel-size entry: keep edits local until the user confirms them.
-  // Values are output pixels; the selection is point-based, so onSetSize
-  // converts them using the display scale.
-  const [sizeW, setSizeW] = useState("");
-  const [sizeH, setSizeH] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   useEffect(() => setDetailsOpen(tool !== "select"), [tool]);
-  const applySize = () => {
-    const w = Math.round(Number(sizeW));
-    const h = Math.round(Number(sizeH));
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
-    onSetSize(w, h);
-  };
-
-  const onSizeInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === "Return") applySize();
-    // Number-field input must not trigger the overlay's tool shortcuts or
-    // finish the screenshot when Return is used to confirm the dimensions.
-    e.stopPropagation();
-  };
 
   const slider =
     tool === "pen"
@@ -1946,7 +1929,7 @@ function Toolbar(props: ToolbarProps) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const { left, top } = captureToolbarPosition(selection, bounds, barSize);
+  const { left, top } = captureToolbarPosition(selection, bounds, barSize, canSetSize && sizeControlsOpen);
 
   const sep = <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.14)", margin: "0 3px", flexShrink: 0 }} />;
 
@@ -1989,11 +1972,13 @@ function Toolbar(props: ToolbarProps) {
           <ToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={!canUndo} onClick={onUndo} />
           <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo} />
           <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr} />
-          <ToolButton icon="slider.horizontal.3" title={t("More Actions")} active={detailsOpen} expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)} />
+          <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "More Actions")}
+            active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
+            onClick={() => canSetSize ? onToggleSize() : setDetailsOpen(open => !open)} />
           {sep}
           <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary onClick={onDone} />
         </div>
-        {detailsOpen && (
+        {detailsOpen && !canSetSize && (
           <div className="kiri-hud" style={toolbarRowStyle}>
             {/* Context row */}
             {tool === "text" ? (
@@ -2082,42 +2067,6 @@ function Toolbar(props: ToolbarProps) {
                 onClick={() => setAppearance({ ...appearance, colorPreset: preset })}
               />
             ))}
-            {canSetSize && sep}
-            {canSetSize && (
-              /* Quick pixel-size entry — confirm before resizing the selection. */
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 3,
-                  padding: "2px 4px",
-                  flexShrink: 0,
-                }}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  value={sizeW}
-                  onChange={(e) => setSizeW(e.target.value)}
-                  onKeyDown={onSizeInputKeyDown}
-                  placeholder={t("Width (px)").charAt(0)}
-                  title={t("Width (px)")}
-                  style={sizeInputStyle}
-                />
-                <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11 }}>×</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={sizeH}
-                  onChange={(e) => setSizeH(e.target.value)}
-                  onKeyDown={onSizeInputKeyDown}
-                  placeholder={t("Height (px)").charAt(0)}
-                  title={t("Height (px)")}
-                  style={sizeInputStyle}
-                />
-                <ToolButton icon="checkmark" title={t("Apply size")} onClick={applySize} />
-              </div>
-            )}
           </div>
         )}
       </div>

@@ -199,7 +199,7 @@
   "unknown action": "不明な操作です",
   "Width (px)": "幅（px）",
   "Height (px)": "高さ（px）",
-  "Apply size": "サイズを適用",
+  "Resize selection": "選択範囲のサイズを調整",
   "Settings": "設定",
   "General": "一般",
   "Show in Dock": "Dock に表示",
