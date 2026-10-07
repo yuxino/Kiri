@@ -1,0 +1,12 @@
+{
+  "gnome-desktop.png": {
+    "sha256": "14f8dfaa7f904beb71c9ee7b52e1677fe980c77d2c7c8533bd9a2b0cb2e7bc25",
+    "width": 1500,
+    "height": 768
+  },
+  "ubuntu-installed-packages-crop.png": {
+    "sha256": "35a588fce70a47281b8c4729fe0078111c55ed05075adf3517c0138cc8b8149e",
+    "width": 680,
+    "height": 420
+  }
+}

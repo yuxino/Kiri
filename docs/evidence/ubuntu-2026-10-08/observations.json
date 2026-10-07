@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "environment": {
+    "os": "Ubuntu24.04.4",
+    "kernel": "6.8.0-90-generic",
+    "architecture": "x86_64",
+    "desktop": "GNOME46",
+    "session": "x11",
+    "resolution": "3000x1536",
+    "pulse_default_sink": "fifo_output",
+    "pulse_monitor": "fifo_output.monitor",
+    "monitor_format": "s16le stereo48000Hz"
+  },
+  "package": "1.6.11",
+  "cloud_deb_sha256_check": "OK",
+  "blocker": "Browser microphone permission requires human denial and explicit return of control; desktop operations remain paused",
+  "cloud_last_observed_state": "running; not rechecked after permission handoff",
+  "public_video_playback": "not tested",
+  "real_speech_languages_tested": [],
+  "native_app_launched": false,
+  "capture_ocr_recording_export": "not tested",
+  "remote_ocr_credentials_used": false
+}
