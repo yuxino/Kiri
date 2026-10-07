@@ -154,7 +154,6 @@
   "The recording region is too small.": "录屏区域太小。",
   "No recording segments are available.": "没有可用的录屏片段。",
   "Kiri could not create the GIF file.": "Kiri 无法创建 GIF 文件。",
-  "The GIF could not be finalized.": "无法完成 GIF 文件。",
   "The capture could not be found.": "找不到这项内容。",
   "Image": "图片",
   "Video": "视频",
@@ -698,5 +697,9 @@
   "MB": "MB",
   "GB": "GB",
   "TB": "TB",
-  "Imported %d files.": "已导入 %d 个文件。"
+  "Imported %d files.": "已导入 %d 个文件。",
+  "Preparing GIF…": "正在准备 GIF…",
+  "Finishing GIF…": "正在完成 GIF…",
+  "Saving GIF…": "正在保存 GIF…",
+  "Creating GIF… %d%": "正在创建 GIF… %d%"
 }

@@ -17,6 +17,12 @@ const compiled = ts.transpileModule(`${source}\nexport { AssetCard, RecordingSav
   },
 }).outputText;
 
+const gifModule = { exports: {} };
+new Function("require", "module", "exports", ts.transpileModule(
+  readFileSync(new URL("../../src/windows/gif-conversion.ts", import.meta.url), "utf8"),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+).outputText)(() => ({ t: (key) => key, fmt: (key, value) => key.replace("%d", value) }), gifModule, gifModule.exports);
+
 export const testAsset = {
   id: "00000000-0000-4000-8000-000000000001",
   kind: "image",
@@ -122,6 +128,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
       api: {
         qrAction: async () => null,
         getAssetAvailability: async () => ({ status: "ready" }),
+        getGifConversionStates: async () => [],
         getLibraryStatus: async () => ({ availability: "ready" }),
         listAssets: async () => [testAsset],
         listPendingRecordings: async () => [],
@@ -145,6 +152,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
       kiriResourceUrl: (route, [id], { v }) => `${route}:${id}?v=${v}`,
     },
     "./library-card-interaction.js": cardInteraction,
+    "./gif-conversion": gifModule.exports,
     "./viewer-copy-shortcut.js": viewerCopyShortcut,
     "./video-capabilities.js": videoCapabilities,
     ...environment.modules,

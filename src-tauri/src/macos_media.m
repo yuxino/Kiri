@@ -609,14 +609,17 @@ bool kiri_macos_merge_segments(
     }
 }
 
-bool kiri_macos_export_gif(
+// The callback encodes each frame before the next one is decoded. ImageIO's
+// multi-image destination retained decoded frames until finalization, making
+// GIF memory grow with video length.
+typedef bool (*KiriGifFrame)(void *, const uint8_t *, uint32_t, uint32_t, uint64_t, uint64_t);
+
+bool kiri_macos_decode_gif_frames(
     const char *sourcePath,
-    const char *outputPath,
     uint32_t maxLongEdge,
     uint32_t fps,
-    int64_t *width,
-    int64_t *height,
-    double *duration,
+    KiriGifFrame writeFrame,
+    void *context,
     char *errorBuffer,
     size_t errorCapacity
 ) {
@@ -627,7 +630,6 @@ bool kiri_macos_export_gif(
                 return false;
             }
             NSURL *sourceURL = [NSURL fileURLWithPath:kiri_path(sourcePath)];
-            NSURL *destinationURL = [NSURL fileURLWithPath:kiri_path(outputPath)];
             AVURLAsset *asset = [AVURLAsset URLAssetWithURL:sourceURL options:nil];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -660,48 +662,13 @@ bool kiri_macos_export_gif(
                 return false;
             }
             NSUInteger frameCount = (NSUInteger)rawFrameCount;
-            [[NSFileManager defaultManager] removeItemAtURL:destinationURL error:nil];
-            CGImageDestinationRef destination = CGImageDestinationCreateWithURL(
-                (__bridge CFURLRef)destinationURL,
-                (__bridge CFStringRef)UTTypeGIF.identifier,
-                frameCount,
-                NULL
-            );
-            if (destination == NULL) {
-                kiri_write_error(errorBuffer, errorCapacity, @"Could not create the GIF destination.");
-                return false;
-            }
-            NSDictionary *gifProperties = @{
-                (NSString *)kCGImagePropertyGIFDictionary: @{
-                    (NSString *)kCGImagePropertyGIFLoopCount: @0,
-                },
-            };
-            CGImageDestinationSetProperties(destination, (__bridge CFDictionaryRef)gifProperties);
-
             AVAssetImageGenerator *generator = [AVAssetImageGenerator assetImageGeneratorWithAsset:asset];
             generator.appliesPreferredTrackTransform = YES;
             generator.maximumSize = targetSize;
             generator.requestedTimeToleranceBefore = kCMTimeZero;
             generator.requestedTimeToleranceAfter = CMTimeMake(1, fps);
-            // GIF stores centiseconds: distribute the fractional remainder
-            // over elapsed time instead of quantizing every frame separately.
-            uint32_t gifRemainder = fps / 2;
-            uint64_t encodedTicks = 0;
-            size_t outputWidth = 0;
-            size_t outputHeight = 0;
             for (NSUInteger frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
                 @autoreleasepool {
-                    gifRemainder += 100;
-                    uint32_t delayTicks = gifRemainder / fps;
-                    gifRemainder %= fps;
-                    encodedTicks += delayTicks;
-                    double delaySeconds = (double)delayTicks / 100.0;
-                    NSDictionary *frameProperties = @{
-                        (NSString *)kCGImagePropertyGIFDictionary: @{
-                            (NSString *)kCGImagePropertyGIFDelayTime: @(delaySeconds),
-                            (NSString *)kCGImagePropertyGIFUnclampedDelayTime: @(delaySeconds),
-                        },
-                    };
                     double requestedSeconds = MIN(seconds - 0.001, (double)frameIndex / (double)fps);
                     CMTime requestedTime = CMTimeMakeWithSeconds(MAX(0, requestedSeconds), 600);
                     NSError *frameError = nil;
@@ -712,33 +679,36 @@ bool kiri_macos_export_gif(
                                                                error:&frameError];
 #pragma clang diagnostic pop
                     if (image == NULL) {
-                        CFRelease(destination);
-                        [[NSFileManager defaultManager] removeItemAtURL:destinationURL error:nil];
-                        kiri_write_error(errorBuffer, errorCapacity, frameError.localizedDescription);
+                        kiri_write_error(errorBuffer, errorCapacity, [NSString stringWithFormat:
+                            @"Could not decode GIF frame %lu/%lu at %.2f s: %@ (%@ %ld).",
+                            (unsigned long)(frameIndex + 1), (unsigned long)frameCount,
+                            requestedSeconds, frameError.localizedDescription ?: @"No video frame returned",
+                            frameError.domain ?: @"AVFoundation", (long)frameError.code]);
                         return false;
                     }
-                    if (outputWidth == 0) {
-                        outputWidth = CGImageGetWidth(image);
-                        outputHeight = CGImageGetHeight(image);
+                    size_t frameWidth = CGImageGetWidth(image);
+                    size_t frameHeight = CGImageGetHeight(image);
+                    size_t rowBytes = frameWidth * 4;
+                    uint8_t *pixels = calloc(frameHeight, rowBytes);
+                    CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+                    CGContextRef bitmap = pixels ? CGBitmapContextCreate(pixels, frameWidth, frameHeight,
+                        8, rowBytes, colorSpace, kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big) : NULL;
+                    CGColorSpaceRelease(colorSpace);
+                    if (bitmap == NULL) {
+                        free(pixels);
+                        CGImageRelease(image);
+                        kiri_write_error(errorBuffer, errorCapacity, @"Could not allocate a GIF frame buffer.");
+                        return false;
                     }
-                    CGImageDestinationAddImage(
-                        destination,
-                        image,
-                        (__bridge CFDictionaryRef)frameProperties
-                    );
+                    CGContextDrawImage(bitmap, CGRectMake(0, 0, frameWidth, frameHeight), image);
+                    bool written = writeFrame(context, pixels, (uint32_t)frameWidth, (uint32_t)frameHeight,
+                        (uint64_t)frameIndex, (uint64_t)frameCount);
+                    CGContextRelease(bitmap);
+                    free(pixels);
                     CGImageRelease(image);
+                    if (!written) return false;
                 }
             }
-            BOOL finalized = CGImageDestinationFinalize(destination);
-            CFRelease(destination);
-            if (!finalized || outputWidth == 0 || outputHeight == 0) {
-                [[NSFileManager defaultManager] removeItemAtURL:destinationURL error:nil];
-                kiri_write_error(errorBuffer, errorCapacity, @"The GIF could not be finalized.");
-                return false;
-            }
-            *width = (int64_t)outputWidth;
-            *height = (int64_t)outputHeight;
-            *duration = (double)encodedTicks / 100.0;
             return true;
         } @catch (NSException *exception) {
             kiri_write_error(errorBuffer, errorCapacity, exception.reason);

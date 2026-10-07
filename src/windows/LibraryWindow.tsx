@@ -17,6 +17,7 @@ import {
   type AssetDto,
   type AssetAvailability,
   type ErrorDto,
+  type GifConversionStateDto,
   type LibraryStatusDto,
   type NoticeDto,
   type RecordingSaveJob,
@@ -38,6 +39,8 @@ import {
   getMenuFocusIndex,
 } from "./library-card-interaction.js";
 import { canCopyCaptureOnKeyDown } from "./viewer-copy-shortcut.js";
+
+import { gifConversionLabel } from "./gif-conversion";
 
 const SettingsView = React.lazy(() =>
   import("../settings/SettingsView").then((module) => ({ default: module.SettingsView })),
@@ -104,7 +107,9 @@ export function LibraryWindow() {
   const [screenshotAuthorizationBusy, setScreenshotAuthorizationBusy] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [menuFocusFirst, setMenuFocusFirst] = useState(false);
-  const [gifConversionIds, setGifConversionIds] = useState<Set<string>>(new Set());
+  const [gifConversions, setGifConversions] = useState<Record<string, GifConversionStateDto>>({});
+  const activeGifConversions = Object.values(gifConversions).filter((job) => job.isConverting);
+  const gifConversionIds = new Set(activeGifConversions.map((job) => job.id));
   // Menu anchor in viewport coordinates (mouse position on right-click, or
   // the ⋯ button's corner), so the menu appears where the user looked.
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -446,19 +451,30 @@ export function LibraryWindow() {
   }, [refresh]);
 
   useEffect(() => {
+    let active = true;
+    let eventVersion = 0;
+    let dispose: (() => void) | undefined;
+    void onGifConversionState((job) => {
+      eventVersion++;
+      if (active) setGifConversions((current) => ({ ...current, [job.id]: job }));
+    }).then(async (unlisten) => {
+      if (!active) { unlisten(); return; }
+      dispose = unlisten;
+      const version = eventVersion;
+      const jobs = await api.getGifConversionStates();
+      if (active && version === eventVersion) setGifConversions((current) => ({
+        ...current, ...Object.fromEntries(jobs.map((job) => [job.id, job])),
+      }));
+    }).catch(() => {});
+    return () => { active = false; dispose?.(); };
+  }, []);
+
+  useEffect(() => {
     const subscriptions = [
       onLibraryChanged(() => {
         void refresh().catch(() => {});
       }),
       onAssetContentChanged(refreshAssetContent),
-      onGifConversionState(({ id, isConverting }) => {
-        setGifConversionIds((current) => {
-          const next = new Set(current);
-          if (isConverting) next.add(id);
-          else next.delete(id);
-          return next;
-        });
-      }),
       onNotice(setNotice),
       onError((e) => setError(e)),
     ];
@@ -587,14 +603,14 @@ export function LibraryWindow() {
     [closeMenu],
   );
   const startGifConversion = useCallback((id: string) => {
-    // Give immediate feedback before the backend thread publishes its state.
-    setGifConversionIds((current) => new Set(current).add(id));
-    void api.convertToGif(id).catch(() => {
-      setGifConversionIds((current) => {
-        const next = new Set(current);
-        next.delete(id);
-        return next;
-      });
+    setGifConversions((current) => ({ ...current, [id]: {
+      id, isConverting: true, phase: "preparing", progress: null, error: null,
+    } }));
+    void api.convertToGif(id).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setGifConversions((current) => ({ ...current, [id]: {
+        id, isConverting: false, phase: "failed", progress: null, error: message,
+      } }));
     });
   }, []);
 
@@ -1309,7 +1325,12 @@ export function LibraryWindow() {
                   animation: "kiri-library-spin 0.75s linear infinite",
                 }}
               />
-              {t("Creating GIF…")}
+              <span>{gifConversionLabel(activeGifConversions[0])}
+                {activeGifConversions.length > 1 && ` · ${activeGifConversions.length}`}</span>
+              {activeGifConversions.length === 1 && activeGifConversions[0].progress != null && (
+                <progress aria-label={t("Creating GIF…")} max={1} value={activeGifConversions[0].progress}
+                  style={{ width: 80, height: 4, accentColor: "var(--kiri-label)" }} />
+              )}
             </>
           ) : (
             <>
@@ -1317,6 +1338,25 @@ export function LibraryWindow() {
               <span>{notice && t(notice.title)}</span>
             </>
           )}
+        </div>
+      )}
+
+      {Object.values(gifConversions).some((job) => job.error) && (
+        <div className="library-gif-errors">
+          {Object.values(gifConversions).filter((job) => job.error).map((job) => (
+            <div key={job.id} className="library-gif-error" role="alert">
+              <strong>{t("Could not create GIF")}</strong>
+              <span>{assets.find((asset) => asset.id === job.id)?.title ||
+                assets.find((asset) => asset.id === job.id)?.filename}</span>
+              <p>{job.error}</p>
+              <div>
+                <button type="button" className="kiri-button kiri-button--secondary" onClick={() => startGifConversion(job.id)}>{t("Retry")}</button>
+                <button type="button" className="kiri-button kiri-button--secondary" onClick={() => setGifConversions((current) => {
+                  const next = { ...current }; delete next[job.id]; return next;
+                })}>{t("Close")}</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

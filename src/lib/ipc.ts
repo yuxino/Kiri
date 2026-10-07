@@ -127,6 +127,9 @@ export interface NoticeDto {
 export interface GifConversionStateDto {
   id: string;
   isConverting: boolean;
+  phase: "preparing" | "encoding" | "finalizing" | "saving" | "complete" | "failed";
+  progress: number | null;
+  error: string | null;
 }
 
 export interface ErrorDto {
@@ -311,6 +314,7 @@ export const api = {
   exportVideoCopy: (id: string, segments: {start: number; end: number;speed?:number}[], effects: import("../windows/video-effects").VideoEffect[], annotations: import("../windows/video-annotation-render").RasterizedVideoAnnotation[], preset: "original" | "share" | "small",requestId?:string) =>
     invoke<string>("export_video_copy", { id, segments, effects: effects.map(({id: _id, ...effect}) => effect), annotations, preset,requestId }),
   cancelVideoExport: (requestId:string) => invoke<boolean>("cancel_video_export",{requestId}),
+  getGifConversionStates: () => invoke<GifConversionStateDto[]>("get_gif_conversion_states"),
   convertToGif: (id: string) => invoke<void>("convert_to_gif", { id }),
 
   startCapture: () => invoke<CaptureContextDto>("start_capture"),

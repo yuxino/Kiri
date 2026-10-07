@@ -61,14 +61,14 @@ unsafe extern "C" {
         error: *mut c_char,
         error_capacity: usize,
     ) -> bool;
-    fn kiri_macos_export_gif(
+    // Calls write_frame serially and synchronously; pixel bytes live only for
+    // that call. Neither the context nor callback is retained by AVFoundation.
+    fn kiri_macos_decode_gif_frames(
         source_path: *const c_char,
-        output_path: *const c_char,
         max_long_edge: c_uint,
         fps: c_uint,
-        width: *mut c_longlong,
-        height: *mut c_longlong,
-        duration: *mut c_double,
+        write_frame: extern "C" fn(*mut c_void, *const u8, u32, u32, u64, u64) -> bool,
+        context: *mut c_void,
         error: *mut c_char,
         error_capacity: usize,
     ) -> bool;
@@ -307,44 +307,130 @@ pub fn merge_segments(segments: &[PathBuf], output: &Path) -> Result<()> {
     }
 }
 
+#[cfg(test)]
 pub fn export_gif(
     source: &Path,
     max_long_edge: u32,
     fps: u32,
 ) -> Result<(PathBuf, i64, i64, Option<f64>)> {
-    let output = std::env::temp_dir().join(format!(
-        "kiri-gif-{}.gif",
-        uuid::Uuid::new_v4().to_string().to_lowercase()
-    ));
-    let source_c = c_path(source)?;
-    let output_c = c_path(&output)?;
-    let mut width = 0;
-    let mut height = 0;
-    let mut duration = 0.0;
-    let mut error = error_buffer();
-    let success = unsafe {
-        kiri_macos_export_gif(
-            source_c.as_ptr(),
-            output_c.as_ptr(),
-            max_long_edge,
-            fps,
-            &mut width,
-            &mut height,
-            &mut duration,
-            error.as_mut_ptr(),
-            error.len(),
-        )
-    };
-    if !success {
-        let _ = std::fs::remove_file(&output);
-        return Err(error_message(&error, "ImageIO could not create the GIF"));
+    export_gif_with_progress(source, max_long_edge, fps, &mut |_| {})
+}
+
+pub fn export_gif_with_progress(
+    source: &Path,
+    max_long_edge: u32,
+    fps: u32,
+    progress: &mut dyn FnMut(f64),
+) -> Result<(PathBuf, i64, i64, Option<f64>)> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    use std::io::Write;
+
+    struct FrameSink<'a> {
+        encoder: GifEncoder<&'a mut std::io::BufWriter<std::fs::File>>,
+        clock: crate::core::gif_timing::GifFrameClock,
+        progress: &'a mut dyn FnMut(f64),
+        dimensions: Option<(u32, u32)>,
+        error: Option<anyhow::Error>,
     }
-    Ok((
-        output,
-        width,
-        height,
-        (duration.is_finite() && duration > 0.0).then_some(duration),
-    ))
+    extern "C" fn write_frame(
+        context: *mut c_void,
+        pixels: *const u8,
+        width: u32,
+        height: u32,
+        index: u64,
+        total: u64,
+    ) -> bool {
+        let sink = unsafe { &mut *context.cast::<FrameSink<'_>>() };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
+            let length = (width as usize)
+                .checked_mul(height as usize)
+                .and_then(|count| count.checked_mul(4))
+                .context("GIF frame is too large")?;
+            if pixels.is_null() || length == 0 {
+                bail!("The GIF frame is invalid.");
+            }
+            let mut rgba = unsafe { std::slice::from_raw_parts(pixels, length) }.to_vec();
+            for pixel in rgba.chunks_exact_mut(4) {
+                pixel[3] = 255;
+            }
+            let rgba = image::RgbaImage::from_raw(width, height, rgba)
+                .context("Invalid GIF frame dimensions")?;
+            sink.encoder
+                .encode_frame(image::Frame::from_parts(
+                    rgba,
+                    0,
+                    0,
+                    image::Delay::from_numer_denom_ms(sink.clock.next_delay_ms(), 1),
+                ))
+                .with_context(|| format!("Could not write GIF frame {}/{}", index + 1, total))?;
+            sink.dimensions = Some((width, height));
+            (sink.progress)((index + 1) as f64 / total.max(1) as f64);
+            Ok(())
+        }))
+        .unwrap_or_else(|_| {
+            Err(anyhow::anyhow!(
+                "The GIF frame encoder stopped unexpectedly."
+            ))
+        });
+        match result {
+            Ok(()) => true,
+            Err(error) => {
+                sink.error = Some(error);
+                false
+            }
+        }
+    }
+
+    let clock = crate::core::gif_timing::GifFrameClock::new(fps)
+        .context("GIF frame rate must be between 1 and 60")?;
+    let source_c = c_path(source)?;
+    let output = tempfile::Builder::new()
+        .prefix("kiri-gif-")
+        .suffix(".gif")
+        .tempfile()?;
+    let mut writer = std::io::BufWriter::new(output.reopen()?);
+    let (width, height, duration) = {
+        let mut encoder = GifEncoder::new_with_speed(&mut writer, 10);
+        encoder.set_repeat(Repeat::Infinite)?;
+        let mut sink = FrameSink {
+            encoder,
+            clock,
+            progress,
+            dimensions: None,
+            error: None,
+        };
+        let mut error = error_buffer();
+        let success = unsafe {
+            kiri_macos_decode_gif_frames(
+                source_c.as_ptr(),
+                max_long_edge,
+                fps,
+                write_frame,
+                (&mut sink as *mut FrameSink<'_>).cast(),
+                error.as_mut_ptr(),
+                error.len(),
+            )
+        };
+        if let Some(error) = sink.error {
+            return Err(error);
+        }
+        if !success {
+            return Err(error_message(
+                &error,
+                "AVFoundation could not decode the GIF video",
+            ));
+        }
+        let (width, height) = sink.dimensions.context("GIF encoding produced no frames")?;
+        (width, height, sink.clock.duration_seconds())
+    };
+    writer
+        .flush()
+        .context("Could not finish writing the GIF; check available disk space")?;
+    drop(writer);
+    let (_, path) = output
+        .keep()
+        .context("Could not retain the completed GIF")?;
+    Ok((path, i64::from(width), i64::from(height), Some(duration)))
 }
 
 pub fn video_first_frame_png(source: &Path, max_long_edge: u32) -> Result<Vec<u8>> {
@@ -444,6 +530,65 @@ mod tests {
         assert!((encoded_seconds - frames.len() as f64 / 12.0).abs() <= 0.005_000_001);
         assert!((gif_duration.unwrap() - encoded_seconds).abs() < 0.000_001);
         assert!((encoded_seconds - duration.unwrap()).abs() < 1.0 / 12.0 + 0.01);
+        let top = frames[0].buffer().get_pixel(16, 4).0;
+        let bottom = frames[0].buffer().get_pixel(16, 28).0;
+        assert!(top[0] > top[2], "GIF top should remain red: {top:?}");
+        assert!(
+            bottom[2] > bottom[0],
+            "GIF bottom should remain blue: {bottom:?}"
+        );
         let _ = std::fs::remove_file(gif);
+    }
+
+    #[test]
+    fn invalid_gif_source_returns_native_reason() {
+        let directory = tempfile::tempdir().unwrap();
+        let video = directory.path().join("invalid.mp4");
+        std::fs::write(&video, b"invalid video").unwrap();
+        let mut progress = Vec::new();
+        let error = export_gif_with_progress(&video, 720, 12, &mut |value| progress.push(value))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("source video is invalid"),
+            "{error:#}"
+        );
+        assert!(progress.is_empty());
+    }
+
+    #[test]
+    #[ignore = "requires KIRI_TEST_MP4 pointing to a generated local fixture"]
+    fn native_gif_long_fixture_streams_frames_and_progress() {
+        use image::AnimationDecoder;
+        let source = std::env::var_os("KIRI_TEST_MP4").unwrap();
+        let mut progress = Vec::new();
+        let (gif, width, height, duration) =
+            export_gif_with_progress(Path::new(&source), 720, 12, &mut |value| {
+                progress.push(value)
+            })
+            .unwrap();
+        assert!(progress.len() > 12);
+        assert!(progress.windows(2).all(|pair| pair[1] > pair[0]));
+        assert_eq!(progress.last(), Some(&1.0));
+        let decoder = image::codecs::gif::GifDecoder::new(std::io::BufReader::new(
+            std::fs::File::open(&gif).unwrap(),
+        ))
+        .unwrap();
+        let mut encoded_ms = 0.0;
+        let mut count = 0;
+        for frame in decoder.into_frames() {
+            let frame = frame.unwrap();
+            assert_eq!(frame.buffer().dimensions(), (width as u32, height as u32));
+            let (numerator, denominator) = frame.delay().numer_denom_ms();
+            encoded_ms += numerator as f64 / denominator as f64;
+            count += 1;
+        }
+        assert_eq!(count, progress.len());
+        assert!((encoded_ms / 1000.0 - duration.unwrap()).abs() < 0.001);
+        println!(
+            "GIF: {width}x{height}, {count} frames, {} s, {} bytes",
+            duration.unwrap(),
+            std::fs::metadata(&gif).unwrap().len()
+        );
+        std::fs::remove_file(gif).unwrap();
     }
 }

@@ -314,7 +314,14 @@ output disables audio for that recording session without erasing the user's
 saved MP4 audio preferences. After the MP4 staging file is finalized, Kiri
 converts it locally to a looping, silent GIF at 12 fps with a 720-pixel long
 edge. Windows decodes the staging MP4 with Media Foundation and encodes the GIF
-inside the application; macOS uses AVAssetImageGenerator and ImageIO. There is no duration cutoff for a
+inside the application; macOS decodes one scaled AVAssetImageGenerator frame at a time and writes it
+with the streaming Rust GIF encoder, so decoded frames do not accumulate until
+finalization. Saved-video conversions report measured frame progress on macOS,
+then finalization and library saving; unknown progress remains indeterminate.
+Operation-specific failures remain visible with retry and dismiss actions,
+including repeated failures. The library subscribes before fetching an active
+conversion snapshot so opening it during conversion restores the current state
+without overwriting newer events (ADR 0077). There is no duration cutoff for a
 recording with a positive known duration. If GIF encoding or import fails,
 Kiri imports the valid MP4 staging file instead of losing the recording. The
 native recording session returns to idle and restores the source application's
@@ -379,8 +386,8 @@ loading the window cannot lose the starting state or its cancel action.
 
 Windows uses Media Foundation plus the bundled Rust GIF encoder for MP4
 recording, recovery validation, thumbnails, and MP4-to-GIF conversion. macOS
-uses AVFoundation and ImageIO for the same boundary, including pause-segment
-merging. Linux WebKitGTK video playback uses a process-scoped loopback HTTP capability
+uses AVFoundation for recording, decoding and pause-segment merging, ImageIO
+for thumbnails, and the streaming Rust GIF encoder. Linux WebKitGTK video playback uses a process-scoped loopback HTTP capability
 with bounded streaming and validated asset IDs/ranges (ADR 0069), because its
 media decoder rejects custom `kiri` URIs. Images keep the private protocol.
 

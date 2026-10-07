@@ -154,7 +154,6 @@
   "The recording region is too small.": "録画領域が小さすぎます。",
   "No recording segments are available.": "録画セグメントがありません。",
   "Kiri could not create the GIF file.": "Kiri は GIF ファイルを作成できませんでした。",
-  "The GIF could not be finalized.": "GIF を完成できませんでした。",
   "The capture could not be found.": "キャプチャが見つかりませんでした。",
   "Image": "画像",
   "Video": "動画",
@@ -698,5 +697,9 @@
   "MB": "MB",
   "GB": "GB",
   "TB": "TB",
-  "Imported %d files.": "%d 件のファイルを読み込みました。"
+  "Imported %d files.": "%d 件のファイルを読み込みました。",
+  "Preparing GIF…": "GIF を準備中…",
+  "Finishing GIF…": "GIF の処理を完了中…",
+  "Saving GIF…": "GIF を保存中…",
+  "Creating GIF… %d%": "GIF を作成中… %d%"
 }

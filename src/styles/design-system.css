@@ -1430,3 +1430,17 @@ button:active:not(:disabled) {
 @media (prefers-reduced-motion: reduce) {
   .library-toast, .library-toast > [aria-hidden] { animation: none !important; }
 }
+
+.library-gif-errors {
+  position: absolute; right: 24px; bottom: 70px; z-index: 35;
+  width: min(380px, calc(100% - 48px)); max-height: 60%; overflow: auto;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.library-gif-error {
+  padding: 14px; border: 1px solid var(--kiri-surface-border); border-radius: 12px;
+  background: var(--kiri-elevated); color: var(--kiri-label); font-size: 12.5px;
+}
+.library-gif-error > strong, .library-gif-error > span { display: block; }
+.library-gif-error > span { color: var(--kiri-secondary-label); margin-top: 4px; overflow-wrap: anywhere; }
+.library-gif-error p { margin: 10px 0; line-height: 1.5; overflow-wrap: anywhere; }
+.library-gif-error > div { display: flex; gap: 8px; }

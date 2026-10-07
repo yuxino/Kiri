@@ -154,7 +154,6 @@
   "The recording region is too small.": "The recording region is too small.",
   "No recording segments are available.": "No recording segments are available.",
   "Kiri could not create the GIF file.": "Kiri could not create the GIF file.",
-  "The GIF could not be finalized.": "The GIF could not be finalized.",
   "The capture could not be found.": "The capture could not be found.",
   "Image": "Image",
   "Video": "Video",
@@ -698,5 +697,9 @@
   "MB": "MB",
   "GB": "GB",
   "TB": "TB",
-  "Imported %d files.": "Imported %d files."
+  "Imported %d files.": "Imported %d files.",
+  "Preparing GIF…": "Preparing GIF…",
+  "Finishing GIF…": "Finishing GIF…",
+  "Saving GIF…": "Saving GIF…",
+  "Creating GIF… %d%": "Creating GIF… %d%"
 }

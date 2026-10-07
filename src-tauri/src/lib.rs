@@ -253,6 +253,7 @@ pub fn run() {
             commands::take_editor_qr_request,
             commands::reveal_asset,
             commands::convert_to_gif,
+            commands::get_gif_conversion_states,
             commands::export_video_copy,
             commands::cancel_video_export,
             video_project_commands::load_video_project,

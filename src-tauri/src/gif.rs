@@ -1,7 +1,7 @@
 //! GIF export.
 //!
 //! Windows uses Media Foundation plus the Rust GIF encoder. macOS uses
-//! AVFoundation plus ImageIO through the native media bridge.
+//! AVFoundation frame decoding plus the streaming Rust GIF encoder.
 
 #[cfg(windows)]
 use std::path::{Path, PathBuf};

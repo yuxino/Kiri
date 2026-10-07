@@ -14,8 +14,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { KiriIcon } from "../components/KiriIcons";
 import { t } from "../i18n";
-import { api, mediaUrl } from "../lib/ipc";
+import { api, mediaUrl, onGifConversionState, type GifConversionStateDto } from "../lib/ipc";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
+
+import { gifConversionLabel } from "./gif-conversion";
 
 interface NoticePayload {
   id: string;
@@ -25,7 +27,7 @@ interface NoticePayload {
 
 interface CompletionPreviewPayload {
   id: string;
-  phase: "processing" | "ready";
+  phase: "processing" | "ready" | "failed";
   assetId: string | null;
   kind: "image" | "video" | "gif";
   title: string;
@@ -57,7 +59,7 @@ function initialCompletionFromUrl(): CompletionPreviewPayload | null {
   const params = new URLSearchParams(window.location.search);
   if (params.get("mode") !== "completion") return null;
 
-  const phase = params.get("phase") === "processing" ? "processing" : "ready";
+  const phase = params.get("phase") === "processing" ? "processing" : params.get("phase") === "failed" ? "failed" : "ready";
   const rawKind = params.get("kind");
   const kind = rawKind === "video" || rawKind === "gif" ? rawKind : "image";
   const rawAssetId = params.get("assetId");
@@ -137,6 +139,7 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
   const [pendingAction, setPendingAction] = useState<ActionName | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copiedNow, setCopiedNow] = useState(false);
+  const [gifProgress, setGifProgress] = useState<GifConversionStateDto | null>(null);
 
   const completionRef = useRef(completion);
   const undoRef = useRef<UndoState | null>(null);
@@ -184,6 +187,7 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
       setNotice(null);
       setCompletion(payload);
       completionRef.current = payload;
+      setGifProgress(null);
       resetActionState();
     },
     [resetActionState],
@@ -255,12 +259,26 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
     };
   }, [hideWindow, presentCompletion, presentNotice]);
 
+  useEffect(() => {
+    const subscription = onGifConversionState((job) => {
+      const current = completionRef.current;
+      if (current?.phase === "processing" && current.assetId === job.id) setGifProgress(job);
+    });
+    return () => { void subscription.then((dispose) => dispose()).catch(() => {}); };
+  }, []);
+
   // Passive notices and non-actionable processing cards remain click-through.
   // Only ready cards and Undo need pointer input.
   useEffect(() => {
-    const interactive = completion?.phase === "ready" || undo !== null;
+    const interactive = completion?.phase === "ready" || completion?.phase === "failed" || undo !== null;
     void getCurrentWindow().setIgnoreCursorEvents(!interactive).catch(() => {});
   }, [completion, undo]);
+
+  useEffect(() => {
+    if (!completion) return;
+    void getCurrentWindow().setSize(new LogicalSize(COMPLETION_WIDTH,
+      completion.phase === "failed" ? 224 : COMPLETION_HEIGHT)).catch(() => {});
+  }, [completion?.id, completion?.phase]);
 
   // Ordinary notices stay just long enough to register without lingering. Ready cards
   // remain for eight seconds; the compact Undo state gets only three seconds.
@@ -271,7 +289,7 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
       const timer = window.setTimeout(hideWindow, PASSIVE_DISMISS_MS);
       return () => window.clearTimeout(timer);
     }
-    if (completion?.phase === "processing") return;
+    if (completion?.phase === "processing" || completion?.phase === "failed") return;
     if (!completion && !undo) return;
     if (pendingAction) return;
 
@@ -344,12 +362,15 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
 
   const assetId = visibleCompletion.assetId;
   const isProcessing = !undo && visibleCompletion.phase === "processing";
+  const isFailed = !undo && visibleCompletion.phase === "failed";
   const title = undo ? t("Moved to Trash") : t(visibleCompletion.title);
   const detail = actionError
     ? t(actionError)
     : undo
       ? t("You can restore it from Trash.")
-      : t(visibleCompletion.detail);
+      : isProcessing && gifProgress
+        ? gifConversionLabel(gifProgress)
+        : t(visibleCompletion.detail);
 
   const openPreview = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (event.detail > 1) return;
@@ -424,7 +445,7 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
           />
         </section>
       ) : (
-        <section className="kiri-completion-card" aria-label={title}>
+        <section className={`kiri-completion-card${isFailed ? " is-failed" : ""}`} aria-label={title}>
           <button
             type="button"
             className="kiri-completion-preview"
@@ -468,12 +489,22 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
           <div className="kiri-completion-content">
             <div className="kiri-completion-copy" role="status" aria-live="polite">
               <strong>{title}</strong>
-              <span className={actionError ? "is-error" : ""} title={detail}>
+              <span className={actionError || isFailed ? "is-error" : ""} title={detail}>
                 {detail}
               </span>
             </div>
 
-            {!isProcessing && (
+            {isProcessing && gifProgress?.progress != null && (
+              <progress aria-label={t("Creating GIF…")} value={gifProgress.progress} max={1} />
+            )}
+            {isFailed && (
+              <div className="kiri-completion-actions">
+                <ActionButton action="gif" icon="sparkles.rectangle.stack" label={t("Retry")}
+                  pending={pendingAction} onClick={createGif} />
+                <button type="button" className="kiri-completion-action" onClick={hideWindow}>{t("Close")}</button>
+              </div>
+            )}
+            {!isProcessing && !isFailed && (
               <div className="kiri-completion-actions">
                 <ActionButton
                   action="copy"
@@ -534,6 +565,11 @@ function ToastStyles() {
       }
 
       .kiri-toast-shell { pointer-events: none; }
+      .kiri-completion-card.is-failed { align-items: start; }
+      .kiri-completion-card.is-failed .kiri-completion-copy > span {
+        white-space: normal; overflow: auto; max-height: 112px; overflow-wrap: anywhere;
+      }
+      .kiri-completion-content progress { width: 100%; height: 4px; accent-color: var(--kiri-label); }
 
       .kiri-toast-card {
         display: flex;
