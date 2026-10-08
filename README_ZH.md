@@ -5,7 +5,7 @@
   <p>
     <a href="https://kiri.yuxino.cn">官网</a>
     · <strong>简体中文</strong>
-    · <a href="README.md">English</a>
+    · <a href="README_EN.md"><strong>English</strong></a>
   </p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="最新版本"></a>
@@ -19,7 +19,7 @@
   </p>
 </div>
 
-<p align="center">Kiri 是一款适用于 macOS、Windows 和 Linux 的截图与录屏工具。截图后可以画箭头、打马赛克、提取文字，图片和视频都保存在本机。</p>
+<p align="center">Kiri 是截图与录屏工具，支持 macOS、Windows 和 Linux。截图后可以画箭头、打马赛克、提取文字，图片和视频都保存在本机。</p>
 
 ![Kiri 标注界面预览，使用新绘制的插画素材](docs/assets/readme-preview.png)
 
