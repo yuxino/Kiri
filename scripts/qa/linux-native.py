@@ -407,7 +407,8 @@ def discover_video(path):
     if len(streams) != 1 or len(audio) != int(system_audio):
         raise RuntimeError("MP4 must contain one video and the explicitly requested audio track count")
     if audio and (audio[0].get_sample_rate() != 48000 or audio[0].get_channels() != 2
-                  or audio[0].get_caps().get_structure(0).get_name() != "audio/mpeg"):
+                  or audio[0].get_caps().get_structure(0).get_name() != "audio/mpeg"
+                  or audio[0].get_caps().get_structure(0).get_value("mpegversion") != 4):
         raise RuntimeError("System audio must be 48kHz stereo AAC")
     dimensions = (streams[0].get_width(), streams[0].get_height())
     if dimensions != recording_size:
@@ -428,7 +429,6 @@ def frame_error(actual, expected):
     histogram = luminance.histogram()
     changed = sum(histogram[33:]) / (actual.width * actual.height)
     return mean, changed
-
 
 
 def inspect_system_audio(path):

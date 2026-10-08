@@ -180,6 +180,7 @@ jobs:
             tesseract-ocr-chi-sim \
             tesseract-ocr-jpn \
             xvfb openbox xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
+            pulseaudio pulseaudio-utils \
             python3-gi python3-pyatspi at-spi2-core \
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0
       - run: pnpm install --frozen-lockfile
@@ -372,6 +373,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends "${packages[0]}" \
             xvfb openbox xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
+            pulseaudio pulseaudio-utils \
             python3-gi python3-pyatspi at-spi2-core \
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
