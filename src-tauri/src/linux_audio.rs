@@ -339,7 +339,7 @@ fn trim_pcm_before_origin(pts_ns: i128, bytes: &mut Vec<u8>) -> Duration {
 
 fn validate_audio_continuity(previous_end: Option<Duration>, next: Duration) -> Result<()> {
     if previous_end.is_some_and(|expected| expected.abs_diff(next) > Duration::from_millis(100)) {
-        bail!(AUDIO_RECORDING_FAILED);
+        bail!("{AUDIO_RECORDING_FAILED} [native timestamp discontinuity]");
     }
     Ok(())
 }
@@ -355,6 +355,11 @@ fn pcm_bytes_before_cutoff(pts: Duration, cutoff: Duration, bytes: usize) -> usi
 
 const PCM_BYTES_PER_SECOND: u64 = 48_000 * 2 * 4;
 const PCM_QUEUE_BYTES: u64 = PCM_BYTES_PER_SECOND / 4;
+// A monitor can deliver playback more than 250ms ahead (for example a 64KiB
+// s16le FIFO sink). Keep that future PCM in libpulse until presentation time.
+// Its native queue needs a separate, finite lead budget; appsrc/mixer queues
+// remain at 250ms. Otherwise libpulse drops unread PCM before we can submit it.
+const NATIVE_PCM_QUEUE_BYTES: u64 = PCM_BYTES_PER_SECOND;
 
 struct NativeInput {
     stream: pulse::stream::Stream,
@@ -389,10 +394,20 @@ pub struct NativeCapture {
     inputs: Vec<NativeInput>,
     connection: PulseConnection,
     failed: Rc<std::cell::Cell<bool>>,
+    queue_bytes: u64,
 }
 
 impl NativeCapture {
     pub(crate) fn new(sources: &[AudioSource]) -> Result<Self> {
+        Self::with_queue_limit(sources, NATIVE_PCM_QUEUE_BYTES)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_legacy_queue(sources: &[AudioSource]) -> Result<Self> {
+        Self::with_queue_limit(sources, PCM_QUEUE_BYTES)
+    }
+
+    fn with_queue_limit(sources: &[AudioSource], queue_bytes: u64) -> Result<Self> {
         let first = sources.first().context(AUDIO_UNAVAILABLE)?;
         let mut connection = PulseConnection::new_at(Some(&first.server))?;
         let failed = Rc::new(std::cell::Cell::new(false));
@@ -403,7 +418,7 @@ impl NativeCapture {
             rate: 48_000,
         };
         let attributes = pulse::def::BufferAttr {
-            maxlength: PCM_QUEUE_BYTES as u32,
+            maxlength: queue_bytes as u32,
             fragsize: 3_840,
             tlength: u32::MAX,
             prebuf: u32::MAX,
@@ -439,7 +454,7 @@ impl NativeCapture {
             if stream.get_device_index() != Some(source.index)
                 || stream.get_sample_spec() != Some(&spec)
                 || stream.get_buffer_attr().is_none_or(|actual| {
-                    actual.maxlength > PCM_QUEUE_BYTES as u32
+                    actual.maxlength > queue_bytes as u32
                         || actual.fragsize > PCM_QUEUE_BYTES as u32
                 })
             {
@@ -462,6 +477,7 @@ impl NativeCapture {
             inputs,
             connection,
             failed,
+            queue_bytes,
         })
     }
 
@@ -489,6 +505,32 @@ impl NativeCapture {
         self.check()
     }
 
+    pub fn start_for_recording(&mut self, cancelled: &AtomicBool) -> Result<()> {
+        self.start()?;
+        // A FIFO monitor may initially deliver only future playback. Prime
+        // each native input before starting the shared video/audio clock;
+        // otherwise the mixer records that startup lead as silence. No PCM
+        // from this bounded preparation interval enters the output pipeline.
+        let warmup = Instant::now();
+        while self.inputs.iter().any(|input| input.next_pts.is_none()) {
+            if cancelled.load(Ordering::Acquire) {
+                bail!("Linux recording was cancelled.");
+            }
+            if warmup.elapsed() >= Duration::from_secs(2) {
+                bail!("{AUDIO_RECORDING_FAILED} [native startup timeout]");
+            }
+            self.pump(warmup, None, |_, _, _, _| Ok(()))?;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // Re-anchor existing native snapshots to the actual recording origin.
+        // Keep queued future PCM; its timestamps remain tied to presentation.
+        for input in &mut self.inputs {
+            input.next_pts = None;
+            input.timing = NativeTiming::default();
+        }
+        Ok(())
+    }
+
     pub fn finish(
         &mut self,
         origin: Instant,
@@ -514,9 +556,11 @@ impl NativeCapture {
     }
 
     fn check(&self) -> Result<()> {
-        if self.failed.get() || self.connection.context.get_state() != pulse::context::State::Ready
-        {
-            bail!(AUDIO_RECORDING_FAILED);
+        if self.failed.get() {
+            bail!("{AUDIO_RECORDING_FAILED} [native overflow or device move]");
+        }
+        if self.connection.context.get_state() != pulse::context::State::Ready {
+            bail!("{AUDIO_RECORDING_FAILED} [sound service disconnected]");
         }
         for input in &self.inputs {
             if input.stream.get_state() != pulse::stream::State::Ready
@@ -549,7 +593,7 @@ impl NativeCapture {
                     .stream
                     .readable_size()
                     .context(AUDIO_RECORDING_FAILED)? as u64;
-                if queued > PCM_QUEUE_BYTES {
+                if queued > self.queue_bytes {
                     bail!(AUDIO_RECORDING_FAILED);
                 }
                 if queued == 0 {

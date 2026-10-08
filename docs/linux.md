@@ -412,3 +412,12 @@ records them through the real libpulse path, verifies decoded tones and the
 microphone meter, and removes the private server afterward. It never accesses
 the desktop sound devices. CI runs this explicitly; a blocked local socket
 must be reported as unverified rather than bypassed.
+
+The FIFO monitor regression has a separate harness,
+`bash scripts/qa/linux-audio-fifo.sh`. It creates a private 48 kHz stereo s16le
+`fifo_output`, verifies generated 440 Hz playback, then checks system-only AAC,
+pause/resume merging and a silent control. To exercise the installed app on an
+isolated X11 desktop, run `bash scripts/qa/linux-audio-fifo.sh /usr/bin/kiri`.
+Neither mode opens a physical microphone. See the
+[issue #101 investigation](qa/linux-fifo-system-audio.md) for the timing evidence
+and acceptance boundaries.

@@ -802,7 +802,7 @@ fn encode_bgra_mp4(
                 prepared.audio.push(index, bytes, pts, duration)
             })?;
         }
-        let frame = if shutdown.load(Ordering::Acquire) {
+        let mut frame = if shutdown.load(Ordering::Acquire) {
             match video_rx.try_recv() {
                 Ok(frame) => frame,
                 Err(_) => break,
@@ -830,14 +830,33 @@ fn encode_bgra_mp4(
             bail!("The Linux capture frame size changed during recording.");
         }
         if origin.is_none() {
+            if let Some(capture) = &mut native_audio {
+                capture.start_for_recording(&cancelled)?;
+                // Discard at most the bounded capture backlog, then prefer a
+                // fresh frame after audio preparation. Static/test producers
+                // may have no new frame, so this wait is only one frame long.
+                for _ in 0..crate::capture::VIDEO_FRAME_QUEUE_CAPACITY {
+                    match video_rx.try_recv() {
+                        Ok(latest) => frame = latest,
+                        Err(_) => break,
+                    }
+                }
+                if !shutdown.load(Ordering::Acquire) {
+                    if let Ok(latest) = video_rx.recv_timeout(Duration::from_nanos(
+                        1_000_000_000 / u64::from(prepared.fps),
+                    )) {
+                        frame = latest;
+                    }
+                }
+                if frame.len() != prepared.frame_bytes {
+                    bail!("The Linux capture frame size changed during recording.");
+                }
+            }
             prepared
                 .pipeline
                 .set_state(gstreamer::State::Playing)
                 .context("Could not start Linux media capture")?;
             origin = Some(Instant::now());
-            if let Some(capture) = &mut native_audio {
-                capture.start()?;
-            }
         }
         let start = origin.expect("recording clock");
         prepared.audio.check(start)?;
@@ -2466,6 +2485,141 @@ mod tests {
         .unwrap();
         assert!(peaks.iter().any(|peak| *peak > 0.05));
         assert!(continuity_errors.is_empty(), "{continuity_errors:?}");
+    }
+
+    #[test]
+    #[ignore = "requires scripts/qa/linux-audio-fifo.sh private FIFO sink; microphone stays off"]
+    fn native_pulse_fifo_system_audio_and_pause_merge() {
+        assert_eq!(
+            std::env::var("KIRI_LINUX_PULSE_FIFO_QA").as_deref(),
+            Ok("1")
+        );
+        let sources = crate::linux_audio::selected_sources(true, false).unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].name, "fifo_output.monitor");
+        // FIFO playback can take longer to prime than a null sink. Prove the
+        // generated route is audible before asking the encoder to record it.
+        {
+            let mut capture = crate::linux_audio::NativeCapture::new(&sources).unwrap();
+            let origin = Instant::now();
+            capture.start().unwrap();
+            let mut heard = false;
+            while !heard && origin.elapsed() < Duration::from_secs(5) {
+                capture
+                    .pump(origin, None, |_, bytes, _, _| {
+                        heard |= bytes
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .any(|sample| f32::from_le_bytes(*sample).abs() > 0.05);
+                        Ok(())
+                    })
+                    .unwrap();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(heard, "FIFO test generator never delivered its tone");
+            eprintln!("FIFO test tone verified after {:?}", origin.elapsed());
+        }
+        // The same audible route must reject the legacy 250ms native budget.
+        // This counterfactual prevents a lower-latency fixture from passing
+        // without exercising the dropped-future-PCM regression.
+        {
+            let mut legacy =
+                crate::linux_audio::NativeCapture::with_legacy_queue(&sources).unwrap();
+            let origin = Instant::now();
+            legacy.start().unwrap();
+            let mut failure = None;
+            while origin.elapsed() < Duration::from_secs(2) {
+                if let Err(error) = legacy.pump(origin, None, |_, _, _, _| Ok(())) {
+                    failure = Some(error.to_string());
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let failure = failure.expect("FIFO fixture did not reproduce the legacy queue failure");
+            assert!(
+                failure.contains("native timestamp discontinuity")
+                    || failure.contains("native overflow or device move"),
+                "Unexpected legacy failure: {failure}"
+            );
+            eprintln!("Verified legacy FIFO failure: {failure}");
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let _review = ReviewArtifacts::new(temp.path(), "pulse-fifo");
+        let mut segments = Vec::new();
+        let mut active_duration = 0.0;
+        for index in 0..2 {
+            let path = temp.path().join(format!("segment-{index}.mp4"));
+            let config = EncoderConfig {
+                audio: Some(crate::linux_audio::AUDIO_SPEC),
+                mic: None,
+                ..config()
+            };
+            let mut prepared = PreparedEncoder::new(&config, &path).unwrap();
+            let trace = NativeAudioTrace::new(&mut prepared, &path, 1);
+            let (tx, rx) = mpsc::sync_channel(2);
+            let encoder =
+                LinuxNativeSegmentEncoder::start_prepared(prepared, path.clone(), rx).unwrap();
+            tx.send(solid_frame([255, 0, 0, 255])).unwrap();
+            std::thread::sleep(Duration::from_secs(4));
+            drop(tx);
+            encoder.finish().unwrap();
+            assert!(trace.native_continuity_errors().is_empty());
+            drop(trace);
+            let (_, _, duration) =
+                validate_recording_tracks(&path, Some((64, 48)), Some(true)).unwrap();
+            assert!(
+                (3.3..4.1).contains(&duration),
+                "FIFO segment duration: {duration}"
+            );
+            active_duration += duration;
+            let samples = decoded_audio(&path);
+            assert!(
+                tone_window_amplitudes(&samples[..9_600], 440.0)
+                    .iter()
+                    .all(|amplitude| *amplitude > 0.08),
+                "FIFO preparation silence leaked into the recording"
+            );
+            let amplitudes = tone_window_amplitudes(&samples[9_600..samples.len() - 4_800], 440.0);
+            assert!(
+                amplitudes.iter().all(|amplitude| *amplitude > 0.08),
+                "FIFO lost tone: {amplitudes:?}"
+            );
+            segments.push(path);
+            if index == 0 {
+                std::thread::sleep(Duration::from_millis(700));
+            }
+        }
+        let merged = temp.path().join("paused-merged.mp4");
+        merge_segments(&segments, &merged).unwrap();
+        let (_, _, duration) =
+            validate_recording_tracks(&merged, Some((64, 48)), Some(true)).unwrap();
+        assert!(
+            (duration - active_duration).abs() < 0.05,
+            "paused/preparation wall time leaked: {duration}, active {active_duration}"
+        );
+        assert!(tone_window_amplitudes(&decoded_audio(&merged), 440.0)
+            .iter()
+            .all(|amplitude| *amplitude > 0.08));
+        let cancelled = temp.path().join("cancelled-during-preparation.mp4");
+        let config = EncoderConfig {
+            audio: Some(crate::linux_audio::AUDIO_SPEC),
+            ..config()
+        };
+        let prepared = PreparedEncoder::new(&config, &cancelled).unwrap();
+        let (tx, rx) = mpsc::sync_channel(2);
+        let encoder =
+            LinuxNativeSegmentEncoder::start_prepared(prepared, cancelled.clone(), rx).unwrap();
+        tx.send(solid_frame([255, 0, 0, 255])).unwrap();
+        std::thread::sleep(Duration::from_millis(60));
+        let cancel_started = Instant::now();
+        encoder.cancel();
+        assert!(cancel_started.elapsed() < Duration::from_secs(1));
+        assert!(!cancelled.exists());
+        drop(tx);
+        let silent = temp.path().join("silent.mp4");
+        fixture(&silent, [0, 0, 255, 255], 400);
+        validate_recording_tracks(&silent, Some((64, 48)), Some(false)).unwrap();
     }
 
     #[test]
