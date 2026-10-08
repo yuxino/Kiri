@@ -12,7 +12,7 @@ With system audio ON and microphone OFF, two recording attempts failed immediate
 
 ## Cleanup and limits
 
-Kiri quit normally. Exact process-name checks found neither Kiri nor Mimi running. Seven owned QA assets and seven indexed entries, plus their known annotation/video project files, were removed after matching the complete file set. Settings and the library marker were preserved; QA downloads were removed. The official Ubuntu direct-shutdown action was submitted and a page wait detected “已关机”; final row capture and remote exit remain pending after a new browser-control handoff.
+Kiri quit normally. Exact process-name checks found neither Kiri nor Mimi running. Seven owned QA assets and seven indexed entries, plus their known annotation/video project files, were removed after matching the complete file set. Settings and the library marker were preserved; QA downloads were removed. A fresh official-console resource-row snapshot now confirms Ubuntu is powered off (“已关机”). The next call hit a new browser-control hard stop, so the final screenshot, remote-session exit and task-space finish remain unconfirmed. See the [closeout record](closeout-2026-10-08.json).
 
 Wayland, physical Linux devices, Japanese UI and AppImage runtime remain untested. No new issue or product-code change is created. This evidence-only branch stays separate from product main. [Earlier observations](observations.json) are historical; use [current observations](serial-resume-2026-10-08.json).
 

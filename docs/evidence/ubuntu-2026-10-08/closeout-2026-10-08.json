@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "recorded_at_utc": "2026-10-08T05:36:50Z",
+  "cloud_os": "Ubuntu",
+  "official_console_state": "已关机",
+  "verification": "Fresh official-console DOM snapshot of the Ubuntu resource row after authorized resume; the row showed 已关机 and 开机",
+  "screenshot_available": false,
+  "credential_cleanup": "Test Alibaba credential removed through the native GUI before shutdown; empty field and removal toast captured earlier",
+  "remote_session_exit": "Not confirmed: a new browser user-control hard stop occurred on the next call",
+  "task_space_finish": "Not called: blocked by the new hard stop",
+  "remaining": "Only exit the remote session and finish the original task space after a new direct human resume instruction; do not start more experiments or delete the Ubuntu resource"
+}
