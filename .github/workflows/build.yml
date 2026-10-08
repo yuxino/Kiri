@@ -92,8 +92,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:release-tools
       - run: pnpm build
-      - run: python -m pip install playwright==1.55.0 imageio-ffmpeg==0.6.0 Pillow==11.3.0
-      - run: python scripts/qa/countdown-ui.py --record
+      - run: python -m pip install playwright==1.55.0 Pillow==11.3.0
+      - run: python scripts/qa/countdown-ui.py
       - name: Verify OCR waits for a committed selection
         run: python docs/demos/full-flow/test-ocr.py
         env:

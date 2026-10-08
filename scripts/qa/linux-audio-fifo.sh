@@ -35,18 +35,40 @@ done
 test -S "$root/pulse/native"
 # The FIFO reader paces consumption at the sink's native 48kHz stereo s16 rate.
 python3 - "$root/output.fifo" <<'PY' &
-import sys, time
+import array, sys, time
+from pathlib import Path
 with open(sys.argv[1], "rb", buffering=0) as stream:
     start = time.monotonic()
     count = 0
     while data := stream.read(1920):
+        if any(abs(sample) > 1_000 for sample in array.array("h", data)):
+            Path(sys.argv[1] + ".audible").touch()
         count += len(data)
         time.sleep(max(0, start + count / 192000 - time.monotonic()))
 PY
 pids+=("$!")
-gst-launch-1.0 -q audiotestsrc is-live=true freq=440 volume=0.15 ! audioconvert ! pulsesink device=fifo_output &
+# Feed native Pulse playback directly. Unlike pulsesink's clock, this does not
+# depend on the FIFO device publishing a progressing playback clock at preroll.
+python3 - <<'TONE' | pacat --playback --raw --device=fifo_output --format=s16le --rate=48000 --channels=2 --latency-msec=20 &
+import array, math, sys
+block = array.array("h", (int(32767 * 0.15 * math.sin(2 * math.pi * 440 * frame / 48000))
+                         for frame in range(48000) for _ in range(2))).tobytes()
+try:
+    while True:
+        sys.stdout.buffer.write(block)
+        sys.stdout.buffer.flush()
+except BrokenPipeError:
+    pass
+TONE
 pids+=("$!")
-sleep 0.3
+for _ in $(seq 1 100); do
+  test -f "$root/output.fifo.audible" && break
+  for pid in "${pids[@]}"; do
+    kill -0 "$pid" 2>/dev/null || { echo "A FIFO audio fixture process stopped" >&2; exit 1; }
+  done
+  sleep 0.05
+done
+test -f "$root/output.fifo.audible" || { echo "FIFO output never delivered the generated tone" >&2; exit 1; }
 export KIRI_LINUX_PULSE_QA=1 KIRI_LINUX_PULSE_FIFO_QA=1
 if [[ -n "${KIRI_LINUX_MEDIA_QA_DIR:-}" ]]; then
   export KIRI_LINUX_MEDIA_QA_DIR="$KIRI_LINUX_MEDIA_QA_DIR/fifo"
