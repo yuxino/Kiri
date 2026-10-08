@@ -106,5 +106,17 @@
     "width": 550,
     "height": 410,
     "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
+  },
+  "ubuntu-released-empty-list.png": {
+    "sha256": "ef635602961ab5e96fca42fedeeb3c2cae371c352ece20150991d93106fb9f31",
+    "width": 1202,
+    "height": 303,
+    "origin": "Lossless crop of actual official-console screenshot; excludes account header; no retouching",
+    "crop": {
+      "x": 228,
+      "y": 66,
+      "width": 1202,
+      "height": 303
+    }
   }
 }

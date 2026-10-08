@@ -1,0 +1,24 @@
+{
+  "completed_at_utc": "2026-10-08T06:01:10.034112+00:00",
+  "timezone": "Asia/Shanghai",
+  "ubuntu_release": "Completed through the official console after direct human release authorization and identity verification",
+  "observed_sequence": [
+    "已关机",
+    "release confirmation: stored data will be cleared",
+    "identity verification completed without saving verification secret",
+    "删除中",
+    "list refreshed: no cloud computers in the selected region; 共有0条"
+  ],
+  "resource_list_count": 0,
+  "region": "华北2（北京）",
+  "windows_release": "Previously completed and verified absent",
+  "credential_cleanup": "Test credential removed through native GUI before shutdown/release",
+  "verification_secret_recorded": false,
+  "billing_scope": "The released desktops no longer accrue new compute or system-disk charges. Previously incurred charges may settle later; no account-wide billing audit is claimed.",
+  "browser_task": "Final official-console snapshot and screenshot preserved. A new user-control hard stop occurred while inspecting the remote page afterwards; no retry or finish was attempted. Released desktop resources are absent; browser tabs may remain.",
+  "finish_called": false,
+  "new_resources_created": false,
+  "screenshot_available": true,
+  "screenshot": "screenshots/ubuntu-released-empty-list.png",
+  "screenshot_origin": "Lossless crop of actual official-console screenshot; top account area excluded"
+}

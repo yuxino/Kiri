@@ -50,7 +50,7 @@
     "cause": "Unproven; observed only in this cloud PulseAudio FIFO environment"
   },
   "cleanup": "Normal Quit; no exact-name process remained. Seven owned QA assets and seven indexed entries removed along with their known annotation/video project files; app settings and library marker preserved. QA downloads removed.",
-  "cloud": "Verified powered off in a fresh official-console resource-row snapshot on 2026-10-08 (Asia/Shanghai). A new browser-control hard stop prevented the subsequent screenshot, remote-session exit and task-space finish.",
+  "cloud": "RELEASED after direct human authorization and identity verification; refreshed official-console list shows no desktops and 共有0条. Snapshot and screenshot preserved. A subsequent new hard stop prevented remote-page exit/task-space finish.",
   "not_tested": [
     "Wayland capture",
     "physical Linux audio device",
@@ -60,5 +60,5 @@
     "Japanese UI"
   ],
   "scope": "Screenshots are real native captures or lossless crops; no generated or retouched pixels. No recording/audio file or recognized-text log is published.",
-  "closeout_record": "closeout-2026-10-08.json"
+  "closeout_record": "release-2026-10-08.json"
 }

@@ -12,7 +12,7 @@ With system audio ON and microphone OFF, two recording attempts failed immediate
 
 ## Cleanup and limits
 
-Kiri quit normally. Exact process-name checks found neither Kiri nor Mimi running. Seven owned QA assets and seven indexed entries, plus their known annotation/video project files, were removed after matching the complete file set. Settings and the library marker were preserved; QA downloads were removed. A fresh official-console resource-row snapshot now confirms Ubuntu is powered off (“已关机”). The next call hit a new browser-control hard stop, so the final screenshot, remote-session exit and task-space finish remain unconfirmed. See the [closeout record](closeout-2026-10-08.json).
+Kiri quit normally. Exact process-name checks found neither Kiri nor Mimi running. Seven owned QA assets and seven indexed entries, plus their known annotation/video project files, were removed after matching the complete file set. Settings and the library marker were preserved; QA downloads were removed. After the user explicitly requested release, Ubuntu was released through the official console and identity verification. The refreshed resource list now shows no cloud desktops (“共有0条”); the final snapshot and screenshot were preserved. Windows had already been released. These desktops no longer accrue compute or system-disk charges. A new browser-control hard stop occurred while inspecting the remote page, so browser page/task-space closure remains unconfirmed. See the [release record](release-2026-10-08.json).
 
 Wayland, physical Linux devices, Japanese UI and AppImage runtime remain untested. No new issue or product-code change is created. This evidence-only branch stays separate from product main. [Earlier observations](observations.json) are historical; use [current observations](serial-resume-2026-10-08.json).
 
@@ -40,3 +40,4 @@ Screenshots are real native captures or lossless crops, with no generated or ret
 | [kiri-system-audio-mic-off-options.png](screenshots/kiri-system-audio-mic-off-options.png) | 550×410 | `8b4a26d601c7f93ae5ee753b587d363b7a063a089f5fe9dcb9ef6c0208e3948d` |
 | [kiri-trim-four-seconds.png](screenshots/kiri-trim-four-seconds.png) | 570×380 | `a0a3d5261b079f44532c19886853dab644c725f9fd3ca937cbc8a7d1ca502c25` |
 | [ubuntu-installed-packages-crop.png](screenshots/ubuntu-installed-packages-crop.png) | 680×420 | `35a588fce70a47281b8c4729fe0078111c55ed05075adf3517c0138cc8b8149e` |
+| [ubuntu-released-empty-list.png](screenshots/ubuntu-released-empty-list.png) | 1202×303 | `ef635602961ab5e96fca42fedeeb3c2cae371c352ece20150991d93106fb9f31` |
