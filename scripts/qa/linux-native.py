@@ -5,6 +5,8 @@ real audio devices, multiple monitors, or fractional scaling.
 """
 
 import argparse
+import array
+import math
 import io
 import json
 import os
@@ -24,6 +26,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--executable", required=True, type=Path)
 parser.add_argument("--output", required=True, type=Path)
 args = parser.parse_args()
+system_audio = os.environ.get("KIRI_LINUX_QA_SYSTEM_AUDIO") == "1"
 profile = Path(os.environ.get("KIRI_QA_PROFILE", "/missing")).resolve()
 if sys.platform != "linux" or not profile.is_dir() or os.environ.get("XDG_SESSION_TYPE") != "x11":
     raise SystemExit("Use linux-native.sh to create an isolated Linux desktop")
@@ -400,8 +403,12 @@ def discover_video(path):
     if info.get_result() != GstPbutils.DiscovererResult.OK:
         raise RuntimeError(f"GStreamer could not discover the saved MP4: {info.get_result()}")
     streams = info.get_video_streams()
-    if len(streams) != 1 or info.get_audio_streams():
-        raise RuntimeError("The silent MP4 must contain exactly one video stream and no audio")
+    audio = info.get_audio_streams()
+    if len(streams) != 1 or len(audio) != int(system_audio):
+        raise RuntimeError("MP4 must contain one video and the explicitly requested audio track count")
+    if audio and (audio[0].get_sample_rate() != 48000 or audio[0].get_channels() != 2
+                  or audio[0].get_caps().get_structure(0).get_name() != "audio/mpeg"):
+        raise RuntimeError("System audio must be 48kHz stereo AAC")
     dimensions = (streams[0].get_width(), streams[0].get_height())
     if dimensions != recording_size:
         raise RuntimeError(f"MP4 dimensions {dimensions} do not match region {recording_size}")
@@ -421,6 +428,56 @@ def frame_error(actual, expected):
     histogram = luminance.histogram()
     changed = sum(histogram[33:]) / (actual.width * actual.height)
     return mean, changed
+
+
+
+def inspect_system_audio(path):
+    # Decode only generated public test tones through system GStreamer, never FFmpeg.
+    pipeline = Gst.parse_launch(
+        "uridecodebin name=decode ! audioconvert ! audioresample ! "
+        "audio/x-raw,format=F32LE,rate=48000,channels=1 ! "
+        "appsink name=audio sync=false max-buffers=2 drop=false"
+    )
+    pipeline.get_by_name("decode").set_property("uri", path.resolve().as_uri())
+    sink = pipeline.get_by_name("audio")
+    bus = pipeline.get_bus()
+    samples = array.array("f")
+    deadline = time.monotonic() + 20
+    reached_eos = False
+    pipeline.set_state(Gst.State.PLAYING)
+    try:
+        while time.monotonic() < deadline:
+            sample = sink.emit("try-pull-sample", 200 * Gst.MSECOND)
+            if sample is None:
+                message = bus.pop_filtered(Gst.MessageType.ERROR)
+                if message:
+                    raise RuntimeError(f"AAC decoding failed: {message.parse_error()}")
+                if sink.get_property("eos"):
+                    reached_eos = True
+                    break
+                continue
+            buffer = sample.get_buffer()
+            samples.frombytes(buffer.extract_dup(0, buffer.get_size()))
+            if len(samples) > 48000 * 60:
+                raise RuntimeError("Audio QA exceeded its sample bound")
+    finally:
+        pipeline.set_state(Gst.State.NULL)
+    if not reached_eos or len(samples) < 48000:
+        raise RuntimeError("AAC did not decode fully")
+    if sys.byteorder != "little":
+        samples.byteswap()
+    amplitudes = []
+    for offset in range(9600, len(samples) - 9600, 4800):
+        window = samples[offset:offset + 4800]
+        real = sum(value * math.cos(2 * math.pi * 440 * index / 48000)
+                   for index, value in enumerate(window))
+        imaginary = sum(value * math.sin(2 * math.pi * 440 * index / 48000)
+                        for index, value in enumerate(window))
+        amplitudes.append(2 * math.hypot(real, imaginary) / len(window))
+    if not amplitudes or min(amplitudes) < 0.08:
+        raise RuntimeError(f"The FIFO AAC lost its 440Hz tone: {amplitudes}")
+    return {"sample_rate": 48000, "channels": 2, "decoded_seconds": len(samples) / 48000,
+            "tone_hz": 440, "minimum_100ms_amplitude": min(amplitudes), "reached_eos": True}
 
 
 def inspect_recording(path, references, expected_active_seconds, wall_seconds, paused_seconds):
@@ -509,7 +566,7 @@ def inspect_recording(path, references, expected_active_seconds, wall_seconds, p
         raise RuntimeError(f"Both active recording sections must have at least 20 decoded frames: {counts}")
     final_frame.save(output / "recording-final-frame.png")
     return {
-        "dimensions": list(recording_size), "audio_streams": 0,
+        "dimensions": list(recording_size), "audio_streams": int(system_audio),
         "duration_seconds": round(duration, 3),
         "active_seconds": round(expected_active_seconds, 3),
         "paused_seconds": round(paused_seconds, 3),
@@ -705,6 +762,14 @@ try:
         return control and not control[0].get_state_set().contains(Atspi.StateType.CHECKED)
     wait_for("countdown disabled", countdown_is_off)
     report["recording_countdown_enabled"] = False
+    for label, requested in (("System audio", system_audio), ("Microphone", False)):
+        control, _ = wait_for_control(label)
+        if control.get_state_set().contains(Atspi.StateType.CHECKED) != requested:
+            click_control(label)
+        control, _ = wait_for_control(label)
+        if control.get_state_set().contains(Atspi.StateType.CHECKED) != requested:
+            raise RuntimeError(f"{label} does not match the requested QA configuration")
+    report["audio_options"] = {"system_audio": system_audio, "microphone": False}
     staged_before = recording_files(".kiri-media-*.mp4")
     click_control("Start Recording")
     # Pointer stays outside the selected region, including during countdown.
@@ -752,11 +817,13 @@ try:
         saved_video, references, (pause_requested - first_started) + (stop_requested - second_started),
         stop_requested - first_started, paused_seconds,
     )
+    if system_audio:
+        report["recording"]["audio"] = inspect_system_audio(saved_video)
     report["recording"]["first_segment_seconds"] = round(first_duration, 3)
     if abs(video.get("duration", 0) - report["recording"]["duration_seconds"]) > 0.2:
         raise RuntimeError("Saved video duration metadata does not match the actual MP4")
     report["checks"].append("real MP4 recording starts in the GUI and pauses, resumes, and stops through public CLI controls")
-    report["checks"].append("system GStreamer fully decodes the 680x380 silent MP4; active frames match the desktop, with no paused frames or Kiri controls")
+    report["checks"].append("system GStreamer fully decodes the 680x380 MP4 and verifies requested audio; active frames match the desktop, with no paused frames or Kiri controls")
     saved = assets()
 
     stop(process)

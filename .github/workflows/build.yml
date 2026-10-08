@@ -146,7 +146,7 @@ jobs:
           node-version: 22
       - name: Install Linux build and desktop-test dependencies
         run: |
-          sudo sed -i 's|://azure\.archive\.ubuntu\.com/ubuntu|://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' -e 's|://azure\.archive\.ubuntu\.com/ubuntu|://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
@@ -240,6 +240,12 @@ jobs:
         if: needs.plan.outputs.linux_x11 == 'true'
         timeout-minutes: 4
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
+      - name: Verify installed X11 system audio and pause/resume with a private FIFO sink
+        if: needs.plan.outputs.linux_x11 == 'true'
+        timeout-minutes: 4
+        run: |
+          KIRI_LINUX_QA_DIR="$PWD/linux-native-review/fifo" \
+            bash scripts/qa/linux-audio-fifo.sh /usr/bin/kiri
       - uses: actions/upload-artifact@v7
         if: ${{ always() && needs.plan.outputs.package_linux == 'true' }}
         with:
@@ -302,7 +308,7 @@ jobs:
           mkdir -p "$KIRI_LINUX_WAYLAND_QA_DIR"
           dpkg-deb --info "${packages[0]}" > "$KIRI_LINUX_WAYLAND_QA_DIR/package-info.txt"
           sha256sum "${packages[0]}" > "$KIRI_LINUX_WAYLAND_QA_DIR/package-sha256.txt"
-          sudo sed -i 's|://azure\.archive\.ubuntu\.com/ubuntu|://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' -e 's|://azure\.archive\.ubuntu\.com/ubuntu|://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             "${packages[0]}" \
@@ -358,7 +364,7 @@ jobs:
         run: |
           packages=("${{ runner.temp }}/kiri-linux-deb/"*.deb)
           test "${#packages[@]}" -eq 1
-          sudo sed -i 's|://azure\.archive\.ubuntu\.com/ubuntu|://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu/|g' -e 's|://azure\.archive\.ubuntu\.com/ubuntu|://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends "${packages[0]}" \
             xvfb openbox xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
@@ -373,6 +379,11 @@ jobs:
       - name: Replay all original installed X11 assertions
         timeout-minutes: 4
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
+      - name: Replay installed X11 system audio and pause/resume with a private FIFO sink
+        timeout-minutes: 4
+        run: |
+          KIRI_LINUX_QA_DIR="$PWD/linux-native-review/fifo" \
+            bash scripts/qa/linux-audio-fifo.sh /usr/bin/kiri
       - uses: actions/upload-artifact@v7
         if: always()
         with:

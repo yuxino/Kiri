@@ -2,7 +2,9 @@
 # Issue #101: private s16le FIFO output monitor, no microphone or desktop audio.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-cargo test --locked --manifest-path src-tauri/Cargo.toml --no-run
+if [[ $# -eq 0 ]]; then
+  cargo test --locked --manifest-path src-tauri/Cargo.toml --no-run
+fi
 root=$(mktemp -d "${TMPDIR:-/tmp}/kiri-fifo-qa.XXXXXX")
 pids=()
 cleanup() {
@@ -49,5 +51,9 @@ export KIRI_LINUX_PULSE_QA=1 KIRI_LINUX_PULSE_FIFO_QA=1
 if [[ -n "${KIRI_LINUX_MEDIA_QA_DIR:-}" ]]; then
   export KIRI_LINUX_MEDIA_QA_DIR="$KIRI_LINUX_MEDIA_QA_DIR/fifo"
 fi
-timeout 45s cargo test --locked --manifest-path src-tauri/Cargo.toml \
-  native_pulse_fifo_system_audio_and_pause_merge -- --ignored --nocapture --test-threads=1
+if [[ $# -eq 0 ]]; then
+  timeout 45s cargo test --locked --manifest-path src-tauri/Cargo.toml \
+    native_pulse_fifo_system_audio_and_pause_merge -- --ignored --nocapture --test-threads=1
+else
+  KIRI_LINUX_QA_SYSTEM_AUDIO=1 bash scripts/qa/linux-native.sh "$1"
+fi
