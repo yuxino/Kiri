@@ -194,16 +194,16 @@ jobs:
         env:
           KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
           KIRI_LINUX_VIDEO_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review/video-export
+      - name: Verify Linux system audio with a private FIFO sink
+        run: bash scripts/qa/linux-audio-fifo.sh
+        env:
+          KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
       - name: Verify Linux audio with isolated synthetic Pulse sources
         run: |
           for pass in 1 2 3; do
             KIRI_LINUX_MEDIA_QA_DIR="$KIRI_LINUX_MEDIA_QA_DIR/pulse-pass-$pass" \
               bash scripts/qa/linux-audio.sh
           done
-        env:
-          KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
-      - name: Verify Linux system audio with a private FIFO sink
-        run: bash scripts/qa/linux-audio-fifo.sh
         env:
           KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
       - name: Verify the 60-second Linux audio/video clock

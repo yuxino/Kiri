@@ -445,7 +445,7 @@ impl NativeCapture {
                 || stream.get_sample_spec() != Some(&spec)
                 || stream.get_buffer_attr().is_none_or(|actual| {
                     actual.maxlength > NATIVE_PCM_QUEUE_BYTES as u32
-                        || actual.fragsize > NATIVE_PCM_QUEUE_BYTES as u32
+                        || actual.fragsize > PCM_QUEUE_BYTES as u32
                 })
             {
                 bail!(AUDIO_UNAVAILABLE);

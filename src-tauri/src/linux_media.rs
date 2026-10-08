@@ -2478,6 +2478,29 @@ mod tests {
         let sources = crate::linux_audio::selected_sources(true, false).unwrap();
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].name, "fifo_output.monitor");
+        // FIFO playback can take longer to prime than a null sink. Prove the
+        // generated route is audible before asking the encoder to record it.
+        {
+            let mut capture = crate::linux_audio::NativeCapture::new(&sources).unwrap();
+            let origin = Instant::now();
+            capture.start().unwrap();
+            let mut heard = false;
+            while !heard && origin.elapsed() < Duration::from_secs(5) {
+                capture
+                    .pump(origin, None, |_, bytes, _, _| {
+                        heard |= bytes
+                            .as_chunks::<4>()
+                            .0
+                            .iter()
+                            .any(|sample| f32::from_le_bytes(*sample).abs() > 0.05);
+                        Ok(())
+                    })
+                    .unwrap();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(heard, "FIFO test generator never delivered its tone");
+            eprintln!("FIFO test tone verified after {:?}", origin.elapsed());
+        }
         let temp = tempfile::tempdir().unwrap();
         let _review = ReviewArtifacts::new(temp.path(), "pulse-fifo");
         let mut segments = Vec::new();
