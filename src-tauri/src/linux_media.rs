@@ -802,7 +802,7 @@ fn encode_bgra_mp4(
                 prepared.audio.push(index, bytes, pts, duration)
             })?;
         }
-        let frame = if shutdown.load(Ordering::Acquire) {
+        let mut frame = if shutdown.load(Ordering::Acquire) {
             match video_rx.try_recv() {
                 Ok(frame) => frame,
                 Err(_) => break,
@@ -830,14 +830,33 @@ fn encode_bgra_mp4(
             bail!("The Linux capture frame size changed during recording.");
         }
         if origin.is_none() {
+            if let Some(capture) = &mut native_audio {
+                capture.start_for_recording(&cancelled)?;
+                // Discard at most the bounded capture backlog, then prefer a
+                // fresh frame after audio preparation. Static/test producers
+                // may have no new frame, so this wait is only one frame long.
+                for _ in 0..crate::capture::VIDEO_FRAME_QUEUE_CAPACITY {
+                    match video_rx.try_recv() {
+                        Ok(latest) => frame = latest,
+                        Err(_) => break,
+                    }
+                }
+                if !shutdown.load(Ordering::Acquire) {
+                    if let Ok(latest) = video_rx.recv_timeout(Duration::from_nanos(
+                        1_000_000_000 / u64::from(prepared.fps),
+                    )) {
+                        frame = latest;
+                    }
+                }
+                if frame.len() != prepared.frame_bytes {
+                    bail!("The Linux capture frame size changed during recording.");
+                }
+            }
             prepared
                 .pipeline
                 .set_state(gstreamer::State::Playing)
                 .context("Could not start Linux media capture")?;
             origin = Some(Instant::now());
-            if let Some(capture) = &mut native_audio {
-                capture.start()?;
-            }
         }
         let start = origin.expect("recording clock");
         prepared.audio.check(start)?;
@@ -1258,9 +1277,7 @@ fn scale_long_edge(width: u32, height: u32, max_long_edge: u32) -> (u32, u32) {
 #[cfg(test)]
 pub(crate) fn recording_audio_fixture(path: &Path, frequencies: &[f64], millis: u64) -> f64 {
     tests::audio_fixture(path, frequencies, millis);
-    validate_recording_tracks(path, Some((64, 48)), Some(true))
-        .unwrap()
-        .2
+    validate_recording_tracks(path, Some((64, 48)), Some(true)).unwrap().2
 }
 
 #[cfg(test)]
@@ -2530,6 +2547,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let _review = ReviewArtifacts::new(temp.path(), "pulse-fifo");
         let mut segments = Vec::new();
+        let mut active_duration = 0.0;
         for index in 0..2 {
             let path = temp.path().join(format!("segment-{index}.mp4"));
             let config = EncoderConfig {
@@ -2547,7 +2565,13 @@ mod tests {
             drop(tx);
             encoder.finish().unwrap();
             drop(trace);
-            validate_recording_tracks(&path, Some((64, 48)), Some(true)).unwrap();
+            let (_, _, duration) =
+                validate_recording_tracks(&path, Some((64, 48)), Some(true)).unwrap();
+            assert!(
+                (0.9..1.6).contains(&duration),
+                "FIFO segment duration: {duration}"
+            );
+            active_duration += duration;
             let samples = decoded_audio(&path);
             let amplitudes = tone_window_amplitudes(&samples[9_600..samples.len() - 4_800], 440.0);
             assert!(
@@ -2564,8 +2588,8 @@ mod tests {
         let (_, _, duration) =
             validate_recording_tracks(&merged, Some((64, 48)), Some(true)).unwrap();
         assert!(
-            (duration - 3.0).abs() < 0.25,
-            "paused wall time leaked: {duration}"
+            (duration - active_duration).abs() < 0.05,
+            "paused/preparation wall time leaked: {duration}, active {active_duration}"
         );
         assert!(tone_amplitude(&decoded_audio(&merged), 440.0) > 0.08);
         let silent = temp.path().join("silent.mp4");

@@ -505,6 +505,32 @@ impl NativeCapture {
         self.check()
     }
 
+    pub fn start_for_recording(&mut self, cancelled: &AtomicBool) -> Result<()> {
+        self.start()?;
+        // A FIFO monitor may initially deliver only future playback. Prime
+        // each native input before starting the shared video/audio clock;
+        // otherwise the mixer records that startup lead as silence. No PCM
+        // from this bounded preparation interval enters the output pipeline.
+        let warmup = Instant::now();
+        while self.inputs.iter().any(|input| input.next_pts.is_none()) {
+            if cancelled.load(Ordering::Acquire) {
+                bail!("Linux recording was cancelled.");
+            }
+            if warmup.elapsed() >= Duration::from_secs(2) {
+                bail!("{AUDIO_RECORDING_FAILED} [native startup timeout]");
+            }
+            self.pump(warmup, None, |_, _, _, _| Ok(()))?;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // Re-anchor existing native snapshots to the actual recording origin.
+        // Keep queued future PCM; its timestamps remain tied to presentation.
+        for input in &mut self.inputs {
+            input.next_pts = None;
+            input.timing = NativeTiming::default();
+        }
+        Ok(())
+    }
+
     pub fn finish(
         &mut self,
         origin: Instant,

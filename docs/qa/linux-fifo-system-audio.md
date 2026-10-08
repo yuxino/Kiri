@@ -33,11 +33,20 @@ The native libpulse receive queue has a separate, finite one-second budget
 (384,000 bytes per source). GStreamer appsrc/mixer queues retain their 250 ms
 limits. Native overflow, holes, device moves and timestamp discontinuities
 still stop recording; the repair does not accept arbitrary timing gaps.
+Each segment primes native inputs for at most two seconds before establishing
+its shared video/audio origin. Preparation PCM is discarded; queued future
+PCM is retained and re-anchored. The encoder drains its bounded video backlog
+and prefers a fresh frame. This avoids writing a high-latency source's initial
+lead as silence, including after Resume. Cancellation remains checked during
+preparation. Preparation and paused time are excluded from the output clock.
+
 Static error reason suffixes distinguish timing, overflow/move and service
 disconnection without logging private audio or device information.
 
 The FIFO fixture must prove nonzero generated playback before recording; a
-silent fixture is a failed precondition. Native acceptance decodes the AAC
+silent fixture is a failed precondition. The same audible source must fail
+with the old 250 ms receive budget before testing the repaired budget.
+Native acceptance decodes the AAC
 from both segments and the merged MP4, checks 440 Hz in 100 ms windows, checks
 48 kHz stereo audio metadata and excludes paused time. A separate no-audio
 recording must still have no audio track. The installed-app harness checks
