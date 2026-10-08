@@ -2469,6 +2469,62 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires scripts/qa/linux-audio-fifo.sh private FIFO sink; microphone stays off"]
+    fn native_pulse_fifo_system_audio_and_pause_merge() {
+        assert_eq!(
+            std::env::var("KIRI_LINUX_PULSE_FIFO_QA").as_deref(),
+            Ok("1")
+        );
+        let sources = crate::linux_audio::selected_sources(true, false).unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].name, "fifo_output.monitor");
+        let temp = tempfile::tempdir().unwrap();
+        let _review = ReviewArtifacts::new(temp.path(), "pulse-fifo");
+        let mut segments = Vec::new();
+        for index in 0..2 {
+            let path = temp.path().join(format!("segment-{index}.mp4"));
+            let config = EncoderConfig {
+                audio: Some(crate::linux_audio::AUDIO_SPEC),
+                mic: None,
+                ..config()
+            };
+            let mut prepared = PreparedEncoder::new(&config, &path).unwrap();
+            let trace = NativeAudioTrace::new(&mut prepared, &path, 1);
+            let (tx, rx) = mpsc::sync_channel(2);
+            let encoder =
+                LinuxNativeSegmentEncoder::start_prepared(prepared, path.clone(), rx).unwrap();
+            tx.send(solid_frame([255, 0, 0, 255])).unwrap();
+            std::thread::sleep(Duration::from_millis(1_500));
+            drop(tx);
+            encoder.finish().unwrap();
+            drop(trace);
+            validate_recording_tracks(&path, Some((64, 48)), Some(true)).unwrap();
+            let samples = decoded_audio(&path);
+            let amplitudes = tone_window_amplitudes(&samples[9_600..samples.len() - 4_800], 440.0);
+            assert!(
+                amplitudes.iter().all(|amplitude| *amplitude > 0.08),
+                "FIFO lost tone: {amplitudes:?}"
+            );
+            segments.push(path);
+            if index == 0 {
+                std::thread::sleep(Duration::from_millis(700));
+            }
+        }
+        let merged = temp.path().join("paused-merged.mp4");
+        merge_segments(&segments, &merged).unwrap();
+        let (_, _, duration) =
+            validate_recording_tracks(&merged, Some((64, 48)), Some(true)).unwrap();
+        assert!(
+            (duration - 3.0).abs() < 0.25,
+            "paused wall time leaked: {duration}"
+        );
+        assert!(tone_amplitude(&decoded_audio(&merged), 440.0) > 0.08);
+        let silent = temp.path().join("silent.mp4");
+        fixture(&silent, [0, 0, 255, 255], 400);
+        validate_recording_tracks(&silent, Some((64, 48)), Some(false)).unwrap();
+    }
+
+    #[test]
     #[ignore = "60-second native A/V clock acceptance; run explicitly for audio changes"]
     fn native_audio_long_recording_keeps_shared_clock() {
         let temp = tempfile::tempdir().unwrap();

@@ -259,6 +259,7 @@ fn select_sources(
 
 fn raw_sample_presentation_ns(snapshot_ns: i128, info: &pulse::def::TimingInfo) -> Result<i128> {
     if info.read_index_corrupt != 0 || info.write_index_corrupt != 0 {
+        eprintln!("audio-diagnostic {}:{}", file!(), line!());
         bail!(AUDIO_RECORDING_FAILED);
     }
     // A record read index already includes client-side unread bytes. The raw
@@ -285,11 +286,13 @@ impl NativeTiming {
         now: pulse::time::UnixTs,
     ) -> Result<i128> {
         if info.timestamp > now {
-            bail!(AUDIO_RECORDING_FAILED);
+            eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
         }
         let age = pulse::time::UnixTs::diff(&now, &info.timestamp);
         if age.0 > 2_000_000 {
-            bail!(AUDIO_RECORDING_FAILED);
+            eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
         }
         if self
             .anchor
@@ -307,6 +310,7 @@ impl NativeTiming {
 fn bracketed_snapshot_elapsed(before: Duration, after: Duration) -> Result<Duration> {
     let span = after.checked_sub(before).context(AUDIO_RECORDING_FAILED)?;
     if span > Duration::from_millis(1) {
+        eprintln!("audio-diagnostic {}:{}", file!(), line!());
         bail!(AUDIO_RECORDING_FAILED);
     }
     Ok(before + span / 2)
@@ -339,6 +343,7 @@ fn trim_pcm_before_origin(pts_ns: i128, bytes: &mut Vec<u8>) -> Duration {
 
 fn validate_audio_continuity(previous_end: Option<Duration>, next: Duration) -> Result<()> {
     if previous_end.is_some_and(|expected| expected.abs_diff(next) > Duration::from_millis(100)) {
+        eprintln!("audio-diagnostic {}:{}", file!(), line!());
         bail!(AUDIO_RECORDING_FAILED);
     }
     Ok(())
@@ -505,7 +510,8 @@ impl NativeCapture {
             .any(|input| input.next_pts.is_none_or(|end| end + tolerance < cutoff))
         {
             if Instant::now() >= deadline {
-                bail!(AUDIO_RECORDING_FAILED);
+                eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
             }
             self.pump(origin, Some(cutoff), &mut consume)?;
             std::thread::sleep(Duration::from_millis(2));
@@ -516,7 +522,8 @@ impl NativeCapture {
     fn check(&self) -> Result<()> {
         if self.failed.get() || self.connection.context.get_state() != pulse::context::State::Ready
         {
-            bail!(AUDIO_RECORDING_FAILED);
+            eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
         }
         for input in &self.inputs {
             if input.stream.get_state() != pulse::stream::State::Ready
@@ -524,7 +531,8 @@ impl NativeCapture {
                 || input.stream.is_suspended().unwrap_or(true)
                 || input.last_data.elapsed() > Duration::from_secs(2)
             {
-                bail!(AUDIO_RECORDING_FAILED);
+                eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
             }
         }
         Ok(())
@@ -550,7 +558,8 @@ impl NativeCapture {
                     .readable_size()
                     .context(AUDIO_RECORDING_FAILED)? as u64;
                 if queued > PCM_QUEUE_BYTES {
-                    bail!(AUDIO_RECORDING_FAILED);
+                    eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
                 }
                 if queued == 0 {
                     break;
@@ -563,7 +572,8 @@ impl NativeCapture {
                     {
                         Some(pulse::operation::State::Done) => {
                             if input.timing_result.get() != Some(true) {
-                                bail!(AUDIO_RECORDING_FAILED);
+                                eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
                             }
                             input.timing_update = None;
                             input.timing_ready = true;
@@ -631,7 +641,8 @@ impl NativeCapture {
                     pulse::stream::PeekResult::Hole(_) => bail!(AUDIO_RECORDING_FAILED),
                 };
                 if bytes.is_empty() || !bytes.len().is_multiple_of(8) {
-                    bail!(AUDIO_RECORDING_FAILED);
+                    eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
                 }
                 let raw_duration =
                     bytes.len() as i128 * 1_000_000_000 / i128::from(PCM_BYTES_PER_SECOND);
@@ -812,7 +823,8 @@ impl RecordingAudio {
             .downcast::<gstreamer_app::AppSrc>()
             .map_err(|_| anyhow!(AUDIO_RECORDING_FAILED))?;
         if appsrc.current_level_bytes() + bytes.len() as u64 > PCM_QUEUE_BYTES {
-            bail!(AUDIO_RECORDING_FAILED);
+            eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
         }
         let mut buffer = gstreamer::Buffer::from_mut_slice(bytes);
         {
@@ -833,7 +845,8 @@ impl RecordingAudio {
                 .iter()
                 .any(|count| count.load(Ordering::Acquire) == 0)
         {
-            bail!(AUDIO_RECORDING_FAILED);
+            eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
         }
         Ok(())
     }
@@ -844,12 +857,14 @@ impl RecordingAudio {
 
     pub fn check(&self, started: Instant) -> Result<()> {
         if self.failed.load(Ordering::Acquire) {
-            bail!(AUDIO_RECORDING_FAILED);
+            eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
         }
         for last in &self.progress {
             let last = *last.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if last.unwrap_or(started).elapsed() > Duration::from_secs(2) {
-                bail!(AUDIO_RECORDING_FAILED);
+                eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
             }
         }
         Ok(())
@@ -860,7 +875,8 @@ impl RecordingAudio {
             if let Ok(appsrc) = source.clone().downcast::<gstreamer_app::AppSrc>() {
                 appsrc.end_of_stream().context(AUDIO_RECORDING_FAILED)?;
             } else if !source.send_event(gstreamer::event::Eos::new()) {
-                bail!(AUDIO_RECORDING_FAILED);
+                eprintln!("audio-diagnostic {}:{}", file!(), line!());
+        bail!(AUDIO_RECORDING_FAILED);
             }
         }
         Ok(())

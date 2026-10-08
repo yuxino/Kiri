@@ -202,6 +202,10 @@ jobs:
           done
         env:
           KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
+      - name: Verify Linux system audio with a private FIFO sink
+        run: bash scripts/qa/linux-audio-fifo.sh
+        env:
+          KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
       - uses: actions/upload-artifact@v7
         if: always()
         with:
