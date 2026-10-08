@@ -49,7 +49,7 @@ PY
 pids+=("$!")
 # Feed native Pulse playback directly. Unlike pulsesink's clock, this does not
 # depend on the FIFO device publishing a progressing playback clock at preroll.
-python3 - <<'TONE' | pacat --playback --raw --device=fifo_output --format=s16le --rate=48000 --channels=2 --latency-msec=20 &
+python3 - <<'TONE' | pacat --playback --raw --device=fifo_output --format=s16le --rate=48000 --channels=2 --latency-msec=200 &
 import array, math, sys
 block = array.array("h", (int(32767 * 0.15 * math.sin(2 * math.pi * 440 * frame / 48000))
                          for frame in range(48000) for _ in range(2))).tobytes()

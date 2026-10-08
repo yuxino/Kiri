@@ -1258,7 +1258,9 @@ fn scale_long_edge(width: u32, height: u32, max_long_edge: u32) -> (u32, u32) {
 #[cfg(test)]
 pub(crate) fn recording_audio_fixture(path: &Path, frequencies: &[f64], millis: u64) -> f64 {
     tests::audio_fixture(path, frequencies, millis);
-    validate_recording_tracks(path, Some((64, 48)), Some(true)).unwrap().2
+    validate_recording_tracks(path, Some((64, 48)), Some(true))
+        .unwrap()
+        .2
 }
 
 #[cfg(test)]
@@ -2500,6 +2502,30 @@ mod tests {
             }
             assert!(heard, "FIFO test generator never delivered its tone");
             eprintln!("FIFO test tone verified after {:?}", origin.elapsed());
+        }
+        // The same audible route must reject the legacy 250ms native budget.
+        // This counterfactual prevents a lower-latency fixture from passing
+        // without exercising the dropped-future-PCM regression.
+        {
+            let mut legacy =
+                crate::linux_audio::NativeCapture::with_legacy_queue(&sources).unwrap();
+            let origin = Instant::now();
+            legacy.start().unwrap();
+            let mut failure = None;
+            while origin.elapsed() < Duration::from_secs(2) {
+                if let Err(error) = legacy.pump(origin, None, |_, _, _, _| Ok(())) {
+                    failure = Some(error.to_string());
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let failure = failure.expect("FIFO fixture did not reproduce the legacy queue failure");
+            assert!(
+                failure.contains("native timestamp discontinuity")
+                    || failure.contains("native overflow or device move"),
+                "Unexpected legacy failure: {failure}"
+            );
+            eprintln!("Verified legacy FIFO failure: {failure}");
         }
         let temp = tempfile::tempdir().unwrap();
         let _review = ReviewArtifacts::new(temp.path(), "pulse-fifo");

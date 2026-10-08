@@ -394,10 +394,20 @@ pub struct NativeCapture {
     inputs: Vec<NativeInput>,
     connection: PulseConnection,
     failed: Rc<std::cell::Cell<bool>>,
+    queue_bytes: u64,
 }
 
 impl NativeCapture {
     pub(crate) fn new(sources: &[AudioSource]) -> Result<Self> {
+        Self::with_queue_limit(sources, NATIVE_PCM_QUEUE_BYTES)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_legacy_queue(sources: &[AudioSource]) -> Result<Self> {
+        Self::with_queue_limit(sources, PCM_QUEUE_BYTES)
+    }
+
+    fn with_queue_limit(sources: &[AudioSource], queue_bytes: u64) -> Result<Self> {
         let first = sources.first().context(AUDIO_UNAVAILABLE)?;
         let mut connection = PulseConnection::new_at(Some(&first.server))?;
         let failed = Rc::new(std::cell::Cell::new(false));
@@ -408,7 +418,7 @@ impl NativeCapture {
             rate: 48_000,
         };
         let attributes = pulse::def::BufferAttr {
-            maxlength: NATIVE_PCM_QUEUE_BYTES as u32,
+            maxlength: queue_bytes as u32,
             fragsize: 3_840,
             tlength: u32::MAX,
             prebuf: u32::MAX,
@@ -444,7 +454,7 @@ impl NativeCapture {
             if stream.get_device_index() != Some(source.index)
                 || stream.get_sample_spec() != Some(&spec)
                 || stream.get_buffer_attr().is_none_or(|actual| {
-                    actual.maxlength > NATIVE_PCM_QUEUE_BYTES as u32
+                    actual.maxlength > queue_bytes as u32
                         || actual.fragsize > PCM_QUEUE_BYTES as u32
                 })
             {
@@ -467,6 +477,7 @@ impl NativeCapture {
             inputs,
             connection,
             failed,
+            queue_bytes,
         })
     }
 
@@ -556,7 +567,7 @@ impl NativeCapture {
                     .stream
                     .readable_size()
                     .context(AUDIO_RECORDING_FAILED)? as u64;
-                if queued > NATIVE_PCM_QUEUE_BYTES {
+                if queued > self.queue_bytes {
                     bail!(AUDIO_RECORDING_FAILED);
                 }
                 if queued == 0 {
