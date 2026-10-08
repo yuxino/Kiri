@@ -4,7 +4,7 @@
   <p>Screenshots, text recognition, and screen recording. Your captures stay local.</p>
   <p>
     <a href="https://kiri.yuxino.cn">Website</a>
-    · <a href="README_ZH.md">简体中文</a>
+    · <a href="README.md">简体中文</a>
     · <strong>English</strong>
   </p>
   <p>
@@ -36,6 +36,8 @@
 1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.
 2. Choose Screenshot, Record, or OCR.
 3. Press `Enter` to confirm a screenshot or `Esc` to cancel. Screenshots are copied to your clipboard and saved in the library.
+
+Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
 
 Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, MP4 audio recording, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
 

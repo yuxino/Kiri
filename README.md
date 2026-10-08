@@ -1,16 +1,16 @@
 <div align="center">
-  <img src="src-tauri/icons/128x128.png" width="112" alt="Kiri app icon">
+  <img src="src-tauri/icons/128x128.png" width="112" alt="Kiri 应用图标">
   <h1>Kiri</h1>
-  <p>Screenshots, text recognition, and screen recording. Your captures stay local.</p>
+  <p>截图、文字识别和录屏，素材保存在本机。</p>
   <p>
-    <a href="https://kiri.yuxino.cn">Website</a>
-    · <a href="README_ZH.md">简体中文</a>
-    · <strong>English</strong>
+    <a href="https://kiri.yuxino.cn">官网</a>
+    · <strong>简体中文</strong>
+    · <a href="README_EN.md"><strong>English</strong></a>
   </p>
   <p>
-    <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="Latest release"></a>
-    <a href="https://github.com/yuxino/kiri/actions/workflows/build.yml?query=branch%3Amain"><img src="https://img.shields.io/github/actions/workflow/status/yuxino/kiri/build.yml?style=flat&amp;logo=githubactions&amp;logoColor=white&amp;branch=main&amp;event=push&amp;label=CI" alt="CI status on main"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/github/license/yuxino/kiri?style=flat&amp;logo=opensourceinitiative&amp;logoColor=white" alt="MIT license"></a>
+    <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="最新版本"></a>
+    <a href="https://github.com/yuxino/kiri/actions/workflows/build.yml?query=branch%3Amain"><img src="https://img.shields.io/github/actions/workflow/status/yuxino/kiri/build.yml?style=flat&amp;logo=githubactions&amp;logoColor=white&amp;branch=main&amp;event=push&amp;label=CI" alt="main 分支 CI 状态"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/yuxino/kiri?style=flat&amp;logo=opensourceinitiative&amp;logoColor=white" alt="MIT 许可证"></a>
   </p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/badge/macOS-14%2B-555?style=flat&amp;logo=apple&amp;logoColor=white" alt="macOS 14+"></a>
@@ -19,40 +19,40 @@
   </p>
 </div>
 
-<p align="center">Kiri is a screenshot and screen recording app for macOS, Windows, and Linux. Annotate screenshots, copy text from images, and keep your captures on your computer.</p>
+<p align="center">Kiri 是截图与录屏工具，支持 macOS、Windows 和 Linux。截图后可以画箭头、打马赛克、提取文字，图片和视频都保存在本机。</p>
 
-![Kiri annotation interface with an illustrated sample](docs/assets/readme-preview.png)
+![Kiri 标注界面预览，使用新绘制的插画素材](docs/assets/readme-preview.png)
 
-## Features
+## 功能
 
-- Capture a window or region, crop it, add drawings, text or mosaic, and pin screenshots as floating references.
-- Copy text with local OCR and read QR codes from images.
-- Record MP4 with optional system audio and microphone, or make a silent GIF. macOS GIF conversion shows frame progress and keeps failure details visible.
-- Trim and reorder clips from one video, then export a new MP4.
-- Search, tag, favorite, and export local captures. Recover accidental deletions from Trash.
+- 截取窗口或区域，裁剪、画图、加文字或马赛克，也能把截图置顶作参考。
+- 用本地 OCR 复制图片里的文字，识别二维码。
+- 录制 MP4，可选系统声音和麦克风；也可保存为无声 GIF。macOS 转换 GIF 时显示逐帧进度，失败后保留具体原因。
+- 裁切、重排同一视频的片段，导出新的 MP4。
+- 搜索、打标签、收藏与导出本地素材，误删可从回收站恢复。
 
-## Get started
+## 开始使用
 
-1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.
-2. Choose Screenshot, Record, or OCR.
-3. Press `Enter` to confirm a screenshot or `Esc` to cancel. Screenshots are copied to your clipboard and saved in the library.
+1. 按 `⇧⌘A`（macOS）或 `Shift+Ctrl+A`（Windows / Linux X11），点击窗口或拖出一个区域。
+2. 选择截图、录屏或 OCR。
+3. 按 `Enter` 确认截图，`Esc` 取消。截图会复制到剪贴板，也会保存在素材库。
 
-Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
+开始标注或录屏前，点击滑杆按钮，可在选区边上直接输入宽高，单位为像素。
 
-Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, MP4 audio recording, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
+素材保存在本机。远程 OCR 可选，每次上传前都会询问。Linux 配置、MP4 声音录制、Wayland 快捷键和平台限制见 [Linux 指南](docs/linux.md)。
 
-[Setup & help](docs/usage.md) · [Video editing](docs/video-editing.md) · [Report a bug](https://github.com/yuxino/kiri/issues) · [Contributing](CONTRIBUTING.md)
+[使用与常见问题](docs/usage.zh-CN.md) · [视频剪辑](docs/video-editing.zh-CN.md) · [反馈问题](https://github.com/yuxino/kiri/issues) · [贡献指南](CONTRIBUTING.md)
 
-## Contributors
+## 贡献者
 
-Thanks to everyone who writes code, reports issues, tries Kiri, or shares it (๑•̀ㅂ•́)و✧
+感谢每一位写代码、提问题、试用和分享的朋友 (๑•̀ㅂ•́)و✧
 
-Special thanks to [@kerwin2046](https://github.com/kerwin2046) for the [initial Linux support](https://github.com/yuxino/kiri/pull/20), and [@LLLin000](https://github.com/LLLin000) for the [Windows text-scaling fix](https://github.com/yuxino/kiri/pull/61).
+特别感谢 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支持](https://github.com/yuxino/kiri/pull/20)，以及 [@LLLin000](https://github.com/LLLin000) 修复 [Windows 文字缩放下的截图对齐](https://github.com/yuxino/kiri/pull/61)。
 
-[All contributors](https://github.com/yuxino/kiri/graphs/contributors)
+[查看所有贡献者](https://github.com/yuxino/kiri/graphs/contributors)
 
-## Community
+## 社区致谢
 
-Thanks to the people in [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), and [NodeLoc](https://www.nodeloc.com/) for trying Kiri, sharing feedback, and spreading the word.
+也感谢 [V2EX](https://www.v2ex.com/)、[LINUX DO](https://linux.do/)、[小众软件](https://www.appinn.com/)和 [NodeLoc](https://www.nodeloc.com/)社区朋友的试用、反馈与分享。
 
 [MIT](LICENSE) © 2026 yuxino
