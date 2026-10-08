@@ -362,9 +362,27 @@ jobs:
           KIRI_LINUX_DEB_DIR: ${{ runner.temp }}/kiri-linux-deb
           KIRI_LINUX_QA_DIR: ${{ github.workspace }}/linux-native-review
         run: |
+          # Select the recorded attempt, including artifacts from an older
+          # attempt after a rerun. The verifier independently validates it.
+          candidate_attempt="$(python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads((Path(os.environ["KIRI_LINUX_DEB_DIR"]) / "provenance.json").read_text())
+          attempt = manifest["run_attempt"]
+          assert type(attempt) is int and attempt > 0
+          print(attempt)
+          PYTHON
+          )"
+          candidate_conclusion="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$KIRI_CANDIDATE_RUN_ID/attempts/$candidate_attempt/jobs" \
+            --jq '.jobs[] | select(.name == "Build, test and package Linux (Ubuntu 24.04 / X11)") | .conclusion')"
+          recheck_flags=()
+          if [[ "$candidate_conclusion" == "failure" ]]; then
+            recheck_flags+=(--recheck-failed-x11)
+          fi
           python3 scripts/qa/linux-package-provenance.py verify \
             --package-dir "$KIRI_LINUX_DEB_DIR" --run-id "$KIRI_CANDIDATE_RUN_ID" \
-            --output "$KIRI_LINUX_QA_DIR/package-provenance.json" --recheck-failed-x11
+            --output "$KIRI_LINUX_QA_DIR/package-provenance.json" "${recheck_flags[@]}"
       - name: Install unchanged candidate and X11 desktop-test dependencies
         run: |
           packages=("${{ runner.temp }}/kiri-linux-deb/"*.deb)
