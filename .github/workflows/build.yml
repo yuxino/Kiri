@@ -206,6 +206,10 @@ jobs:
         run: bash scripts/qa/linux-audio-fifo.sh
         env:
           KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
+      - name: Verify the 60-second Linux audio/video clock
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml native_audio_long_recording_keeps_shared_clock -- --ignored --nocapture --test-threads=1
+        env:
+          KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
       - uses: actions/upload-artifact@v7
         if: always()
         with:
