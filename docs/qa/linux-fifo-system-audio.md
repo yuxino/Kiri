@@ -57,3 +57,22 @@ GStreamer A/V test separately checks shared-clock duration and decoded tones.
 These are controlled software and virtual-desktop checks. They do not
 establish physical microphone/speaker behavior, PipeWire-Pulse hardware
 latency, GNOME Wayland consent, multiple monitors or fractional scaling.
+
+## Recorded comparison
+
+The same audible FIFO route in [run 37742138470](https://github.com/yuxino/Kiri/actions/runs/37742138470)
+reported roughly 295–322 ms of sink latency. The legacy 250 ms queue failed
+after about 361 ms with a native timestamp discontinuity. A one-second queue
+prevented the abort, but the strict decoded-tone test exposed initial silence.
+
+With bounded preparation, the native FIFO check and 60-second A/V test passed
+in [run 37742990654](https://github.com/yuxino/Kiri/actions/runs/37742990654).
+Both segment starts contained 440 Hz PCM at amplitude 0.14998 in their first
+two 100 ms windows, before AAC encoding. The audiorate counters were
+`add=0 drop=0` in both segments. These are generated-signal measurements, not
+physical-device or speech-quality claims.
+
+The unchanged Debian candidate is replayed through both silent and system-only
+installed X11 runs in [run 37745355744](https://github.com/yuxino/Kiri/actions/runs/37745355744).
+Package provenance checks the original build attempt, source files and SHA-256
+before installation; the microphone remains off.

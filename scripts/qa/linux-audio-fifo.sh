@@ -47,8 +47,8 @@ with open(sys.argv[1], "rb", buffering=0) as stream:
         time.sleep(max(0, start + count / 192000 - time.monotonic()))
 PY
 pids+=("$!")
-# Feed native Pulse playback directly. Unlike pulsesink's clock, this does not
-# depend on the FIFO device publishing a progressing playback clock at preroll.
+# Feed native Pulse playback directly and verify actual FIFO output below.
+# Fixture startup is independent of a GStreamer playback clock.
 python3 - <<'TONE' | pacat --playback --raw --device=fifo_output --format=s16le --rate=48000 --channels=2 --latency-msec=200 &
 import array, math, sys
 block = array.array("h", (int(32767 * 0.15 * math.sin(2 * math.pi * 440 * frame / 48000))

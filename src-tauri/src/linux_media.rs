@@ -2561,18 +2561,25 @@ mod tests {
             let encoder =
                 LinuxNativeSegmentEncoder::start_prepared(prepared, path.clone(), rx).unwrap();
             tx.send(solid_frame([255, 0, 0, 255])).unwrap();
-            std::thread::sleep(Duration::from_millis(1_500));
+            std::thread::sleep(Duration::from_secs(4));
             drop(tx);
             encoder.finish().unwrap();
+            assert!(trace.native_continuity_errors().is_empty());
             drop(trace);
             let (_, _, duration) =
                 validate_recording_tracks(&path, Some((64, 48)), Some(true)).unwrap();
             assert!(
-                (0.9..1.6).contains(&duration),
+                (3.3..4.1).contains(&duration),
                 "FIFO segment duration: {duration}"
             );
             active_duration += duration;
             let samples = decoded_audio(&path);
+            assert!(
+                tone_window_amplitudes(&samples[..9_600], 440.0)
+                    .iter()
+                    .all(|amplitude| *amplitude > 0.08),
+                "FIFO preparation silence leaked into the recording"
+            );
             let amplitudes = tone_window_amplitudes(&samples[9_600..samples.len() - 4_800], 440.0);
             assert!(
                 amplitudes.iter().all(|amplitude| *amplitude > 0.08),
@@ -2591,7 +2598,25 @@ mod tests {
             (duration - active_duration).abs() < 0.05,
             "paused/preparation wall time leaked: {duration}, active {active_duration}"
         );
-        assert!(tone_amplitude(&decoded_audio(&merged), 440.0) > 0.08);
+        assert!(tone_window_amplitudes(&decoded_audio(&merged), 440.0)
+            .iter()
+            .all(|amplitude| *amplitude > 0.08));
+        let cancelled = temp.path().join("cancelled-during-preparation.mp4");
+        let config = EncoderConfig {
+            audio: Some(crate::linux_audio::AUDIO_SPEC),
+            ..config()
+        };
+        let prepared = PreparedEncoder::new(&config, &cancelled).unwrap();
+        let (tx, rx) = mpsc::sync_channel(2);
+        let encoder =
+            LinuxNativeSegmentEncoder::start_prepared(prepared, cancelled.clone(), rx).unwrap();
+        tx.send(solid_frame([255, 0, 0, 255])).unwrap();
+        std::thread::sleep(Duration::from_millis(60));
+        let cancel_started = Instant::now();
+        encoder.cancel();
+        assert!(cancel_started.elapsed() < Duration::from_secs(1));
+        assert!(!cancelled.exists());
+        drop(tx);
         let silent = temp.path().join("silent.mp4");
         fixture(&silent, [0, 0, 255, 255], 400);
         validate_recording_tracks(&silent, Some((64, 48)), Some(false)).unwrap();

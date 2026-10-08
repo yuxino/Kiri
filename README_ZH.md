@@ -39,7 +39,7 @@
 
 开始标注或录屏前，点击滑杆按钮，可在选区边上直接输入宽高，单位为像素。
 
-素材保存在本机。远程 OCR 可选，每次上传前都会询问。Linux 配置、Wayland 快捷键和平台限制见 [Linux 指南](docs/linux.md)。
+素材保存在本机。远程 OCR 可选，每次上传前都会询问。Linux 配置、MP4 声音录制、Wayland 快捷键和平台限制见 [Linux 指南](docs/linux.md)。
 
 [使用与常见问题](docs/usage.zh-CN.md) · [视频剪辑](docs/video-editing.zh-CN.md) · [反馈问题](https://github.com/yuxino/kiri/issues) · [贡献指南](CONTRIBUTING.md)
 
