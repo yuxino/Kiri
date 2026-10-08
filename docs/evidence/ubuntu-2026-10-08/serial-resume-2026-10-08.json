@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-08",
+  "timezone": "Asia/Shanghai",
+  "package": "1.6.11",
+  "environment": {
+    "os": "Ubuntu 24.04.4",
+    "desktop": "GNOME 46",
+    "session": "X11",
+    "pulse_default_sink": "fifo_output",
+    "pulse_monitor": "fifo_output.monitor"
+  },
+  "native_launch": "pass",
+  "public_video_import_playback_seek": "pass: 51.9-second public Sintel trailer; native seek showed a changed frame",
+  "trim_export": "pass: 20-24 second source range exported as a separate 4-second MP4 and reopened",
+  "trim_export_metadata": {
+    "video_codec": "H.264 High",
+    "width": 854,
+    "height": 480,
+    "frame_rate": "24/1",
+    "audio": "AAC stereo 48kHz"
+  },
+  "gif_conversion": "pass: four-second MP4 converted to 720x404 GIF, 6658390 bytes; two different native preview frames observed",
+  "region_capture_annotation": "pass: X11 region capture of public multilingual fixture, rectangle annotation, save and reopen",
+  "local_ocr": "pass: saved-image and screen OCR on short public three-line fixture; not an accuracy benchmark",
+  "ui_languages": [
+    "en",
+    "zh-Hans"
+  ],
+  "recording": {
+    "system_audio": true,
+    "microphone": false,
+    "failures": 2,
+    "failure_times_utc": [
+      "2026-10-08T03:49:29Z",
+      "2026-10-08T03:58:15Z"
+    ],
+    "error_label": "AudioRecordingStopped",
+    "result": "Both system-audio-on attempts failed immediately and produced no new MP4; second attempt used no pause",
+    "silent_control": {
+      "system_audio": false,
+      "microphone": false,
+      "result": "pass: saved MP4 reopened and moving counter observed",
+      "duration_seconds": 6.065333333,
+      "width": 1020,
+      "height": 310,
+      "frame_rate": "30/1",
+      "codec": "H.264 Constrained Baseline"
+    },
+    "pause_resume": "not verified: first attempt had already failed before the pause command",
+    "cause": "Unproven; observed only in this cloud PulseAudio FIFO environment"
+  },
+  "cleanup": "Normal Quit; no exact-name process remained. Seven owned QA assets and seven indexed entries removed along with their known annotation/video project files; app settings and library marker preserved. QA downloads removed.",
+  "cloud": "Direct shutdown submitted; powered-off label detected by page wait. Final row screenshot and remote exit pending after a new browser-control handoff.",
+  "not_tested": [
+    "Wayland capture",
+    "physical Linux audio device",
+    "full GIF timing audit",
+    "audio/video synchronization",
+    "AppImage runtime",
+    "Japanese UI"
+  ],
+  "scope": "Screenshots are real native captures or lossless crops; no generated or retouched pixels. No recording/audio file or recognized-text log is published."
+}

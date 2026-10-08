@@ -2,11 +2,109 @@
   "gnome-desktop.png": {
     "sha256": "14f8dfaa7f904beb71c9ee7b52e1677fe980c77d2c7c8533bd9a2b0cb2e7bc25",
     "width": 1500,
-    "height": 768
+    "height": 768,
+    "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
   },
   "ubuntu-installed-packages-crop.png": {
     "sha256": "35a588fce70a47281b8c4729fe0078111c55ed05075adf3517c0138cc8b8149e",
     "width": 680,
-    "height": 420
+    "height": 420,
+    "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-native-home.png": {
+    "sha256": "ffa570a450df0a86817d4207b94c83f43d64656bb4a941147613c61bcf091e2c",
+    "width": 481,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-sintel-playback-seek.png": {
+    "sha256": "311b5d5ac5ae25972bd1646848894a5b4cda445ce398bf2cbf19d05b2167f4f9",
+    "width": 570,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-trim-four-seconds.png": {
+    "sha256": "a0a3d5261b079f44532c19886853dab644c725f9fd3ca937cbc8a7d1ca502c25",
+    "width": 570,
+    "height": 380,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-four-second-mp4-exported.png": {
+    "sha256": "bf7f244993deadd933dbd04db402c779830663120cb6d077d757211ec06049ad",
+    "width": 570,
+    "height": 380,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-four-second-mp4-playback.png": {
+    "sha256": "85e73a8a94123b02e227c14dceb340e6ea1cc4ff5c4367c7cf87a155241893c4",
+    "width": 570,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-library-with-screenshot.png": {
+    "sha256": "54cfd5f29d1bbd9e279239eef0825ce7c3bcf8b87f403d97df54a92450cca1e4",
+    "width": 481,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-gif-preview-first.png": {
+    "sha256": "6f1a87b9f0ef576ea7b97fca5c322f80de104953857d463a30d5dcaa0f788709",
+    "width": 570,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-gif-preview-second.png": {
+    "sha256": "5824ea0321757587b22e0a61e0d8e76468f467121d8fb9c91d4fcbff0c28ec30",
+    "width": 570,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-screenshot-editor.png": {
+    "sha256": "e31aa16f04a1adf6418ca2603cc33959a4c720dd6bb1b5d5e5063cd7e318c778",
+    "width": 441,
+    "height": 330,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-local-ocr-result.png": {
+    "sha256": "291b9b6a0de35f3fd2c55f86668bd33a4502d03bb5791d2ed96db03883f39048",
+    "width": 441,
+    "height": 330,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-settings-zh.png": {
+    "sha256": "6ac35864d09269a7e91e372583e3c5a3d9c76ba7f9b5462b79d4e7371c1d7cee",
+    "width": 481,
+    "height": 340,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-screen-ocr-result.png": {
+    "sha256": "4f91b2358a0a9fd1ab5f980c7e6efd8d2d2d49f2ccea799a254791342ad111ca",
+    "width": 550,
+    "height": 420,
+    "origin": "Actual Ubuntu native application capture or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-audio-recording-errors.png": {
+    "sha256": "4e03e1150d8d96f0672a6c4e9458241cf8465c5ef459f18ca84562591593b7d3",
+    "width": 685,
+    "height": 106,
+    "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-silent-record-metadata.png": {
+    "sha256": "758596b431757428ee3e73a1d43da61fa5afc034ddaa282bc043783db9e2ba81",
+    "width": 650,
+    "height": 88,
+    "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-silent-record-playback.png": {
+    "sha256": "4a57f3e6af4352b418af622eebfc9865611488c3c795c9f1a1e228cde3fa0579",
+    "width": 601,
+    "height": 340,
+    "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
+  },
+  "kiri-system-audio-mic-off-options.png": {
+    "sha256": "8b4a26d601c7f93ae5ee753b587d363b7a063a089f5fe9dcb9ef6c0208e3948d",
+    "width": 550,
+    "height": 410,
+    "origin": "Actual native screenshot or lossless crop; no generated or retouched pixels"
   }
 }
