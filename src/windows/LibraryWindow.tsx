@@ -789,9 +789,11 @@ export function LibraryWindow() {
               onClick={run(() =>
                 void api.showConfirmDialog(
                   `removeMissing:${asset.id}`,
-                  t("Remove this record?"),
+                  "Remove this record?",
                   "",
-                  t("Remove Record"),
+                  "Remove Record",
+                  undefined,
+                  true,
                 ),
               )}
             />
@@ -812,9 +814,11 @@ export function LibraryWindow() {
               onClick={run(() =>
                 void api.showConfirmDialog(
                   `delete:${asset.id}`,
-                  t("Delete this capture permanently?"),
-                  t("This cannot be undone."),
-                  t("Delete Permanently"),
+                  "Delete this capture permanently?",
+                  "This cannot be undone.",
+                  "Delete Permanently",
+                  undefined,
+                  true,
                 ),
               )}
             />
@@ -1025,9 +1029,11 @@ export function LibraryWindow() {
                 onClick={() =>
                   void api.showConfirmDialog(
                     "emptyTrash",
-                    t("Empty Trash?"),
-                    t("All captures in Trash will be permanently deleted. This cannot be undone."),
-                    t("Empty Trash"),
+                    "Empty Trash?",
+                    "All captures in Trash will be permanently deleted. This cannot be undone.",
+                    "Empty Trash",
+                    undefined,
+                    true,
                   )
                 }
                 style={{ minHeight: 30, padding: "0 10px", fontSize: 11.5, flexShrink: 0 }}
@@ -1108,10 +1114,11 @@ export function LibraryWindow() {
           onDelete={() =>
             void api.showConfirmDialog(
               "batchDelete",
-              t("Delete these captures permanently?"),
-              t("This cannot be undone."),
-              t("Delete Permanently (N)").replace("{n}", String(selectionIds.length)),
+              "Delete these captures permanently?",
+              "This cannot be undone.",
+              "Delete Permanently (N)",
               selectionIds,
+              true,
             )
           }
           onMoveToTrash={() => {

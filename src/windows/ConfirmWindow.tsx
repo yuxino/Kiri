@@ -15,11 +15,16 @@ interface ConfirmProps {
   message: string;
   confirmLabel: string;
   ids?: string[];
+  localize?: boolean;
 }
 
 export function ConfirmWindow(props: ConfirmProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogText = (text: string) => props.localize ? t(text) : text;
+  const confirmLabel = props.localize && props.kind === "batchDelete"
+    ? dialogText(props.confirmLabel).replace("{n}", String(props.ids?.length ?? 0))
+    : dialogText(props.confirmLabel);
 
   const close = () => {
     void getCurrentWindow().close();
@@ -93,7 +98,7 @@ export function ConfirmWindow(props: ConfirmProps) {
         }}
       >
         <div id="kiri-confirm-title" style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>
-          {t(props.title)}
+          {dialogText(props.title)}
         </div>
         {props.message && (
           <div
@@ -105,7 +110,7 @@ export function ConfirmWindow(props: ConfirmProps) {
               lineHeight: 1.4,
             }}
           >
-            {t(props.message)}
+            {dialogText(props.message)}
           </div>
         )}
         {error && (
@@ -136,7 +141,7 @@ export function ConfirmWindow(props: ConfirmProps) {
             disabled={busy}
             onClick={() => void confirm()}
           >
-            {t(props.confirmLabel)}
+            {confirmLabel}
           </button>
         </div>
       </div>
