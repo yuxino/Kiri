@@ -55,6 +55,7 @@ pub fn png_filter_label(language: &str) -> &'static str {
 /// Keep the small native Portal labels here rather than embedding full UI
 /// dictionaries just to read three strings. The frontend parity test checks
 /// these labels against the complete application dictionaries.
+#[cfg(any(target_os = "linux", test))]
 pub fn shortcut_descriptions(language: &str) -> [&'static str; 3] {
     match language {
         "zh-Hans" => ["截图 / 录屏", "暂停/继续录制", "停止录制"],
