@@ -7,21 +7,35 @@ import * as videoCapabilities from "../../src/windows/video-capabilities.js";
 
 // Exercise the real component handlers without a WebView, native IPC, or a
 // user's library. This models hook state/effect cleanup, not DOM or layout.
-const source = readFileSync(new URL("../../src/windows/LibraryWindow.tsx", import.meta.url), "utf8");
-const compiled = ts.transpileModule(`${source}\nexport { AssetCard, RecordingSaveCard };`, {
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2021,
-    jsx: ts.JsxEmit.React,
-    module: ts.ModuleKind.CommonJS,
-    esModuleInterop: true,
-  },
-}).outputText;
+// Cache compiled source only. Hooks, listeners and mocked IPC stay local to
+// each harness, and a fresh test process always reads the current source.
+const componentCodeCache = new Map();
+let librarySource;
+function componentCode(source) {
+  if (!componentCodeCache.has(source)) {
+    componentCodeCache.set(source, ts.transpileModule(source, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2021,
+        jsx: ts.JsxEmit.React,
+        module: ts.ModuleKind.CommonJS,
+        esModuleInterop: true,
+      },
+    }).outputText);
+  }
+  return componentCodeCache.get(source);
+}
 
-const gifModule = { exports: {} };
-new Function("require", "module", "exports", ts.transpileModule(
-  readFileSync(new URL("../../src/windows/gif-conversion.ts", import.meta.url), "utf8"),
-  { compilerOptions: { module: ts.ModuleKind.CommonJS } },
-).outputText)(() => ({ t: (key) => key, fmt: (key, value) => key.replace("%d", value) }), gifModule, gifModule.exports);
+let gifModule;
+function gifConversion() {
+  if (!gifModule) {
+    gifModule = { exports: {} };
+    new Function("require", "module", "exports", ts.transpileModule(
+      readFileSync(new URL("../../src/windows/gif-conversion.ts", import.meta.url), "utf8"),
+      { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+    ).outputText)(() => ({ t: (key) => key, fmt: (key, value) => key.replace("%d", value) }), gifModule, gifModule.exports);
+  }
+  return gifModule.exports;
+}
 
 export const testAsset = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -152,17 +166,19 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
       kiriResourceUrl: (route, [id], { v }) => `${route}:${id}?v=${v}`,
     },
     "./library-card-interaction.js": cardInteraction,
-    "./gif-conversion": gifModule.exports,
+    get "./gif-conversion"() { return gifConversion(); },
     "./viewer-copy-shortcut.js": viewerCopyShortcut,
     "./video-capabilities.js": videoCapabilities,
     ...environment.modules,
   };
   const module = { exports: {} };
-  const componentCode = componentSource == null ? compiled : ts.transpileModule(componentSource, {
-    compilerOptions: { target: ts.ScriptTarget.ES2021, jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
-  }).outputText;
+  if (componentSource == null) {
+    librarySource ??= readFileSync(new URL("../../src/windows/LibraryWindow.tsx", import.meta.url), "utf8") +
+      "\nexport { AssetCard, RecordingSaveCard };";
+    componentSource = librarySource;
+  }
   const globals = environment.globals ?? {};
-  new Function("require", "module", "exports", "window", "document", "requestAnimationFrame", "cancelAnimationFrame", "navigator", ...Object.keys(globals), componentCode)((name) => {
+  new Function("require", "module", "exports", "window", "document", "requestAnimationFrame", "cancelAnimationFrame", "navigator", ...Object.keys(globals), componentCode(componentSource))((name) => {
     if (!(name in modules)) throw new Error(`Unexpected import: ${name}`);
     return modules[name];
   }, module, module.exports, window, { ...window, body: null, querySelector: () => null, ...environment.document }, () => 1, () => {}, environment.navigator ?? { userAgent: "Macintosh" }, ...Object.values(globals));
