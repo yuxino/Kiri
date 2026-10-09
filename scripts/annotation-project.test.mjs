@@ -23,7 +23,12 @@ function moduleDataUrl(source) {
   return `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 }
 
-async function loadAnnotationModel() {
+let annotationModel;
+function loadAnnotationModel() {
+  return annotationModel ??= compileAnnotationModel();
+}
+
+async function compileAnnotationModel() {
   const [geomSource, modelSource] = await Promise.all([
     readFile(new URL("../src/annotation/geom.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/annotation/model.ts", import.meta.url), "utf8"),
@@ -37,7 +42,12 @@ async function loadAnnotationModel() {
   return import(moduleDataUrl(modelJavaScript));
 }
 
-async function loadAnnotationRender() {
+let annotationRender;
+function loadAnnotationRender() {
+  return annotationRender ??= compileAnnotationRender();
+}
+
+async function compileAnnotationRender() {
   const [geomSource, modelSource, renderSource] = await Promise.all([
     readFile(new URL("../src/annotation/geom.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/annotation/model.ts", import.meta.url), "utf8"),
