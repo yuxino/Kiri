@@ -11,6 +11,21 @@ application or a durable product decision.
 - [Linux](linux.md) — Ubuntu/GNOME setup, X11 compatibility,
   manual updates, feature limits, and separate CI/desktop acceptance.
 
+## Read in your language
+
+| Language | Overview | Setup and help | Video editing |
+| --- | --- | --- | --- |
+| 简体中文 | [Kiri](../README.md) | [简体中文](usage.zh-CN.md) | [简体中文](video-editing.zh-CN.md) |
+| English | [Kiri](../README_EN.md) | [English](usage.md) | [English](video-editing.md) |
+| 繁體中文 | [Kiri](../README_ZH_TW.md) | [繁體中文](usage.zh-TW.md) | [繁體中文](video-editing.zh-TW.md) |
+| 日本語 | [Kiri](../README_JA.md) | [日本語](usage.ja.md) | [日本語](video-editing.ja.md) |
+| Deutsch | [Kiri](../README_DE.md) | [Deutsch](usage.de.md) | [Deutsch](video-editing.de.md) |
+| 한국어 | [Kiri](../README_KO.md) | [한국어](usage.ko.md) | [한국어](video-editing.ko.md) |
+| Français | [Kiri](../README_FR.md) | [Français](usage.fr.md) | [Français](video-editing.fr.md) |
+
+The user guides cover the same platform boundaries. Architecture, ADRs, detailed
+Linux QA, and contribution records retain their original language.
+
 ## Current sources of truth
 
 - [`qa/issue-21-windows/README.md`](qa/issue-21-windows/README.md) — native
@@ -158,3 +173,5 @@ development.
 - [ADR 0076: Inline capture size controls](adr/0076-inline-capture-size-controls.md)
 - [ADR 0077: Quick screenshot completion and pinning](adr/0077-quick-screenshot-completion-and-pin.md)
 - [ADR 0078: Cancellable GIF conversion and video validation](adr/0078-cancellable-gif-video-validation.md)
+- [ADR 0079: Seven languages and a shared preference](adr/0079-seven-language-preferences.md)
+- [ADR 0080: Pinned macOS release signing](adr/0080-pinned-macos-release-signing.md)

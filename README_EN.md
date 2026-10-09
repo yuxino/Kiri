@@ -6,6 +6,11 @@
     <a href="https://kiri.yuxino.cn">Website</a>
     · <a href="README.md">简体中文</a>
     · <strong>English</strong>
+    · <a href="README_ZH_TW.md">繁體中文</a>
+    · <a href="README_JA.md">日本語</a>
+    · <a href="README_DE.md">Deutsch</a>
+    · <a href="README_KO.md">한국어</a>
+    · <a href="README_FR.md">Français</a>
   </p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="Latest release"></a>
@@ -38,6 +43,8 @@
 3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Choose **Pin** on the completion card to open a floating reference image.
 
 Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
+
+Choose one of seven UI languages in **Settings → General → Language**. Your choice applies to every Kiri window and survives relaunches. On first launch, Kiri follows the system language.
 
 Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, MP4 audio recording, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
 

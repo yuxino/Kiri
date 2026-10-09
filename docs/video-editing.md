@@ -1,6 +1,7 @@
 # Edit a video in Kiri
 
-**English** · [简体中文](video-editing.zh-CN.md)
+[简体中文](video-editing.zh-CN.md) · **English** · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md)
+
 
 Open a video from the library and choose **Trim & Export** above the picture. This guide describes the current source; check the release notes for the controls available in your installed version.
 
@@ -55,4 +56,4 @@ Small sources are never enlarged. File size depends on the source and edited dur
 
 Exports retain synchronized audio. Linux normalizes audio to 48 kHz stereo AAC, applies video orientation and preserves variable-rate and held-frame presentation timing. macOS preserves audio pitch when clip speed changes; Windows changes the pitch along with the speed. On Windows, video effects currently require a source without rotation metadata. Kiri recordings meet that requirement.
 
-[Back to Kiri](../README.md)
+[Back to Kiri](../README_EN.md)

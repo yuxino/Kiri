@@ -1,6 +1,8 @@
 # Using Kiri
 
-[Back to README](../README.md) · [简体中文](usage.zh-CN.md)
+[简体中文](usage.zh-CN.md) · **English** · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md)
+
+[Back to README](../README_EN.md)
 
 ## Install and update
 
@@ -20,6 +22,10 @@ Updates: macOS and Windows installer builds use Settings → About → Check for
 
 macOS Dock: Settings → Show in Dock controls the Dock icon immediately and remembers your choice. The tray and capture shortcut remain available when it is hidden.
 
+## Language
+
+Settings → General → Language offers English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, and Français. Your choice applies to every open Kiri window and survives relaunches. On first launch, Kiri follows the system language. UI language choices do not change installed Linux OCR language data.
+
 ## Capture
 
 Press ⇧⌘A on macOS or Shift+Ctrl+A on Windows / Linux X11, then select a window or drag a region. On Wayland, use the Capture button or bind `kiri --capture` in desktop settings. Supporting desktops also offer Settings → General → Wayland Desktop Shortcuts for desktop-approved Capture, Pause/Resume, and Stop bindings. Ubuntu 24.04 / GNOME 46 retains the command fallback.
@@ -33,6 +39,10 @@ On macOS, if you change display layout, resolution, or scale after selecting a r
 While typing an annotation, Ctrl/Cmd+Z undoes text and Shift+Enter adds a line. Esc leaves the text edit first; a second Esc cancels capture. Closing an edited saved image offers Save, Discard, or Keep editing when changes are unsaved.
 
 On GNOME Wayland, if the first capture shows no permission dialog, open Kiri's Library and choose Request Access in the error banner. Allow screenshot access in GNOME's dialog, then retry Capture. Kiri discards the authorization image. See the [Linux guide](linux.md).
+
+## GIF conversion
+
+Converting a library MP4 to GIF checks video decoding before encoding. Use Cancel during checking or conversion; Cancel all stops multiple jobs. The original video remains. Cancellation is unavailable once the final library save begins.
 
 ## Privacy
 
