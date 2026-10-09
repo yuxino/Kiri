@@ -260,12 +260,29 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
   }, [hideWindow, presentCompletion, presentNotice]);
 
   useEffect(() => {
+    if (completion?.phase !== "processing" || !completion.assetId) return;
+    let disposed = false;
+    let receivedUpdate = false;
+    const assetId = completion.assetId;
     const subscription = onGifConversionState((job) => {
       const current = completionRef.current;
-      if (current?.phase === "processing" && current.assetId === job.id) setGifProgress(job);
+      if (current?.phase === "processing" && current.assetId === job.id) {
+        receivedUpdate = true;
+        setGifProgress(job);
+      }
     });
-    return () => { void subscription.then((dispose) => dispose()).catch(() => {}); };
-  }, []);
+    // A newly created native card may miss the first progress event, especially
+    // on platforms with indeterminate progress. Restore its active Cancel action.
+    void subscription.then(() => api.getGifConversionStates()).then((jobs) => {
+      if (disposed || receivedUpdate) return;
+      const job = jobs.find((job) => job.id === assetId);
+      if (job) setGifProgress(job);
+    }).catch(() => {});
+    return () => {
+      disposed = true;
+      void subscription.then((dispose) => dispose()).catch(() => {});
+    };
+  }, [completion?.assetId, completion?.phase]);
 
   // Active GIF jobs need pointer input for Cancel; passive save cards remain click-through.
   useEffect(() => {

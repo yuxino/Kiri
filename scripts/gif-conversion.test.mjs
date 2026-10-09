@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createLibraryHarness, nodes, settleRequests, testAsset, deferred } from "./helpers/library-render-harness.mjs";
 
@@ -92,4 +93,39 @@ test("multiple GIF jobs have one Cancel all action and skip saving jobs", async 
   buttons[0].props.onClick(); await settleRequests();
   assert.deepEqual(calls, [id]);
   library.unmount();
+});
+
+
+test("new completion cards restore Cancel without losing a newer progress event", async () => {
+  for (const newerEvent of [false, true]) {
+    const snapshot = deferred();
+    const calls = [];
+    const interactive = [];
+    const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/ToastWindow.tsx", import.meta.url), "utf8");
+    const harness = createLibraryHarness({
+      getGifConversionStates: () => snapshot.promise,
+      cancelGifConversion: async (id) => { calls.push(id); return true; },
+    }, source, {
+      search: `?mode=completion&phase=processing&assetId=${id}&kind=gif`,
+      modules: {
+        "@tauri-apps/api/dpi": { LogicalSize: class {} },
+        "@tauri-apps/api/event": { listen: async () => () => {} },
+        "@tauri-apps/api/window": { getCurrentWindow: () => ({
+          hide: async () => {}, setSize: async () => {},
+          setIgnoreCursorEvents: async (ignore) => interactive.push(!ignore),
+        }) },
+      },
+    });
+    const toast = harness.mount("ToastWindow", {});
+    toast.render(); await settleRequests();
+    if (newerEvent) harness.emit("gifConversionState", {...job, phase:"cancelling"});
+    snapshot.resolve([{...job, progress:null}]); await settleRequests();
+    const tree = toast.render();
+    const cancel = nodes(tree).find((node) => node?.type === "button" && nodes(node).includes(newerEvent ? "Cancelling…" : "Cancel"));
+    assert.ok(cancel);
+    assert.equal(cancel.props.disabled, newerEvent);
+    assert.ok(interactive.includes(true), "native processing card must accept pointer input");
+    if (!newerEvent) { cancel.props.onClick(); await settleRequests(); assert.deepEqual(calls, [id]); }
+    toast.unmount();
+  }
 });

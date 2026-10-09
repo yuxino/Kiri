@@ -325,7 +325,11 @@ pub fn export_gif_with_progress(
     progress: &mut dyn FnMut(f64),
 ) -> Result<(PathBuf, i64, i64, Option<f64>)> {
     export_gif_controlled(source, max_long_edge, fps, &crate::gif::GifControl::default(),
-        &mut |phase, value| { if phase == "encoding" { if let Some(value) = value { progress(value); } } })
+        &mut |phase, value| {
+            if phase == "encoding" {
+                if let Some(value) = value.filter(|value| *value > 0.0) { progress(value); }
+            }
+        })
 }
 
 pub fn export_gif_controlled(
@@ -625,6 +629,12 @@ mod tests {
         assert_eq!(decoder.into_frames().collect_frames().unwrap().len(), 12);
         assert!((duration.unwrap() - 1.0).abs() < 0.01);
         assert!(phases.iter().position(|phase| *phase == "checking").unwrap() < phases.iter().position(|phase| *phase == "encoding").unwrap());
+        let mut frame_progress = Vec::new();
+        let (path, _, _, _) = export_gif_with_progress(&video, 64, 12, &mut |value| frame_progress.push(value)).unwrap();
+        let _output = tempfile::TempPath::try_from_path(path).unwrap();
+        assert_eq!(frame_progress.len(), 12, "legacy progress reports one update per encoded frame");
+        assert!(frame_progress.windows(2).all(|pair| pair[1] > pair[0]));
+        assert_eq!(frame_progress.last(), Some(&1.0));
     }
 
     #[test]
@@ -638,6 +648,7 @@ mod tests {
                 progress.push(value)
             })
             .unwrap();
+        let gif = tempfile::TempPath::try_from_path(gif).unwrap();
         assert!(progress.len() > 12);
         assert!(progress.windows(2).all(|pair| pair[1] > pair[0]));
         assert_eq!(progress.last(), Some(&1.0));
@@ -661,6 +672,5 @@ mod tests {
             duration.unwrap(),
             std::fs::metadata(&gif).unwrap().len()
         );
-        std::fs::remove_file(gif).unwrap();
     }
 }
