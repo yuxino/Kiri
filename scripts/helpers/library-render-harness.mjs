@@ -186,6 +186,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
   return {
     window,
     emit: (name, payload) => events.get(name)?.(payload),
+    hasEventListener: (name) => events.has(name),
     mount(name, initialProps) {
       const owner = { hooks: [], cursor: 0, effects: [], dirty: false, unmounted: false };
       let props = initialProps;
