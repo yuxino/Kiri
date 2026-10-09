@@ -452,18 +452,19 @@ export function LibraryWindow() {
 
   useEffect(() => {
     let active = true;
-    let eventVersion = 0;
+    const updatedIds = new Set<string>();
     let dispose: (() => void) | undefined;
     void onGifConversionState((job) => {
-      eventVersion++;
+      updatedIds.add(job.id);
       if (active) setGifConversions((current) => ({ ...current, [job.id]: job }));
     }).then(async (unlisten) => {
       if (!active) { unlisten(); return; }
       dispose = unlisten;
-      const version = eventVersion;
       const jobs = await api.getGifConversionStates();
-      if (active && version === eventVersion) setGifConversions((current) => ({
-        ...current, ...Object.fromEntries(jobs.map((job) => [job.id, job])),
+      // A newer event protects only its own job, including terminal states.
+      // Other active jobs still need restoring from the opening snapshot.
+      if (active) setGifConversions((current) => ({
+        ...current, ...Object.fromEntries(jobs.filter((job) => !updatedIds.has(job.id)).map((job) => [job.id, job])),
       }));
     }).catch(() => {});
     return () => { active = false; dispose?.(); };

@@ -56,6 +56,46 @@ test("opening the library restores an active GIF without overwriting newer event
   }
 });
 
+test("opening the library restores other GIF jobs when one job updates during the snapshot", async () => {
+  for (const terminal of [false, true]) {
+    const snapshot = deferred();
+    const calls = [];
+    const second = { ...job, id: "second" };
+    const harness = createLibraryHarness({
+      getGifConversionStates: () => snapshot.promise,
+      cancelGifConversion: async (id) => { calls.push(id); return true; },
+    });
+    const library = harness.mount("LibraryWindow", {});
+    library.render(); await settleRequests();
+    harness.emit("gifConversionState", terminal
+      ? { ...second, isConverting: false, phase: "cancelled", progress: null }
+      : { ...second, progress: 0.84 });
+    snapshot.resolve([job, second]); await settleRequests();
+    const tree = library.render();
+    const label = terminal ? "Cancel" : "Cancel all";
+    const cancel = nodes(tree).find((node) => node?.type === "button" && nodes(node).includes(label));
+    assert.ok(cancel, "unrelated job updates must not discard an active job from the snapshot");
+    cancel.props.onClick(); await settleRequests();
+    assert.deepEqual(calls.sort(), terminal ? [id] : [id, second.id].sort(),
+      "a terminal job must not be revived by the older snapshot");
+    if (terminal) assert.equal(nodes(tree).find((node) => node?.type === "progress").props.value, job.progress);
+    else assert.ok(nodes(tree).includes("Creating GIF… 84%"), "the updated job retains its newer progress");
+    library.unmount();
+  }
+});
+
+test("closing the library removes the GIF listener while its snapshot is pending", async () => {
+  const snapshot = deferred();
+  const harness = createLibraryHarness({ getGifConversionStates: () => snapshot.promise });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  assert.ok(harness.hasEventListener("gifConversionState"));
+  library.unmount();
+  assert.equal(harness.hasEventListener("gifConversionState"), false);
+  snapshot.resolve([job]); await settleRequests();
+  assert.equal(harness.hasEventListener("gifConversionState"), false);
+});
+
 test("GIF checking and encoding can cancel while saving cannot", async () => {
   const calls = [];
   const harness = createLibraryHarness({ cancelGifConversion: async (id) => { calls.push(id); return true; } });
