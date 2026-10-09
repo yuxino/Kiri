@@ -62,6 +62,7 @@ def plan(event, ref, inputs, paths, labels=()):
             if path.startswith("scripts/qa/ipc-lifetime/"):
                 selected["native_linux"] = True
             if (path.startswith("src/") or path in {"package.json", "pnpm-lock.yaml", "index.html"}
+                    or path in {".github/workflows/build.yml", "scripts/qa/countdown-ui.py"}
                     or path.startswith(("vite.config.", "tsconfig"))
                     or (path.startswith("docs/demos/") and path.endswith((".py", ".js", ".html")))):
                 selected["renderer"] = True

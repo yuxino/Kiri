@@ -26,6 +26,11 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(result["renderer"], "true")
         self.assertFalse(any(value == "true" for key, value in result.items() if key.startswith(("package_", "native_"))))
 
+    def test_renderer_workflow_and_harness_changes_run_renderer(self):
+        for path in (".github/workflows/build.yml", "scripts/qa/countdown-ui.py"):
+            with self.subTest(path=path):
+                self.assertEqual(self.auto(path)["renderer"], "true")
+
     def test_shared_backend_and_capability_check_every_target_without_packages(self):
         for path in ("src-tauri/src/core/geometry.rs", "src-tauri/capabilities/image-close.json", "src-tauri/Cargo.lock"):
             with self.subTest(path=path):
