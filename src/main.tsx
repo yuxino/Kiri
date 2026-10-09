@@ -116,6 +116,7 @@ function App() {
           message={params.get("message") ?? ""}
           confirmLabel={params.get("confirmLabel") ?? ""}
           ids={params.get("ids")?.split(",").filter(Boolean)}
+          localize={params.get("localize") === "1"}
         />
       );
     default:

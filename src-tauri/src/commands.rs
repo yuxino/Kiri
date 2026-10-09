@@ -5439,6 +5439,7 @@ pub fn show_confirm_dialog(
     message: String,
     confirmLabel: String,
     ids: Option<Vec<String>>,
+    localize: Option<bool>,
 ) {
     crate::state::show_confirm_dialog(
         &app,
@@ -5447,6 +5448,7 @@ pub fn show_confirm_dialog(
         message,
         confirmLabel,
         ids.unwrap_or_default(),
+        localize.unwrap_or(false),
     );
 }
 

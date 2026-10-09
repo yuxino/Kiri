@@ -618,7 +618,9 @@ pub fn show_confirm_dialog(
     message: String,
     confirm_label: String,
     ids: Vec<String>,
+    localize: bool,
 ) {
+    let localize_query = if localize { "&localize=1" } else { "" };
     let label = "confirm";
     let window = match app.get_webview_window(label) {
         Some(window) => window,
@@ -641,7 +643,7 @@ pub fn show_confirm_dialog(
                 label,
                 WebviewUrl::App(
                     format!(
-                        "index.html?window=confirm&kind={}&title={}&message={}&confirmLabel={}{ids_query}",
+                        "index.html?window=confirm&kind={}&title={}&message={}&confirmLabel={}{ids_query}{localize_query}",
                         urlencode(&kind),
                         urlencode(&title),
                         urlencode(&message),
@@ -678,7 +680,7 @@ pub fn show_confirm_dialog(
         format!("&ids={}", urlencode(&ids.join(",")))
     };
     let url = format!(
-        "index.html?window=confirm&kind={}&title={}&message={}&confirmLabel={}{ids_query}",
+        "index.html?window=confirm&kind={}&title={}&message={}&confirmLabel={}{ids_query}{localize_query}",
         urlencode(&kind),
         urlencode(&title),
         urlencode(&message),
