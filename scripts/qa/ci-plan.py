@@ -84,6 +84,19 @@ def changed_paths(event, payload):
     base = payload.get("pull_request", {}).get("base", {}).get("sha") if event == "pull_request" else payload.get("before")
     if not isinstance(base, str) or not re.fullmatch(r"[0-9a-f]{40}", base) or base == "0" * 40:
         return None
+    # A depth-2 merge checkout can omit the event's original base after main
+    # advances. Fetch that exact commit instead of turning a known diff into
+    # the fallback that schedules every native platform.
+    available = subprocess.run(["git", "cat-file", "-e", base + "^{commit}"],
+                               capture_output=True, check=False)
+    if available.returncode:
+        try:
+            fetched = subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", base],
+                                     capture_output=True, check=False, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if fetched.returncode:
+            return None
     result = subprocess.run(["git", "diff", "--name-only", "--no-renames", "-z", base, "HEAD", "--"],
                             capture_output=True, check=False)
     if result.returncode:

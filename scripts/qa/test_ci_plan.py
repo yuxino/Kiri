@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -172,6 +173,54 @@ class PlanTests(unittest.TestCase):
             invalid = {**flags, "linux_x11": value}
             self.assertIn("plan outputs", policy.check_results(
                 {**needs, "plan": {"result": "success", "outputs": invalid}}))
+
+
+class ChangedPathsTests(unittest.TestCase):
+    base = "a" * 40
+
+    def payload(self, event):
+        return {"pull_request": {"base": {"sha": self.base}}} if event == "pull_request" else {"before": self.base}
+
+    def result(self, code=0, stdout=b""):
+        return SimpleNamespace(returncode=code, stdout=stdout)
+
+    def test_existing_base_diffs_without_network(self):
+        for event in ("pull_request", "push"):
+            with self.subTest(event=event), patch.object(policy.subprocess, "run", side_effect=[
+                    self.result(), self.result(stdout=b"src/windows/EditorWindow.tsx\0")]) as run:
+                self.assertEqual(policy.changed_paths(event, self.payload(event)), ["src/windows/EditorWindow.tsx"])
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual(run.call_args_list[0].args[0], ["git", "cat-file", "-e", self.base + "^{commit}"])
+                self.assertFalse(any("fetch" in call.args[0] for call in run.call_args_list))
+
+    def test_missing_base_fetches_only_exact_event_commit(self):
+        for event in ("pull_request", "push"):
+            with self.subTest(event=event), patch.object(policy.subprocess, "run", side_effect=[
+                    self.result(1), self.result(), self.result(stdout=b"README with spaces.md\0")]) as run:
+                self.assertEqual(policy.changed_paths(event, self.payload(event)), ["README with spaces.md"])
+                fetch = run.call_args_list[1]
+                self.assertEqual(fetch.args[0], ["git", "fetch", "--no-tags", "--depth=1", "origin", self.base])
+                self.assertEqual(fetch.kwargs["timeout"], 30)
+
+    def test_fetch_failure_or_timeout_keeps_all_native_checks(self):
+        for failed in (self.result(1), subprocess.TimeoutExpired("git", 30), OSError("network unavailable")):
+            with self.subTest(failure=failed), patch.object(policy.subprocess, "run", side_effect=[
+                    self.result(1), failed]) as run:
+                paths = policy.changed_paths("pull_request", self.payload("pull_request"))
+                self.assertIsNone(paths)
+                self.assertEqual(run.call_count, 2)
+                selected = policy.plan("pull_request", "refs/pull/108/merge", {}, paths)
+                self.assertTrue(all(selected[f"native_{target}"] == "true" for target in policy.TARGET_PREFIXES))
+
+    def test_diff_failure_still_keeps_unknown_diff(self):
+        with patch.object(policy.subprocess, "run", side_effect=[self.result(), self.result(1)]):
+            self.assertIsNone(policy.changed_paths("push", self.payload("push")))
+
+    def test_invalid_event_bases_never_run_git(self):
+        for base in (None, "", "main", "--upload-pack=bad", "0" * 40, "a" * 39, "a" * 40 + ";bad"):
+            with self.subTest(base=base), patch.object(policy.subprocess, "run") as run:
+                self.assertIsNone(policy.changed_paths("push", {"before": base}))
+                run.assert_not_called()
 
 
 class ProvenanceTests(unittest.TestCase):
