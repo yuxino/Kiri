@@ -9,6 +9,39 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use anyhow::{bail, Context, Result};
 
+pub const GIF_CANCELLED: &str = "GIF_CONVERSION_CANCELLED";
+
+/// Cancellation and library import have one winner. Keep the job registered
+/// until native work has stopped, so a retry cannot overlap the old encoder.
+#[derive(Clone, Default)]
+pub struct GifControl(std::sync::Arc<std::sync::atomic::AtomicU8>);
+
+impl GifControl {
+    pub fn request_cancel(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        self.0.compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire).is_ok()
+            || self.is_cancelled()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Acquire) == 1
+    }
+
+    pub fn check(&self) -> anyhow::Result<()> {
+        if self.is_cancelled() { anyhow::bail!(GIF_CANCELLED); }
+        Ok(())
+    }
+
+    pub fn begin_commit(&self) -> anyhow::Result<()> {
+        use std::sync::atomic::Ordering;
+        self.0.compare_exchange(0, 2, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| anyhow::anyhow!(GIF_CANCELLED))?;
+        Ok(())
+    }
+}
+
+pub type GifProgress<'a> = &'a mut dyn FnMut(&'static str, Option<f64>);
+
 #[cfg(any(windows, test))]
 pub fn scaled_dimensions(width: u32, height: u32, max_long_edge: u32) -> (u32, u32) {
     if width == 0 || height == 0 || max_long_edge == 0 {
@@ -257,26 +290,51 @@ pub fn video_first_frame(video: &Path, max_long_edge: u32) -> Result<Vec<u8>> {
 /// Exports a Windows MP4 to a looping GIF without FFmpeg.
 #[cfg(windows)]
 pub fn export_gif(video: &Path, max_long_edge: u32, fps: u32) -> Result<(PathBuf, f64)> {
+    export_gif_controlled(video, max_long_edge, fps, &GifControl::default(), &mut |_, _| {})
+}
+
+#[cfg(windows)]
+pub fn export_gif_controlled(video: &Path, max_long_edge: u32, fps: u32,
+    control: &GifControl, progress: GifProgress<'_>) -> Result<(PathBuf, f64)> {
     use image::codecs::gif::{GifEncoder, Repeat};
+    use std::io::Write;
     use image::imageops::FilterType;
     use image::{Delay, Frame};
 
     let mut clock = crate::core::gif_timing::GifFrameClock::new(fps)
         .context("GIF frame rate must be between 1 and 60")?;
+    control.check()?;
+    progress("checking", None);
+    {
+        let reader = WindowsVideoReader::open(video)?;
+        let mut count = 0;
+        loop {
+            control.check()?;
+            if reader.read_frame()?.is_none() { break; }
+            count += 1;
+        }
+        if count == 0 { bail!("the video did not contain a decodable frame"); }
+    }
+    control.check()?;
+    progress("encoding", None);
     let reader = WindowsVideoReader::open(video)?;
     let (output_width, output_height) =
         scaled_dimensions(reader.width, reader.height, max_long_edge);
     let out_path = temporary_gif_path();
     let result = (|| -> Result<()> {
         let file = std::fs::File::create(&out_path).context("could not create the GIF file")?;
-        let mut encoder = GifEncoder::new_with_speed(std::io::BufWriter::new(file), 10);
+        let mut writer = std::io::BufWriter::new(file);
+        let mut encoder = GifEncoder::new_with_speed(&mut writer, 10);
         encoder
             .set_repeat(Repeat::Infinite)
             .context("could not configure GIF looping")?;
         let frame_interval = 10_000_000i64 / i64::from(fps);
         let mut next_timestamp = None;
         let mut encoded_frames = 0u64;
-        while let Some((timestamp, mut rgba)) = reader.read_frame()? {
+        loop {
+            control.check()?;
+            let Some((timestamp, mut rgba)) = reader.read_frame()? else { break };
+            control.check()?;
             let due = next_timestamp.map(|next| timestamp >= next).unwrap_or(true);
             if !due {
                 continue;
@@ -304,6 +362,10 @@ pub fn export_gif(video: &Path, max_long_edge: u32, fps: u32) -> Result<(PathBuf
             }
             next_timestamp = Some(next);
         }
+        control.check()?;
+        progress("finalizing", Some(1.0));
+        drop(encoder);
+        writer.flush().context("could not finish writing the GIF")?;
         if encoded_frames == 0 {
             bail!("the video did not contain a decodable frame");
         }
@@ -319,6 +381,23 @@ pub fn export_gif(video: &Path, max_long_edge: u32, fps: u32) -> Result<(PathBuf
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancel_and_library_commit_have_one_winner() {
+        for _ in 0..100 {
+            let control = GifControl::default();
+            let worker = control.clone();
+            let commit = std::thread::spawn(move || worker.begin_commit().is_ok());
+            let cancelled = control.request_cancel();
+            assert_ne!(cancelled, commit.join().unwrap());
+            if cancelled {
+                assert_eq!(control.check().unwrap_err().to_string(), GIF_CANCELLED);
+                assert!(control.request_cancel());
+            } else {
+                assert!(!control.request_cancel());
+            }
+        }
+    }
 
     #[test]
     fn scaling_caps_landscape_and_portrait_long_edges() {

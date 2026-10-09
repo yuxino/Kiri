@@ -702,5 +702,9 @@
   "Preparing GIF…": "Preparing GIF…",
   "Finishing GIF…": "Finishing GIF…",
   "Saving GIF…": "Saving GIF…",
-  "Creating GIF… %d%": "Creating GIF… %d%"
+  "Creating GIF… %d%": "Creating GIF… %d%",
+  "Checking video…": "Checking video…",
+  "Checking video… %d%": "Checking video… %d%",
+  "GIF conversion cancelled": "GIF conversion cancelled",
+  "Cancel all": "Cancel all"
 }

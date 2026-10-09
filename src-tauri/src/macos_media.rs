@@ -68,6 +68,8 @@ unsafe extern "C" {
         max_long_edge: c_uint,
         fps: c_uint,
         write_frame: extern "C" fn(*mut c_void, *const u8, u32, u32, u64, u64) -> bool,
+        should_continue: extern "C" fn(*mut c_void) -> bool,
+        validate_only: bool,
         context: *mut c_void,
         error: *mut c_char,
         error_capacity: usize,
@@ -322,15 +324,32 @@ pub fn export_gif_with_progress(
     fps: u32,
     progress: &mut dyn FnMut(f64),
 ) -> Result<(PathBuf, i64, i64, Option<f64>)> {
+    export_gif_controlled(source, max_long_edge, fps, &crate::gif::GifControl::default(),
+        &mut |phase, value| {
+            if phase == "encoding" {
+                if let Some(value) = value.filter(|value| *value > 0.0) { progress(value); }
+            }
+        })
+}
+
+pub fn export_gif_controlled(
+    source: &Path, max_long_edge: u32, fps: u32,
+    control: &crate::gif::GifControl, progress: crate::gif::GifProgress<'_>,
+) -> Result<(PathBuf, i64, i64, Option<f64>)> {
     use image::codecs::gif::{GifEncoder, Repeat};
     use std::io::Write;
 
     struct FrameSink<'a> {
-        encoder: GifEncoder<&'a mut std::io::BufWriter<std::fs::File>>,
+        encoder: Option<GifEncoder<&'a mut std::io::BufWriter<std::fs::File>>>,
         clock: crate::core::gif_timing::GifFrameClock,
-        progress: &'a mut dyn FnMut(f64),
+        progress: crate::gif::GifProgress<'a>,
+        control: &'a crate::gif::GifControl,
         dimensions: Option<(u32, u32)>,
         error: Option<anyhow::Error>,
+    }
+    extern "C" fn should_continue(context: *mut c_void) -> bool {
+        let sink = unsafe { &mut *context.cast::<FrameSink<'_>>() };
+        !sink.control.is_cancelled()
     }
     extern "C" fn write_frame(
         context: *mut c_void,
@@ -342,6 +361,11 @@ pub fn export_gif_with_progress(
     ) -> bool {
         let sink = unsafe { &mut *context.cast::<FrameSink<'_>>() };
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
+            sink.control.check()?;
+            if sink.encoder.is_none() {
+                (sink.progress)("checking", Some((index + 1) as f64 / total.max(1) as f64));
+                return Ok(());
+            }
             let length = (width as usize)
                 .checked_mul(height as usize)
                 .and_then(|count| count.checked_mul(4))
@@ -355,7 +379,7 @@ pub fn export_gif_with_progress(
             }
             let rgba = image::RgbaImage::from_raw(width, height, rgba)
                 .context("Invalid GIF frame dimensions")?;
-            sink.encoder
+            sink.encoder.as_mut().unwrap()
                 .encode_frame(image::Frame::from_parts(
                     rgba,
                     0,
@@ -364,7 +388,7 @@ pub fn export_gif_with_progress(
                 ))
                 .with_context(|| format!("Could not write GIF frame {}/{}", index + 1, total))?;
             sink.dimensions = Some((width, height));
-            (sink.progress)((index + 1) as f64 / total.max(1) as f64);
+            (sink.progress)("encoding", Some((index + 1) as f64 / total.max(1) as f64));
             Ok(())
         }))
         .unwrap_or_else(|_| {
@@ -383,7 +407,20 @@ pub fn export_gif_with_progress(
 
     let clock = crate::core::gif_timing::GifFrameClock::new(fps)
         .context("GIF frame rate must be between 1 and 60")?;
+    control.check()?;
     let source_c = c_path(source)?;
+    progress("checking", Some(0.0));
+    {
+        let mut sink = FrameSink { encoder: None, clock, progress, control, dimensions: None, error: None };
+        let mut error = error_buffer();
+        let success = unsafe { kiri_macos_decode_gif_frames(source_c.as_ptr(), max_long_edge, fps,
+            write_frame, should_continue, true, (&mut sink as *mut FrameSink<'_>).cast(), error.as_mut_ptr(), error.len()) };
+        control.check()?;
+        if let Some(error) = sink.error { return Err(error); }
+        if !success { return Err(error_message(&error, "The source video could not be decoded")); }
+    }
+    progress("encoding", Some(0.0));
+    let clock = crate::core::gif_timing::GifFrameClock::new(fps).unwrap();
     let output = tempfile::Builder::new()
         .prefix("kiri-gif-")
         .suffix(".gif")
@@ -393,9 +430,10 @@ pub fn export_gif_with_progress(
         let mut encoder = GifEncoder::new_with_speed(&mut writer, 10);
         encoder.set_repeat(Repeat::Infinite)?;
         let mut sink = FrameSink {
-            encoder,
+            encoder: Some(encoder),
             clock,
             progress,
+            control,
             dimensions: None,
             error: None,
         };
@@ -406,11 +444,14 @@ pub fn export_gif_with_progress(
                 max_long_edge,
                 fps,
                 write_frame,
+                should_continue,
+                false,
                 (&mut sink as *mut FrameSink<'_>).cast(),
                 error.as_mut_ptr(),
                 error.len(),
             )
         };
+        control.check()?;
         if let Some(error) = sink.error {
             return Err(error);
         }
@@ -423,6 +464,8 @@ pub fn export_gif_with_progress(
         let (width, height) = sink.dimensions.context("GIF encoding produced no frames")?;
         (width, height, sink.clock.duration_seconds())
     };
+    control.check()?;
+    progress("finalizing", Some(1.0));
     writer
         .flush()
         .context("Could not finish writing the GIF; check available disk space")?;
@@ -556,6 +599,45 @@ mod tests {
     }
 
     #[test]
+    fn gif_uses_video_duration_and_cancels_during_both_passes() {
+        use image::AnimationDecoder;
+        let directory = tempfile::tempdir().unwrap();
+        let video = directory.path().join("long-audio.mp4");
+        let mut encoder = MacosSegmentEncoder::new(&video, 64, 64, 30, 500_000, true).unwrap();
+        let pixels = [0, 0, 255, 255].repeat(64 * 64);
+        for index in 0..30 { assert!(encoder.append_video(&pixels, index).unwrap()); }
+        for _ in 0..20 { encoder.append_audio(&vec![0; 4_800 * 4]).unwrap(); }
+        encoder.finish().unwrap();
+        assert!(probe_media(&video).unwrap().2.unwrap() > 1.8, "audio extends beyond video");
+        for cancelled_phase in ["checking", "encoding"] {
+            let control = crate::gif::GifControl::default();
+            let started = std::time::Instant::now();
+            let error = export_gif_controlled(&video, 64, 12, &control, &mut |phase, progress| {
+                if phase == cancelled_phase && progress.is_some_and(|value| value > 0.0 && value < 1.0) {
+                    assert!(control.request_cancel());
+                }
+            }).unwrap_err();
+            assert_eq!(error.to_string(), crate::gif::GIF_CANCELLED);
+            assert!(started.elapsed() < std::time::Duration::from_secs(5));
+            assert!(video.exists());
+        }
+        let mut phases = Vec::new();
+        let (path, _, _, duration) = export_gif_controlled(&video, 64, 12,
+            &crate::gif::GifControl::default(), &mut |phase, _| phases.push(phase)).unwrap();
+        let output = tempfile::TempPath::try_from_path(path).unwrap();
+        let decoder = image::codecs::gif::GifDecoder::new(std::io::BufReader::new(std::fs::File::open(&output).unwrap())).unwrap();
+        assert_eq!(decoder.into_frames().collect_frames().unwrap().len(), 12);
+        assert!((duration.unwrap() - 1.0).abs() < 0.01);
+        assert!(phases.iter().position(|phase| *phase == "checking").unwrap() < phases.iter().position(|phase| *phase == "encoding").unwrap());
+        let mut frame_progress = Vec::new();
+        let (path, _, _, _) = export_gif_with_progress(&video, 64, 12, &mut |value| frame_progress.push(value)).unwrap();
+        let _output = tempfile::TempPath::try_from_path(path).unwrap();
+        assert_eq!(frame_progress.len(), 12, "legacy progress reports one update per encoded frame");
+        assert!(frame_progress.windows(2).all(|pair| pair[1] > pair[0]));
+        assert_eq!(frame_progress.last(), Some(&1.0));
+    }
+
+    #[test]
     #[ignore = "requires KIRI_TEST_MP4 pointing to a generated local fixture"]
     fn native_gif_long_fixture_streams_frames_and_progress() {
         use image::AnimationDecoder;
@@ -566,6 +648,7 @@ mod tests {
                 progress.push(value)
             })
             .unwrap();
+        let gif = tempfile::TempPath::try_from_path(gif).unwrap();
         assert!(progress.len() > 12);
         assert!(progress.windows(2).all(|pair| pair[1] > pair[0]));
         assert_eq!(progress.last(), Some(&1.0));
@@ -589,6 +672,5 @@ mod tests {
             duration.unwrap(),
             std::fs::metadata(&gif).unwrap().len()
         );
-        std::fs::remove_file(gif).unwrap();
     }
 }

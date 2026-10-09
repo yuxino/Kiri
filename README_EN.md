@@ -27,7 +27,7 @@
 
 - Capture a window or region, crop it, add drawings, text or mosaic, and pin screenshots as floating references.
 - Copy text with local OCR and read QR codes from images.
-- Record MP4 with optional system audio and microphone, or make a silent GIF. macOS GIF conversion shows frame progress and keeps failure details visible.
+- Record MP4 with optional system audio and microphone, or make a silent GIF. Converting saved videos to GIF checks decoding first and can be cancelled before saving; macOS shows frame progress and keeps failure details visible.
 - Trim and reorder clips from one video, then export a new MP4.
 - Search, tag, favorite, and export local captures. Recover accidental deletions from Trash.
 

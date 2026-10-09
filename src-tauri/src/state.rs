@@ -40,6 +40,7 @@ pub struct AppState {
     pub saved_recording_options: std::sync::Mutex<RecordingOptions>,
     pub recording_recovery: std::sync::Mutex<RecordingRecoveryStore>,
     pub recording_recovery_transition: std::sync::Mutex<()>,
+    pub gif_controls: std::sync::Mutex<HashMap<uuid::Uuid, crate::gif::GifControl>>,
     pub gif_conversions: std::sync::Mutex<HashMap<uuid::Uuid, crate::commands::GifConversionStateDto>>,
     /// Active click monitor (ripple source), installed only for recordings
     /// that explicitly enable click highlights and removed when they finish.
@@ -538,6 +539,7 @@ impl AppState {
             saved_recording_options: std::sync::Mutex::new(RecordingOptions::default()),
             recording_recovery: std::sync::Mutex::new(recording_recovery),
             recording_recovery_transition: std::sync::Mutex::new(()),
+            gif_controls: Default::default(),
             gif_conversions: Default::default(),
             click_monitor: std::sync::Mutex::new(None),
             ocr_providers,

@@ -322,7 +322,12 @@ converts it locally to a looping, silent GIF at 12 fps with a 720-pixel long
 edge. Windows decodes the staging MP4 with Media Foundation and encodes the GIF
 inside the application; macOS decodes one scaled AVAssetImageGenerator frame at a time and writes it
 with the streaming Rust GIF encoder, so decoded frames do not accumulate until
-finalization. Saved-video conversions report measured frame progress on macOS,
+finalization. GIF sampling uses the video track range, excluding any longer audio tail.
+A decode-only pass validates the requested frames before expensive GIF encoding.
+Saved-video conversions can cancel checking, encoding and finalization; native work
+stops between frames and incomplete temporary output is removed. Library import
+has an atomic commit boundary after which cancellation is unavailable.
+Saved-video conversions report measured frame progress on macOS,
 then finalization and library saving; unknown progress remains indeterminate.
 Operation-specific failures remain visible with retry and dismiss actions,
 including repeated failures. The library subscribes before fetching an active

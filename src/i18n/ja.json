@@ -702,5 +702,9 @@
   "Preparing GIF…": "GIF を準備中…",
   "Finishing GIF…": "GIF の処理を完了中…",
   "Saving GIF…": "GIF を保存中…",
-  "Creating GIF… %d%": "GIF を作成中… %d%"
+  "Creating GIF… %d%": "GIF を作成中… %d%",
+  "Checking video…": "動画を確認中…",
+  "Checking video… %d%": "動画を確認中… %d%",
+  "GIF conversion cancelled": "GIF 変換をキャンセルしました",
+  "Cancel all": "すべてキャンセル"
 }
