@@ -90,7 +90,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:release-tools
+      # The required fast-checks job runs the Node suite in parallel. Keep this
+      # build independent so renderer verification starts without waiting for it.
       - run: pnpm build
       - run: python -m pip install playwright==1.55.0 Pillow==11.3.0
       - run: python scripts/qa/countdown-ui.py
