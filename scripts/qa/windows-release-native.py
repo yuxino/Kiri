@@ -1,13 +1,17 @@
 """Smoke-test the extracted ZIP and installed NSIS app on disposable Windows CI."""
 
+import ctypes
+from ctypes import wintypes
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 
 from pywinauto import Desktop, keyboard, mouse
+from PIL import Image, ImageChops, ImageGrab, ImageStat
 
 
 if os.name != "nt" or os.environ.get("GITHUB_ACTIONS") != "true":
@@ -92,6 +96,113 @@ def stop():
     process = None
 
 
+def wait_for(description, predicate, timeout=20):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"Kiri exited while waiting for {description}")
+        result = predicate()
+        if result:
+            return result
+        time.sleep(0.1)
+    raise RuntimeError(f"Timed out waiting for {description}")
+
+
+def quick_capture_acceptance():
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetWindowLongW.restype = wintypes.LONG
+    width, height = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+    if width < 1024 or height < 650:
+        raise RuntimeError("Native capture acceptance needs a 1024x650 desktop")
+    fixture = subprocess.Popen([sys.executable,
+        str(Path(__file__).with_name("windows-quick-capture-fixture.py")), str(width), str(height)])
+    try:
+        source = wait_for("public source window", lambda: next(iter(
+            Desktop(backend="win32").windows(process=fixture.pid, visible_only=True)), None))
+        source.set_focus()
+        wait_for("public source focus", lambda: user32.GetForegroundWindow() == source.handle)
+        # Wait for the real desktop source to paint; pixels come from the OS,
+        # never from an injected capture mode or a renderer fixture.
+        def source_painted():
+            frame = ImageGrab.grab()
+            return frame if frame.getpixel((80, 200))[:3] == (255, 255, 255) else None
+        before = wait_for("public source paint", source_painted)
+        region = (70, 190, 650, 425)
+        expected = before.crop(region).convert("RGB")
+        expected.save(output / "quick-capture-source.png")
+        if not user32.OpenClipboard(None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            if not user32.EmptyClipboard():
+                raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            user32.CloseClipboard()
+        keyboard.send_keys("^+a")
+        find("Screenshot")
+        mouse.press(coords=region[:2])
+        mouse.move(coords=region[2:])
+        mouse.release(coords=region[2:])
+        find(re.escape("Done — Copy to clipboard · Return"))
+        mouse.double_click(coords=(400, 380))
+        pin_button = find("Pin")
+        copied = ImageGrab.grabclipboard()
+        if not isinstance(copied, Image.Image) or copied.size != expected.size:
+            raise RuntimeError("Double-click did not copy the selected region")
+        difference = ImageChops.difference(copied.convert("RGB"), expected)
+        error = sum(ImageStat.Stat(difference).mean) / 3
+        if error > 1.5:
+            raise RuntimeError(f"Double-click capture pixels differ from the source: {error}")
+        copied.save(output / "quick-capture-clipboard.png")
+        if user32.GetForegroundWindow() != source.handle:
+            raise RuntimeError("Screenshot completion did not restore source focus")
+        ImageGrab.grab().save(output / "quick-capture-completed.png")
+        pin_button.click_input()
+        unpin = find("Unpin")
+        pin_window = unpin.top_level_parent()
+        if "Pinned Screenshot" not in pin_window.window_text():
+            raise RuntimeError("Completion card did not open the reference window")
+        if not user32.GetWindowLongW(pin_window.handle, -20) & 0x00000008:
+            raise RuntimeError("Reference window lacks the native topmost style")
+        Desktop(backend="win32").window(handle=pin_window.handle).move_window(max(300, width - 730), 180)
+        source.set_focus()
+        wait_for("another app owns keyboard focus", lambda: user32.GetForegroundWindow() == source.handle)
+        def visible_pinned_image():
+            for control in pin_window.descendants(control_type="Image"):
+                if control.window_text() != "Pinned screenshot" or not control.is_visible():
+                    continue
+                bounds = control.rectangle()
+                if bounds.width() < 200 or bounds.height() < 100:
+                    continue
+                actual = ImageGrab.grab(bbox=(bounds.left, bounds.top, bounds.right, bounds.bottom)).convert("RGB")
+                reference = copied.convert("RGB").resize(actual.size, Image.Resampling.LANCZOS)
+                diff = ImageChops.difference(actual, reference)
+                mean = sum(ImageStat.Stat(diff).mean) / 3
+                if mean <= 3:
+                    return {"bounds": [bounds.left, bounds.top, bounds.right, bounds.bottom], "mean_pixel_error": mean}
+            return None
+        visible = wait_for("pinned image above another foreground app", visible_pinned_image)
+        ImageGrab.grab().save(output / "quick-capture-pinned.png")
+        pin_window.set_focus()
+        keyboard.send_keys("{ESC}")
+        wait_for("Escape closes reference", lambda: not desktop.windows(
+            process=process.pid, title_re="Pinned Screenshot.*", visible_only=True))
+        report["quick_capture"] = {"capture_mean_pixel_error": error, "source_focus_restored": True,
+            "native_topmost": True, "visible_above_foreground_app": visible, "escape_closes_reference": True}
+        report["checks"].extend([
+            "stationary region double-click completes native capture, copies exact pixels and restores source focus",
+            "completion-card Pin opens a native topmost reference visible above another foreground app",
+            "Escape closes the pinned reference without quitting Kiri",
+        ])
+    except Exception:
+        ImageGrab.grab().save(output / "quick-capture-failure.png")
+        raise
+    finally:
+        fixture.terminate()
+        fixture.wait(timeout=10)
+
+
 def smoke(executable, update_button, label):
     global process
     if not executable.is_file():
@@ -113,6 +224,8 @@ def smoke(executable, update_button, label):
         find("Screenshot")
         keyboard.send_keys("{ESC}")
         report["checks"].append(f"{label} opens and cancels native capture")
+        if label == "NSIS installation":
+            quick_capture_acceptance()
     except Exception:
         try:
             snapshot(f"{label.split()[0]}-failure")
