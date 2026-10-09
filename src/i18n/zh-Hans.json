@@ -706,5 +706,6 @@
   "Checking video…": "正在检查视频…",
   "Checking video… %d%": "正在检查视频… %d%",
   "GIF conversion cancelled": "GIF 转换已取消",
-  "Cancel all": "全部取消"
+  "Cancel all": "全部取消",
+  "Could not save the language preference.": "无法保存语言设置。"
 }

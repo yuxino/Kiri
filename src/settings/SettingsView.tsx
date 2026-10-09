@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { KiriIcon } from "../components/KiriIcons";
-import { fmt, getLanguage, setLanguage, t, type KiriLanguage } from "../i18n";
+import { fmt, getLanguage, languageNames, languages, onLanguageChange, setLanguage, t, type KiriLanguage } from "../i18n";
 import {
   api,
   onLibraryChanged,
@@ -521,7 +521,9 @@ function stateDetails(state: UpdateState): UpdateDetails | null {
 }
 
 function GeneralSettingsSection() {
-  const [language, setCurrentLanguage] = useState<KiriLanguage>(getLanguage());
+  const language = useSyncExternalStore(onLanguageChange, getLanguage);
+  const [languageBusy, setLanguageBusy] = useState(false);
+  const [languageError, setLanguageError] = useState(false);
   const [libraryStatus, setLibraryStatus] = useState<LibraryStatusDto | null>(null);
   const [libraryLoadError, setLibraryLoadError] = useState(false);
   const [libraryBusy, setLibraryBusy] = useState(false);
@@ -608,10 +610,18 @@ function GeneralSettingsSection() {
     };
   }, [loadLibraryStatus]);
 
-  const switchTo = (next: KiriLanguage) => {
-    setCurrentLanguage(next);
-    setLanguage(next);
-    void api.setLanguage(next).catch(() => {});
+  const switchTo = async (next: KiriLanguage) => {
+    if (languageBusy) return;
+    setLanguageBusy(true);
+    setLanguageError(false);
+    try {
+      await api.setLanguage(next);
+      setLanguage(next);
+    } catch {
+      setLanguageError(true);
+    } finally {
+      setLanguageBusy(false);
+    }
   };
 
   const retryShortcut = async () => {
@@ -671,22 +681,17 @@ function GeneralSettingsSection() {
         <div>
           <strong>{t("Language")}</strong>
           <span>{t("Changes apply to every Kiri window.")}</span>
+          {languageError && <span role="alert">{t("Could not save the language preference.")}</span>}
         </div>
-        <div className="kiri-language-picker" role="group" aria-label={t("Language")}>
-          {(["en", "zh-Hans", "ja"] as const).map((item) => (
-            <button
-              type="button"
-              className="kiri-language-option"
-              aria-pressed={language === item}
-              data-active={language === item || undefined}
-              key={item}
-              onClick={() => switchTo(item)}
-              title={item === "en" ? "English" : item === "zh-Hans" ? "简体中文" : "日本語"}
-            >
-              {item === "en" ? "EN" : item === "zh-Hans" ? "中文" : "日本語"}
-            </button>
-          ))}
-        </div>
+        <select
+          className="kiri-language-select"
+          aria-label={t("Language")}
+          value={language}
+          disabled={languageBusy}
+          onChange={(event) => void switchTo(event.target.value as KiriLanguage)}
+        >
+          {languages.map((item) => <option key={item} value={item}>{languageNames[item]}</option>)}
+        </select>
       </div>
       <DockVisibilityRow />
       {shortcutStatus?.status === "systemManaged" ? <PortalShortcutsCard /> : <div className="kiri-settings-card kiri-shortcut-row">

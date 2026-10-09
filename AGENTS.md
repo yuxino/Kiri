@@ -53,8 +53,10 @@ Linux. Preserve these decisions:
 - The optional high-contrast red click ripple is visible live and is also captured.
 - The 3-2-1 countdown is centered and compact; it must not dim the selected
   recording region.
-- User-facing UI supports English, Simplified Chinese, and Japanese and follows
-  the OS preferred language.
+- User-facing UI supports English, Simplified Chinese, Traditional Chinese,
+  Japanese, German, Korean, and French. It follows the OS preferred language
+  until the user chooses a language in Settings; that choice persists and
+  applies to every open window.
 - Captures stay local. Never add uploads, analytics, accounts, or network
   behavior without an explicit product decision and privacy documentation.
   Recording, merging, thumbnails, and GIF conversion use platform media APIs
@@ -75,7 +77,7 @@ Linux. Preserve these decisions:
 ## Repository map
 
 - `src/` — React frontend: capture overlay, annotation canvas, library,
-  editor, countdown/control/ripple windows, i18n (en/zh-Hans/ja), design tokens.
+  editor, countdown/control/ripple windows, i18n (en/zh-Hans/zh-Hant/ja/de/ko/fr), design tokens.
 - `src-tauri/src/core/` — platform-independent models: geometry, recording
   policy, shortcut model, asset library (byte-compatible with the Swift
   version's `library.json`).
@@ -180,7 +182,7 @@ the separate checklist in `docs/linux.md` and report those limits explicitly.
 
 - All user-facing strings go through `t()`/`fmt()` in `src/i18n`; the English
   string is the key (matching the Swift L10n behavior).
-- Keep the English, zh-Hans, and Japanese dictionaries identical in key set.
+- Keep all seven dictionaries identical in key set and formatting placeholders.
 - Update `README.md` and `README_ZH.md` together for user-visible behavior.
 - Record durable interaction changes as a new ADR instead of rewriting old
   history without explanation.

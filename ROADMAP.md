@@ -24,7 +24,7 @@ history.
 - [x] Optional system audio, pointer, and click highlights
 - [x] Neutral, non-dimming 3-2-1 countdown and multi-segment recording pipeline
 - [x] GIF export for any positive known duration (12 fps, 720 px long edge)
-- [x] English, Simplified Chinese, and Japanese, following the OS language
+- [x] Seven UI languages, following the OS language or a persisted Settings choice
 
 ## v1.4 — Secure remote OCR and release reliability
 

@@ -1139,24 +1139,24 @@ fn language_path(app: &AppHandle) -> PathBuf {
         .join("language.json")
 }
 
-/// Returns the persisted language ("en" | "zh-Hans" | "ja") or empty string when
+/// Returns the persisted language (one of the seven supported codes) or empty string when
 /// the user has never picked one (then the system locale applies).
 pub fn load_language(app: &AppHandle) -> String {
     let path = language_path(app);
     std::fs::read(&path)
         .ok()
         .and_then(|data| serde_json::from_slice::<String>(&data).ok())
-        .filter(|lang| lang == "en" || lang == "zh-Hans" || lang == "ja")
+        .filter(|lang| crate::core::locale::is_language(lang))
         .unwrap_or_default()
 }
 
-pub fn save_language(app: &AppHandle, language: &str) {
+pub fn save_language(app: &AppHandle, language: &str) -> std::io::Result<()> {
     let path = language_path(app);
-    if language == "en" || language == "zh-Hans" || language == "ja" {
-        if let Ok(data) = serde_json::to_vec_pretty(language) {
-            let _ = std::fs::write(path, data);
-        }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
     }
+    let data = serde_json::to_vec_pretty(language).map_err(std::io::Error::other)?;
+    std::fs::write(path, data)
 }
 
 #[cfg(test)]

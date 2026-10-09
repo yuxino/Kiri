@@ -5505,23 +5505,20 @@ pub fn get_language(app: AppHandle) -> String {
 
 #[tauri::command]
 pub fn set_language(app: AppHandle, language: String) -> Result<(), String> {
-    crate::state::save_language(&app, &language);
+    if !crate::core::locale::is_language(&language) {
+        return Err("Invalid language.".into());
+    }
+    crate::state::save_language(&app, &language)
+        .map_err(|_| "Could not save the language preference.".to_string())?;
+    app.emit("language-changed", &language)
+        .map_err(|error| error.to_string())?;
     crate::refresh_tray_menu(&app, &language)
 }
 
 #[tauri::command]
 pub fn get_locale() -> String {
-    let locale = sys_locale::get_locale().unwrap_or_else(|| "en".into());
-    let lower = locale.to_lowercase();
-    if lower.starts_with("zh")
-        && (lower.contains("hans") || lower.contains("-cn") || lower.contains("_cn"))
-    {
-        "zh-Hans".into()
-    } else if lower.starts_with("ja") {
-        "ja".into()
-    } else {
-        "en".into()
-    }
+    crate::core::locale::language_for_locale(&sys_locale::get_locale().unwrap_or_else(|| "en".into()))
+        .into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

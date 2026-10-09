@@ -706,5 +706,6 @@
   "Checking video…": "Checking video…",
   "Checking video… %d%": "Checking video… %d%",
   "GIF conversion cancelled": "GIF conversion cancelled",
-  "Cancel all": "Cancel all"
+  "Cancel all": "Cancel all",
+  "Could not save the language preference.": "Could not save the language preference."
 }

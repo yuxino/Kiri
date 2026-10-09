@@ -556,6 +556,10 @@ fn build_tray_menu(
         let (pause_label, stop_label) = match language {
             "zh-Hans" | "zh-CN" => ("暂停 / 继续录屏", "停止录屏"),
             "ja" => ("録画を一時停止 / 再開", "録画を停止"),
+            "zh-Hant" => ("暫停 / 繼續錄影", "停止錄影"),
+            "de" => ("Aufnahme pausieren / fortsetzen", "Aufnahme beenden"),
+            "ko" => ("녹화 일시 정지 / 재개", "녹화 중지"),
+            "fr" => ("Suspendre / reprendre l’enregistrement", "Arrêter l’enregistrement"),
             _ => ("Pause / Resume Recording", "Stop Recording"),
         };
         menu.insert(&MenuItem::with_id(app, "pause-recording", pause_label, true, None::<&str>)?, 2)?;
@@ -717,6 +721,10 @@ fn tray_labels(language: &str) -> (&'static str, &'static str, &'static str) {
     match language {
         "zh-Hans" => ("打开素材库", "截图 / 录屏", "退出 Kiri"),
         "ja" => ("ライブラリを開く", "キャプチャ", "Kiri を終了"),
+        "zh-Hant" => ("開啟素材庫", "截圖 / 錄影", "結束 Kiri"),
+        "de" => ("Bibliothek öffnen", "Aufnehmen", "Kiri beenden"),
+        "ko" => ("라이브러리 열기", "캡처", "Kiri 종료"),
+        "fr" => ("Ouvrir la bibliothèque", "Capturer", "Quitter Kiri"),
         _ => ("Open Library", "Capture", "Quit Kiri"),
     }
 }
