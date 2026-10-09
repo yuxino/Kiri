@@ -13,12 +13,20 @@
         "languages": [
           "English",
           "SimpChinese",
-          "Japanese"
+          "TradChinese",
+          "Japanese",
+          "German",
+          "Korean",
+          "French"
         ],
         "customLanguageFiles": {
           "English": "installer-theme/generated/English.nsh",
           "SimpChinese": "installer-theme/generated/SimpChinese.nsh",
-          "Japanese": "installer-theme/generated/Japanese.nsh"
+          "TradChinese": "installer-theme/generated/TradChinese.nsh",
+          "Japanese": "installer-theme/generated/Japanese.nsh",
+          "German": "installer-theme/generated/German.nsh",
+          "Korean": "installer-theme/generated/Korean.nsh",
+          "French": "installer-theme/generated/French.nsh"
         },
         "displayLanguageSelector": false
       }

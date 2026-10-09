@@ -105,3 +105,23 @@ test("OS locale is used only without a saved choice and cannot overwrite a newer
   });
   assert.equal(readLocale, false);
 });
+
+test("native Portal labels match each complete UI dictionary without embedding the dictionaries", () => {
+  const source = readFileSync(new URL("../src-tauri/src/core/locale.rs", import.meta.url), "utf8");
+  const native = source.slice(source.indexOf("pub fn shortcut_descriptions"), source.indexOf("#[cfg(test)]"));
+  const keys = ["Capture", "Pause/Resume Recording", "Stop Recording"];
+  for (const language of languages.filter(language => language !== "en")) {
+    const match = native.match(new RegExp(`"${language}" => \\[([\\s\\S]*?)\\]`));
+    assert.ok(match, language);
+    const values = [...match[1].matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/g)].map(match => JSON.parse('"' + match[1] + '"'));
+    assert.deepEqual(values, keys.map(key => dictionaries[language][key]), language);
+  }
+  const portal = readFileSync(new URL("../src-tauri/src/portal_shortcuts/linux.rs", import.meta.url), "utf8");
+  assert.match(portal, /preferred_language/);
+  assert.match(portal, /shortcut_descriptions\(language\)/);
+  assert.doesNotMatch(portal, /include_str!.*i18n/);
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  const dialog = commands.slice(commands.indexOf("pub async fn save_file_dialog"), commands.indexOf("pub async fn save_file_dialog") + 1600);
+  assert.match(dialog, /preferred_language[\s\S]*&get_locale\(\)/);
+  assert.match(dialog, /png_filter_label\(language\)/);
+});

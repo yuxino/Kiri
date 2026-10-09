@@ -3020,12 +3020,11 @@ pub async fn save_file_dialog(
     }
     let window_label = window.label().to_string();
     // Localize the filter label from the persisted language preference.
-    let filter_label = match crate::state::load_language(&app).as_str() {
-        "zh-Hans" => "PNG 图片",
-        "ja" => "PNG 画像",
-        _ => "PNG image",
-    }
-    .to_string();
+    let language = crate::core::locale::preferred_language(
+        &crate::state::load_language(&app),
+        &get_locale(),
+    );
+    let filter_label = crate::core::locale::png_filter_label(language).to_string();
     let dialog_app = app.clone();
     let destination = tauri::async_runtime::spawn_blocking(move || {
         dialog_app
