@@ -146,7 +146,7 @@ def quick_capture_acceptance():
         mouse.release(coords=region[2:])
         find(re.escape("Done — Copy to clipboard · Return"))
         mouse.double_click(coords=(400, 380))
-        pin_button = find("Pin")
+        pin_button = find("Pin Screenshot on Top", timeout=7)
         copied = ImageGrab.grabclipboard()
         if not isinstance(copied, Image.Image) or copied.size != expected.size:
             raise RuntimeError("Double-click did not copy the selected region")
@@ -197,6 +197,10 @@ def quick_capture_acceptance():
         ])
     except Exception:
         ImageGrab.grab().save(output / "quick-capture-failure.png")
+        copied = ImageGrab.grabclipboard()
+        if isinstance(copied, Image.Image):
+            report["failure_clipboard_size"] = list(copied.size)
+            copied.save(output / "quick-capture-failure-clipboard.png")
         raise
     finally:
         fixture.terminate()
