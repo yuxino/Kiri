@@ -104,6 +104,7 @@ async def main():
                             button.scrollWidth <= button.clientWidth && button.getBoundingClientRect().right <= row.getBoundingClientRect().right)''')
                     await page.screenshot(path=str(OUT / ('completion-pin-' + language + '.png')))
                     await page.evaluate('state.pinFails = false')
+                    await page.wait_for_timeout(500)  # Completion actions share a 450 ms cooldown.
                     await pin.click()
                     await page.locator('#toast').wait_for(state='detached')
                 assert await page.evaluate('state.pinCalls.every(id => id === state.assets[0].id)')
