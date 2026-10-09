@@ -33,6 +33,7 @@ const emit = (event: string, payload: unknown) => {
 };
 Object.assign(window, {
   __qaActions: actions,
+  __qaGifState: (job: unknown) => emit("gif-conversion-state", job),
   __qaCompleteSave: () => {
     const job = savingJobs.shift();
     if (!job) return;
@@ -60,6 +61,8 @@ Object.assign(window, {
       switch (command) {
         case "get_library_status": return { availability: "ready", isDefault: true, locationLabel: "Test Library" };
         case "get_shortcut_status": return { state: "enabled", label: "Shift+Ctrl+A" };
+        case "get_gif_conversion_states": return [];
+        case "cancel_gif_conversion": actions.push(command); return true;
         case "get_recording_save_jobs": return [...savingJobs];
         case "list_assets": return [...assets];
         case "get_asset_availability": return { status: "ready" };

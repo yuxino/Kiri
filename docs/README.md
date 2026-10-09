@@ -157,3 +157,4 @@ development.
 - [ADR 0072: Live annotation transform preview](adr/0072-live-annotation-transform-preview.md)
 - [ADR 0076: Inline capture size controls](adr/0076-inline-capture-size-controls.md)
 - [ADR 0077: Quick screenshot completion and pinning](adr/0077-quick-screenshot-completion-and-pin.md)
+- [ADR 0078: Cancellable GIF conversion and video validation](adr/0078-cancellable-gif-video-validation.md)

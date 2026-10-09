@@ -40,7 +40,7 @@ interface UndoState {
   completion: CompletionPreviewPayload;
 }
 
-type ActionName = "open" | "copy" | "pin" | "gif" | "trash" | "undo";
+type ActionName = "open" | "copy" | "pin" | "gif" | "cancel-gif" | "trash" | "undo";
 
 const COMPLETION_WIDTH = 360;
 const COMPLETION_HEIGHT = 124;
@@ -267,12 +267,12 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
     return () => { void subscription.then((dispose) => dispose()).catch(() => {}); };
   }, []);
 
-  // Passive notices and non-actionable processing cards remain click-through.
-  // Only ready cards and Undo need pointer input.
+  // Active GIF jobs need pointer input for Cancel; passive save cards remain click-through.
   useEffect(() => {
-    const interactive = completion?.phase === "ready" || completion?.phase === "failed" || undo !== null;
+    const interactive = completion?.phase === "ready" || completion?.phase === "failed" ||
+      (completion?.phase === "processing" && gifProgress?.isConverting === true) || undo !== null;
     void getCurrentWindow().setIgnoreCursorEvents(!interactive).catch(() => {});
-  }, [completion, undo]);
+  }, [completion, gifProgress?.isConverting, undo]);
 
   useEffect(() => {
     if (!completion) return;
@@ -501,6 +501,15 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
 
             {isProcessing && gifProgress?.progress != null && (
               <progress aria-label={t("Creating GIF…")} value={gifProgress.progress} max={1} />
+            )}
+            {isProcessing && gifProgress?.isConverting && (
+              <div className="kiri-completion-actions">
+                <button type="button" className="kiri-completion-action"
+                  disabled={gifProgress.phase === "saving" || gifProgress.phase === "cancelling" || pendingAction !== null}
+                  onClick={() => { if (assetId) void runAction("cancel-gif", () => api.cancelGifConversion(assetId).then(() => {})); }}>
+                  {t(gifProgress.phase === "cancelling" ? "Cancelling…" : "Cancel")}
+                </button>
+              </div>
             )}
             {isFailed && (
               <div className="kiri-completion-actions">

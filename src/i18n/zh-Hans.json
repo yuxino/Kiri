@@ -702,5 +702,9 @@
   "Preparing GIF…": "正在准备 GIF…",
   "Finishing GIF…": "正在完成 GIF…",
   "Saving GIF…": "正在保存 GIF…",
-  "Creating GIF… %d%": "正在创建 GIF… %d%"
+  "Creating GIF… %d%": "正在创建 GIF… %d%",
+  "Checking video…": "正在检查视频…",
+  "Checking video… %d%": "正在检查视频… %d%",
+  "GIF conversion cancelled": "GIF 转换已取消",
+  "Cancel all": "全部取消"
 }

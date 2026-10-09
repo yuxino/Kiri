@@ -1180,6 +1180,13 @@ pub fn export_gif(
     max_long_edge: u32,
     fps: u32,
 ) -> Result<(PathBuf, i64, i64, Option<f64>)> {
+    export_gif_controlled(video, max_long_edge, fps, &crate::gif::GifControl::default(), &mut |_, _| {})
+}
+
+pub fn export_gif_controlled(video: &Path, max_long_edge: u32, fps: u32,
+    control: &crate::gif::GifControl, progress: crate::gif::GifProgress<'_>,
+) -> Result<(PathBuf, i64, i64, Option<f64>)> {
+    control.check()?;
     let mut clock = crate::core::gif_timing::GifFrameClock::new(fps)
         .ok_or_else(|| anyhow!("The GIF frame rate is invalid."))?;
     let (width, height, duration) =
@@ -1189,6 +1196,21 @@ pub fn export_gif(
         .ok_or_else(|| anyhow!("The source video has no positive duration."))?;
     let (width, height) =
         scale_long_edge(u32::try_from(width)?, u32::try_from(height)?, max_long_edge);
+    progress("checking", Some(0.0));
+    {
+        let (pipeline, sink) = decode_pipeline(video, width, height, Some(fps))?;
+        let bus = pipeline_bus(&pipeline)?;
+        let mut count = 0;
+        let mut last_frame = std::time::Instant::now();
+        while let Some(sample) = pull_gif_sample(&sink, &bus, control, &mut last_frame)? {
+            packed_sample_pixels(&sample, PixelCrop { x: 0, y: 0, width, height })?;
+            count += 1;
+            progress("checking", Some((count as f64 / (_duration * fps as f64)).min(1.0)));
+        }
+        if count == 0 { bail!("GIF decoding produced no frames."); }
+    }
+    control.check()?;
+    progress("encoding", Some(0.0));
     let out_path = std::env::temp_dir().join(format!(
         "kiri-linux-gif-{}.gif",
         uuid::Uuid::new_v4().as_simple()
@@ -1204,18 +1226,11 @@ pub fn export_gif(
         let mut writer = std::io::BufWriter::new(output.reopen()?);
         let mut encoder = image::codecs::gif::GifEncoder::new_with_speed(&mut writer, 10);
         encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
+        let mut last_frame = std::time::Instant::now();
         loop {
             // A bounded appsink plus one encoded frame keeps memory independent
             // of recording length. No optional external gifenc plugin is needed.
-            let Some(sample) = sink.try_pull_sample(gstreamer::ClockTime::from_seconds(15)) else {
-                if let Some(message) = bus.pop_filtered(&[gstreamer::MessageType::Error]) {
-                    return Err(message_failure(&message, "GIF decoding"));
-                }
-                if sink.is_eos() {
-                    break;
-                }
-                bail!("GIF decoding stopped delivering video frames.");
-            };
+            let Some(sample) = pull_gif_sample(&sink, &bus, control, &mut last_frame)? else { break; };
             let pixels = packed_sample_pixels(
                 &sample,
                 PixelCrop {
@@ -1234,7 +1249,10 @@ pub fn export_gif(
                 image::Delay::from_numer_denom_ms(clock.next_delay_ms(), 1),
             ))?;
             frame_count += 1;
+            progress("encoding", Some((frame_count as f64 / (_duration * fps as f64)).min(1.0)));
         }
+        control.check()?;
+        progress("finalizing", Some(1.0));
         drop(encoder);
         std::io::Write::flush(&mut writer)?;
     }
@@ -1251,6 +1269,26 @@ pub fn export_gif(
         i64::from(height),
         Some(clock.duration_seconds()),
     ))
+}
+
+fn pull_gif_sample(sink: &gstreamer_app::AppSink, bus: &gstreamer::Bus,
+    control: &crate::gif::GifControl, last_frame: &mut std::time::Instant,
+) -> Result<Option<gstreamer::Sample>> {
+    loop {
+        control.check()?;
+        if let Some(message) = bus.pop_filtered(&[gstreamer::MessageType::Error]) {
+            return Err(message_failure(&message, "GIF decoding"));
+        }
+        if let Some(sample) = sink.try_pull_sample(gstreamer::ClockTime::from_mseconds(100)) {
+            control.check()?;
+            *last_frame = std::time::Instant::now();
+            return Ok(Some(sample));
+        }
+        if sink.is_eos() { return Ok(None); }
+        if last_frame.elapsed() >= std::time::Duration::from_secs(15) {
+            bail!("GIF decoding stopped delivering video frames.");
+        }
+    }
 }
 
 fn scale_long_edge(width: u32, height: u32, max_long_edge: u32) -> (u32, u32) {

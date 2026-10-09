@@ -1564,11 +1564,33 @@ pub async fn export_video_copy(
 }
 
 #[tauri::command]
+pub fn cancel_gif_conversion(app: AppHandle, window: WebviewWindow, id: String) -> Result<bool, String> {
+    let parsed = uuid::Uuid::parse_str(&id).map_err(|error| error.to_string())?;
+    if window.label() != "library" && window.label() != "toast" && window.label() != format!("viewer-{parsed}") {
+        return Err("GIF cancellation requires its library or preview.".into());
+    }
+    let state = app.state::<AppState>();
+    let controls = state.gif_controls.lock().unwrap();
+    let cancelled = controls.get(&parsed).is_some_and(|control| control.request_cancel());
+    if cancelled {
+        // Serialize with progress updates; an old encoding update cannot replace cancelling.
+        let mut conversions = state.gif_conversions.lock().unwrap();
+        if let Some(job) = conversions.get_mut(&parsed) {
+            job.phase = "cancelling";
+            let _ = app.emit("gif-conversion-state", job.clone());
+        }
+    }
+    Ok(cancelled)
+}
+
+#[tauri::command]
 pub fn convert_to_gif(app: AppHandle, window: WebviewWindow, id: String) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
-    let (asset, source_path) = {
+    let (asset, source_path, library_id, generation) = {
         let state = app.state::<AppState>();
         let mut context = state.library.lock().unwrap();
+        let library_id = context.expected_library_id();
+        let generation = context.expected_library_generation();
         let library = context.library().map_err(|error| error.to_string())?;
         let asset = library
             .asset_by_id(&parsed)
@@ -1577,13 +1599,17 @@ pub fn convert_to_gif(app: AppHandle, window: WebviewWindow, id: String) -> Resu
         let source_path = library
             .readable_asset_url(&asset)
             .map_err(|error| error.to_string())?;
-        (asset, source_path)
+        (asset, source_path, library_id, generation)
     };
     if asset.kind != CaptureKind::Video
         || !crate::core::policy::RecordingPolicy::is_gif_eligible(asset.duration)
     {
         return Err("Only recordings with a known duration can be converted to GIF.".into());
     }
+    if window.label() != "library" && window.label() != "toast" && window.label() != format!("viewer-{parsed}") {
+        return Err("GIF conversion requires its library or preview.".into());
+    }
+    let control = crate::gif::GifControl::default();
     let from_completion = window.label() == "toast";
     let completion_monitor = from_completion
         .then(|| window.current_monitor().ok().flatten())
@@ -1599,6 +1625,7 @@ pub fn convert_to_gif(app: AppHandle, window: WebviewWindow, id: String) -> Resu
             id: id.clone(), is_converting: true, phase: "preparing", progress: None, error: None,
         });
     }
+    app.state::<AppState>().gif_controls.lock().unwrap().insert(parsed, control.clone());
     publish_gif_state(&app, GifConversionStateDto {
         id: id.clone(), is_converting: true, phase: "preparing", progress: None, error: None,
     });
@@ -1614,23 +1641,33 @@ pub fn convert_to_gif(app: AppHandle, window: WebviewWindow, id: String) -> Resu
     }
     let handle = app.clone();
     std::thread::spawn(move || {
-        let mut last_progress = (0.0_f64, std::time::Instant::now());
-        let mut report = |progress: f64| {
-            if progress < 1.0 && last_progress.1.elapsed() < std::time::Duration::from_millis(200) { return; }
-            let progress = progress.clamp(last_progress.0, 1.0);
-            last_progress = (progress, std::time::Instant::now());
+        let mut last_progress = ("preparing", std::time::Instant::now());
+        let mut report = |phase: &'static str, progress: Option<f64>| {
+            let controls = handle.state::<AppState>();
+            let _controls = controls.gif_controls.lock().unwrap();
+            if control.is_cancelled() { return; }
+            if phase == last_progress.0 && progress != Some(1.0) &&
+                last_progress.1.elapsed() < std::time::Duration::from_millis(200) { return; }
+            last_progress = (phase, std::time::Instant::now());
             publish_gif_state(&handle, GifConversionStateDto {
-                id: id.clone(), is_converting: true,
-                phase: if progress >= 1.0 { "finalizing" } else { "encoding" },
-                progress: Some(progress), error: None,
+                id: id.clone(), is_converting: true, phase, progress, error: None,
             });
         };
-        let result = convert_asset_to_gif(&handle, &asset, &source_path, &mut report);
+        let result = convert_asset_to_gif(&handle, &asset, &source_path, (library_id, generation), &control, &mut report);
+        handle.state::<AppState>().gif_controls.lock().unwrap().remove(&parsed);
+        let cancelled = control.is_cancelled();
         publish_gif_state(&handle, GifConversionStateDto {
             id: id.clone(), is_converting: false,
-            phase: if result.is_ok() { "complete" } else { "failed" },
-            progress: None, error: result.as_ref().err().cloned(),
+            phase: if cancelled { "cancelled" } else if result.is_ok() { "complete" } else { "failed" },
+            progress: None, error: if cancelled { None } else { result.as_ref().err().cloned() },
         });
+        if cancelled {
+            if from_completion {
+                show_completion_preview(&handle, &CompletionPreviewDto::ready(
+                    completion_id, &asset, "GIF conversion cancelled", completion_asset_detail(&asset), false), completion_monitor);
+            }
+            return;
+        }
         match result {
             Ok(gif_asset) if from_completion => show_completion_preview(
                 &handle,
@@ -1666,32 +1703,36 @@ fn convert_asset_to_gif(
     app: &AppHandle,
     asset: &CaptureAsset,
     source_path: &std::path::Path,
-    progress: &mut dyn FnMut(f64),
+    library_identity: (uuid::Uuid, uuid::Uuid),
+    control: &crate::gif::GifControl,
+    progress: crate::gif::GifProgress<'_>,
 ) -> Result<CaptureAsset, String> {
     let state = app.state::<AppState>();
-    publish_gif_state(app, GifConversionStateDto {
-        id: asset.id.to_string(), is_converting: true, phase: "encoding", progress: None, error: None,
-    });
+    control.check().map_err(|error| error.to_string())?;
     let (gif_path, gif_width, gif_height, gif_duration) = export_gif_file(
         app,
         source_path,
         asset.pixel_width,
         asset.pixel_height,
         asset.duration,
+        control,
         progress,
     )?;
-    publish_gif_state(app, GifConversionStateDto {
-        id: asset.id.to_string(), is_converting: true, phase: "saving", progress: Some(1.0), error: None,
-    });
+    let output = tempfile::TempPath::try_from_path(gif_path).map_err(|error| error.to_string())?;
     let import_result = {
         let mut context = state.library.lock().unwrap();
+        if (context.expected_library_id(), context.expected_library_generation()) != library_identity {
+            return Err("Library changed during GIF conversion.".into());
+        }
+        control.begin_commit().map_err(|error| error.to_string())?;
+        progress("saving", Some(1.0));
         context
             .library_mut()
             .map_err(|error| error.to_string())
             .and_then(|library| {
                 library
                     .import_file(
-                        &gif_path,
+                        &output,
                         CaptureKind::Gif,
                         "gif",
                         gif_width,
@@ -1702,7 +1743,6 @@ fn convert_asset_to_gif(
                     .map_err(|e| e.to_string())
             })
     };
-    let _ = std::fs::remove_file(&gif_path);
     let gif_asset = import_result.map_err(|error| format!("Could not save GIF: {error}"))?;
     emit_library_changed(app);
     Ok(gif_asset)
@@ -1714,15 +1754,16 @@ fn export_gif_file(
     _source_width: i64,
     _source_height: i64,
     source_duration: Option<f64>,
-    progress: &mut dyn FnMut(f64),
+    control: &crate::gif::GifControl,
+    progress: crate::gif::GifProgress<'_>,
 ) -> Result<(PathBuf, i64, i64, Option<f64>), String> {
     let max_long_edge = crate::core::policy::RecordingPolicy::MAXIMUM_GIF_LONG_EDGE;
     let fps = crate::core::policy::RecordingPolicy::GIF_FRAMES_PER_SECOND;
 
     #[cfg(windows)]
     {
-        let _ = (app, source_duration, progress);
-        let (gif_path, encoded_duration) = crate::gif::export_gif(source_path, max_long_edge, fps)
+        let _ = (app, source_duration);
+        let (gif_path, encoded_duration) = crate::gif::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
             .map_err(|error| format!("{error:#}"))?;
         let (width, height) = if _source_width > 0 && _source_height > 0 {
             (_source_width as u32, _source_height as u32)
@@ -1741,7 +1782,7 @@ fn export_gif_file(
     #[cfg(target_os = "macos")]
     {
         let _ = (app, &progress);
-        crate::macos_media::export_gif_with_progress(source_path, max_long_edge, fps, progress)
+        crate::macos_media::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
             .map(|(path, width, height, duration)| {
                 (path, width, height, duration.or(source_duration))
             })
@@ -1751,7 +1792,7 @@ fn export_gif_file(
     #[cfg(target_os = "linux")]
     {
         let _ = (app, &progress);
-        crate::linux_media::export_gif(source_path, max_long_edge, fps)
+        crate::linux_media::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
             .map(|(path, width, height, duration)| {
                 (path, width, height, duration.or(source_duration))
             })
@@ -5202,7 +5243,7 @@ fn finalize_recording(
 
         let gif_result = (|| {
             let (gif_path, gif_width, gif_height, gif_duration) =
-                export_gif_file(app, &merged_path, pixel_width, pixel_height, duration, &mut |_| {})?;
+                export_gif_file(app, &merged_path, pixel_width, pixel_height, duration, &crate::gif::GifControl::default(), &mut |_, _| {})?;
             if let Some(pending) = pending.as_mut() {
                 state
                     .recording_recovery

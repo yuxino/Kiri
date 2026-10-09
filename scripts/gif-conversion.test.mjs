@@ -54,3 +54,42 @@ test("opening the library restores an active GIF without overwriting newer event
     library.unmount();
   }
 });
+
+test("GIF checking and encoding can cancel while saving cannot", async () => {
+  const calls = [];
+  const harness = createLibraryHarness({ cancelGifConversion: async (id) => { calls.push(id); return true; } });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  for (const phase of ["checking", "encoding", "finalizing", "saving", "cancelling"]) {
+    harness.emit("gifConversionState", { ...job, phase });
+    const tree = library.render();
+    const cancel = nodes(tree).find((node) => node?.type === "button" && nodes(node).includes(phase === "cancelling" ? "Cancelling…" : "Cancel"));
+    assert.ok(cancel);
+    assert.equal(cancel.props.disabled, phase === "saving" || phase === "cancelling");
+    if (phase === "checking" || phase === "encoding") {
+      cancel.props.onClick(); await settleRequests();
+    }
+    if (phase === "checking") assert.ok(nodes(tree).includes("Checking video… 42%"));
+  }
+  assert.deepEqual(calls, [id, id]);
+  harness.emit("gifConversionState", { ...job, isConverting: false, phase: "cancelled", progress: null, error: null });
+  const tree = library.render();
+  assert.ok(!nodes(tree).some((node) => node?.type === "progress"));
+  assert.ok(!nodes(tree).includes("Could not create GIF"));
+  library.unmount();
+});
+
+test("multiple GIF jobs have one Cancel all action and skip saving jobs", async () => {
+  const calls = [];
+  const harness = createLibraryHarness({cancelGifConversion: async (id) => { calls.push(id); return true; }});
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  harness.emit("gifConversionState", job);
+  harness.emit("gifConversionState", {...job, id:"second", phase:"saving"});
+  const tree = library.render();
+  const buttons = nodes(tree).filter((node) => node?.type === "button" && nodes(node).includes("Cancel all"));
+  assert.equal(buttons.length, 1);
+  buttons[0].props.onClick(); await settleRequests();
+  assert.deepEqual(calls, [id]);
+  library.unmount();
+});

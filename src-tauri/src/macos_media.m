@@ -619,6 +619,8 @@ bool kiri_macos_decode_gif_frames(
     uint32_t maxLongEdge,
     uint32_t fps,
     KiriGifFrame writeFrame,
+    bool (*shouldContinue)(void *),
+    bool validateOnly,
     void *context,
     char *errorBuffer,
     size_t errorCapacity
@@ -634,12 +636,13 @@ bool kiri_macos_decode_gif_frames(
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             AVAssetTrack *track = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
-            CMTime assetDuration = asset.duration;
+            CMTimeRange videoRange = track.timeRange;
             CGSize naturalSize = track.naturalSize;
             CGAffineTransform transform = track.preferredTransform;
 #pragma clang diagnostic pop
-            double seconds = CMTimeGetSeconds(assetDuration);
-            if (track == nil || !isfinite(seconds) || seconds <= 0) {
+            double seconds = CMTimeGetSeconds(videoRange.duration);
+            double startSeconds = CMTimeGetSeconds(videoRange.start);
+            if (track == nil || !isfinite(seconds) || !isfinite(startSeconds) || seconds <= 0) {
                 kiri_write_error(errorBuffer, errorCapacity, @"The GIF source video is invalid.");
                 return false;
             }
@@ -669,7 +672,8 @@ bool kiri_macos_decode_gif_frames(
             generator.requestedTimeToleranceAfter = CMTimeMake(1, fps);
             for (NSUInteger frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
                 @autoreleasepool {
-                    double requestedSeconds = MIN(seconds - 0.001, (double)frameIndex / (double)fps);
+                    if (!shouldContinue(context)) return false;
+                    double requestedSeconds = startSeconds + MIN(seconds - 0.001, (double)frameIndex / (double)fps);
                     CMTime requestedTime = CMTimeMakeWithSeconds(MAX(0, requestedSeconds), 600);
                     NSError *frameError = nil;
 #pragma clang diagnostic push
@@ -685,6 +689,13 @@ bool kiri_macos_decode_gif_frames(
                             requestedSeconds, frameError.localizedDescription ?: @"No video frame returned",
                             frameError.domain ?: @"AVFoundation", (long)frameError.code]);
                         return false;
+                    }
+                    if (validateOnly) {
+                        bool checked = writeFrame(context, NULL, (uint32_t)CGImageGetWidth(image),
+                            (uint32_t)CGImageGetHeight(image), (uint64_t)frameIndex, (uint64_t)frameCount);
+                        CGImageRelease(image);
+                        if (!checked) return false;
+                        continue;
                     }
                     size_t frameWidth = CGImageGetWidth(image);
                     size_t frameHeight = CGImageGetHeight(image);

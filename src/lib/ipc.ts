@@ -127,7 +127,7 @@ export interface NoticeDto {
 export interface GifConversionStateDto {
   id: string;
   isConverting: boolean;
-  phase: "preparing" | "encoding" | "finalizing" | "saving" | "complete" | "failed";
+  phase: "preparing" | "checking" | "encoding" | "finalizing" | "saving" | "cancelling" | "cancelled" | "complete" | "failed";
   progress: number | null;
   error: string | null;
 }
@@ -315,6 +315,7 @@ export const api = {
     invoke<string>("export_video_copy", { id, segments, effects: effects.map(({id: _id, ...effect}) => effect), annotations, preset,requestId }),
   cancelVideoExport: (requestId:string) => invoke<boolean>("cancel_video_export",{requestId}),
   getGifConversionStates: () => invoke<GifConversionStateDto[]>("get_gif_conversion_states"),
+  cancelGifConversion: (id: string) => invoke<boolean>("cancel_gif_conversion", { id }),
   convertToGif: (id: string) => invoke<void>("convert_to_gif", { id }),
 
   startCapture: () => invoke<CaptureContextDto>("start_capture"),

@@ -614,6 +614,12 @@ export function LibraryWindow() {
     });
   }, []);
 
+  const cancelGifConversion = useCallback((id: string) => {
+    void api.cancelGifConversion(id).catch((error: unknown) => {
+      setError({ message: error instanceof Error ? error.message : String(error), recovery: null });
+    });
+  }, []);
+
   const restoreMissing = useCallback(async (id: string) => {
     setError(null);
     try {
@@ -1331,6 +1337,14 @@ export function LibraryWindow() {
                 <progress aria-label={t("Creating GIF…")} max={1} value={activeGifConversions[0].progress}
                   style={{ width: 80, height: 4, accentColor: "var(--kiri-label)" }} />
               )}
+              <button type="button" className="kiri-button kiri-button--secondary"
+                style={{ pointerEvents: "auto", flexShrink: 0 }}
+                disabled={activeGifConversions.every((job) => job.phase === "saving" || job.phase === "cancelling")}
+                onClick={() => activeGifConversions.filter((job) => job.phase !== "saving" && job.phase !== "cancelling")
+                  .forEach((job) => cancelGifConversion(job.id))}>
+                {t(activeGifConversions.every((job) => job.phase === "cancelling") ? "Cancelling…" :
+                  activeGifConversions.length > 1 ? "Cancel all" : "Cancel")}
+              </button>
             </>
           ) : (
             <>
