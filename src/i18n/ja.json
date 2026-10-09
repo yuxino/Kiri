@@ -606,6 +606,7 @@
   "Paste Image (Cmd/Ctrl+V)": "画像を貼り付け（⌘V / Ctrl+V）",
   "Clipboard image added to Library.": "クリップボードの画像をライブラリに追加しました。",
   "Could not paste an image from the clipboard.": "クリップボードから画像を貼り付けられませんでした。",
+  "Pin": "固定",
   "Pin Screenshot on Top": "スクリーンショットを最前面に固定",
   "Screenshot Reference": "参照用スクリーンショット",
   "Unpin": "固定を解除",

@@ -159,6 +159,9 @@ export function OverlayWindow() {
   const [modeSelectorPosition, setModeSelectorPosition] = useState<Point | null>(null);
   const [modeSelectorDragging, setModeSelectorDragging] = useState(false);
   const canvasRef = useRef<AnnotationCanvasHandle>(null);
+  const selectionPointerStartRef = useRef<Point | null>(null);
+  const selectionClickMovedRef = useRef(false);
+  const doubleClickCanFinishRef = useRef(false);
   const imageRef = useRef<HTMLImageElement>(null);
   const modeSelectorRef = useRef<HTMLDivElement>(null);
   const modeSelectorDragRef = useRef<ModeSelectorDrag | null>(null);
@@ -649,6 +652,9 @@ export function OverlayWindow() {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      selectionPointerStartRef.current = toPoint(e);
+      selectionClickMovedRef.current = false;
       // OCR results: allow drawing a fresh region directly (no button) —
       // clicking/dragging in blank space starts a new selection which
       // re-runs recognition on release. phaseRef must be updated
@@ -691,6 +697,10 @@ export function OverlayWindow() {
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
+      const start = selectionPointerStartRef.current;
+      if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 3) {
+        selectionClickMovedRef.current = true;
+      }
       const p = clampPoint(toPoint(e), bounds);
       const interactive =
         phaseRef.current === "mode-select" ||
@@ -744,6 +754,12 @@ export function OverlayWindow() {
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      const start = selectionPointerStartRef.current;
+      if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 3) {
+        selectionClickMovedRef.current = true;
+      }
+      selectionPointerStartRef.current = null;
       const p = clampPoint(toPoint(e), bounds);
       if (resizeHandle || moveDrag) {
         setResizeHandle(null);
@@ -758,6 +774,7 @@ export function OverlayWindow() {
           const candidate = windowCandidate(p, context.windowRects, bounds);
           if (candidate) {
             setSelection(candidate);
+            selectionRef.current = candidate;
             afterSelection(candidate);
           }
         } else if (moved && isValidSelection(committedSelection, 3)) {
@@ -781,6 +798,7 @@ export function OverlayWindow() {
       // annotation canvas stays hidden). Picking a tool (or its shortcut)
       // is what locks the region into .annotating.
       setPhase("selecting");
+      phaseRef.current = "selecting";
       setTool("select");
     } else if (modeRef.current === "ocr") {
       setPhase("ocr-preparing");
@@ -871,6 +889,22 @@ export function OverlayWindow() {
       onPointerDown={completing || phase === "annotating" ? undefined : onPointerDown}
       onPointerMove={completing || phase === "annotating" ? undefined : onPointerMove}
       onPointerUp={completing || phase === "annotating" ? undefined : onPointerUp}
+      onClick={(event) => {
+        const point = { x: event.clientX, y: event.clientY };
+        const region = selectionRef.current;
+        const eligible = event.target === event.currentTarget &&
+          modeRef.current === "screenshot" && phaseRef.current === "selecting" &&
+          !selectionClickMovedRef.current && !!region && isValidSelection(region, 3) &&
+          contains(region, point) && !hitTestHandle(point, region, 10);
+        doubleClickCanFinishRef.current = event.detail === 1
+          ? eligible : doubleClickCanFinishRef.current && eligible;
+      }}
+      onDoubleClick={(event) => {
+        if (event.target !== event.currentTarget || !doubleClickCanFinishRef.current ||
+          completionLock.locked || modeRef.current !== "screenshot" || phaseRef.current !== "selecting") return;
+        event.preventDefault();
+        void complete();
+      }}
       onContextMenu={(e) => {
         // Spec §1.6: right-click returns to region selection while
         // annotating (tearing down annotations); otherwise it cancels.
@@ -1054,6 +1088,7 @@ export function OverlayWindow() {
             }}
             onCancel={cancel}
             onFinishAfterTextCommit={() => void complete()}
+            onFinishOnBlankDoubleClick={mode === "screenshot" ? () => void complete() : undefined}
           />
         </div>
       )}

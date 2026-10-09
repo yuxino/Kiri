@@ -606,6 +606,7 @@
   "Paste Image (Cmd/Ctrl+V)": "Paste Image (Cmd/Ctrl+V)",
   "Clipboard image added to Library.": "Clipboard image added to Library.",
   "Could not paste an image from the clipboard.": "Could not paste an image from the clipboard.",
+  "Pin": "Pin",
   "Pin Screenshot on Top": "Pin Screenshot on Top",
   "Screenshot Reference": "Screenshot Reference",
   "Unpin": "Unpin",

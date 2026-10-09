@@ -40,7 +40,7 @@ interface UndoState {
   completion: CompletionPreviewPayload;
 }
 
-type ActionName = "open" | "copy" | "gif" | "trash" | "undo";
+type ActionName = "open" | "copy" | "pin" | "gif" | "trash" | "undo";
 
 const COMPLETION_WIDTH = 360;
 const COMPLETION_HEIGHT = 124;
@@ -402,6 +402,11 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
     void runAction("gif", () => api.convertToGif(assetId));
   };
 
+  const pinScreenshot = () => {
+    if (!assetId || visibleCompletion.kind !== "image") return;
+    void runAction("pin", () => api.pinAsset(assetId), hideWindow);
+  };
+
   const moveToTrash = () => {
     if (!assetId) return;
     const deletedCompletion = visibleCompletion;
@@ -520,6 +525,16 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
                   accent
                   onClick={copyAsset}
                 />
+                {visibleCompletion.kind === "image" && (
+                  <ActionButton
+                    action="pin"
+                    icon="photo.on.rectangle"
+                    label={t("Pin")}
+                    title={t("Pin Screenshot on Top")}
+                    pending={pendingAction}
+                    onClick={pinScreenshot}
+                  />
+                )}
                 {visibleCompletion.kind === "video" && visibleCompletion.gifEligible && (
                   <ActionButton
                     action="gif"

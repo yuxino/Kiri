@@ -516,7 +516,9 @@ fn restore_pinned_window(window: &WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn pin_asset(window: WebviewWindow, app: AppHandle, id: String) -> Result<(), String> {
-    if window.label() != "library" { return Err("Only the library can pin a screenshot.".into()); }
+    if !matches!(window.label(), "library" | "toast") {
+        return Err("Only the library or completion preview can pin a screenshot.".into());
+    }
     let parsed = uuid::Uuid::parse_str(&id).map_err(|_| "Invalid screenshot.".to_string())?;
     let asset = {
         let state = app.state::<AppState>();

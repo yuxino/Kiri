@@ -35,7 +35,7 @@
 
 1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.
 2. Choose Screenshot, Record, or OCR.
-3. Press `Enter` to confirm a screenshot or `Esc` to cancel. Screenshots are copied to your clipboard and saved in the library.
+3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Choose **Pin** on the completion card to open a floating reference image.
 
 Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
 
