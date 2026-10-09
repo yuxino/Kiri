@@ -43,9 +43,11 @@ from pathlib import Path
 with open(sys.argv[1], "rb", buffering=0) as stream:
     start = time.monotonic()
     count = 0
+    audible = False
     while data := stream.read(192):
-        if any(abs(sample) > 1_000 for sample in array.array("h", data)):
+        if not audible and any(abs(sample) > 1_000 for sample in array.array("h", data)):
             Path(sys.argv[1] + ".audible").touch()
+            audible = True
         count += len(data)
         time.sleep(max(0, start + count / 192000 - time.monotonic()))
 PY
