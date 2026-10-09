@@ -4,6 +4,7 @@ pub mod geometry;
 pub mod gif_timing;
 pub mod library;
 pub mod library_location;
+pub mod locale;
 pub mod ocr_provider;
 pub mod policy;
 pub mod recording_recovery;

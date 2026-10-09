@@ -2,7 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
 import "./styles/design-system.css";
-import { onLanguageChange, setLanguage } from "./i18n";
+import { getLanguage, isLanguage, onLanguageChange, setLanguage } from "./i18n";
+import { initializeLanguage } from "./i18n/language-sync";
 import { configureVideoPlaybackOrigin } from "./lib/kiri-resource-url.js";
 
 const OverlayWindow = React.lazy(() =>
@@ -43,23 +44,19 @@ const ConfirmWindow = React.lazy(() =>
 // back to the real system locale via get_locale (the WebView's
 // navigator.language is fixed to en in Tauri, so it cannot be trusted).
 // The choice is shared across all windows and survives relaunches.
-function applySystemLanguage(): Promise<void> {
-  return invoke<string>("get_locale")
-    .then((locale) => {
-      if (locale === "zh-Hans" || locale === "ja") setLanguage(locale);
-    })
-    .catch(() => {});
-}
-
-void invoke<string>("get_language")
-  .then((saved) => {
-    if (saved) {
-      setLanguage(saved as "en" | "zh-Hans" | "ja");
-      return;
-    }
-    return applySystemLanguage();
-  })
-  .catch(() => applySystemLanguage());
+void initializeLanguage({
+  subscribe: async (change) => {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<string>("language-changed", ({ payload }) => change(payload));
+  },
+  getSaved: () => invoke<string>("get_language"),
+  getLocale: () => invoke<string>("get_locale"),
+  accept: (language) => {
+    if (!isLanguage(language)) return false;
+    setLanguage(language);
+    return true;
+  },
+});
 
 // Forward renderer failures to the bounded Rust error log. Production windows
 // must not mutate their title or inject a debug overlay.
@@ -88,8 +85,7 @@ function App() {
   const { kind, params } = resolveWindow();
   // Re-render when the UI language resolves/changes (system locale arrives
   // asynchronously from the backend).
-  const [, force] = React.useReducer((x: number) => x + 1, 0);
-  React.useEffect(() => onLanguageChange(force), []);
+  React.useSyncExternalStore(onLanguageChange, getLanguage);
   switch (kind) {
     case "overlay":
       return <OverlayWindow />;

@@ -10,7 +10,7 @@ export function compactTranslations(dictionary) {
 
 export function compactTranslationsPlugin(root) {
   const dictionaries = new Set(
-    ["en", "zh-Hans", "ja"].map((language) =>
+    ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"].map((language) =>
       path.resolve(root, "src/i18n", `${language}.json`).replaceAll("\\", "/"),
     ),
   );

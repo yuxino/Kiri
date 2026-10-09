@@ -271,46 +271,6 @@
   overflow-wrap: anywhere;
 }
 
-.kiri-language-picker {
-  display: flex;
-  flex-shrink: 0;
-  gap: 2px;
-  padding: 3px;
-  background: var(--kiri-group-fill);
-  border-radius: var(--kiri-radius-control);
-}
-
-.kiri-language-picker button {
-  min-width: 42px;
-  height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--kiri-secondary-label);
-  font: 600 11px var(--kiri-font-ui);
-  cursor: pointer;
-  transition:
-    background var(--kiri-motion-hover) ease-out,
-    color var(--kiri-motion-hover) ease-out,
-    transform var(--kiri-motion-hover) ease-out;
-}
-
-.kiri-language-option:hover:not([data-active]) {
-  background: var(--kiri-accent-soft-alpha-10);
-  color: var(--kiri-label);
-}
-
-.kiri-language-option:active {
-  transform: scale(0.96);
-}
-
-.kiri-language-option[data-active] {
-  background: var(--kiri-accent-strong);
-  color: var(--kiri-on-accent);
-  box-shadow: none;
-}
-
 .kiri-settings-add-button {
   flex-shrink: 0;
 }
@@ -664,7 +624,7 @@
     align-self: flex-start;
   }
 
-  .kiri-language-picker {
+  .kiri-language-select {
     align-self: flex-start;
   }
 
@@ -723,3 +683,14 @@
 .kiri-portal-bindings dt { font-weight: 500; }
 .kiri-portal-bindings dd { margin: 0; overflow-wrap: anywhere; }
 .kiri-portal-command { grid-column: 2; font-family: monospace; }
+
+.kiri-language-select {
+  max-width: 100%;
+  min-width: 150px;
+  padding: 8px 30px 8px 12px;
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 7px;
+  background: var(--kiri-group-fill);
+  color: inherit;
+  font: inherit;
+}

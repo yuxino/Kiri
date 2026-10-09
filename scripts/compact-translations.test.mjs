@@ -6,7 +6,7 @@ import { compactTranslations, compactTranslationsPlugin } from "./compact-transl
 
 test("compacted dictionaries preserve every translation and English alias", () => {
   let canonicalKeys;
-  for (const language of ["en", "zh-Hans", "ja"]) {
+  for (const language of ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"]) {
     const dictionary = JSON.parse(readFileSync(new URL(`../src/i18n/${language}.json`, import.meta.url)));
     const keys = Object.keys(dictionary).sort();
     canonicalKeys ??= keys;
@@ -22,7 +22,7 @@ test("compacted dictionaries preserve every translation and English alias", () =
   });
 });
 
-test("build compaction touches only the three canonical dictionaries", () => {
+test("build compaction touches only the seven canonical dictionaries", () => {
   const root = path.resolve("/project");
   const plugin = compactTranslationsPlugin(root);
   assert.equal(plugin.apply, "build");

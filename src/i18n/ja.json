@@ -706,5 +706,6 @@
   "Checking video…": "動画を確認中…",
   "Checking video… %d%": "動画を確認中… %d%",
   "GIF conversion cancelled": "GIF 変換をキャンセルしました",
-  "Cancel all": "すべてキャンセル"
+  "Cancel all": "すべてキャンセル",
+  "Could not save the language preference.": "言語設定を保存できませんでした。"
 }

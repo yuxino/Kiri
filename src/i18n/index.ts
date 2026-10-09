@@ -1,7 +1,7 @@
 /**
  * Kiri i18n:
  *  - keys are the English strings themselves (English fallback)
- *  - follows the OS preferred language; en, zh-Hans, and ja are supported
+ *  - follows the OS preferred language; seven languages are supported
  *  - the user's manual choice is persisted by the backend (language.json)
  *    and wins over the system locale
  *  - `%@` and `%d` placeholders for compact shared formatting
@@ -9,26 +9,40 @@
 import en from "./en.json";
 import zhHans from "./zh-Hans.json";
 import ja from "./ja.json";
+import zhHant from "./zh-Hant.json";
+import de from "./de.json";
+import ko from "./ko.json";
+import fr from "./fr.json";
 
-export type KiriLanguage = "en" | "zh-Hans" | "ja";
+export const languages = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"] as const;
+export type KiriLanguage = (typeof languages)[number];
+export const languageNames: Record<KiriLanguage, string> = {
+  en: "English", "zh-Hans": "简体中文", "zh-Hant": "繁體中文", ja: "日本語",
+  de: "Deutsch", ko: "한국어", fr: "Français",
+};
+export function isLanguage(value: string): value is KiriLanguage {
+  return languages.includes(value as KiriLanguage);
+}
+export function languageForLocale(value: string): KiriLanguage {
+  const locale = value.toLowerCase().replaceAll("_", "-");
+  if (/^zh(?:-|$)/.test(locale)) {
+    return locale.split("-").slice(1).some((part) => ["hant", "tw", "hk", "mo"].includes(part))
+      ? "zh-Hant" : "zh-Hans";
+  }
+  const base = locale.split("-")[0];
+  return isLanguage(base) ? base : "en";
+}
 
 const DICTIONARIES: Record<KiriLanguage, Record<string, string>> = {
   en,
   "zh-Hans": zhHans,
   ja,
+  "zh-Hant": zhHant,
+  de, ko, fr,
 };
 
 function detectLanguage(): KiriLanguage {
-  const locale = (navigator.language || "en").toLowerCase();
-  // Match macOS zh-Hans preference and Windows zh-CN/zh-SG locales.
-  if (/^zh-(hans|cn|sg)|zh-(hans|cn|sg)-/i.test(locale) || locale === "zh-hans") {
-    return "zh-Hans";
-  }
-  // Japanese (macOS ja / ja-JP, Windows ja-JP).
-  if (/^ja(-|$)/i.test(locale)) {
-    return "ja";
-  }
-  return "en";
+  return languageForLocale(navigator.language || "en");
 }
 
 let language: KiriLanguage = detectLanguage();

@@ -66,6 +66,16 @@ default. It selects regular or accessory activation policy at startup and
 when changed in Settings. Library and capture activation respect that choice;
 the tray and global shortcut remain available when the Dock icon is hidden.
 
+## Language preferences
+
+The seven dictionaries in `src/i18n/` share English keys and formatting
+placeholders. Settings uses language self-names in a compact selector. The
+backend stores the selected code in `language.json`; saved choices override the
+system locale, including Traditional Chinese locales. A successful save
+broadcasts `language-changed` to every window and refreshes native tray labels.
+Windows subscribe before reading their startup preference and ignore stale
+reads after a newer change. See ADR 0079.
+
 ## Capture flow
 
 1. The native global shortcut asks Rust to start a capture session and records
