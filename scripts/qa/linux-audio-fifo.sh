@@ -33,16 +33,21 @@ for _ in $(seq 1 100); do
   sleep 0.05
 done
 test -S "$root/pulse/native"
-# The FIFO reader paces consumption at the sink's native 48kHz stereo s16 rate.
+# Pulse's pipe sink estimates latency from unread FIFO bytes, without a
+# hardware clock. Drain at 1ms granularity: 10ms reads quantize that estimate
+# beyond the native trace's unchanged 5ms continuity limit.
+# Keep the sink's native 48kHz stereo s16 rate and high-latency FIFO route.
 python3 - "$root/output.fifo" <<'PY' &
 import array, sys, time
 from pathlib import Path
 with open(sys.argv[1], "rb", buffering=0) as stream:
     start = time.monotonic()
     count = 0
-    while data := stream.read(1920):
-        if any(abs(sample) > 1_000 for sample in array.array("h", data)):
+    audible = False
+    while data := stream.read(192):
+        if not audible and any(abs(sample) > 1_000 for sample in array.array("h", data)):
             Path(sys.argv[1] + ".audible").touch()
+            audible = True
         count += len(data)
         time.sleep(max(0, start + count / 192000 - time.monotonic()))
 PY

@@ -58,3 +58,5 @@ if __name__=='__main__':
  asyncio.run(test_image_editing.main())
  import test_image_crop
  asyncio.run(test_image_crop.main())
+ import test_quick_capture
+ asyncio.run(test_quick_capture.main())

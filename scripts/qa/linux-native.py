@@ -17,6 +17,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import traceback
 
 from PIL import Image, ImageChops, ImageGrab, ImageStat
 from linux_desktop_fixture import DesktopFixture, RECORDING_REGION
@@ -242,9 +243,14 @@ def accessible_nodes():
     desktop = Atspi.get_desktop(0)
     stack = []
     for index in range(desktop.get_child_count()):
-        application = desktop.get_child_at_index(index)
-        if application and application.get_process_id() == process.pid:
-            stack.append(application)
+        try:
+            application = desktop.get_child_at_index(index)
+            if application and application.get_process_id() == process.pid:
+                stack.append(application)
+        except GLib.Error:
+            # AT-SPI can retain the previous process after an app restart.
+            # wait_for() independently rejects an exited current process.
+            continue
     visited = 0
     while stack and visited < 2000:
         node = stack.pop()
@@ -837,11 +843,14 @@ try:
     def video_card():
         label = video.get("title") or video["filename"]
         for node in accessible_nodes():
-            if node.get_name() != label or not node.get_state_set().contains(Atspi.StateType.SHOWING):
+            try:
+                if node.get_name() != label or not node.get_state_set().contains(Atspi.StateType.SHOWING):
+                    continue
+                bounds = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+                if bounds.width > 150 and bounds.height > 100:
+                    return bounds
+            except GLib.Error:
                 continue
-            bounds = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
-            if bounds.width > 150 and bounds.height > 100:
-                return bounds
         return None
 
     bounds = wait_for("saved video card", video_card)
@@ -850,12 +859,15 @@ try:
 
     def playback_position():
         for node in accessible_nodes():
-            if (node.get_name() == "Playback position"
-                    and node.get_state_set().contains(Atspi.StateType.SHOWING)
-                    and node.get_state_set().contains(Atspi.StateType.ENABLED)):
-                value = node.get_value_iface()
-                if value.get_maximum_value() > 1:
-                    return node, value.get_current_value(), value.get_maximum_value()
+            try:
+                if (node.get_name() == "Playback position"
+                        and node.get_state_set().contains(Atspi.StateType.SHOWING)
+                        and node.get_state_set().contains(Atspi.StateType.ENABLED)):
+                    value = node.get_value_iface()
+                    if value.get_maximum_value() > 1:
+                        return node, value.get_current_value(), value.get_maximum_value()
+            except GLib.Error:
+                continue
         return None
 
     wait_for("WebKitGTK decodes the saved video metadata", playback_position)
@@ -933,6 +945,7 @@ try:
     report["success"] = True
 except Exception as error:
     report["error"] = str(error)
+    report["traceback"] = traceback.format_exc()
     try:
         screenshot("failure-desktop.png")
         report["windows"] = {window: geometry(window) for window in windows()} if process else {}

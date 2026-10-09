@@ -2564,7 +2564,7 @@ mod tests {
             std::thread::sleep(Duration::from_secs(4));
             drop(tx);
             encoder.finish().unwrap();
-            assert!(trace.native_continuity_errors().is_empty());
+            trace.assert_native_continuity();
             drop(trace);
             let (_, _, duration) =
                 validate_recording_tracks(&path, Some((64, 48)), Some(true)).unwrap();

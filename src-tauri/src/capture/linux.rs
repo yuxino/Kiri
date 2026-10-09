@@ -715,6 +715,12 @@ impl LinuxRecorder {
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(capture))
                     .unwrap_or_else(|_| Err(anyhow!("The Linux recorder worker panicked.")));
+                if let Err(error) = &result {
+                    // The encoder can observe the closed frame channel before
+                    // recorder teardown and report only "no video frames".
+                    // Retain the capture cause, including portal denial.
+                    log::error!("recording: Linux capture worker failed: {error:#}");
+                }
                 let message = result
                     .as_ref()
                     .err()

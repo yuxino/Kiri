@@ -606,6 +606,7 @@
   "Paste Image (Cmd/Ctrl+V)": "粘贴图片（⌘V / Ctrl+V）",
   "Clipboard image added to Library.": "剪贴板图片已加入素材库。",
   "Could not paste an image from the clipboard.": "无法从剪贴板粘贴图片。",
+  "Pin": "置顶",
   "Pin Screenshot on Top": "置顶截图",
   "Screenshot Reference": "截图参考",
   "Unpin": "取消置顶",

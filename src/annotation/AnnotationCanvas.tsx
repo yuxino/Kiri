@@ -122,6 +122,8 @@ interface Props {
    * overlay finishes the screenshot; the editor leaves this unset.
    */
   onFinishAfterTextCommit?(): void;
+  /** Capture-only: Select tool double-clicks on unmarked canvas confirm the image. */
+  onFinishOnBlankDoubleClick?(): void;
 }
 
 interface EditingState {
@@ -172,6 +174,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       onHistoryChange,
       onCancel,
       onFinishAfterTextCommit,
+      onFinishOnBlankDoubleClick,
     },
     ref,
   ) {
@@ -206,6 +209,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const [selectCursor, setSelectCursor] = useState<string>("default");
     const [editing, setEditing] = useState<EditingState | null>(null);
     const interactionRef = useRef<Interaction>({ kind: "none" });
+    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false });
+    const blankDoubleClickRef = useRef(false);
     const appearanceRef = useRef(appearance);
     appearanceRef.current = appearance;
     const toolRef = useRef(tool);
@@ -543,6 +548,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       (e: React.PointerEvent) => {
         if (interactionsDisabled()) return;
         if(e.button!==0)return;
+        canvasClickRef.current = {
+          start: { x: e.clientX, y: e.clientY }, moved: false, wasEditing: editingRef.current !== null,
+        };
         finishAppearanceAdjustment();
         const canvas = canvasRef.current!;
         canvas.setPointerCapture(e.pointerId);
@@ -742,6 +750,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
 
     const onPointerMove = useCallback(
       (e: React.PointerEvent) => {
+        if (Math.hypot(e.clientX - canvasClickRef.current.start.x,
+          e.clientY - canvasClickRef.current.start.y) >= 3) canvasClickRef.current.moved = true;
         if (interactionsDisabled()) return;
         const p = clampPoint(toPoint(e), {
           x: 0,
@@ -1299,6 +1309,25 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onClick={(event) => {
+            const point = toPoint(event.nativeEvent);
+            const selected = selectedIndexRef.current === null ? null : history.elements[selectedIndexRef.current];
+            const eligible = !interactionsDisabled() && toolRef.current === "select" &&
+              !editingRef.current && !canvasClickRef.current.wasEditing && !canvasClickRef.current.moved &&
+              markIndexAt(history.elements, point, hitTestScale) === null &&
+              !(selected && hitTestHandle(point, selectionBounds(selected), 10 * hitTestScale.radial));
+            blankDoubleClickRef.current = event.detail === 1
+              ? eligible : blankDoubleClickRef.current && eligible;
+          }}
+          onDoubleClick={(event) => {
+            if (interactionsDisabled() || toolRef.current !== "select" || editingRef.current) return;
+            const index = markIndexAt(history.elements, toPoint(event.nativeEvent), hitTestScale);
+            if (index !== null && history.elements[index].kind === "text") {
+              editText(index);
+            } else if (index === null && blankDoubleClickRef.current) {
+              onFinishOnBlankDoubleClick?.();
+            }
+          }}
           onPointerCancel={()=>{interactionRef.current={kind:"none"};setDraft(null);setSelectCursor("default");}}
           onPointerLeave={()=>setBrushCursor(null)}
         />

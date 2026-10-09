@@ -129,6 +129,12 @@ runtime synthetic-desktop or temporary-library mode in development or
 production; deterministic capture data belongs in unit tests or an isolated
 test harness.
 
+Screenshot selections also finish on a stationary double-click inside the
+selected region, away from resize handles and overlay controls. In annotation
+mode, only the Select tool's unmarked canvas accepts this action; text keeps its
+double-click editing behavior. Both clicks must be eligible and use the same
+synchronous completion lock and confirmation pipeline as Return.
+
 On macOS, transient capture, countdown, recording-control, ripple, and
 completion windows explicitly join other applications' full-screen Spaces.
 A transparent, non-interactive native `NSPanel` parent supplies full-screen
@@ -431,8 +437,12 @@ One resident `toast` window serves two distinct modes. Ordinary notices are
 short-lived and ignore pointer input. Persisted screenshot, MP4, and GIF assets
 use an interactive completion card with a bounded thumbnail, status detail,
 and actions to continue editing an image, open video/GIF in the viewer, copy,
-or move the asset to recoverable Trash. The library keeps a separate eye action
-for flat image quick preview. Images copy as clipboard pixels; MP4 and GIF
+or move the asset to recoverable Trash. Image cards additionally offer Pin, which calls
+the existing screenshot-only reference window command from the `toast` window
+and dismisses the card only after success. The command remains restricted to
+the library and completion windows and rejects OCR, trashed, and nonimage assets.
+The library keeps a separate eye action for flat image quick preview.
+Images copy as clipboard pixels; MP4 and GIF
 assets copy as operating-system file items, never as a text path or a full
 in-memory video payload.
 
