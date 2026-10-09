@@ -2,7 +2,7 @@
 
 Created on 2026-10-04.
 
-- `readme-background.png`: new illustration generated with the built-in imagegen tool, 1586 × 992 pixels.
+- [Original illustration](https://github.com/yuxino/Kiri/blob/c625486ce0dbf1e9eb46a8ca4fb72d76db4e00c7/docs/assets/readme-background.png): generated with the built-in imagegen tool, 1586 × 992 pixels. This completed source asset is archived in Git history; the current README uses the rendered preview below.
 - `readme-preview.png`: 2880 × 1918 pixels; the current application frontend rendered with an isolated demo fixture and the generated illustration. Interface components, icons, and internal styles come from `f9d08e8f0558376b6a682ef624aefa0ee1311243`.
 - This is an interface illustration, not evidence of a native capture or a live recognition session. No personal content or credentials were used.
 
