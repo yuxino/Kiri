@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
 
 export const themeDirectory = fileURLToPath(new URL('.', import.meta.url));
-export const fileNames = ['English.nsh', 'Japanese.nsh', 'SimpChinese.nsh', 'preview.nsi', 'sidebar.bmp', 'theme.nsh'];
+export const fileNames = ['English.nsh', 'French.nsh', 'German.nsh', 'Japanese.nsh', 'Korean.nsh', 'SimpChinese.nsh', 'TradChinese.nsh', 'preview.nsi', 'sidebar.bmp', 'theme.nsh'];
 export const digest = data => createHash('sha256').update(data).digest('hex');
 const maximumBundleSize = 8 * 1024 * 1024;
 const width = 656, height = 1256;
@@ -76,7 +76,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const args = process.argv.slice(2);
     if (args.length > 1 || args.some(a => a !== '--check')) throw new Error('Usage: build.mjs [--check]');
     buildTheme(undefined, args.includes('--check'));
-    console.log('Shared installer verified: offline, full-color 4x, English / 中文 / 日本語.');
+    console.log('Shared installer verified: offline, full-color 4x, seven languages.');
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

@@ -56,25 +56,11 @@ fn save_enabled(app: &tauri::AppHandle, enabled: bool) -> std::io::Result<()> {
 }
 
 fn descriptions(app: &tauri::AppHandle) -> [String; 3] {
-    let saved = crate::state::load_language(app);
-    let language = if saved.is_empty() {
-        crate::commands::get_locale()
-    } else {
-        saved
-    };
-    let dictionary = match language.as_str() {
-        "zh-Hans" => include_str!("../../../src/i18n/zh-Hans.json"),
-        "ja" => include_str!("../../../src/i18n/ja.json"),
-        _ => include_str!("../../../src/i18n/en.json"),
-    };
-    let values: serde_json::Value = serde_json::from_str(dictionary).unwrap_or_default();
-    ["Capture", "Pause/Resume Recording", "Stop Recording"].map(|key| {
-        values
-            .get(key)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or(key)
-            .to_owned()
-    })
+    let language = crate::core::locale::preferred_language(
+        &crate::state::load_language(app),
+        &crate::commands::get_locale(),
+    );
+    crate::core::locale::shortcut_descriptions(language).map(str::to_owned)
 }
 
 fn apply_bindings(

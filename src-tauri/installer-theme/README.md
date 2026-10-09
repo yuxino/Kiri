@@ -1,7 +1,7 @@
 # Kiri installer
 
 Presentation source: [yuxino/desktop-installer](https://github.com/yuxino/desktop-installer).
-Pinned version: **2.1.2**. This directory is generated; edit the shared repository.
+Pinned version: **2.2.0**. This directory is generated; edit the shared repository.
 
 Build offline from the application root:
 
@@ -12,7 +12,7 @@ node src-tauri/installer-theme/build.mjs --check
 ```
 
 The Windows config uses native Tauri/NSIS installation and update behavior, a lossless
-4x full-color half-body sidebar, and English / Simplified Chinese / Japanese dialogs.
+4x full-color half-body sidebar, and English / Simplified Chinese / Traditional Chinese / Japanese / German / Korean / French dialogs.
 The optional GitHub link opens only when clicked on Finish.
 
 Update all consumers from the shared repository:
