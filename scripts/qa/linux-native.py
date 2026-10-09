@@ -6,7 +6,6 @@ real audio devices, multiple monitors, or fractional scaling.
 
 import argparse
 import array
-import math
 import io
 import json
 import os
@@ -21,6 +20,7 @@ import traceback
 
 from PIL import Image, ImageChops, ImageGrab, ImageStat
 from linux_desktop_fixture import DesktopFixture, RECORDING_REGION
+from linux_audio_tone import inspect_tone
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -437,7 +437,7 @@ def frame_error(actual, expected):
     return mean, changed
 
 
-def inspect_system_audio(path):
+def inspect_system_audio(path, first_duration, first_resumed_pts):
     # Decode only generated public test tones through system GStreamer, never FFmpeg.
     pipeline = Gst.parse_launch(
         "uridecodebin name=decode ! audioconvert ! audioresample ! "
@@ -472,18 +472,9 @@ def inspect_system_audio(path):
         raise RuntimeError("AAC did not decode fully")
     if sys.byteorder != "little":
         samples.byteswap()
-    amplitudes = []
-    for offset in range(9600, len(samples) - 9600, 4800):
-        window = samples[offset:offset + 4800]
-        real = sum(value * math.cos(2 * math.pi * 440 * index / 48000)
-                   for index, value in enumerate(window))
-        imaginary = sum(value * math.sin(2 * math.pi * 440 * index / 48000)
-                        for index, value in enumerate(window))
-        amplitudes.append(2 * math.hypot(real, imaginary) / len(window))
-    if not amplitudes or min(amplitudes) < 0.08:
-        raise RuntimeError(f"The FIFO AAC lost its 440Hz tone: {amplitudes}")
+    tone = inspect_tone(samples, (first_duration, first_resumed_pts))
     return {"sample_rate": 48000, "channels": 2, "decoded_seconds": len(samples) / 48000,
-            "tone_hz": 440, "minimum_100ms_amplitude": min(amplitudes), "reached_eos": True}
+            "tone_hz": 440, **tone, "reached_eos": True}
 
 
 def inspect_recording(path, references, expected_active_seconds, wall_seconds, paused_seconds):
@@ -506,6 +497,7 @@ def inspect_recording(path, references, expected_active_seconds, wall_seconds, p
     largest_mean = 0.0
     largest_changed = 0.0
     previous_pts = None
+    first_resumed_pts = None
     final_frame = None
     reached_eos = False
     pipeline.set_state(Gst.State.PLAYING)
@@ -560,6 +552,8 @@ def inspect_recording(path, references, expected_active_seconds, wall_seconds, p
                 frame.save(output / "recording-frame-zero.png")
             if counts[closest] == 0:
                 frame.save(output / f"recording-first-{closest}-frame.png")
+                if closest == "resumed":
+                    first_resumed_pts = buffer.pts / Gst.SECOND
             counts[closest] += 1
             largest_mean = max(largest_mean, mean)
             largest_changed = max(largest_changed, changed)
@@ -577,6 +571,7 @@ def inspect_recording(path, references, expected_active_seconds, wall_seconds, p
         "active_seconds": round(expected_active_seconds, 3),
         "paused_seconds": round(paused_seconds, 3),
         "wall_seconds": round(wall_seconds, 3), "decoded_frames": counts,
+        "first_resumed_pts_seconds": first_resumed_pts,
         "paused_pattern_frames": 0, "unexpected_frames": 0,
         "frame_zero_included": True,
         "selection_edges_checked_on_every_frame": True,
@@ -823,9 +818,12 @@ try:
         saved_video, references, (pause_requested - first_started) + (stop_requested - second_started),
         stop_requested - first_started, paused_seconds,
     )
-    if system_audio:
-        report["recording"]["audio"] = inspect_system_audio(saved_video)
     report["recording"]["first_segment_seconds"] = round(first_duration, 3)
+    report["recording"]["first_segment_exact_seconds"] = first_duration
+    if system_audio:
+        report["recording"]["audio"] = inspect_system_audio(
+            saved_video, first_duration, report["recording"]["first_resumed_pts_seconds"],
+        )
     if abs(video.get("duration", 0) - report["recording"]["duration_seconds"]) > 0.2:
         raise RuntimeError("Saved video duration metadata does not match the actual MP4")
     report["checks"].append("real MP4 recording starts in the GUI and pauses, resumes, and stops through public CLI controls")
