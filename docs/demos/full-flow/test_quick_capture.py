@@ -148,13 +148,104 @@ async def main():
                     assert await confirms() == 2
                     assert await page.evaluate("state.calls.filter(x => x.c === 'start_recording_flow').length") == 0
                     await cancel()
+
+                # Saved-image re-editing shares the canvas but no completion callback.
+                image = io.BytesIO()
+                Image.new('RGB', (1000, 600), '#cccccc').save(image, format='PNG')
+                MEDIA['editor-second-edit'] = (image.getvalue(), 'image/png')
+                await page.evaluate('''() => {
+                    const original = window.invoke;
+                    state.editorProject = {schemaVersion: 1,
+                        canvas: {width: 1000, height: 600},
+                        sourcePixels: {width: 1000, height: 600}, marks: [
+                        {kind: 'text', id: 501, text: 'saved text',
+                         rect: {x: 200, y: 150, width: 200, height: 40},
+                         color: 'cherry', background: 'transparent', fontSize: 24},
+                        {kind: 'rectangle', id: 502,
+                         rect: {x: 500, y: 130, width: 180, height: 140},
+                         color: 'cherry', width: 3}]};
+                    state.editorSaveCalls = 0;
+                    state.editorRevision = 'a'.repeat(64);
+                    state.editorCloseEvents = true;
+                    state.editorDestroyCalls = 0;
+                    window.invoke = async (kind, command, args) => {
+                        if (command === 'get_asset_annotation_project' && args.id === 'editor-second-edit') {
+                            return {state: 'valid', documentJson: JSON.stringify(state.editorProject),
+                                revisionSha256: state.editorRevision};
+                        }
+                        if (command === 'prepare_asset_annotation') {
+                            state.editorPrepared = JSON.parse(args.documentJson);
+                            return 'fixture-editor-update';
+                        }
+                        if (command === 'update_asset') {
+                            state.editorSaveCalls++;
+                            state.editorProject = structuredClone(state.editorPrepared);
+                            state.editorRevision = 'b'.repeat(64);
+                            return {revisionSha256: state.editorRevision, actionSucceeded: true};
+                        }
+                        return original(kind, command, args);
+                    };
+                }''')
+
+                async def saved_editor():
+                    await page.evaluate("showSubject(); frame('editor', {id: 'editor-second-edit'})")
+                    editor = page.frame_locator('#editor')
+                    await editor.locator('canvas').wait_for()
+                    await editor.locator('canvas').evaluate('''() => new Promise(resolve =>
+                        requestAnimationFrame(() => requestAnimationFrame(resolve)))''')
+                    box = await editor.locator('canvas').bounding_box()
+                    assert box
+                    def point(x, y):
+                        return box['x'] + x * box['width'] / 1000, box['y'] + y * box['height'] / 600
+                    return editor, point
+
+                editor, point = await saved_editor()
+                await page.mouse.dblclick(*point(850, 470))
+                await page.mouse.dblclick(*point(550, 190))
+                assert await page.evaluate('state.editorSaveCalls') == 0
+                assert await page.locator('#editor').count() == 1
+                await page.mouse.dblclick(*point(240, 170))
+                text = editor.get_by_role('textbox', name='Text content', exact=True)
+                await text.wait_for()
+                assert await text.input_value() == 'saved text'
+                await text.fill('edited saved text')
+                await text.press('Enter')
+                await text.wait_for(state='detached')
+                assert await page.locator('#editor').count() == 1
+                assert await page.evaluate('state.editorSaveCalls') == 0
+                await page.mouse.dblclick(*point(850, 470))
+                assert await page.locator('#editor').count() == 1
+                assert await page.evaluate('state.editorSaveCalls') == 0
+                await editor.get_by_role('button', name='Cancel', exact=True).click()
+                dialog = editor.get_by_role('dialog', name='Save changes before closing?', exact=True)
+                await dialog.wait_for()
+                await dialog.get_by_role('button', name='Keep editing', exact=True).click()
+                await editor.get_by_role('button', name='Save', exact=True).click()
+                await page.locator('#editor').wait_for(state='detached')
+                assert await page.evaluate('state.editorSaveCalls') == 1
+                assert await page.evaluate('state.editorProject.marks.map(mark => mark.id)') == [501, 502]
+                editor, point = await saved_editor()
+                await page.mouse.dblclick(*point(240, 170))
+                text = editor.get_by_role('textbox', name='Text content', exact=True)
+                await text.wait_for()
+                assert await text.input_value() == 'edited saved text'
+                await text.press('Escape')
+                await text.wait_for(state='detached')
+                await editor.get_by_role('button', name='Cancel', exact=True).click()
+                await page.locator('#editor').wait_for(state='detached')
+                assert await page.evaluate('state.editorSaveCalls') == 1
+                assert await confirms() == 2
                 assert not errors, errors
                 (OUT / 'quick-capture-check.json').write_text(json.dumps({
                     'native': False, 'passed': ['window double-click confirms once',
                     'completion pins saved asset', 'pin error and retry', 'three-language action layout',
                     'outside/handle/toolbar/annotation guards', 'text double-click edits',
                     'editing gesture does not confirm', 'Select blank canvas confirms',
-                    'drawing tools do not confirm', 'OCR and recording guards']}, indent=2) + '\n')
+                    'drawing tools do not confirm', 'OCR and recording guards',
+                    'saved editor blank/shape double-click does not save or close',
+                    'saved text double-click edits without capture completion',
+                    'text Enter leaves saved editor open', 'saved editor dirty-close guard',
+                    'explicit save preserves annotation IDs and reopens edited text']}, indent=2) + '\n')
                 await context.close()
             finally:
                 await browser.close()
