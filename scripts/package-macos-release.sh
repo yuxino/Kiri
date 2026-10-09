@@ -22,6 +22,10 @@ for target in aarch64-apple-darwin x86_64-apple-darwin; do
   fi
 done
 
+# Formal releases must keep the certificate already used by published Kiri.
+# Development packaging may select a different local identity independently.
+export KIRI_SIGNING_IDENTITY="${KIRI_SIGNING_IDENTITY:-$(cat "$SCRIPT_DIR/macos-release-identity.txt")}"
+
 cd "$PROJECT_DIR"
 release_user="$(id -un)"
 release_user_home="$(
