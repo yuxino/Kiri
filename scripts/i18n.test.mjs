@@ -8,13 +8,13 @@ const languages = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"];
 const dictionaries = Object.fromEntries(languages.map(language => [language,
   JSON.parse(readFileSync(new URL(`../src/i18n/${language}.json`, import.meta.url))),
 ]));
-function moduleAt(path) {
+function moduleAt(path, document = { documentElement: { lang: "" } }) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   const exports = {};
   const code = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
   } }).outputText;
-  vm.runInNewContext(code, { exports, navigator: { language: "en" },
+  vm.runInNewContext(code, { exports, document, navigator: { language: "en" },
     require: path => ({ default: dictionaries[path.slice(2, -5)] }),
   });
   return exports;
@@ -34,7 +34,9 @@ test("all seven complete dictionaries preserve placeholders and their order", ()
 });
 
 test("locale resolution and live formatting cover every selectable language", () => {
-  const locale = moduleAt("../src/i18n/index.ts");
+  const document = { documentElement: { lang: "" } };
+  const locale = moduleAt("../src/i18n/index.ts", document);
+  assert.equal(document.documentElement.lang, "en");
   assert.deepEqual(Array.from(locale.languages), languages);
   for (const [input, expected] of [
     ["en-GB", "en"], ["zh", "zh-Hans"], ["zh-CN", "zh-Hans"],
@@ -46,12 +48,16 @@ test("locale resolution and live formatting cover every selectable language", ()
   for (const language of languages) {
     assert.equal(locale.isLanguage(language), true);
     locale.setLanguage(language);
+    assert.equal(document.documentElement.lang, language);
     assert.equal(locale.t("Language"), dictionaries[language].Language);
     assert.equal(locale.fmt("Checking video… %d%", 53.9), dictionaries[language]["Checking video… %d%"].replace("%d", "53"));
   }
   dispose();
   assert.equal(changed, 6);
   assert.equal(locale.isLanguage("de-DE"), false);
+  document.documentElement.lang = "en";
+  locale.setLanguage("fr");
+  assert.equal(document.documentElement.lang, "fr", "same-language startup updates the document language");
 });
 
 test("a language change received during startup wins over the stale saved preference", async () => {

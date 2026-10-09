@@ -46,9 +46,11 @@ function detectLanguage(): KiriLanguage {
 }
 
 let language: KiriLanguage = detectLanguage();
+document.documentElement.lang = language;
 const listeners = new Set<() => void>();
 
 export function setLanguage(next: KiriLanguage) {
+  document.documentElement.lang = next;
   if (language === next) return;
   language = next;
   // Persistence is handled by the backend (language.json) so the choice is
