@@ -41,6 +41,7 @@ test("locale resolution and live formatting cover every selectable language", ()
   for (const [input, expected] of [
     ["en-GB", "en"], ["zh", "zh-Hans"], ["zh-CN", "zh-Hans"],
     ["zh_TW", "zh-Hant"], ["zh-Hant-HK", "zh-Hant"], ["zh-HK", "zh-Hant"],
+    ["zh-Hans-TW", "zh-Hans"], ["zh-Hans-HK", "zh-Hans"], ["zh-Hant-CN", "zh-Hant"],
     ["de-AT", "de"], ["ko_KR", "ko"], ["fr-CA", "fr"], ["ja-JP", "ja"], ["es", "en"],
   ]) assert.equal(locale.languageForLocale(input), expected, input);
   let changed = 0;

@@ -26,7 +26,10 @@ export function isLanguage(value: string): value is KiriLanguage {
 export function languageForLocale(value: string): KiriLanguage {
   const locale = value.toLowerCase().replaceAll("_", "-");
   if (/^zh(?:-|$)/.test(locale)) {
-    return locale.split("-").slice(1).some((part) => ["hant", "tw", "hk", "mo"].includes(part))
+    const parts = locale.split("-").slice(1);
+    if (parts.includes("hant")) return "zh-Hant";
+    if (parts.includes("hans")) return "zh-Hans";
+    return parts.some((part) => ["tw", "hk", "mo"].includes(part))
       ? "zh-Hant" : "zh-Hans";
   }
   const base = locale.split("-")[0];

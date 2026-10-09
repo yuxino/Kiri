@@ -8,10 +8,16 @@ pub fn language_for_locale(value: &str) -> &'static str {
     let parts: Vec<_> = value.split('-').collect();
     match parts[0] {
         "zh" => {
+            if parts.contains(&"hant") {
+                return "zh-Hant";
+            }
+            if parts.contains(&"hans") {
+                return "zh-Hans";
+            }
             if parts
                 .iter()
                 .skip(1)
-                .any(|part| matches!(*part, "hant" | "tw" | "hk" | "mo"))
+                .any(|part| matches!(*part, "tw" | "hk" | "mo"))
             {
                 "zh-Hant"
             } else {
@@ -32,6 +38,9 @@ mod tests {
         for (input, expected) in [
             ("zh_TW", "zh-Hant"),
             ("zh-Hant-HK", "zh-Hant"),
+            ("zh-Hans-TW", "zh-Hans"),
+            ("zh-Hans-HK", "zh-Hans"),
+            ("zh-Hant-CN", "zh-Hant"),
             ("zh-CN", "zh-Hans"),
             ("zh", "zh-Hans"),
             ("de-AT", "de"),
