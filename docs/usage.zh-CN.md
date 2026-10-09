@@ -1,6 +1,8 @@
 # Kiri 使用说明
 
-[返回 README](../README_ZH.md) · [English](usage.md)
+**简体中文** · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md)
+
+[返回 README](../README.md)
 
 ## 安装与更新
 
@@ -20,6 +22,10 @@ Linux：Wayland 捕获支持连接一台显示器；MP4 录屏可通过本地 Pu
 
 macOS Dock：设置中的「在 Dock 中显示」会立即切换图标显示，并记住选择；隐藏后仍可使用菜单栏和截图快捷键。
 
+## 语言
+
+在「设置 → 通用 → 语言」中选择 English、简体中文、繁體中文、日本語、Deutsch、한국어 或 Français。选择会应用到每个已打开的 Kiri 窗口，重启后仍会保留；首次启动跟随系统语言。界面语言不会改变 Linux 已安装的 OCR 语言数据。
+
 ## 截图与录屏
 
 按 ⇧⌘A（macOS）或 Shift+Ctrl+A（Windows / Linux X11），点击窗口或拖出一个区域。Wayland 使用“截图”按钮，或在桌面设置中绑定 `kiri --capture`。支持该接口的桌面还可以通过设置 → 通用 → Wayland 桌面快捷键，由桌面授权并分配截图、暂停/继续和停止的按键。Ubuntu 24.04 / GNOME 46 仍使用命令快捷键。
@@ -33,6 +39,10 @@ macOS 上，选区后若更改显示器布局、分辨率或缩放，请重新�
 输入标注文字时，Ctrl/Cmd+Z 撤销文字，Shift+Enter 换行。Esc 先退出本次文字编辑，再按一次取消捕获。关闭已保存图片的编辑器时，如有未保存修改，会询问保存、放弃或继续编辑。
 
 在 GNOME Wayland 上，如果首次截图没有出现授权窗口，请打开 Kiri 素材库，在错误提示中点击请求授权。在 GNOME 弹窗中允许截图，然后重新发起截图；授权时产生的图片不会进入 Kiri。详见 [Linux 指南](linux.md)。
+
+## GIF 转换
+
+素材库中的 MP4 转 GIF 会先检查视频能否解码，再开始编码。检查或转换时可按「取消」，多个任务可按「全部取消」。取消会保留原始视频，最后保存到素材库的阶段不能取消。
 
 ## 隐私
 

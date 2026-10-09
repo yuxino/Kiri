@@ -5,7 +5,12 @@
   <p>
     <a href="https://kiri.yuxino.cn">官网</a>
     · <strong>简体中文</strong>
-    · <a href="README_EN.md"><strong>English</strong></a>
+    · <a href="README_EN.md">English</a>
+    · <a href="README_ZH_TW.md">繁體中文</a>
+    · <a href="README_JA.md">日本語</a>
+    · <a href="README_DE.md">Deutsch</a>
+    · <a href="README_KO.md">한국어</a>
+    · <a href="README_FR.md">Français</a>
   </p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="最新版本"></a>
@@ -38,6 +43,8 @@
 3. 按 `Enter` 或双击选区内的空白处完成截图，`Esc` 取消。标注时请先切到选择工具；双击文字仍用于编辑。截图会复制到剪贴板，也会保存在素材库；完成卡上的「置顶」可直接打开悬浮参考图。
 
 开始标注或录屏前，点击滑杆按钮，可在选区边上直接输入宽高，单位为像素。
+
+在「设置 → 通用 → 语言」中选择七种界面语言。选择会应用到每个 Kiri 窗口，重启后仍会保留；首次启动跟随系统语言。
 
 素材保存在本机。远程 OCR 可选，每次上传前都会询问。Linux 配置、MP4 声音录制、Wayland 快捷键和平台限制见 [Linux 指南](docs/linux.md)。
 
