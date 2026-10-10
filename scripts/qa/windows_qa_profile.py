@@ -17,6 +17,13 @@ def remove_generated_directory(path):
         try:
             shutil.rmtree(path)
             return
+        except FileNotFoundError:
+            # WebView2 can remove a transient cache file after rmtree enumerates
+            # it. Finish removing the generated tree before restoring the backup.
+            if not path.exists():
+                return
+            if time.monotonic() >= deadline:
+                raise
         except PermissionError as error:
             # taskkill /T has stopped this run's app. WebView2 can still be
             # releasing its cache handles; retry only sharing/lock violations.

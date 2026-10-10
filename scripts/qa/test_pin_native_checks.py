@@ -140,6 +140,58 @@ class NativePinChecks(unittest.TestCase):
                         pass
             self.assertEqual((backup / "original-0/prior.txt").read_text(), "prior QA data")
 
+    def test_disappearing_webview_cache_file_still_removes_tree_and_restores_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, backup = root / "original", root / "backup"
+            original.mkdir(); backup.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            actual_remove, calls = shutil.rmtree, []
+            def remove_after_cache_exit(path):
+                calls.append(path)
+                if len(calls) == 1:
+                    (path / "lockfile").unlink()
+                    raise FileNotFoundError("WebView cache file disappeared")
+                actual_remove(path)
+            with patch("windows_qa_profile.shutil.rmtree", side_effect=remove_after_cache_exit):
+                with isolated_app_directories((original,), backup):
+                    (original / "lockfile").write_text("generated")
+                    (original / "other-cache").write_text("generated")
+            self.assertEqual(len(calls), 2)
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertFalse((original / "other-cache").exists())
+            self.assertEqual(list(backup.iterdir()), [])
+
+    def test_already_removed_generated_tree_restores_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, backup = root / "original", root / "backup"
+            original.mkdir(); backup.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            actual_remove, calls = shutil.rmtree, []
+            def remove_then_report_missing(path):
+                calls.append(path)
+                actual_remove(path)
+                raise FileNotFoundError("Generated directory was removed")
+            with patch("windows_qa_profile.shutil.rmtree", side_effect=remove_then_report_missing):
+                with isolated_app_directories((original,), backup):
+                    (original / "generated.txt").write_text("generated")
+            self.assertEqual(len(calls), 1)
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+
+    def test_repeated_missing_cache_failure_does_not_hide_unremoved_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, backup = root / "original", root / "backup"
+            original.mkdir(); backup.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            with patch("windows_qa_profile.shutil.rmtree", side_effect=FileNotFoundError("cache race")), patch("windows_qa_profile.time.monotonic", side_effect=[0, 21]):
+                with self.assertRaisesRegex(RuntimeError, "Could not restore"):
+                    with isolated_app_directories((original,), backup):
+                        (original / "generated.txt").write_text("generated")
+            self.assertEqual((backup / "original-0/prior.txt").read_text(), "prior QA data")
+            self.assertTrue((original / "generated.txt").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
