@@ -75,9 +75,15 @@ text and direction, complete two-line keyboard entry, and Clipboard PNG. The
 earlier `09b62e7` candidate also rendered the saved label correctly in the
 borderless pin window while resizing proportionally from 1360×850 to 1160×726.
 
-This task does not replace that fixed-path application. The editor/pin results
-do not establish screenshot-overlay completion/clipboard/focus, physical IME
-composition, or installed Windows/Ubuntu label interaction. The coordinating
-test slot owns broader combined native acceptance and the merge decision.
+The coordinator's product-equivalent `97d83a5` tree additionally passed the
+actual macOS overlay's Direct Pin action during text editing, proportional
+1360×816 → 1160×696 resizing, unpin/repin/close and native PNG clipboard output.
+Decoded clipboard and saved-asset RGBA pixels matched exactly. Its `src` and
+`src-tauri` trees were verified identical to the tested label/Pin combination.
+
+This task does not replace that fixed-path application. Physical IME composition
+and installed Windows/Ubuntu label interaction remain outside this task's
+evidence. The coordinating test slot owns combined native acceptance and the
+authorized merge sequence.
 Pin/QR/native completion callbacks in the isolated harness are explicit no-ops;
 the browser results establish layout and annotation behavior, not system IPC.
