@@ -19,6 +19,11 @@ on:
         required: false
         default: ''
         type: string
+      windows_color_candidate_run_id:
+        description: 'Completed Windows package dispatch to recheck with unchanged application sources'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -68,6 +73,7 @@ jobs:
           python3 scripts/qa/test_ci_plan.py
           python3 scripts/qa/test_linux_package_provenance.py
           python3 scripts/qa/test_windows_package_provenance.py
+          python3 scripts/qa/test_windows_capture_color_candidate.py
           python3 scripts/qa/test_linux_audio_tone.py
       - name: Verify the formal release tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -589,9 +595,42 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sig
           if-no-files-found: error
 
+  windows-color-recheck:
+    name: Recheck native Windows colors with the identical installed executable
+    needs: plan
+    if: inputs.windows_color_candidate_run_id != ''
+    runs-on: windows-2025
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KIRI_COLOR_CANDIDATE_RUN: ${{ inputs.windows_color_candidate_run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify unchanged application sources and candidate executable provenance
+        run: python scripts/qa/windows-capture-color-candidate.py --run "$env:KIRI_COLOR_CANDIDATE_RUN"
+      - run: python -m pip install pywinauto==0.6.9 Pillow==11.3.0
+      - name: Verify native hover colors, clipboard, selection and focus
+        timeout-minutes: 4
+        run: python scripts/qa/windows-capture-color-native.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-capture-color-review
+          path: windows-capture-color-review/
+          retention-days: 5
+          if-no-files-found: warn
+
   quality:
     name: CI quality gate
-    needs: [plan, fast-checks, countdown-ui, test-rust, build-linux, build-windows, build-macos, test-linux-wayland, recheck-linux-x11]
+    needs: [plan, fast-checks, countdown-ui, test-rust, build-linux, build-windows, build-macos, test-linux-wayland, recheck-linux-x11, windows-color-recheck]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -600,3 +639,8 @@ jobs:
         env:
           KIRI_CI_CHECK_RESULTS: ${{ toJSON(needs) }}
         run: python3 scripts/qa/ci-plan.py
+      - name: Require requested Windows color recheck to pass
+        if: inputs.windows_color_candidate_run_id != ''
+        env:
+          KIRI_COLOR_RECHECK_RESULT: ${{ needs.windows-color-recheck.result }}
+        run: test "$KIRI_COLOR_RECHECK_RESULT" = success

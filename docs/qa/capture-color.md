@@ -51,6 +51,20 @@ actual recording or sends OCR content to a provider. Evidence is uploaded as
 checksum, source SHA, clipboard receipts, application logs and failure diagnostics.
 This standard hosted desktop does not establish mixed-DPI hardware acceptance.
 
+For a QA-only correction after a package run, reuse its identical executable:
+
+```sh
+gh workflow run build.yml --ref feat/screenshot-hover-color-picker -f profile=quick \
+  -f windows_color_candidate_run_id=38024060740
+```
+
+The candidate verifier requires the official completed dispatch, successful build,
+package/install and existing native checks, and no failed Windows step except the
+color QA step. It rejects application or packaging source changes, compares the
+downloaded executable checksum to the original installed QA receipt, and records
+candidate/source/harness provenance. This route tests the previously installed
+bytes; it does not rebuild or create a signed release package.
+
 ## 2026-10-10 local verification
 
 - Based on main `f9db76c` (v1.6.14), on macOS 27.0.1.
