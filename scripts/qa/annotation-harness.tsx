@@ -1,3 +1,4 @@
+import {LabelControls, type LabelMark} from "../../src/annotation/LabelControls";
 // Isolated annotation QA: generated source pixels, no native app or user library.
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
@@ -11,7 +12,8 @@ import "../../src/styles/design-system.css";
 const source = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="white"/><text x="32" y="48" font-family="sans-serif" font-size="18" fill="#555">Kiri annotation fixture</text></svg>');
 const original: AnnotationMark = {kind:"rectangle",id:1,rect:{x:100,y:100,width:140,height:90},color:"cherry",width:4};
 const fresh = new URLSearchParams(location.search).has("fresh");
-const callouts = new URLSearchParams(location.search).has("callouts");
+const labels = new URLSearchParams(location.search).has("labels");
+const callouts = labels || new URLSearchParams(location.search).has("callouts");
 const language = new URLSearchParams(location.search).get("lang");
 if (languages.includes(language as typeof languages[number])) setLanguage(language as typeof languages[number]);
 const initialDocument: AnnotationDocumentV1 = {schemaVersion:1,canvas:{width:640,height:360},sourcePixels:{width:640,height:360},marks:fresh||callouts?[]:[original]};
@@ -22,15 +24,18 @@ function Harness() {
   const [tool,setTool]=useState<Tool>(fresh?"rectangle":"select");
   const [marks,setMarks]=useState(initialDocument.marks);
   const [appearance,setAppearance]=useState(DEFAULT_APPEARANCE);
+  const [selectedLabel,setSelectedLabel]=useState<LabelMark|null>(null);
   const [selected,setSelected]=useState<CalloutMark|null>(null);
   const [number,setNumber]=useState(1);
   const [undo,setUndo]=useState(false),[redo,setRedo]=useState(false);
   const [exported,setExported]=useState<string|null>(null);
   const [bounds,setBounds]=useState({x:0,y:0,width:innerWidth-48,height:innerHeight-48});
   useEffect(()=>{const resize=()=>setBounds({x:0,y:0,width:innerWidth-48,height:innerHeight-48});window.addEventListener("resize",resize);return()=>window.removeEventListener("resize",resize);},[]);
-  const selection=useCallback((mark:AnnotationMark|null)=>setSelected(mark?.kind==="callout"?mark:null),[]);
+  const selection=useCallback((mark:AnnotationMark|null)=>{setSelected(mark?.kind==="callout"?mark:null);setSelectedLabel(mark?.kind==="text"&&mark.labelDirection?mark:null);},[]);
   const changed=useCallback((marks:AnnotationMark[])=>{setMarks(marks);setNumber(nextCalloutNumber(marks));},[]);
   useEffect(()=>{const img=new Image();img.onload=()=>setImage(img);img.src=source;return()=>{img.onload=null;};},[]);
+  useEffect(()=>{Object.assign(window,{__qaCommit:()=>canvas.current?.commitTextEditing(),__qaUndo:()=>canvas.current?.undo(),__qaRedo:()=>canvas.current?.redo(),
+    __qaExportResult:()=>canvas.current?.exportResult(),__qaEdit:()=>canvas.current?.editSelectedText()});},[]);
   const frame=useCallback((value:HTMLCanvasElement)=>{Object.assign(window,{__qaCanvas:value});},[]);
   const history=useCallback((u:boolean,r:boolean)=>{setUndo(u);setRedo(r);},[]);
   return <div className="library-root kiri-canvas-surface" style={{padding:24,boxSizing:"border-box",height:"100vh"}}>
@@ -51,6 +56,10 @@ function Harness() {
       canSetSize={false} sizeControlsOpen={false} onToggleSize={()=>{}} disabled={false}
       onUndo={()=>canvas.current?.undo()} onRedo={()=>canvas.current?.redo()} onQr={()=>{}} onCancel={()=>{}}
       onDone={()=>{void canvas.current?.exportResult().then(result=>{if(result){Object.assign(window,{__qaExport:result.document});setExported(URL.createObjectURL(new Blob([result.png as BlobPart],{type:"image/png"})));}});}}
+      showLabelControls={tool==="label"||(tool==="select"&&selectedLabel!==null)} selectedLabelId={selectedLabel?.id}
+      labelControls={<LabelControls selected={selectedLabel} appearance={appearance}
+        onChange={(patch,transient)=>{setAppearance({...appearance,...patch});canvas.current?.updateSelectionAppearance(patch,transient);}}
+        onFinish={()=>canvas.current?.finishAppearanceAdjustment()}/>}
       showCalloutControls={tool==="callout"||(tool==="select"&&selected!==null)}
       selectedCalloutId={selected?.id}
       calloutControls={<CalloutControls selected={selected} nextNumber={number} appearance={appearance} onNextNumber={setNumber}

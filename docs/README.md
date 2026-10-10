@@ -176,3 +176,5 @@ development.
 - [ADR 0079: Seven languages and a shared preference](adr/0079-seven-language-preferences.md)
 - [ADR 0080: Pinned macOS release signing](adr/0080-pinned-macos-release-signing.md)
 - [ADR 0081: Editable numbered screenshot callouts](adr/0081-numbered-screenshot-callouts.md)
+
+- [ADR 0084 — Directional label bubbles](adr/0084-directional-label-bubbles.md)

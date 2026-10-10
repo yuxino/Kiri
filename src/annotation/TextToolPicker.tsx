@@ -6,14 +6,14 @@ import type {Tool} from "./model";
 import "./callout-controls.css";
 
 /** Text and numbered notes share one slot, keeping both capture toolbars compact. */
-export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(tool: "text" | "callout"): void}) {
-  const [choice, setChoice] = useState<"text" | "callout">(tool === "callout" ? "callout" : "text");
+export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(tool: "text" | "callout" | "label"): void}) {
+  const [choice, setChoice] = useState<"text" | "callout" | "label">(tool === "callout" || tool === "label" ? tool : "text");
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({left: 0, top: 0});
   const anchor = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  const active = tool === "text" || tool === "callout";
-  useEffect(() => {if (active) setChoice(tool as "text" | "callout");}, [tool, active]);
+  const active = tool === "text" || tool === "callout" || tool === "label";
+  useEffect(() => {if (active) setChoice(tool as "text" | "callout" | "label");}, [tool, active]);
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
     const rect = anchor.current.getBoundingClientRect();
@@ -34,11 +34,12 @@ export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(
   }, [open]);
   return <div className="kiri-text-tool">
     <button type="button" className="kiri-text-tool-main" aria-pressed={active}
-      title={t(choice === "text" ? "Text (T)" : "Numbered callout (N)")}
-      aria-label={t(choice === "text" ? "Text (T)" : "Numbered callout (N)")}
-      onClick={() => onSelect(choice)}><KiriIcon name={choice === "text" ? "textformat" : "number.circle"} size={16}/></button>
+      title={t(choice === "text" ? "Text (T)" : choice === "label" ? "Label bubble (B)" : "Numbered callout (N)")}
+      aria-label={t(choice === "text" ? "Text (T)" : choice === "label" ? "Label bubble (B)" : "Numbered callout (N)")}
+      onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()}
+      onClick={() => onSelect(choice)}><KiriIcon name={choice === "text" ? "textformat" : choice === "label" ? "tag" : "number.circle"} size={16}/></button>
     <button ref={anchor} type="button" className="kiri-text-tool-toggle" aria-label={t("Text tools")}
-      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+      aria-haspopup="menu" aria-expanded={open} onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()} onClick={() => setOpen(value => !value)}>
       <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
     </button>
     {open && createPortal(<div ref={menu} role="menu" className="kiri-text-tool-menu kiri-dark" style={position}
@@ -52,10 +53,10 @@ export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(
           buttons[(index + (event.key === "ArrowDown" ? 1 : buttons.length - 1)) % buttons.length]?.focus();
         }
       }}>
-      {(["text", "callout"] as const).map(value => <button key={value} type="button" className="kiri-text-tool-option" role="menuitemradio"
+      {(["text", "callout", "label"] as const).map(value => <button key={value} type="button" className="kiri-text-tool-option" role="menuitemradio"
         aria-checked={choice === value} onClick={() => {setChoice(value); setOpen(false); onSelect(value); anchor.current?.focus();}}>
-        <KiriIcon name={value === "text" ? "textformat" : "number.circle"}/>
-        <span>{t(value === "text" ? "Text" : "Numbered callout")}</span><kbd>{value === "text" ? "T" : "N"}</kbd>
+        <KiriIcon name={value === "text" ? "textformat" : value === "label" ? "tag" : "number.circle"}/>
+        <span>{t(value === "text" ? "Text" : value === "label" ? "Label bubble" : "Numbered callout")}</span><kbd>{value === "text" ? "T" : value === "label" ? "B" : "N"}</kbd>
       </button>)}
     </div>, document.body)}
   </div>;

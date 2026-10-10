@@ -102,6 +102,28 @@ body,
   color: #ffffff;
 }
 
+.kiri-label-dot { display:grid; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; cursor:pointer; }
+.kiri-label-dot span { display:block; border-radius:50%; pointer-events:none; }
+.kiri-label-dot:hover:not(:disabled) { background:rgba(255,255,255,.24); box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+.kiri-label-dot:focus-visible { outline:2px solid #fff; box-shadow:0 0 0 3px #333; }
+.kiri-label-dot:disabled { opacity:.5; cursor:default; }
+.kiri-label-controls { width:330px; max-width:100%; box-sizing:border-box; padding:10px 12px; display:flex; flex-direction:column; gap:10px; font-size:11px; }
+.kiri-label-control-row { display:flex; flex-wrap:wrap; align-items:center; gap:14px; }
+.kiri-label-directions { display:flex; gap:2px; padding:2px; border:1px solid #444; border-radius:7px; }
+.kiri-label-direction { display:grid; place-items:center; height:28px; padding:0 5px; border:0; border-radius:4px; color:#aaa; background:transparent; cursor:pointer; }
+.kiri-label-direction[aria-pressed=true] { color:#fff; background:#414141; }
+.kiri-label-direction:hover { background:#555; color:#fff; }
+.kiri-label-direction:focus-visible, .kiri-label-swatch:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.kiri-label-size { flex:1; display:flex; align-items:center; gap:8px; min-width:150px; }
+.kiri-label-size input { flex:1; min-width:60px; width:60px; }
+.kiri-label-size output { min-width:20px; text-align:right; font-variant-numeric:tabular-nums; }
+.kiri-label-colors { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.kiri-label-swatch { width:19px; height:19px; padding:0; border:2px solid #171717; outline:1px solid #666; border-radius:50%; cursor:pointer; }
+.kiri-label-swatch[aria-pressed=true] { outline-color:#fff; }
+.kiri-label-swatch:hover { opacity:.7; }
+.kiri-label-colors span { flex-basis:100%; color:#aaa; line-height:1.4; }
+.kiri-label-text-editor:focus { outline:none; box-shadow:none; }
+
 .kiri-primary-button {
   font: 600 12.5px var(--kiri-font-ui);
   color: var(--kiri-on-accent);

@@ -1,0 +1,184 @@
+[
+  {
+    "language": "en",
+    "tip": "Click the dot to switch sides.",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  },
+  {
+    "language": "zh-Hans",
+    "tip": "点击圆点切换左右方向。",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  },
+  {
+    "language": "zh-Hant",
+    "tip": "點擊圓點切換左右方向。",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  },
+  {
+    "language": "ja",
+    "tip": "点をクリックして左右を切り替えます。",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  },
+  {
+    "language": "de",
+    "tip": "Auf den Punkt klicken, um die Seite zu wechseln.",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  },
+  {
+    "language": "ko",
+    "tip": "점을 클릭하여 좌우 방향을 전환하세요.",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  },
+  {
+    "language": "fr",
+    "tip": "Cliquez sur le point pour changer de côté.",
+    "viewport": {
+      "width": 480,
+      "height": 640
+    },
+    "bounds": [
+      {
+        "x": 32,
+        "y": 277,
+        "width": 416,
+        "height": 81,
+        "right": 448,
+        "bottom": 358
+      },
+      {
+        "x": 75,
+        "y": 364,
+        "width": 330,
+        "height": 107.3984375,
+        "right": 405,
+        "bottom": 471.3984375
+      }
+    ]
+  }
+]

@@ -26,12 +26,14 @@ import {
   dragAnnotationHandle,
   markIndexAt,
   selectionBounds,
+  labelGeometry,
   translateMark,
   type AnnotationMark,
   type CalloutMark,
   type AnnotationDocumentV1,
   type AppearanceSettings,
   type TextBackgroundStyle,
+  type LabelDirection,
   type Tool,
   type MosaicShape,
 } from "./model";
@@ -140,6 +142,7 @@ interface EditingState {
   color: ColorPreset;
   background: TextBackgroundStyle;
   fontSize: number;
+  labelDirection?: LabelDirection;
 }
 
 type Interaction =
@@ -309,7 +312,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     useEffect(()=>{
       const selected=selectedIndex===null?null:marks[selectedIndex]??null;
       const mark:AnnotationMark|null=editing?{kind:"text",id:editing.index===null?-1:marks[editing.index]?.id??-1,
-        text:editing.text,rect:editing.rect,color:editing.color,background:editing.background,fontSize:editing.fontSize}:selected;
+        text:editing.text,rect:editing.rect,color:editing.color,background:editing.background,fontSize:editing.fontSize,
+        ...(editing.labelDirection?{labelDirection:editing.labelDirection}:{})}:selected;
       onSelectionInfo?.(mark,!!editing);
     },[marks,selectedIndex,editing,onSelectionInfo]);
 
@@ -319,7 +323,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const mark:AnnotationMark|null=editing&&text!==null?{kind:"text",id:editing.id,text,
         rect:{x:editing.rect.x+insets.x,y:editing.rect.y+insets.y,
           width:Math.max(1,editing.rect.width-2*insets.x),height:Math.max(1,editing.rect.height-2*insets.y)},
-        color:editing.color,background:editing.background,fontSize:editing.fontSize}:null;
+        color:editing.color,background:editing.background,fontSize:editing.fontSize,
+        ...(editing.labelDirection?{labelDirection:editing.labelDirection}:{})}:null;
       onTextDraftChange?.(mark,editing?.index!=null?marks[editing.index]?.id??null:null,!!editing);
     },[editing,marks,onTextDraftChange]);
 
@@ -470,6 +475,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         color: current.color,
         background: current.background,
         fontSize: current.fontSize,
+        ...(current.labelDirection?{labelDirection:current.labelDirection}:{}),
       };
       if (current.index !== null) {
         const unchanged =
@@ -481,7 +487,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               previous.rect.height === newMark.rect.height &&
               previous.color === newMark.color &&
               previous.background === newMark.background &&
-              previous.fontSize === newMark.fontSize
+              previous.fontSize === newMark.fontSize && previous.labelDirection === newMark.labelDirection
             : false;
         if (!unchanged) {
           history.replace(current.index, newMark);
@@ -505,10 +511,11 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const height=Math.max(1,Math.min(mark.rect.height+2*insets.y,documentSize.height));
       const next:EditingState={id:mark.id,index,text:mark.text,uiScale,rect:{x:Math.min(Math.max(0,mark.rect.x-insets.x),Math.max(0,documentSize.width-width)),
         y:Math.min(Math.max(0,mark.rect.y-insets.y),Math.max(0,documentSize.height-height)),width,height},
-        maxWidth:Math.max(width,documentSize.width-Math.max(0,mark.rect.x-insets.x)),color:mark.color,background:mark.background,fontSize:mark.fontSize};
+        maxWidth:Math.max(width,documentSize.width-Math.max(0,mark.rect.x-insets.x)),color:mark.color,background:mark.background,fontSize:mark.fontSize,labelDirection:mark.labelDirection};
       editingRef.current=next;setEditing(next);selectMark(index);publishHistory();
     },[history,documentSize.width,documentSize.height,selectMark,publishHistory,hitTestScale.radial]);
 
+    const fitLabelRef = useRef<(mark:AnnotationMark)=>AnnotationMark>(mark=>mark);
     const styleAdjustment=useRef<{index:number;original:AnnotationMark}|null>(null);
     const fitCallout = useCallback((mark: CalloutMark): CalloutMark => {
       const context = canvasRef.current?.getContext("2d");
@@ -555,14 +562,15 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       if(interactionsDisabled())return;
       const editing=editingRef.current;
       if(editing){
-        const next={...editing,color:patch.colorPreset??editing.color,background:patch.textBackgroundStyle??editing.background,fontSize:patch.textFontSize??editing.fontSize};
+        const next={...editing,color:patch.colorPreset??editing.color,background:patch.textBackgroundStyle??editing.background,fontSize:patch.textFontSize??editing.fontSize,
+          ...(editing.labelDirection?{labelDirection:patch.labelDirection??editing.labelDirection}: {})};
         editingRef.current=next;setEditing(next);return;
       }
       const index=selectedIndexRef.current;if(index===null)return;
       const mark=history.elements[index];if(!mark)return;
       styleAdjustment.current??={index,original:mark};
       const updated=applyAnnotationAppearance(mark,patch);
-      const next=updated.kind === "callout" ? fitCallout(updated) : updated;
+      const next=updated.kind === "callout" ? fitCallout(updated) : updated.kind === "text" && updated.labelDirection ? fitLabelRef.current(updated) : updated;
       const elements=history.elements.slice();elements[index]=next;history.overwrite(elements);setMarks(elements);
       if(!transient)finishAppearanceAdjustment();
     },[history,interactionsDisabled,finishAppearanceAdjustment,fitCallout]);
@@ -579,6 +587,22 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       documentChangeRef.current?.(elements);
       if (!transient) finishAppearanceAdjustment();
     }, [history, interactionsDisabled, fitCallout, finishAppearanceAdjustment]);
+
+    const toggleLabel = useCallback((id: number) => {
+      if (interactionsDisabled() || interactionRef.current.kind !== "none") return;
+      blankDoubleClickRef.current = false;
+      const current = editingRef.current;
+      if (current?.id === id && current.labelDirection) {
+        const next: EditingState = {...current, labelDirection:current.labelDirection === "left" ? "right" : "left"};
+        editingRef.current = next; setEditing(next); return;
+      }
+      commitText(); finishAppearanceAdjustment();
+      const index = history.elements.findIndex(mark => mark.id === id);
+      const mark = history.elements[index];
+      if (!mark || mark.kind !== "text" || !mark.labelDirection) return;
+      history.replace(index, {...mark, labelDirection:mark.labelDirection === "left" ? "right" : "left"});
+      selectMark(index); syncMarks();
+    }, [history, interactionsDisabled, commitText, finishAppearanceAdjustment, selectMark, syncMarks]);
 
     const cancelInteraction=useCallback(()=>{
       if(editingRef.current){editingRef.current=null;setEditing(null);publishHistory();return true;}
@@ -623,7 +647,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           commitText();
         }
 
-        if (t === "text") {
+        if (t === "text" || t === "label") {
           const hit=markIndexAt(history.elements,p,hitTestScale);
           if(hit!==null&&history.elements[hit].kind==="text"){editText(hit);return;}
           const width = Math.max(1, Math.min(180*hitTestScale.radial, documentSize.width));
@@ -646,7 +670,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             maxWidth: Math.max(width,documentSize.width-frame.x),
             color: ap.colorPreset,
             background: ap.textBackgroundStyle,
-            fontSize: ap.textFontSize,
+            fontSize: t === "label" ? Math.min(ap.textFontSize, documentSize.width / 8, documentSize.height / 3) : ap.textFontSize,
+            ...(t === "label" ? {labelDirection: ap.labelDirection} : {}),
           };
           editingRef.current = nextEditing;
           setEditing(nextEditing);
@@ -770,6 +795,24 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const fitTextBounds = useCallback((mark: AnnotationMark, handle?: string,
       original: AnnotationMark = mark): AnnotationMark => {
       if (mark.kind !== "text") return mark;
+      if (mark.labelDirection) {
+        const context = canvasRef.current?.getContext("2d");
+        if (!context) return mark;
+        context.save();
+        let fontSize = mark.fontSize, width = mark.rect.width, height = mark.rect.height;
+        for (let attempt = 0; attempt < 32; attempt++) {
+          const horizontal = fontSize * 1.99;
+          width = Math.max(.1, Math.min(width, documentSize.width - horizontal * 2));
+          context.font = textFont(fontSize);
+          height = Math.max(.1, Math.ceil(layoutTextLines(mark.text, width, text => context.measureText(text).width).length * fontSize * 1.25));
+          if (height + fontSize * .8 <= documentSize.height && horizontal * 2 + width <= documentSize.width) break;
+          fontSize *= .8; width *= .8;
+        }
+        context.restore();
+        const xMargin = fontSize * 1.99, yMargin = fontSize * .4;
+        return {...mark, fontSize, rect:{x:Math.max(xMargin, Math.min(mark.rect.x, documentSize.width - xMargin - width)),
+          y:Math.max(yMargin, Math.min(mark.rect.y, documentSize.height - yMargin - height)), width, height}};
+      }
       const context = canvasRef.current?.getContext("2d");
       if (!context) return mark;
       const measureHeight = (width: number, fontSize: number) => {
@@ -810,7 +853,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         y: top ? anchorY - height : bottom ? anchorY : anchorY - height / 2,
         width, height,
       }};
-    }, [documentSize.height]);
+    }, [documentSize.height, documentSize.width]);
+
+    fitLabelRef.current = fitTextBounds;
 
     const onPointerMove = useCallback(
       (e: React.PointerEvent) => {
@@ -1351,6 +1396,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
     );
 
+    const dotMarks = draft && marks.some(mark => mark.id === draft.id)
+      ? marks.map(mark => mark.id === draft.id ? draft : mark) : marks;
     return (
       <div
         className="annotation-canvas-root"
@@ -1407,6 +1454,15 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           onPointerCancel={()=>{interactionRef.current={kind:"none"};setDraft(null);setSelectCursor("default");}}
           onPointerLeave={()=>setBrushCursor(null)}
         />
+        {dotMarks.map((mark, index) => {
+          if (mark.kind !== "text" || !mark.labelDirection || editing?.id === mark.id) return null;
+          const {dot, radius} = labelGeometry(mark.rect, mark.fontSize, mark.labelDirection);
+          if (markIndexAt(dotMarks.slice(index + 1), dot, hitTestScale) !== null) return null;
+          return <LabelDot key={mark.id} x={dot.x * viewScaleX} y={dot.y * viewScaleY}
+            radius={radius * Math.min(viewScaleX, viewScaleY)} color={COLOR_HEX[mark.color]}
+            direction={mark.labelDirection} disabled={interactionDisabled}
+            onToggle={() => toggleLabel(mark.id)}/>;
+        })}
         {editing && (
           <div
             style={{
@@ -1425,6 +1481,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               editing={editing}
               bounds={documentSize}
               disabled={interactionDisabled}
+              onToggleDirection={() => toggleLabel(editing.id)}
               onTextChange={updateEditingText}
               onRectChange={updateEditingRect}
               onCommit={commitText}
@@ -1445,6 +1502,7 @@ function TextEditor(props: {
   editing: EditingState;
   bounds: { width: number; height: number };
   disabled: boolean;
+  onToggleDirection(): void;
   onTextChange(text: string): void;
   onRectChange(rect: Rect): void;
   onCommit(): void;
@@ -1459,6 +1517,7 @@ function TextEditor(props: {
     bounds,
     disabled,
     onTextChange,
+    onToggleDirection,
     onRectChange,
     onCommit,
     onFinish,
@@ -1502,20 +1561,23 @@ function TextEditor(props: {
     const text = editing.text || t("Type something…");
     // Width follows the longest line (measureText on the whole string with
     // newlines yields a wrong width).
-    onRectChange(
-      fitTextEditorFrame({
+    const insets = textEditorInsets(editing.uiScale);
+    const marginX = editing.labelDirection ? Math.max(0, editing.fontSize * 1.99 - insets.x) : 0;
+    const marginY = editing.labelDirection ? Math.max(0, editing.fontSize * .4 - insets.y) : 0;
+    const frame = fitTextEditorFrame({
         text,
         fontSize: editing.fontSize,
-        x: editing.rect.x,
-        y: editing.rect.y,
-        maxWidth: editing.maxWidth,
+        x: editing.rect.x - marginX,
+        y: editing.rect.y - marginY,
+        maxWidth: Math.min(editing.maxWidth, bounds.width - 2 * marginX),
         uiScale: editing.uiScale,
-        boundsWidth: bounds.width,
-        boundsHeight: bounds.height,
+        boundsWidth: bounds.width - 2 * marginX,
+        boundsHeight: bounds.height - 2 * marginY,
         measureText: (value) => ctx.measureText(value).width,
-      }),
-    );
+      });
+    onRectChange({...frame, x:frame.x+marginX, y:frame.y+marginY});
   }, [
+    editing.labelDirection,
     bounds.height,
     bounds.width,
     editing.fontSize,
@@ -1526,10 +1588,24 @@ function TextEditor(props: {
     onRectChange,
   ]);
 
+  const insets = textEditorInsets(editing.uiScale);
+  const label = editing.labelDirection ? labelGeometry({x:editing.rect.x+insets.x, y:editing.rect.y+insets.y,
+    width:Math.max(1,editing.rect.width-insets.x*2),height:Math.max(1,editing.rect.height-insets.y*2)}, editing.fontSize, editing.labelDirection) : null;
+  const edge = label ? editing.labelDirection === "left" ? label.body.x : label.body.x+label.body.width : 0;
+  const sign = editing.labelDirection === "left" ? -1 : 1;
   return (
     <>
+    {label && <>
+      <svg aria-hidden="true" width={bounds.width} height={bounds.height} style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+        <rect {...label.body} rx={editing.fontSize*.45} fill="#303136"/>
+        <path d={`M${edge-sign} ${label.dot.y-label.tail} L${edge+sign*label.tail} ${label.dot.y} L${edge-sign} ${label.dot.y+label.tail} Z`} fill="#303136"/>
+      </svg>
+      <LabelDot x={label.dot.x} y={label.dot.y} radius={label.radius} color={COLOR_HEX[editing.color]}
+        direction={editing.labelDirection!} disabled={disabled} onToggle={onToggleDirection}/>
+    </>}
     <textarea
       ref={attachTextarea}
+      className={label ? "kiri-label-text-editor" : undefined}
       aria-label={t("Text content")}
       aria-describedby={hintId}
       disabled={disabled}
@@ -1556,9 +1632,9 @@ function TextEditor(props: {
         boxSizing: "border-box",
         padding: `${5*editing.uiScale}px ${8*editing.uiScale}px`,
         font: textFont(editing.fontSize),
-        color: COLOR_HEX[editing.color],
-        background: editing.background === "dark" ? "rgba(0,0,0,0.72)" : "transparent",
-        border: `${editing.uiScale}px solid ${COLOR_HEX[editing.color]}cc`,
+        color: label ? "#fafafa" : COLOR_HEX[editing.color],
+        background: label ? "transparent" : editing.background === "dark" ? "rgba(0,0,0,0.72)" : "transparent",
+        border: `${editing.uiScale}px solid ${label ? "#ffffff55" : COLOR_HEX[editing.color]+"cc"}`,
         borderRadius: 7,
         resize: "none",
         overflow: "hidden",
@@ -1587,3 +1663,20 @@ function TextEditor(props: {
 }
 
 export default AnnotationCanvas;
+
+
+function LabelDot({x, y, radius, color, direction, disabled, onToggle}: {
+  x:number; y:number; radius:number; color:string; direction:LabelDirection; disabled:boolean; onToggle():void;
+}) {
+  const size = Math.max(radius * 2 + 10, 22);
+  const title = t(direction === "left" ? "Point label right" : "Point label left");
+  return <button type="button" className="kiri-label-dot" title={title} aria-label={title} disabled={disabled}
+    onPointerDown={event => {event.stopPropagation(); event.preventDefault();}}
+    onClick={event => {event.stopPropagation(); onToggle();}}
+    onDoubleClick={event => {event.stopPropagation(); event.preventDefault();}}
+    onKeyDown={event => {event.stopPropagation();}}
+    onKeyUp={event => {event.stopPropagation();}}
+    style={{position:"absolute",left:x-size/2,top:y-size/2,width:size,height:size,pointerEvents:"auto"}}>
+    <span style={{width:radius*2,height:radius*2,background:color}}/>
+  </button>;
+}

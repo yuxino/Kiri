@@ -22,6 +22,44 @@ const text = {kind: "text", id: 1, text: "first line\nsecond line", rect: {x: 40
 const rectangle = {kind: "rectangle", id: 2, rect: {x: 100, y: 100, width: 100, height: 80}, color: "white", width: 3};
 const appearance = model.DEFAULT_APPEARANCE;
 
+const label = {...text, color:"cherry", labelDirection:"left", rect:{x:140,y:100,width:150,height:45}};
+function dotButton(h) {
+  const node = nodes(h.component.render()).find(node=>node?.type?.name==="LabelDot");
+  assert.ok(node, "the visible label has an accessible dot control");
+  return node.type(node.props);
+}
+
+test("clicking a label dot flips once without moving text, starts no drag, and survives undo/reopen", async()=>{
+  const h=annotation(documentWith([label]),{selectedMarkId:label.id});
+  let stopped=0, prevented=0;
+  const event={stopPropagation(){stopped++;},preventDefault(){prevented++;}};
+  const button=dotButton(h);
+  button.props.onPointerDown(event); button.props.onKeyDown(event); button.props.onKeyUp(event);
+  assert.equal(stopped,3); assert.equal(prevented,1);
+  button.props.onClick(event); h.component.render();
+  const flipped={...label,labelDirection:"right"};
+  assert.deepEqual(h.changes.at(-1),[flipped]);
+  assert.equal(h.changes.length,1);
+  const saved=await h.ref.current.exportResult();
+  const reopened=annotation(saved.document);
+  assert.deepEqual((await reopened.ref.current.exportResult()).document.marks,[flipped]);
+  h.ref.current.undo();h.component.render();assert.deepEqual(h.changes.at(-1),[label]);
+  h.ref.current.redo();h.component.render();assert.deepEqual(h.changes.at(-1),[flipped]);
+});
+
+test("label font changes remain a single edit and keep both possible dots inside narrow canvases",()=>{
+  const h=annotation(documentWith([label]),{selectedMarkId:label.id});
+  h.ref.current.updateSelectionAppearance({textFontSize:64},true);
+  h.ref.current.updateSelectionAppearance({textFontSize:32},true);
+  h.ref.current.finishAppearanceAdjustment();h.component.render();
+  assert.equal(h.changes.length,1);
+  const resized=h.changes[0][0];
+  const bounds=model.labelMovementBounds(resized);
+  assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=640&&bounds.y+bounds.height<=360);
+  assert.equal(resized.labelDirection,"left");
+  h.ref.current.undo();h.component.render();assert.deepEqual(h.changes.at(-1),[label]);
+});
+
 function annotation(initialDocument, options = {}) {
   const exports = [], frames = [], creations = [], ref = {current: null}, changes = [];
   function canvas() {
@@ -313,6 +351,7 @@ for (const sample of [
 
 const movableMarks = [
   rectangle,
+  label,
   {...text, rect: {x: 100, y: 100, width: 100, height: 80}},
   {kind: "pen", id: 3, points: [{x:100,y:100},{x:200,y:180}], color:"white", width:3},
   {kind: "line", id: 4, start:{x:100,y:100}, end:{x:200,y:180}, color:"white", width:3},

@@ -210,6 +210,12 @@ cropped and use the common preview/export renderer. Badge style and size join
 the local appearance preference; note content stays in the editable document.
 See ADR 0081.
 
+Screenshot label bubbles share the text mark and inline editor, with an optional
+`labelDirection` field. The text rect remains fixed when its dot is clicked;
+only the tip and dot change sides. Shared document geometry drives canvas/export,
+selection bounds and the accessible dot control. New labels reserve room for
+both sides, while crops keep the intersecting body, tip or dot. See ADR 0084.
+
 ## Managed library flow
 
 `AppState` owns one mutex-guarded library context containing the active root,
