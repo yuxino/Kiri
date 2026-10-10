@@ -29,6 +29,9 @@ function editor(options = {}) {
     exportResult: async () => { mutations.push("export"); return null; },
     undo: () => mutations.push("undo"), redo: () => mutations.push("redo"),
     deleteSelection: () => mutations.push("delete"),
+    // Style/text finalizers have no native/library side effect. The annotation
+    // component tests own their content/history behavior; QR must not export.
+    finishAppearanceAdjustment() {}, commitTextEditing() {}, clearSelection() {},
   };
   const api = {
     getAssetAnnotationProject: async () => options.snapshot ? await options.snapshot : snapshot,
@@ -47,6 +50,7 @@ function editor(options = {}) {
         nextCalloutNumber: marks => Math.min(999, marks.reduce((next,mark) => mark.kind === "callout" ? Math.max(next,mark.number+1) : next,1)) },
       "../annotation/LabelControls": {LabelControls: props => ({type:"label-controls",props})},
       "../annotation/CalloutControls": {CalloutControls: "callout-controls"},
+      "../annotation/AnnotationStyleControls": {AnnotationStyleControls: "annotation-style-controls"},
       "../annotation/TextToolPicker": {TextToolPicker: "text-tool-picker"},
       "../annotation/text-composition.js": textComposition,
       "../annotation/useAnnotationAppearance": { useAnnotationAppearance: () => [{ color: "white", penWidth: 3, shapeWidth: 2, textFontSize: 18, textBackgroundStyle: "transparent", mosaicBrushDiameter: 24, mosaicStyle: "pixel", mosaicIntensity: "standard" }, () => {}] },
@@ -169,7 +173,7 @@ test("QR pauses background shortcuts synchronously and Escape restores crop, mar
   tree = h.component.render();
   assert.deepEqual(h.mutations, []);
   assert.equal(button(tree, "Save").props.disabled, true);
-  assert.equal(button(tree, "Save As…").props.disabled, true);
+  assert.equal(tool(tree, "Save As…").props.disabled, true);
   assert.ok(nodes(tree).some(node => node?.props?.inert === true));
   const imeEscape = h.key("Escape", { isComposing: true });
   assert.equal(imeEscape.defaultPrevented, false);
@@ -281,10 +285,10 @@ test("OCR images stay read-only after leaving QR and expose only recognition and
   tree = h.component.render();
   assert.equal(qr(tree), undefined);
   assert.ok(tool(tree, "Recognize QR Codes"));
-  assert.ok(button(tree, "Close"));
+  assert.ok(tool(tree, "Close"));
   for (const title of ["Crop (C)", "Pen (P)", "Undo (⌘Z)", "Recognize Saved Image Locally"]) assert.equal(tool(tree, title), undefined);
   assert.equal(button(tree, "Save"), undefined);
-  assert.equal(button(tree, "Save As…"), undefined);
+  assert.equal(tool(tree, "Save As…"), undefined);
   assert.equal(find(tree, "annotation-canvas").props.interactionDisabled, true);
   assert.equal(find(tree, "annotation-canvas").props.interactionLock.locked, true);
   for (const [key, extra] of [["Enter", {}], ["z", { metaKey: true }], ["Delete", {}], ["c", {}]]) h.key(key, extra);

@@ -7,6 +7,7 @@ import * as project from "../src/annotation/project.js";
 import * as crop from "../src/annotation/crop.js";
 import * as layout from "../src/annotation/text-layout.js";
 import * as composition from "../src/annotation/text-composition.js";
+import * as watermarkGeometry from "../src/annotation/watermark-geometry.js";
 
 const dataUrl = source => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 const compile = source => ts.transpileModule(source, {compilerOptions: {
@@ -15,7 +16,8 @@ const compile = source => ts.transpileModule(source, {compilerOptions: {
 const geom = await import(dataUrl(compile(readFileSync(new URL("../src/annotation/geom.ts", import.meta.url), "utf8"))));
 const geomUrl = dataUrl(compile(readFileSync(new URL("../src/annotation/geom.ts", import.meta.url), "utf8")));
 const model = await import(dataUrl(compile(readFileSync(new URL("../src/annotation/model.ts", import.meta.url), "utf8")
-  .replaceAll('"./geom"', JSON.stringify(geomUrl)))));
+  .replaceAll('"./geom"', JSON.stringify(geomUrl))
+  .replaceAll('"./watermark-geometry.js"', JSON.stringify(new URL("../src/annotation/watermark-geometry.js", import.meta.url).href)))));
 const source = readFileSync(new URL("../src/annotation/AnnotationCanvas.tsx", import.meta.url), "utf8");
 const text = {kind: "text", id: 1, text: "first line\nsecond line", rect: {x: 40, y: 40, width: 180, height: 45},
   color: "white", background: "transparent", fontSize: 18};
@@ -81,6 +83,7 @@ function annotation(initialDocument, options = {}) {
     modules: {
       "./geom": geom, "./model": model, "./project.js": project, "./crop.js": crop,
       "./text-layout.js": layout, "./text-composition.js": composition,
+      "./watermark-geometry.js": watermarkGeometry,
       "./render": {textFont: size => `600 ${size}px sans-serif`, renderAll(r, marks, options) {
         if (!r.exporting) frames.push({marks: structuredClone(marks), options: structuredClone(options)});
         if (r.exporting) exports.push({source: r.sourceImage, sourceWidth: r.sourceWidth, sourceHeight: r.sourceHeight,
@@ -114,6 +117,149 @@ function annotation(initialDocument, options = {}) {
 }
 
 const documentWith = marks => ({schemaVersion: 1, canvas: {width: 640, height: 360}, sourcePixels: {width: 640, height: 360}, marks});
+
+const watermark = {kind: "watermark", id: 93, text: "中文 sample", rect: {x: 100, y: 100, width: 100, height: 80},
+  color: "black", fontSize: 28, opacity: .2, rotation: -30, mode: "tiled", spacing: 80};
+const watermarkEditor = h => nodes(h.component.render()).find(node => node?.props?.editing?.watermark);
+
+test("the watermark entry opens native inline input, previews all styling and commits one editable mark", async () => {
+  const selections = [];
+  const h = annotation(documentWith([]), {onSelectionInfo: mark => selections.push(mark)});
+  h.ref.current.editWatermark(); h.component.render({...h.props, tool: "watermark"});
+  const input = watermarkEditor(h);
+  assert.ok(input, "the tool-change effect must not close an editor opened by the entry button");
+  assert.equal(input.props.editing.background, "transparent");
+  assert.equal(input.props.onFinish, undefined, "Return commits the watermark without completing capture");
+  const created = input.props.editing.watermark;
+  assert.equal(created.rect.x + created.rect.width / 2, 320);
+  assert.equal(created.rect.y + created.rect.height / 2, 180);
+  assert.deepEqual(h.changes, [], "the empty draft has no undo entry");
+  input.props.onTextChange("中文 input\nEnglish"); h.component.render();
+  h.ref.current.updateSelectionAppearance({watermarkOpacity: 45, watermarkRotation: 15,
+    watermarkMode: "single", watermarkSpacing: 100, watermarkColor: "white"}, true);
+  h.component.render();
+  const preview = h.frames.at(-1).options.draft;
+  assert.equal(preview.kind, "watermark");
+  assert.equal(preview.text, "中文 input\nEnglish");
+  assert.equal(preview.opacity, .45); assert.equal(preview.rotation, 15);
+  assert.equal(preview.mode, "single"); assert.equal(preview.spacing, 100); assert.equal(preview.color, "white");
+  assert.deepEqual(selections.at(-1), preview, "the HUD receives a watermark, not a plain-text surrogate");
+  const saved = await h.ref.current.exportResult();
+  assert.deepEqual(saved.document.marks, [preview]);
+  assert.equal(h.changes.length, 1);
+  const reopened = annotation(saved.document);
+  reopened.ref.current.editWatermark(); reopened.component.render();
+  assert.equal(watermarkEditor(reopened).props.editing.id, preview.id);
+  assert.deepEqual((await reopened.ref.current.exportResult()).document.marks, [preview]);
+  assert.deepEqual(reopened.changes, [], "an unchanged second edit is a no-op");
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), []);
+  h.ref.current.redo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [preview]);
+});
+
+test("watermark entry edits the last cropped-out anchor without changing its tile phase", async () => {
+  const outside = {...watermark, id: 94, rect: {x: -450, y: -130, width: 120, height: 40}};
+  const h = annotation(documentWith([watermark, outside]));
+  h.ref.current.editWatermark(); h.component.render();
+  const editor = watermarkEditor(h);
+  assert.equal(editor.props.editing.id, outside.id);
+  assert.ok(editor.props.editing.rect.x >= 0 && editor.props.editing.rect.y >= 0);
+  assert.deepEqual(editor.props.editing.watermark.rect, outside.rect);
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [watermark, outside]);
+  assert.deepEqual(h.changes, []);
+  h.ref.current.editWatermark(); h.component.render();
+  watermarkEditor(h).props.onTextChange("updated 中文"); h.component.render();
+  const frame = watermarkEditor(h).props.editing.rect;
+  watermarkEditor(h).props.onRectChange({...frame, width: 160, height: 60}); h.component.render();
+  const updated = watermarkEditor(h).props.editing.watermark.rect;
+  assert.equal(updated.x + updated.width / 2, outside.rect.x + outside.rect.width / 2);
+  assert.equal(updated.y + updated.height / 2, outside.rect.y + outside.rect.height / 2);
+  const saved = await h.ref.current.exportResult();
+  assert.equal(saved.document.marks.at(-1).text, "updated 中文");
+  assert.equal(saved.document.marks.at(-1).opacity, outside.opacity);
+  assert.equal(saved.document.marks.at(-1).rotation, outside.rotation);
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [watermark, outside]);
+});
+
+test("native double click edits an existing watermark and tiled copies do not intercept another annotation", () => {
+  const h = annotation(documentWith([watermark, text]));
+  h.pointer("onPointerDown", 150, 140, {detail: 0}); h.pointer("onPointerUp", 150, 140, {detail: 0});
+  h.mouse("onDoubleClick", 150, 140, 2);
+  assert.equal(watermarkEditor(h).props.editing.id, watermark.id);
+  h.ref.current.cancelTextEditing(); h.component.render();
+  assert.equal(model.markIndexAt([text, {...watermark, rect: {x: 500, y: 250, width: 100, height: 80}}],
+    {x: 80, y: 60}), 0, "only the watermark's primary anchor participates in hit testing");
+});
+
+test("dense watermark updates retain the valid saved and inline states and report the reason", async () => {
+  const original = {...watermark, mode: "single", rotation: 0, spacing: 16, rect: {x: 100, y: 100, width: 2, height: 2}};
+  const document = {...documentWith([original]), canvas: {width: 10000, height: 10000}, sourcePixels: {width: 10000, height: 10000}};
+  const errors = [];
+  const h = annotation(document, {selectedMarkId: original.id, onError: message => errors.push(message)});
+  h.ref.current.updateSelectionAppearance({watermarkMode: "tiled"}, true); h.component.render();
+  h.ref.current.finishAppearanceAdjustment(); h.component.render();
+  assert.deepEqual(h.changes, []);
+  assert.equal(errors.at(-1), "Watermark is too dense. Increase its size or spacing.");
+  h.ref.current.updateSelectionAppearance({watermarkOpacity: 200}); h.component.render();
+  assert.match(errors.at(-1), /opacity must be between 0 and 1/);
+  assert.deepEqual(h.changes, [], "strict mark validation also rejects invalid API style values");
+  h.ref.current.editWatermark(); h.component.render();
+  h.ref.current.updateSelectionAppearance({watermarkMode: "tiled"}, true); h.component.render();
+  assert.equal(watermarkEditor(h).props.editing.watermark.mode, "single");
+  watermarkEditor(h).props.onTextChange("x".repeat(513)); h.component.render();
+  assert.equal(watermarkEditor(h).props.editing.text, original.text);
+  assert.equal(errors.at(-1), "Watermark text must be 512 characters or fewer.");
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [original]);
+});
+
+test("an empty or cancelled watermark draft creates no persisted mark", async () => {
+  const h = annotation(documentWith([]));
+  h.ref.current.editWatermark(); h.component.render();
+  h.ref.current.cancelTextEditing(); h.component.render();
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, []);
+  h.ref.current.editWatermark(); h.component.render();
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, []);
+  assert.deepEqual(h.changes, []);
+});
+
+test("mosaic hover size redraws immediately and a stroke keeps its starting shape/style through cross-window preferences", async () => {
+  const h = annotation(documentWith([]), {tool: "mosaic", mosaicShape: "brush"});
+  h.pointer("onPointerMove", 50, 50);
+  const count = h.frames.length;
+  h.component.render({...h.props, appearance: {...appearance, mosaicBrushDiameter: 60}});
+  assert.ok(h.frames.length > count);
+  assert.equal(h.frames.at(-1).options.brushDiameter, 60);
+  h.pointer("onPointerDown", 50, 50);
+  h.component.render({...h.props, mosaicShape: "rectangle", appearance: {...appearance,
+    mosaicBrushDiameter: 12, mosaicIntensity: "soft", mosaicStyle: "blur"}});
+  h.pointer("onPointerMove", 100, 80); h.pointer("onPointerUp", 100, 80);
+  assert.equal(h.frames.at(-1).options.brushCursor, null, "an area tool never retains a stale circular brush cursor");
+  const mark = (await h.ref.current.exportResult()).document.marks[0];
+  assert.equal(mark.shape, "brush"); assert.equal(mark.brushDiameter, 60);
+  assert.equal(mark.style, "pixel"); assert.equal(mark.intensity, "standard");
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), []);
+});
+
+for (const shape of ["brush", "rectangle", "ellipse"]) {
+  test(`${shape} mosaic creation, cancelled preview and selected styling preserve a single undo per gesture`, async () => {
+    const h = annotation(documentWith([]), {tool: "mosaic", mosaicShape: shape});
+    h.pointer("onPointerDown", 30, 40); h.pointer("onPointerMove", 100, 90);
+    h.pointer("onPointerCancel", 100, 90);
+    assert.equal(h.frames.at(-1).options.draft, null); assert.deepEqual(h.changes, []);
+    h.pointer("onPointerDown", 30, 40); h.pointer("onPointerMove", 100, 90); h.pointer("onPointerUp", 100, 90);
+    const created = h.changes.at(-1)[0];
+    assert.equal(created.shape, shape); assert.equal(h.changes.length, 1);
+    h.ref.current.updateSelectionAppearance({mosaicBrushDiameter: 50}, true);
+    h.ref.current.updateSelectionAppearance({mosaicBrushDiameter: 40, mosaicIntensity: "strong", mosaicStyle: "blur"}, true);
+    h.ref.current.finishAppearanceAdjustment(); h.component.render();
+    assert.equal(h.changes.length, 2);
+    const saved = await h.ref.current.exportResult();
+    assert.equal(saved.document.marks[0].brushDiameter, 40);
+    assert.equal(saved.document.marks[0].intensity, "strong");
+    assert.equal(saved.document.marks[0].style, "blur");
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [created]);
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), []);
+  });
+}
 
 test("callout text edits directly on canvas, saves in the same mark and cancels without deleting the badge", async () => {
   const h = annotation(documentWith([]), {tool: "callout"});
@@ -552,6 +698,8 @@ for (const sample of [
 }
 
 const movableMarks = [
+  watermark,
+  {...watermark, mode: "single"},
   rectangle,
   label,
   {...text, rect: {x: 100, y: 100, width: 100, height: 80}},

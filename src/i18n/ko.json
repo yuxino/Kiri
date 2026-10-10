@@ -735,5 +735,18 @@
   "Couldn't rename this capture.": "이 캡처의 이름을 바꿀 수 없습니다.",
   "Renamed; the old file could not be removed.": "이름은 바뀌었지만 이전 파일을 삭제하지 못했습니다.",
   "Renamed; disk synchronization failed.": "이름은 바뀌었지만 디스크 동기화에 실패했습니다.",
-  "Wait for GIF conversion to finish before renaming.": "GIF 변환이 끝난 뒤 이름을 바꾸세요."
+  "Wait for GIF conversion to finish before renaming.": "GIF 변환이 끝난 뒤 이름을 바꾸세요.",
+  "Watermark": "워터마크",
+  "Watermark (W)": "워터마크 (W)",
+  "Watermark layout": "워터마크 배치",
+  "Single": "한 곳",
+  "Tiled": "반복",
+  "Opacity": "불투명도",
+  "Rotation": "각도",
+  "Spacing": "간격",
+  "Effect size": "효과 크기",
+  "Edit watermark": "워터마크 편집",
+  "Tool options": "도구 옵션",
+  "Watermark is too dense. Increase its size or spacing.": "워터마크가 너무 촘촘합니다. 글자 크기나 간격을 늘리세요.",
+  "Watermark text must be 512 characters or fewer.": "워터마크 텍스트는 512자 이하여야 합니다."
 }

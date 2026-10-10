@@ -9,6 +9,7 @@ export const ANNOTATION_PROJECT_LIMITS: Readonly<{
   maxMarks: number;
   maxTotalPoints: number;
   maxTotalText: number;
+  maxWatermarkText: number;
   maxStyleSize: number;
   maxCoordinateMagnitude: number;
 }>;

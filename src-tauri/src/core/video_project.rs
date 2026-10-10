@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use super::annotation::{AnnotationDocument, AnnotationMark, AnnotationPixelSize, AnnotationSize};
+use super::annotation::{AnnotationDocument, AnnotationMark, AnnotationPixelSize, AnnotationSize, MAX_WATERMARK_TEXT_UNITS};
 use super::asset::CaptureAsset;
 
 pub const MAX_VIDEO_PROJECT_BYTES: usize = 48 * 1024 * 1024;
@@ -211,6 +211,13 @@ impl VideoProject {
             match &annotation.mark {
                 AnnotationMark::Pen { points, .. } | AnnotationMark::Mosaic { points, .. } => {
                     annotation_points = annotation_points.saturating_add(points.len());
+                }
+                AnnotationMark::Watermark { text, .. } => {
+                    let units = text.encode_utf16().take(MAX_WATERMARK_TEXT_UNITS + 1).count();
+                    if units > MAX_WATERMARK_TEXT_UNITS {
+                        return Err(VideoProjectError::Invalid);
+                    }
+                    annotation_text_units = annotation_text_units.saturating_add(units);
                 }
                 AnnotationMark::Text { text, .. } | AnnotationMark::Callout { text, .. } => {
                     // Match the shared validator's cap before cloning marks.
@@ -1000,6 +1007,25 @@ mod tests {
         let mut too_many = test_project();
         too_many.edit.effects = vec![too_many.edit.effects[0].clone(); 129];
         assert!(too_many.validate().is_err());
+    }
+
+    #[test]
+    fn video_project_preserves_shared_watermark_data_and_rejects_oversized_text() {
+        let mut value = serde_json::to_value(test_project()).unwrap();
+        value["edit"]["annotations"][0]["mark"] = serde_json::json!({
+            "kind":"watermark","id":1,"text":"© 图片","rect":{"x":100,"y":100,"width":120,"height":35},
+            "fontSize":28,"color":"black","opacity":0.2,"rotation":-30,"mode":"tiled","spacing":80,
+        });
+        let project: VideoProject = serde_json::from_value(value.clone()).unwrap();
+        assert!(project.validate().is_ok());
+        let encoded = serde_json::to_value(&project).unwrap();
+        let decoded: VideoProject = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, project);
+        assert!(matches!(&decoded.edit.annotations[0].mark,
+            AnnotationMark::Watermark {text, opacity, rotation, spacing, ..}
+                if text == "© 图片" && *opacity == 0.2 && *rotation == -30.0 && *spacing == 80.0));
+        value["edit"]["annotations"][0]["mark"]["text"] = serde_json::json!("😀".repeat(257));
+        assert!(serde_json::from_value::<VideoProject>(value).unwrap().validate().is_err());
     }
 
     #[test]

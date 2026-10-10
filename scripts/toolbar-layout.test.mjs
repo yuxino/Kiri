@@ -116,14 +116,25 @@ test("full-display and corner selections keep two and three rows clear of a move
 
 test("only visible HUD rows receive pointer input, with measurement updated when settings grow", () => {
   const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
-  const toolbar = source.slice(source.indexOf("const toolbarRowStyle:"), source.indexOf("function ColorSwatch("));
+  // Compile the real tool definitions and both toolbar rows. TextToolPicker's
+  // own menu is covered separately; no empty TOOLS shortcut hides wrap groups.
+  const toolbar = source.slice(source.indexOf("const TOOLS:"));
+  const css = readFileSync(new URL("../src/styles/design-system.css", import.meta.url), "utf8");
+  const optionsCss = css.match(/\.kiri-capture-tool-options\s*\{([^}]+)\}/)?.[1];
+  assert.ok(optionsCss, "the property HUD has an explicit input and width boundary");
+  const optionsStyle = Object.fromEntries(optionsCss.split(";").filter(value => value.trim()).map(value => {
+    const index = value.indexOf(":"); return [value.slice(0, index).trim(), value.slice(index + 1).trim()];
+  }));
   let height = 48;
   const measured = { get offsetWidth() { return 550; }, get offsetHeight() { return height; } };
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-    const TOOLS=[], COLOR_PRESETS=[];
-    const captureToolbarPosition=${captureToolbarPosition.toString()}; ${toolbar}; export {Toolbar};`, {
-    attachRef(node) { if (node.props.className === "kiri-capture-toolbar") node.props.ref.current = measured; },
+    const TextToolPicker=()=>null;
+    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}`, {
+    attachRef(node) {
+      if (node.props.className === "kiri-capture-toolbar") node.props.ref.current = measured;
+      if (node.props.className?.includes("kiri-annotation-tool-row")) node.props.ref.current = {offsetHeight: 48};
+    },
     globals: { ResizeObserver: class { observe() {} disconnect() {} } },
   });
   const props = { selection: { x: 80, y: 150, width: 1040, height: 620 },
@@ -135,28 +146,35 @@ test("only visible HUD rows receive pointer input, with measurement updated when
   assert.equal(root.props.style.pointerEvents, "none");
   assert.ok(root.props.style.zIndex > 5, "selection keylines must not paint over controls");
   height = 230;
-  tree = component.render({ ...props, tool: "callout", selectedCalloutId: 1, showCalloutControls: true, calloutControls: "callout-controls" });
+  tree = component.render({ ...props, selectedMark: {kind: "callout", id: 1}, styleControls: "callout-controls" });
   root = nodes(tree).find(node => node?.props?.className === "kiri-capture-toolbar");
   assert.ok(root.props.style.top >= props.selection.y + 10);
   assert.ok(root.props.style.top + height <= props.selection.y + props.selection.height - 10);
-  const hud = nodes(tree).find(node => node?.props?.className === "kiri-hud");
+  assert.ok(!overlaps(root.props.style, {width: 550, height}, props.modeSelectorBounds), "the complete settings stack remains clear of the mode selector");
+  const hud = nodes(tree).find(node => node?.props?.className?.includes("kiri-annotation-tool-row"));
   assert.equal(hud.props.style.pointerEvents, "auto");
   const settings = nodes(tree).find(node => node?.props?.children?.includes("callout-controls"));
-  assert.equal(settings.props.style.pointerEvents, "auto");
-  assert.equal(settings.props.style.width, "max-content");
+  assert.equal(settings.props.className, "kiri-hud kiri-capture-tool-options");
+  assert.equal(optionsStyle["pointer-events"], "auto", "only the visible property HUD receives input");
+  assert.equal(optionsStyle.width, "100%", "the property HUD remains within the measured toolbar width");
+  assert.ok(settings.props.style.maxHeight > 0);
   height = 130;
-  tree = component.render({ ...props, tool: "select", selectedLabelId: 2,
-    showLabelControls: true, labelControls: "label-controls" });
+  tree = component.render({ ...props, selectedMark: {kind: "text", id: 2, labelDirection: "left"}, styleControls: "label-controls" });
   root = nodes(tree).find(node => node?.props?.className === "kiri-capture-toolbar");
   assert.equal(root.props.style.pointerEvents, "none", "a selected label must keep blank toolbar space pass-through");
   const labelSettings = nodes(tree).find(node => node?.props?.children?.includes("label-controls"));
   assert.ok(labelSettings, "selecting an existing label opens its settings");
-  assert.equal(labelSettings.props.style.pointerEvents, "auto", "label color and font controls remain interactive");
-  assert.equal(labelSettings.props.style.width, "max-content", "label settings must not fill the wider main toolbar");
-  assert.equal(labelSettings.props.style.maxWidth, "100%");
+  assert.equal(labelSettings.props.className, "kiri-hud kiri-capture-tool-options");
+  assert.equal(optionsStyle["pointer-events"], "auto", "label color and font controls remain interactive");
+  assert.equal(root.props.style.maxWidth, props.bounds.width - 16);
   assert.ok(root.props.style.top >= props.selection.y + 10);
   assert.ok(root.props.style.top + height <= props.selection.y + props.selection.height - 10);
+  assert.ok(!overlaps(root.props.style, {width: 550, height}, props.modeSelectorBounds));
   assert.ok(!nodes(tree).some(node => node?.props?.children?.includes("callout-controls")), "changing to a label must remove stale callout settings");
+  tree = component.render({...props, selectedMark: null, styleControls: "empty-select-options"});
+  assert.ok(!nodes(tree).some(node => node?.props?.children?.includes("empty-select-options")), "clearing selection closes inactive Select settings");
+  root = nodes(tree).find(node => node?.props?.className === "kiri-capture-toolbar");
+  assert.equal(root.props.style.pointerEvents, "none");
   component.unmount();
 });
 

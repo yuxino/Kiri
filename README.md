@@ -53,6 +53,8 @@
 
 在「设置 → 通用 → 语言」中选择七种界面语言。选择会应用到每个 Kiri 窗口，重启后仍会保留；首次启动跟随系统语言。
 
+选中已有标注即可修改样式。马赛克支持自由画笔、矩形和椭圆，可选像素或模糊效果并调整强度。点击水印（W）后直接在图片中输入文字，可选单处或平铺，调整不透明度、角度和间距；保存后仍可再次编辑。
+
 素材保存在本机。远程 OCR 可选，每次上传前都会询问。Linux 配置、MP4 声音录制、Wayland 快捷键和平台限制见 [Linux 指南](docs/linux.md)。
 
 [使用与常见问题](docs/usage.zh-CN.md) · [视频剪辑](docs/video-editing.zh-CN.md) · [反馈问题](https://github.com/yuxino/kiri/issues) · [贡献指南](CONTRIBUTING.md)

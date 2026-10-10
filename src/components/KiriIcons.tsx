@@ -36,6 +36,7 @@ import {
   Square,
   SquareDashed,
   Star,
+  Stamp,
   Tag,
   TextCursorInput,
   TriangleAlert,
@@ -54,6 +55,7 @@ export type IconName =
   | "line.diagonal" // Line (L)
   | "arrow.up.right" // Arrow (A)
   | "textformat" // Text (T)
+  | "watermark"
   | "number.circle"
   | "square.grid.3x3.fill" // Mosaic (M)
   | "arrow.uturn.backward" // Undo
@@ -103,6 +105,7 @@ const ICONS: Record<IconName, React.ComponentType<Record<string, unknown>>> = {
   "line.diagonal": Slash,
   "arrow.up.right": ArrowUpRight,
   textformat: Type,
+  watermark: Stamp,
   "number.circle": CircleDot,
   "square.grid.3x3.fill": Grid3x3,
   "arrow.uturn.backward": Undo2,

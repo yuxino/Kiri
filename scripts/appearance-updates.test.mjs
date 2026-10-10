@@ -54,3 +54,19 @@ test('several callbacks from one render preserve both unsaved changes', () => {
   assert.equal(window.current.penWidth, 24);
   assert.deepEqual(window.beginSave(), {penWidth: 24, colorPreset: 'blue'});
 });
+
+test('watermark and mosaic preferences from independent windows merge field by field',()=>{
+  const initial={watermarkColor:'black',watermarkFontSize:28,watermarkOpacity:20,watermarkRotation:-30,
+    watermarkMode:'tiled',watermarkSpacing:80,mosaicShape:'brush'};
+  const overlay=new AppearanceUpdates(initial),editor=new AppearanceUpdates(initial);
+  const editorRender={...editor.current};
+  overlay.update({...overlay.current,watermarkSpacing:160,watermarkRotation:45});
+  const first=overlay.beginSave(),saved={...initial,...first};
+  overlay.finishSave(saved);editor.receive(saved);
+  editor.update({...editorRender,watermarkOpacity:55,mosaicShape:'ellipse'},editorRender);
+  assert.deepEqual(editor.beginSave(),{watermarkOpacity:55,mosaicShape:'ellipse'});
+  const combined={...saved,watermarkOpacity:55,mosaicShape:'ellipse'};
+  editor.finishSave(combined);overlay.receive(combined);
+  assert.deepEqual(overlay.current,editor.current);
+  assert.equal(editor.current.watermarkSpacing,160);assert.equal(editor.current.watermarkRotation,45);
+});

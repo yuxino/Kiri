@@ -13,6 +13,10 @@ const MAX_MARKS: usize = 2_048;
 const MAX_POINTS_PER_MARK: usize = 100_000;
 const MAX_TOTAL_POINTS: usize = 100_000;
 const MAX_TOTAL_TEXT_UNITS: usize = 65_536;
+pub(super) const MAX_WATERMARK_TEXT_UNITS: usize = 512;
+const MAX_WATERMARK_TILES: usize = 4_096;
+const MAX_TOTAL_WATERMARK_TILES: usize = 8_192;
+const WATERMARK_DENSITY_ERROR: &str = "Watermark is too dense. Increase its size or spacing.";
 const MAX_VISUAL_SIZE: f64 = 4_096.0;
 const MAX_COORDINATE_MAGNITUDE: f64 = 262_144.0;
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
@@ -109,6 +113,13 @@ pub enum MosaicShape {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+pub enum WatermarkMode {
+    Single,
+    Tiled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CalloutStyle {
     Filled,
     Outline,
@@ -125,12 +136,19 @@ pub struct AnnotationAppearance {
     pub label_direction: LabelDirection,
     pub mosaic_intensity: MosaicIntensity,
     pub mosaic_style: MosaicStyle,
+    pub mosaic_shape: MosaicShape,
     pub pen_width: u16,
     pub shape_width: u16,
     pub text_font_size: u16,
     pub mosaic_brush_diameter: u16,
     pub callout_size: u16,
     pub callout_style: CalloutStyle,
+    pub watermark_color: AnnotationColor,
+    pub watermark_font_size: u16,
+    pub watermark_opacity: u16,
+    pub watermark_rotation: i16,
+    pub watermark_mode: WatermarkMode,
+    pub watermark_spacing: u16,
 }
 
 impl Default for AnnotationAppearance {
@@ -141,12 +159,19 @@ impl Default for AnnotationAppearance {
             label_direction: LabelDirection::Left,
             mosaic_intensity: MosaicIntensity::Standard,
             mosaic_style: MosaicStyle::Pixel,
+            mosaic_shape: MosaicShape::Brush,
             pen_width: 3,
             shape_width: 3,
             text_font_size: 18,
             mosaic_brush_diameter: 20,
             callout_size: 36,
             callout_style: CalloutStyle::Filled,
+            watermark_color: AnnotationColor::Black,
+            watermark_font_size: 28,
+            watermark_opacity: 20,
+            watermark_rotation: -30,
+            watermark_mode: WatermarkMode::Tiled,
+            watermark_spacing: 80,
         }
     }
 }
@@ -158,6 +183,10 @@ impl AnnotationAppearance {
         self.text_font_size = self.text_font_size.clamp(12, 64);
         self.mosaic_brush_diameter = self.mosaic_brush_diameter.clamp(12, 120);
         self.callout_size = self.callout_size.clamp(24, 72);
+        self.watermark_font_size = self.watermark_font_size.clamp(12, 128);
+        self.watermark_opacity = self.watermark_opacity.clamp(0, 100);
+        self.watermark_rotation = self.watermark_rotation.clamp(-180, 180);
+        self.watermark_spacing = self.watermark_spacing.clamp(16, 512);
         self
     }
 }
@@ -172,12 +201,19 @@ pub struct AnnotationAppearancePatch {
     pub label_direction: Option<LabelDirection>,
     pub mosaic_intensity: Option<MosaicIntensity>,
     pub mosaic_style: Option<MosaicStyle>,
+    pub mosaic_shape: Option<MosaicShape>,
     pub pen_width: Option<u16>,
     pub shape_width: Option<u16>,
     pub text_font_size: Option<u16>,
     pub mosaic_brush_diameter: Option<u16>,
     pub callout_size: Option<u16>,
     pub callout_style: Option<CalloutStyle>,
+    pub watermark_color: Option<AnnotationColor>,
+    pub watermark_font_size: Option<u16>,
+    pub watermark_opacity: Option<u16>,
+    pub watermark_rotation: Option<i16>,
+    pub watermark_mode: Option<WatermarkMode>,
+    pub watermark_spacing: Option<u16>,
 }
 
 impl AnnotationAppearancePatch {
@@ -187,12 +223,19 @@ impl AnnotationAppearancePatch {
         if let Some(value) = self.label_direction { saved.label_direction = value; }
         if let Some(value) = self.mosaic_intensity { saved.mosaic_intensity = value; }
         if let Some(value) = self.mosaic_style { saved.mosaic_style = value; }
+        if let Some(value) = self.mosaic_shape { saved.mosaic_shape = value; }
         if let Some(value) = self.pen_width { saved.pen_width = value; }
         if let Some(value) = self.shape_width { saved.shape_width = value; }
         if let Some(value) = self.text_font_size { saved.text_font_size = value; }
         if let Some(value) = self.mosaic_brush_diameter { saved.mosaic_brush_diameter = value; }
         if let Some(value) = self.callout_size { saved.callout_size = value; }
         if let Some(value) = self.callout_style { saved.callout_style = value; }
+        if let Some(value) = self.watermark_color { saved.watermark_color = value; }
+        if let Some(value) = self.watermark_font_size { saved.watermark_font_size = value; }
+        if let Some(value) = self.watermark_opacity { saved.watermark_opacity = value; }
+        if let Some(value) = self.watermark_rotation { saved.watermark_rotation = value; }
+        if let Some(value) = self.watermark_mode { saved.watermark_mode = value; }
+        if let Some(value) = self.watermark_spacing { saved.watermark_spacing = value; }
         saved.normalized()
     }
 }
@@ -205,6 +248,17 @@ impl AnnotationAppearancePatch {
     deny_unknown_fields
 )]
 pub enum AnnotationMark {
+    Watermark {
+        id: f64,
+        text: String,
+        rect: AnnotationRect,
+        color: AnnotationColor,
+        font_size: f64,
+        opacity: f64,
+        rotation: f64,
+        mode: WatermarkMode,
+        spacing: f64,
+    },
     Callout {
         id: f64,
         center: AnnotationPoint,
@@ -309,8 +363,33 @@ impl AnnotationDocument {
         let mut ids = HashSet::with_capacity(self.marks.len());
         let mut total_points = 0usize;
         let mut total_text_bytes = 0usize;
+        let mut total_watermark_tiles = 0usize;
         for mark in &self.marks {
             let (id, points, text_bytes) = match mark {
+                AnnotationMark::Watermark {
+                    id, text, rect, font_size, opacity, rotation, mode, spacing, ..
+                } => {
+                    let text_units = text.encode_utf16().take(MAX_WATERMARK_TEXT_UNITS + 1).count();
+                    if text_units > MAX_WATERMARK_TEXT_UNITS {
+                        return Err("Watermark text must be 512 characters or fewer.".into());
+                    }
+                    validate_rect(*rect, coordinate_limit, false)?;
+                    validate_visual_size(*font_size)?;
+                    if !opacity.is_finite() || !(0.0..=1.0).contains(opacity)
+                        || !rotation.is_finite() || !(-180.0..=180.0).contains(rotation)
+                        || !spacing.is_finite() || !(16.0..=MAX_VISUAL_SIZE).contains(spacing)
+                    {
+                        return Err("The watermark style is invalid.".into());
+                    }
+                    let tiles = if *mode == WatermarkMode::Tiled {
+                        watermark_tile_count(*rect, *rotation, *spacing, self.canvas)?
+                    } else { 1 };
+                    total_watermark_tiles = total_watermark_tiles.saturating_add(tiles);
+                    if total_watermark_tiles > MAX_TOTAL_WATERMARK_TILES {
+                        return Err(WATERMARK_DENSITY_ERROR.into());
+                    }
+                    (*id, 0, text_units)
+                }
                 AnnotationMark::Callout { id, center, number, text, label_rect, size, font_size, .. } => {
                     if !(1..=999).contains(number) {
                         return Err("The annotation number is invalid.".into());
@@ -437,6 +516,37 @@ impl AnnotationDocument {
     }
 }
 
+/// Fixed document-axis grid, matching watermark-geometry.js. A crop translates
+/// only the master rect, so every surviving tile keeps its original phase.
+fn watermark_tile_count(
+    rect: AnnotationRect,
+    rotation: f64,
+    spacing: f64,
+    canvas: AnnotationSize,
+) -> Result<usize, String> {
+    let angle = rotation * std::f64::consts::PI / 180.0;
+    let cos = angle.cos().abs();
+    let sin = angle.sin().abs();
+    let width = rect.width * cos + rect.height * sin;
+    let height = rect.width * sin + rect.height * cos;
+    let center_x = rect.x + rect.width / 2.0;
+    let center_y = rect.y + rect.height / 2.0;
+    let step_x = width + spacing;
+    let step_y = height + spacing;
+    // Include boundary-touching tiles conservatively across JS/Rust libm rounding.
+    let start_column = ((-width / 2.0 - center_x) / step_x - 1e-9).ceil();
+    let end_column = ((canvas.width + width / 2.0 - center_x) / step_x + 1e-9).floor();
+    let start_row = ((-height / 2.0 - center_y) / step_y - 1e-9).ceil();
+    let end_row = ((canvas.height + height / 2.0 - center_y) / step_y + 1e-9).floor();
+    let count = (end_column - start_column + 1.0).max(0.0)
+        * (end_row - start_row + 1.0).max(0.0);
+    if !count.is_finite() || count > MAX_WATERMARK_TILES as f64 {
+        Err(WATERMARK_DENSITY_ERROR.into())
+    } else {
+        Ok(count as usize)
+    }
+}
+
 fn validate_dimension(value: f64) -> Result<(), String> {
     if value.is_finite() && value > 0.0 && value <= MAX_CANVAS_DIMENSION {
         Ok(())
@@ -479,15 +589,14 @@ fn validate_points(
 }
 
 fn validate_rect(rect: AnnotationRect, limit: f64, allow_zero_size: bool) -> Result<(), String> {
-    let minimum = if allow_zero_size { 0.0 } else { f64::EPSILON };
     if rect.x.is_finite()
         && rect.y.is_finite()
         && rect.width.is_finite()
         && rect.height.is_finite()
         && rect.x.abs() <= limit
         && rect.y.abs() <= limit
-        && rect.width >= minimum
-        && rect.height >= minimum
+        && (if allow_zero_size { rect.width >= 0.0 } else { rect.width > 0.0 })
+        && (if allow_zero_size { rect.height >= 0.0 } else { rect.height > 0.0 })
         && rect.width <= limit
         && rect.height <= limit
     {
@@ -517,6 +626,7 @@ mod tests {
             r#"{"kind":"text","id":5,"text":"Kiri","rect":{"x":1,"y":2,"width":30,"height":20},"color":"mint","background":"transparent","fontSize":18}"#,
             r#"{"kind":"mosaic","id":6,"points":[{"x":1,"y":2}],"brushDiameter":20,"intensity":"standard","style":"pixel"}"#,
             r#"{"kind":"callout","id":7,"center":{"x":20,"y":30},"number":1,"text":"説明\nStep one","labelRect":{"x":45,"y":20,"width":40,"height":40},"color":"cherry","size":36,"fontSize":18,"style":"filled"}"#,
+            r#"{"kind":"watermark","id":8,"text":"透明 watermark","rect":{"x":20,"y":30,"width":40,"height":20},"color":"black","fontSize":28,"opacity":0.2,"rotation":-30,"mode":"tiled","spacing":80}"#,
         ];
         let json = format!(
             r#"{{"schemaVersion":1,"canvas":{{"width":100,"height":80}},"sourcePixels":{{"width":200,"height":160}},"marks":[{}]}}"#,
@@ -668,5 +778,74 @@ mod tests {
         assert_eq!(normalized.text_font_size, 12);
         assert_eq!(normalized.mosaic_brush_diameter, 120);
         assert!(serde_json::from_str::<AnnotationAppearance>(r#"{"extra":true}"#).is_err());
+    }
+
+    #[test]
+    fn watermark_preferences_merge_with_legacy_defaults_and_normalize_integer_controls() {
+        let legacy: AnnotationAppearance = serde_json::from_str(r#"{"textFontSize":24}"#).unwrap();
+        assert_eq!(legacy.watermark_color, AnnotationColor::Black);
+        assert_eq!(legacy.watermark_font_size, 28);
+        assert_eq!(legacy.watermark_opacity, 20);
+        assert_eq!(legacy.watermark_rotation, -30);
+        assert_eq!(legacy.watermark_mode, WatermarkMode::Tiled);
+        assert_eq!(legacy.watermark_spacing, 80);
+        assert_eq!(legacy.mosaic_shape, MosaicShape::Brush);
+        let patch: AnnotationAppearancePatch = serde_json::from_str(r#"{"watermarkFontSize":999,"watermarkOpacity":999,"watermarkRotation":-999,"watermarkSpacing":0,"watermarkMode":"single","watermarkColor":"white","mosaicShape":"ellipse"}"#).unwrap();
+        let result = patch.apply(legacy);
+        assert_eq!(result.watermark_font_size, 128);
+        assert_eq!(result.watermark_opacity, 100);
+        assert_eq!(result.watermark_rotation, -180);
+        assert_eq!(result.watermark_spacing, 16);
+        assert_eq!(result.watermark_mode, WatermarkMode::Single);
+        assert_eq!(result.watermark_color, AnnotationColor::White);
+        assert_eq!(result.mosaic_shape, MosaicShape::Ellipse);
+        assert_eq!(result.text_font_size, 24);
+        let encoded = serde_json::to_string(&result).unwrap();
+        assert_eq!(serde_json::from_str::<AnnotationAppearance>(&encoded).unwrap(), result);
+    }
+
+    fn watermark_json() -> serde_json::Value {
+        serde_json::json!({"kind":"watermark","id":1,"text":"图片 © Kiri","rect":{"x":20,"y":30,"width":80,"height":35},"color":"black","fontSize":28,"opacity":0.2,"rotation":-30,"mode":"tiled","spacing":80})
+    }
+
+    #[test]
+    fn watermark_schema_rejects_invalid_fields_geometry_and_unbounded_text() {
+        let valid = watermark_json();
+        assert!(AnnotationDocument::from_json(&document_json(&valid.to_string())).is_ok());
+        for (key, value) in [
+            ("opacity", serde_json::json!(-0.1)), ("opacity", serde_json::json!(1.1)),
+            ("rotation", serde_json::json!(181)), ("spacing", serde_json::json!(15)),
+            ("spacing", serde_json::json!(4097)), ("mode", serde_json::json!("repeat")),
+            ("extra", serde_json::json!(true)), ("text", serde_json::json!("😀".repeat(257))),
+        ] {
+            let mut invalid = valid.clone();
+            invalid[key] = value;
+            assert!(AnnotationDocument::from_json(&document_json(&invalid.to_string())).is_err(), "{key}");
+        }
+        let mut zero = valid;
+        zero["rect"]["width"] = serde_json::json!(0);
+        assert!(AnnotationDocument::from_json(&document_json(&zero.to_string())).is_err());
+    }
+
+    #[test]
+    fn watermark_grid_bounds_match_document_density_and_boundary_tiles() {
+        let rect = AnnotationRect {x: 0.0, y: 0.0, width: 1.0, height: 1.0};
+        assert_eq!(watermark_tile_count(rect, 0.0, 16.0, AnnotationSize {width: 1071.0, height: 1071.0}).unwrap(), 4096);
+        assert!(watermark_tile_count(rect, 0.0, 16.0, AnnotationSize {width: 1088.0, height: 1088.0}).is_err());
+        let mut mark = watermark_json();
+        mark["rect"] = serde_json::json!({"x":0,"y":0,"width":1,"height":1});
+        mark["rotation"] = serde_json::json!(0);
+        mark["spacing"] = serde_json::json!(16);
+        let mut document: AnnotationDocument = serde_json::from_str(&document_json(&mark.to_string())).unwrap();
+        document.canvas = AnnotationSize {width: 1024.0, height: 1024.0};
+        document.marks.push(document.marks[0].clone());
+        if let AnnotationMark::Watermark {id, ..} = &mut document.marks[1] { *id = 2.0; }
+        assert!(document.validate().is_ok());
+        document.marks.push(document.marks[0].clone());
+        if let AnnotationMark::Watermark {id, ..} = &mut document.marks[2] { *id = 3.0; }
+        assert_eq!(document.validate().unwrap_err(), WATERMARK_DENSITY_ERROR);
+        // Moving the anchor outside the document does not eliminate repeated tiles.
+        assert!(watermark_tile_count(AnnotationRect {x:-10013.0,y:-10013.0,..rect}, 0.0, 16.0,
+            AnnotationSize {width:1088.0,height:1088.0}).is_err());
     }
 }

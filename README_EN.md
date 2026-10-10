@@ -31,7 +31,7 @@
 ## Features
 
 - Capture a window or region, crop it, add drawings, text or mosaic, and pin screenshots as floating references.
-- Choose Numbered callout from the Text tool's arrow menu. Click to place a number or drag to position its optional description. Numbers advance automatically; edit the number, text, size, color, and filled or outline style.
+- Choose Numbered callout from the Text tool's arrow menu. Click to place a number and type its description directly on the image; Return adds a line. Drag the number and transparent description separately, and adjust size, color, and filled or outline style.
 - Copy text with local OCR and read QR codes from images.
 - Record MP4 with optional system audio and microphone, or make a silent GIF. Converting saved videos to GIF checks decoding first and can be cancelled before saving; macOS shows frame progress and keeps failure details visible.
 - Trim and reorder clips from one video, then export a new MP4.
@@ -52,6 +52,8 @@ Before annotating or recording, click the sliders button to edit the selection's
 Choose one of seven UI languages in **Settings → General → Language**. Your choice applies to every Kiri window and survives relaunches. On first launch, Kiri follows the system language.
 
 Renaming a library item also renames its saved file and keeps its file type. Use **Copy File** in the context menu to paste the file into a folder; **Copy** continues to copy image pixels for chats and editors.
+
+Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type directly on the image, then choose a single mark or a tiled pattern and adjust opacity, angle, and spacing. Watermarks remain editable after saving.
 
 Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, MP4 audio recording, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
 

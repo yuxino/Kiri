@@ -735,5 +735,18 @@
   "Couldn't rename this capture.": "Impossible de renommer cette capture.",
   "Renamed; the old file could not be removed.": "Renommage effectué, mais l’ancien fichier n’a pas pu être supprimé.",
   "Renamed; disk synchronization failed.": "Renommage effectué, mais la synchronisation du disque a échoué.",
-  "Wait for GIF conversion to finish before renaming.": "Attendez la fin de la conversion GIF avant de renommer."
+  "Wait for GIF conversion to finish before renaming.": "Attendez la fin de la conversion GIF avant de renommer.",
+  "Watermark": "Filigrane",
+  "Watermark (W)": "Filigrane (W)",
+  "Watermark layout": "Disposition du filigrane",
+  "Single": "Unique",
+  "Tiled": "Répété",
+  "Opacity": "Opacité",
+  "Rotation": "Rotation",
+  "Spacing": "Espacement",
+  "Effect size": "Taille de l’effet",
+  "Edit watermark": "Modifier le filigrane",
+  "Tool options": "Options de l’outil",
+  "Watermark is too dense. Increase its size or spacing.": "Le filigrane est trop dense. Augmentez sa taille ou son espacement.",
+  "Watermark text must be 512 characters or fewer.": "Le filigrane doit contenir 512 caractères au maximum."
 }

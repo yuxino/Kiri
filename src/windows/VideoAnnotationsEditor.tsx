@@ -55,6 +55,7 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
     mosaicBrushDiameter:selected.brushDiameter/scale,mosaicIntensity:selected.intensity,mosaicStyle:selected.style,
   }:selected?{colorPreset:selected.color,...(selected.kind==="text"?{textFontSize:selected.fontSize/scale,textBackgroundStyle:selected.background}:
     selected.kind==="callout"?{textFontSize:selected.fontSize/scale,calloutSize:selected.size/scale,calloutStyle:selected.style}:
+    selected.kind==="watermark"?{watermarkColor:selected.color,watermarkFontSize:selected.fontSize/scale,watermarkOpacity:selected.opacity*100,watermarkRotation:selected.rotation,watermarkMode:selected.mode,watermarkSpacing:selected.spacing/scale}:
     selected.kind==="pen"?{penWidth:selected.width/scale}:{shapeWidth:selected.width/scale})}:{})};
   function selectTool(next:Tool) {
     canvas.current?.finishAppearanceAdjustment();canvas.current?.commitTextEditing();

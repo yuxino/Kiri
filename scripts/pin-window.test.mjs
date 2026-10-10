@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { AnnotationInteractionLock } from "../src/annotation/interaction-lock.js";
-import { captureToolbarPosition } from "../src/windows/toolbar-layout.js";
+import { capturePanelLayout, captureToolbarPosition } from "../src/windows/toolbar-layout.js";
 import { createLibraryHarness, deferred, nodes, settleRequests } from "./helpers/library-render-harness.mjs";
 
 const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/PinWindow.tsx", import.meta.url), "utf8");
@@ -207,11 +207,11 @@ test("normal completion retains its non-pinning action", async () => {
 });
 
 test("the toolbar exposes direct pin, disables it while completing, and isolates keyboard activation", () => {
-  const toolbar = overlaySource.slice(overlaySource.indexOf("function Toolbar("), overlaySource.indexOf("function ColorSwatch("));
+  const toolbar = overlaySource.slice(overlaySource.indexOf("const TOOLS:"));
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-    const TOOLS=[], COLOR_PRESETS=[], ACCENT="black", toolbarRowStyle={};
-    const captureToolbarPosition=${captureToolbarPosition.toString()}; ${toolbar}; export {Toolbar,ToolButton};`);
+    const TextToolPicker=()=>null;
+    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}; export {ToolButton};`);
   let pins = 0, saves = 0;
   const props = { selection:{x:100,y:100,width:140,height:160}, bounds:{x:0,y:0,width:800,height:600},
     tool:"select", appearance:{}, canSetSize:true, disabled:false,

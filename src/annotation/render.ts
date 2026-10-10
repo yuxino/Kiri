@@ -13,6 +13,8 @@ import type { Point, Rect } from "./geom";
 import { inset, intersection, maxX, maxY, minX, minY, standardized } from "./geom";
 import { layoutTextLines, textLineRuns } from "./text-layout.js";
 import {blurCanvas} from "./canvas-blur";
+import { mosaicDocumentBlurRadius, orderedMosaics } from "./mosaic-render";
+import { drawWatermark } from "./watermark-render";
 
 const FONT_STACK =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
@@ -88,8 +90,7 @@ export function mosaicBlurRadius(
   intensity: MosaicIntensity,
   scale: RenderGeometryScale,
 ): number {
-  const intensityFactor = intensity === "soft" ? 0.18 : intensity === "standard" ? 0.25 : 0.34;
-  const documentRadius = Math.max(2, Math.round(brushDiameter * intensityFactor));
+  const documentRadius = mosaicDocumentBlurRadius(brushDiameter, intensity);
   return Math.max(1, Math.round(documentRadius * scale.stroke));
 }
 
@@ -125,6 +126,10 @@ function strokePolyline(ctx: CanvasRenderingContext2D, points: Point[]) {
 /** Draws one mark into the given context (already in the right space). */
 export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRenderingContext2D, editing = false) {
   switch (mark.kind) {
+    case "watermark": {
+      drawWatermark(mark, r, ctx, editing);
+      break;
+    }
     case "callout": {
       // Lay out the whole object in document space, preserving preview/export parity.
       const scale = geometryScale(r);
@@ -400,6 +405,10 @@ function drawMosaicMark(
   };
   const sourceW = r.sourceWidth;
   const sourceH = r.sourceHeight;
+  const sourceLeft = Math.max(0, r.sourceOffset.x * r.scaleX);
+  const sourceTop = Math.max(0, r.sourceOffset.y * r.scaleY);
+  const sourceRight = Math.min(sourceW, (r.sourceOffset.x + region.width) * r.scaleX);
+  const sourceBottom = Math.min(sourceH, (r.sourceOffset.y + region.height) * r.scaleY);
   const cx = Math.max(0, Math.min(crop.x, sourceW));
   const cy = Math.max(0, Math.min(crop.y, sourceH));
   const cw = Math.max(1, Math.min(crop.width, sourceW - cx));
@@ -420,8 +429,8 @@ function drawMosaicMark(
     const blurPx = mosaicBlurRadius(mark.brushDiameter, mark.intensity, scale);
     const sourceRadius=blurPx*cw/drawW,pad=Math.ceil(sourceRadius*3);
     // Sample beyond the stroke so a small brush can soften details that fill it.
-    const sx=Math.max(0,cx-pad),sy=Math.max(0,cy-pad);
-    const sw=Math.min(sourceW,cx+cw+pad)-sx,sh=Math.min(sourceH,cy+ch+pad)-sy;
+    const sx=Math.max(sourceLeft,cx-pad),sy=Math.max(sourceTop,cy-pad);
+    const sw=Math.min(sourceRight,cx+cw+pad)-sx,sh=Math.min(sourceBottom,cy+ch+pad)-sy;
     const off = document.createElement("canvas");
     off.width = sw;
     off.height = sh;
@@ -434,21 +443,52 @@ function drawMosaicMark(
     return;
   }
 
-  const blockSizeX = MOSAIC_VIEW_BLOCK_SIZE[mark.intensity] * r.scaleX;
-  const blockSizeY = MOSAIC_VIEW_BLOCK_SIZE[mark.intensity] * r.scaleY;
-
-  const smallW = Math.max(1, Math.ceil(cw / blockSizeX));
-  const smallH = Math.max(1, Math.ceil(ch / blockSizeY));
+  // Anchor cells to the document origin. A growing stroke only adds cells;
+  // it never changes the sampling coordinates of cells already covered.
+  const block = MOSAIC_VIEW_BLOCK_SIZE[mark.intensity];
+  const gridX = Math.floor(viewRect.x / block) * block;
+  const gridY = Math.floor(viewRect.y / block) * block;
+  const smallW = Math.max(1, Math.ceil((maxX(viewRect) - gridX) / block));
+  const smallH = Math.max(1, Math.ceil((maxY(viewRect) - gridY) / block));
   const small = document.createElement("canvas");
   small.width = smallW;
   small.height = smallH;
   const smallCtx = small.getContext("2d")!;
-  smallCtx.imageSmoothingEnabled = false;
-  smallCtx.drawImage(r.sourceImage, cx, cy, cw, ch, 0, 0, smallW, smallH);
+  smallCtx.imageSmoothingEnabled = true;
+  const sourceX = (r.sourceOffset.x + gridX) * r.scaleX;
+  const sourceY = (r.sourceOffset.y + gridY) * r.scaleY;
+  const cellWidth = block * r.scaleX, cellHeight = block * r.scaleY;
+  // Downsampling a source crop can sample neighboring pixels outside that
+  // crop in WebKit/Chromium. Copy only this bounded clean patch first so a
+  // capture and its persisted cropped source use the exact same sampler.
+  const patchWidth = Math.min(sourceRight - sourceX, smallW * cellWidth);
+  const patchHeight = Math.min(sourceBottom - sourceY, smallH * cellHeight);
+  const patch = document.createElement("canvas");
+  patch.width = Math.max(1, Math.ceil(patchWidth));
+  patch.height = Math.max(1, Math.ceil(patchHeight));
+  patch.getContext("2d")!.drawImage(r.sourceImage, sourceX, sourceY, patchWidth, patchHeight,
+    0, 0, patchWidth, patchHeight);
+  smallCtx.drawImage(patch, 0, 0, smallW * cellWidth, smallH * cellHeight,
+    0, 0, smallW, smallH);
+  // The final partial image cell samples its available pixels rather than
+  // transparent pixels outside the clean source. This stays stable at edges.
+  if (sourceX + smallW * cellWidth > sourceRight || sourceY + smallH * cellHeight > sourceBottom) {
+    for (let row = 0; row < smallH; row++) for (let column = 0; column < smallW; column++) {
+      const sx = sourceX + column * cellWidth, sy = sourceY + row * cellHeight;
+      if (sx + cellWidth <= sourceRight && sy + cellHeight <= sourceBottom) continue;
+      const sw = Math.min(cellWidth, sourceRight - sx), sh = Math.min(cellHeight, sourceBottom - sy);
+      if (sw > 0 && sh > 0) {
+        smallCtx.clearRect(column, row, 1, 1);
+        smallCtx.drawImage(patch, column * cellWidth, row * cellHeight, sw, sh, column, row, 1, 1);
+      }
+    }
+  }
 
   clipToMosaicStroke(ctx, points, clipDiameter, mark.shape);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(small, 0, 0, smallW, smallH, drawX, drawY, drawW, drawH);
+  ctx.drawImage(small, 0, 0, smallW, smallH, gridX * scale.x, gridY * scale.y,
+    smallW * block * scale.x, smallH * block * scale.y);
+  patch.width = 0; patch.height = 0;
   ctx.restore();
 }
 
@@ -462,6 +502,7 @@ export function renderAll(
     brushDiameter?: number;
     selectedIndex?: number | null;
     editingIndex?: number | null;
+    editingId?: number;
     chromeOnly?: boolean;
   } = {},
 ) {
@@ -508,9 +549,10 @@ export function renderAll(
     );
   }
 
-  const mosaics = marks.filter((m) => m.kind === "mosaic");
-  const others = marks.filter((m) => m.kind !== "mosaic");
-  for (const mark of mosaics) drawMark(mark, r, ctx);
+  const mosaics = marks.filter((m): m is Extract<AnnotationMark, {kind: "mosaic"}> => m.kind === "mosaic");
+  if (options.draft?.kind === "mosaic") mosaics.push(options.draft);
+  const others = marks.filter((m) => m.kind !== "mosaic" && m.kind !== "watermark");
+  for (const mark of orderedMosaics(mosaics)) drawMark(mark, r, ctx);
   for (const mark of others) {
     if (options.editingIndex !== null && options.editingIndex !== undefined) {
       const editingMark = marks[options.editingIndex];
@@ -521,7 +563,14 @@ export function renderAll(
     }
     drawMark(mark, r, ctx);
   }
-  if (options.draft) drawMark(options.draft, r, ctx);
+  if (options.draft && options.draft.kind !== "mosaic" && options.draft.kind !== "watermark") drawMark(options.draft, r, ctx);
+  const watermarks = marks.filter(mark => mark.kind === "watermark");
+  if (options.draft?.kind === "watermark") watermarks.push(options.draft);
+  for (const mark of watermarks) {
+    const editing = !r.exporting && (mark.id === options.editingId ||
+      (options.editingIndex != null && marks[options.editingIndex]?.id === mark.id));
+    drawMark(mark, r, ctx, editing);
+  }
   }
 
   if (!r.exporting && options.brushCursor && options.brushDiameter) {

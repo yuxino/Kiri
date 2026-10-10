@@ -226,7 +226,8 @@ baseline and its close warning even after exporting successfully.
 
 The capture overlay and editor load one validated native preference for the
 last-used annotation color, visual widths, text background and size, and
-mosaic style, strength, and diameter. Changes are debounced as field-level patches, merged under the native preference
+mosaic shape, style, strength, and diameter, plus text-watermark styling.
+Changes are debounced as field-level patches, merged under the native preference
 lock, and broadcast to open windows. The active tool, selection, crop,
 and document content are never persisted as appearance preferences.
 
@@ -250,6 +251,22 @@ Screenshot label bubbles share the text mark and inline editor, with an optional
 only the tip and dot change sides. Shared document geometry drives canvas/export,
 selection bounds and the accessible dot control. New labels reserve room for
 both sides, while crops keep the intersecting body, tip or dot. See ADR 0084.
+
+Capture and saved-image editing share context-sensitive property controls.
+Selection reads the mark's properties without modifying preferences; explicit
+changes update that selection with one history entry per gesture. Fixed-height
+saved-image rows keep canvas coordinates stable during selection and typing.
+Mosaic shapes are available in both windows; document-origin pixel grids and
+effect ordering keep existing same-style stronger coverage stable as strokes grow
+or overlap, including a draft stroke.
+
+The V1 document also accepts editable text-watermark marks. Shared geometry
+defines single-mark rotation, primary-anchor hit testing and tiled layout.
+Watermarks render after ordinary marks and reuse the native inline text editor.
+Cropping translates a tiled anchor without changing its phase, including when
+the anchor leaves the canvas. JavaScript and Rust bound visible tile density and
+text length before accepting an edit. The existing flat-image fallback protects
+older applications from silently rewriting unsupported content. See ADR 0088.
 
 ## Managed library flow
 

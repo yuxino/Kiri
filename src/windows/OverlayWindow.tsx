@@ -1,4 +1,3 @@
-import {LabelControls, type LabelMark} from "../annotation/LabelControls";
 // OverlayWindow — capture overlay: mode selector, window hover, region
 // selection, annotation toolbar, OCR, and recording options. Port of
 // SelectionOverlayController.swift.
@@ -36,20 +35,13 @@ import {
   standardized,
 } from "../annotation/geom";
 import {
-  COLOR_HEX,
-  COLOR_LABELS,
-  COLOR_PRESETS,
   nextCalloutNumber,
   type AnnotationMark,
-  type CalloutMark,
   type AppearanceSettings,
-  type MosaicIntensity,
-  type MosaicStyle,
-  type TextBackgroundStyle,
   type Tool,
 } from "../annotation/model";
 import { useAnnotationAppearance } from "../annotation/useAnnotationAppearance";
-import {CalloutControls} from "../annotation/CalloutControls";
+import {AnnotationStyleControls} from "../annotation/AnnotationStyleControls";
 import {TextToolPicker} from "../annotation/TextToolPicker";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
@@ -136,10 +128,10 @@ export function OverlayWindow() {
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [moveDrag, setMoveDrag] = useState<{ start: Point; original: Rect } | null>(null);
   const [tool, setTool] = useState<Tool>("select");
-  const [selectedLabel, setSelectedLabel] = useState<LabelMark|null>(null);
-  const [selectedCallout, setSelectedCallout] = useState<CalloutMark | null>(null);
+  const [selectedMark, setSelectedMark] = useState<AnnotationMark | null>(null);
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
-  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => {setSelectedCallout(mark?.kind === "callout" ? mark : null); setSelectedLabel(mark?.kind === "text" && mark.labelDirection ? mark : null);}, []);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedMark(mark), []);
   const onAnnotationDocument = useCallback((marks: AnnotationMark[]) => setCalloutNumber(nextCalloutNumber(marks)), []);
   const [appearance, setAppearance] = useAnnotationAppearance();
   const [canUndo, setCanUndo] = useState(false);
@@ -656,11 +648,14 @@ export function OverlayWindow() {
           b: "label",
           n: "callout",
           m: "mosaic",
+          w: "watermark",
         };
         if (key in map && phaseRef.current !== "mode-select") {
           const next = map[key];
           // Spec §6.6: switching tools commits any in-flight text edit.
           canvasRef.current?.commitTextEditing();
+          canvasRef.current?.finishAppearanceAdjustment();
+          if (next !== "select") canvasRef.current?.clearSelection();
           if (phaseRef.current === "selecting" && selectionRef.current) {
             // Selecting a tool locks the region into annotation mode.
             setPhase("annotating");
@@ -668,6 +663,7 @@ export function OverlayWindow() {
           } else {
             setTool(next);
           }
+          if (next === "watermark") canvasRef.current?.editWatermark();
         }
       }
     };
@@ -1127,6 +1123,8 @@ export function OverlayWindow() {
             interactionLock={completionLock}
             tool={tool}
             appearance={appearance}
+            mosaicShape={appearance.mosaicShape}
+            onError={setAnnotationError}
             calloutNumber={calloutNumber}
             onSelectionInfo={onAnnotationSelection}
             onDocumentChange={onAnnotationDocument}
@@ -1301,28 +1299,22 @@ export function OverlayWindow() {
           modeSelectorBounds={modeSelectorBounds}
           tool={tool}
           setTool={(next) => {
-            // Spec §6.6: switching tools commits any in-flight text edit
-            // (commitTextEditing is a no-op when nothing is being edited).
+            canvasRef.current?.finishAppearanceAdjustment();
             canvasRef.current?.commitTextEditing();
-            if (phase === "selecting") {
-              // Picking a tool locks the region into annotation mode.
-              setPhase("annotating");
-            }
+            if (next !== "select") canvasRef.current?.clearSelection();
+            if (phase === "selecting") setPhase("annotating");
             setTool(next);
+            if (next === "watermark") canvasRef.current?.editWatermark();
           }}
           appearance={appearance}
           setAppearance={setAppearance}
-          calloutControls={<CalloutControls selected={selectedCallout} nextNumber={calloutNumber} appearance={appearance}
-            onNextNumber={setCalloutNumber} onAppearance={patch => setAppearance({...appearance, ...patch})}
-            onEdit={patch => canvasRef.current?.updateSelectedCallout(patch, true)}
-            onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}/>}
-          labelControls={<LabelControls selected={selectedLabel} appearance={appearance}
-            onChange={(patch,transient)=>{setAppearance({...appearance,...patch});canvasRef.current?.updateSelectionAppearance(patch,transient);}}
-            onFinish={()=>canvasRef.current?.finishAppearanceAdjustment()}/>}
-          showLabelControls={tool === "label" || (tool === "select" && selectedLabel !== null)}
-          selectedLabelId={selectedLabel?.id}
-          showCalloutControls={tool === "callout" || (tool === "select" && selectedCallout !== null)}
-          selectedCalloutId={selectedCallout?.id}
+          selectedMark={selectedMark}
+          styleControls={<AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance}
+            disabled={completing} nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
+            onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
+            onChange={(patch, transient) => { setAnnotationError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient); }}
+            onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
+            onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
           canUndo={canUndo}
           canRedo={canRedo}
           canSetSize={phase === "selecting"}
@@ -1335,11 +1327,13 @@ export function OverlayWindow() {
           onPin={() => void complete(true)}
           onQr={() => { if (selectionRef.current && !completionLock.locked) void runQr(selectionRef.current); }}
           onCancel={cancel}
-          onTextFontBegin={() => canvasRef.current?.beginTextFontSizeAdjustment()}
-          onTextFontLive={(value) => canvasRef.current?.setTextFontSizeLive(value)}
-          onTextFontEnd={() => canvasRef.current?.endTextFontSizeAdjustment()}
         />
       )}
+
+      {annotationError && <div role="alert" className="kiri-annotation-error" style={{bottom: 12}}
+        onPointerDown={event => event.stopPropagation()}><span>{t(annotationError)}</span>
+        <button type="button" className="kiri-annotation-error-dismiss" aria-label={t("Close")} onClick={() => setAnnotationError(null)}>×</button></div>}
+
 
     </div>
   );
@@ -1920,6 +1914,8 @@ interface ToolbarProps {
   setTool(tool: Tool): void;
   appearance: AppearanceSettings;
   setAppearance(a: AppearanceSettings): void;
+  selectedMark?: AnnotationMark | null;
+  styleControls?: React.ReactNode;
   labelControls?: React.ReactNode;
   showLabelControls?: boolean;
   selectedLabelId?: number;
@@ -1951,6 +1947,7 @@ const TOOLS: { tool: Tool; icon: IconName; title: string }[] = [
   { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
   { tool: "text", icon: "textformat", title: "Text (T)" },
   { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)" },
+  { tool: "watermark", icon: "watermark", title: "Watermark (W)" },
 ];
 
 const toolbarRowStyle: React.CSSProperties = {
@@ -1967,44 +1964,13 @@ const toolbarRowStyle: React.CSSProperties = {
 };
 
 export function Toolbar(props: ToolbarProps) {
-  const {
-    selection,
-    bounds,
-    tool,
-    setTool,
-    appearance,
-    setAppearance,
-    canUndo,
-    canRedo,
-    canSetSize,
-    sizeControlsOpen,
-    onToggleSize,
-    disabled,
-    onUndo,
-    onRedo,
-    onDone,
-    onPin,
-    onQr,
-    onCancel,
-    onTextFontBegin,
-    onTextFontLive,
-    onTextFontEnd,
-  } = props;
-
+  const {selection, bounds, tool, setTool, canUndo, canRedo, canSetSize, sizeControlsOpen, onToggleSize,
+    disabled, onUndo, onRedo, onDone, onPin, onQr, onCancel} = props;
   const [detailsOpen, setDetailsOpen] = useState(false);
-  useEffect(() => setDetailsOpen(tool !== "select" || props.selectedCalloutId !== undefined || props.selectedLabelId !== undefined), [tool, props.selectedCalloutId, props.selectedLabelId]);
-
-  const slider =
-    tool === "pen"
-      ? { min: 1, max: 24, value: appearance.penWidth, onChange: (v: number) => setAppearance({ ...appearance, penWidth: v }) }
-      : tool === "rectangle" || tool === "line" || tool === "arrow"
-        ? { min: 1, max: 16, value: appearance.shapeWidth, onChange: (v: number) => setAppearance({ ...appearance, shapeWidth: v }) }
-        : tool === "text"
-          ? { min: 12, max: 64, value: appearance.textFontSize, onChange: (v: number) => setAppearance({ ...appearance, textFontSize: v }) }
-          : tool === "mosaic"
-            ? { min: 12, max: 120, value: appearance.mosaicBrushDiameter, onChange: (v: number) => setAppearance({ ...appearance, mosaicBrushDiameter: v }) }
-            : null;
-
+  useEffect(() => setDetailsOpen(tool !== "select" || props.selectedMark != null || props.selectedCalloutId !== undefined || props.selectedLabelId !== undefined),
+    [tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const [mainHeight, setMainHeight] = useState(48);
   const barRef = useRef<HTMLDivElement>(null);
   const [barSize, setBarSize] = useState({ width: 420, height: 48 });
   // Measure each committed row change before paint, and observe later reflows
@@ -2012,6 +1978,7 @@ export function Toolbar(props: ToolbarProps) {
   const measureBar = () => {
     const el = barRef.current;
     if (!el) return;
+    setMainHeight(mainRef.current?.offsetHeight ?? 48);
     setBarSize((previous) => {
       const width = el.offsetWidth;
       const height = el.offsetHeight;
@@ -2027,9 +1994,13 @@ export function Toolbar(props: ToolbarProps) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const { left, top } = captureToolbarPosition(selection, bounds, barSize, canSetSize && sizeControlsOpen, props.modeSelectorBounds);
-
-  const sep = <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.14)", margin: "0 3px", flexShrink: 0 }} />;
+  const {maxHeight} = capturePanelLayout(selection, bounds, barSize, props.modeSelectorBounds, canSetSize && sizeControlsOpen);
+  const {left, top} = captureToolbarPosition(selection, bounds, {width: barSize.width, height: Math.min(barSize.height, maxHeight)},
+    canSetSize && sizeControlsOpen, props.modeSelectorBounds);
+  const options = props.styleControls ?? (props.showLabelControls ? props.labelControls : props.showCalloutControls ? props.calloutControls : null);
+  const button = ({tool: value, icon, title}: typeof TOOLS[number]) => value === "text"
+    ? <TextToolPicker key={value} tool={tool} onSelect={setTool}/>
+    : <ToolButton key={value} icon={icon} title={t(title)} active={tool === value} disabled={disabled} onClick={() => setTool(value)}/>;
 
   return (
     <>
@@ -2056,127 +2027,29 @@ export function Toolbar(props: ToolbarProps) {
           transition: "opacity 0.12s ease-out",
         }}
       >
-        <div className="kiri-hud" style={toolbarRowStyle}>
-          <ToolButton icon="xmark" title={t("Cancel capture · Esc")} onClick={onCancel} />
-          {sep}
-          {TOOLS.map(({ tool: t2, icon, title }) => t2 === "text" ?
-            <TextToolPicker key={t2} tool={tool} onSelect={setTool}/> : (
-            <ToolButton
-              key={t2}
-              icon={icon}
-              title={t(title)}
-              active={tool === t2}
-              onClick={() => setTool(t2)}
-            />
-          ))}
-          {sep}
-          <ToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={!canUndo} onClick={onUndo} />
-          <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo} />
-          <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr} />
-          <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "More Actions")}
-            active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
-            onClick={() => canSetSize ? onToggleSize() : setDetailsOpen(open => !open)} />
-          {sep}
-          <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin} />
-          <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone} />
-        </div>
-        {detailsOpen && props.showLabelControls && !canSetSize && (
-          <div style={{ width: "max-content", maxWidth: "100%", pointerEvents: "auto" }}>{props.labelControls}</div>
-        )}
-        {detailsOpen && props.showCalloutControls && !canSetSize && (
-          <div style={{ width: "max-content", maxWidth: "100%", pointerEvents: "auto" }}>{props.calloutControls}</div>
-        )}
-        {detailsOpen && !canSetSize && !props.showCalloutControls && !props.showLabelControls && (
-          <div className="kiri-hud" style={toolbarRowStyle}>
-            {/* Context row */}
-            {tool === "text" ? (
-              <SegmentedControl
-                segments={[
-                  { icon: "square.dashed", label: t("Transparent"), title: t("No background") },
-                  { icon: "moon.fill", label: t("Dark"), title: t("Dark background") },
-                ]}
-                value={appearance.textBackgroundStyle === "transparent" ? 0 : 1}
-                onChange={(index) =>
-                  setAppearance({
-                    ...appearance,
-                    textBackgroundStyle: (["transparent", "dark"] as TextBackgroundStyle[])[index],
-                  })
-                }
-              />
-            ) : tool === "mosaic" ? (
-              <>
-                <SegmentedControl
-                  segments={[
-                    { label: t("Pixel"), title: t("Pixel mosaic") },
-                    { label: t("Blur"), title: t("Gaussian blur") },
-                  ]}
-                  value={appearance.mosaicStyle === "pixel" ? 0 : 1}
-                  onChange={(index) =>
-                    setAppearance({
-                      ...appearance,
-                      mosaicStyle: (["pixel", "blur"] as MosaicStyle[])[index],
-                    })
-                  }
-                />
-                <SegmentedControl
-                  width={24}
-                  segments={[
-                    { label: "1", title: t("Soft") },
-                    { label: "2", title: t("Standard") },
-                    { label: "3", title: t("Strong") },
-                  ]}
-                  value={appearance.mosaicIntensity === "soft" ? 0 : appearance.mosaicIntensity === "standard" ? 1 : 2}
-                  onChange={(index) =>
-                    setAppearance({
-                      ...appearance,
-                      mosaicIntensity: (["soft", "standard", "strong"] as MosaicIntensity[])[index],
-                    })
-                  }
-                />
-              </>
-            ) : null}
-            {slider && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                <input
-                  type="range"
-                  className="kiri-range"
-                  aria-label={t(tool === "text" ? "Font" : tool === "mosaic" || tool === "pen" ? "Brush" : "Line")}
-                  min={slider.min}
-                  max={slider.max}
-                  value={slider.value}
-                  onChange={(e) => {
-                    const value = Math.round(Number(e.target.value));
-                    slider.onChange(value);
-                    // Live preview for the selected text mark (spec §6.6).
-                    if (tool === "text") onTextFontLive?.(value);
-                  }}
-                  onPointerDown={() => {
-                    if (tool === "text") onTextFontBegin?.();
-                  }}
-                  onPointerUp={() => {
-                    if (tool === "text") onTextFontEnd?.();
-                  }}
-                  onPointerLeave={() => {
-                    if (tool === "text") onTextFontEnd?.();
-                  }}
-                  onKeyUp={() => { if (tool === "text") onTextFontEnd?.(); }}
-                  onBlur={() => { if (tool === "text") onTextFontEnd?.(); }}
-                />
-                <span className="kiri-toolbar-value">{slider.value}</span>
-              </div>
-            )}
-            {slider && sep}
-            {COLOR_PRESETS.map((preset) => (
-              <ColorSwatch
-                key={preset}
-                color={COLOR_HEX[preset]}
-                label={t(COLOR_LABELS[preset])}
-                selected={appearance.colorPreset === preset}
-                onClick={() => setAppearance({ ...appearance, colorPreset: preset })}
-              />
-            ))}
+        <div ref={mainRef} className="kiri-hud kiri-annotation-tool-row" style={toolbarRowStyle}>
+          <div className="kiri-annotation-tool-group">
+            <ToolButton icon="xmark" title={t("Cancel capture · Esc")} onClick={onCancel}/>
+            {button(TOOLS[0])}
           </div>
-        )}
+          <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>{TOOLS.slice(1, 5).map(button)}</div>
+          <div className="kiri-annotation-tool-group">{button(TOOLS[5])}</div>
+          <div className="kiri-annotation-tool-group">{TOOLS.slice(6).map(button)}</div>
+          <div className="kiri-annotation-tool-group">
+            <ToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={!canUndo} onClick={onUndo}/>
+            <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo}/>
+            <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr}/>
+            <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "Tool options")}
+              active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
+              onClick={() => canSetSize ? onToggleSize() : setDetailsOpen(open => !open)}/>
+          </div>
+          <div className="kiri-annotation-tool-group">
+            <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin}/>
+            <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone}/>
+          </div>
+        </div>
+        {detailsOpen && !canSetSize && options && <div className="kiri-hud kiri-capture-tool-options"
+          style={{maxHeight: Math.max(0, maxHeight - mainHeight - 6)}}>{options}</div>}
       </div>
     </>
   );
@@ -2216,75 +2089,5 @@ function ToolButton(props: {
         props.label
       )}
     </button>
-  );
-}
-
-function ColorSwatch(props: { color: string; label: string; selected: boolean; onClick(): void }) {
-  return (
-    <button
-      type="button"
-      className="kiri-toolbar-swatch"
-      data-selected={props.selected || undefined}
-      aria-label={props.label}
-      title={props.label}
-      aria-pressed={props.selected}
-      onClick={props.onClick}
-      style={{
-        width: 22,
-        ...(props.selected ? { background: `${props.color}33` } : {}),
-      }}
-    >
-      {props.selected && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 8,
-            border: `1.5px solid ${props.color}`,
-            boxSizing: "border-box",
-          }}
-        />
-      )}
-      <div
-        style={{
-          width: props.selected ? 12 : 10,
-          height: props.selected ? 12 : 10,
-          borderRadius: "50%",
-          background: props.color,
-          boxShadow: props.color === "#FFFFFF" ? "0 0 0 0.75px rgba(0,0,0,0.18)" : "none",
-        }}
-      />
-    </button>
-  );
-}
-
-function SegmentedControl(props: {
-  width?: number;
-  segments: { label?: string; icon?: IconName; title?: string }[];
-  value: number;
-  onChange(index: number): void;
-}) {
-  return (
-    <div className="kiri-toolbar-segments">
-      {props.segments.map((segment, index) => (
-        <button
-          type="button"
-          className="kiri-toolbar-segment"
-          data-active={props.value === index || undefined}
-          key={index}
-          title={segment.title}
-          aria-pressed={props.value === index}
-          onClick={() => props.onChange(index)}
-          style={{
-            minWidth: props.width,
-          }}
-        >
-          {segment.icon ? (
-            <KiriIcon name={segment.icon} size={12} style={{ opacity: 0.85 }} />
-          ) : null}
-          {segment.label}
-        </button>
-      ))}
-    </div>
   );
 }

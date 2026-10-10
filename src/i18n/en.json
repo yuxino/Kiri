@@ -735,5 +735,18 @@
   "Couldn't rename this capture.": "Couldn't rename this capture.",
   "Renamed; the old file could not be removed.": "Renamed; the old file could not be removed.",
   "Renamed; disk synchronization failed.": "Renamed; disk synchronization failed.",
-  "Wait for GIF conversion to finish before renaming.": "Wait for GIF conversion to finish before renaming."
+  "Wait for GIF conversion to finish before renaming.": "Wait for GIF conversion to finish before renaming.",
+  "Watermark": "Watermark",
+  "Watermark (W)": "Watermark (W)",
+  "Watermark layout": "Watermark layout",
+  "Single": "Single",
+  "Tiled": "Tiled",
+  "Opacity": "Opacity",
+  "Rotation": "Rotation",
+  "Spacing": "Spacing",
+  "Effect size": "Effect size",
+  "Edit watermark": "Edit watermark",
+  "Tool options": "Tool options",
+  "Watermark is too dense. Increase its size or spacing.": "Watermark is too dense. Increase its size or spacing.",
+  "Watermark text must be 512 characters or fewer.": "Watermark text must be 512 characters or fewer."
 }

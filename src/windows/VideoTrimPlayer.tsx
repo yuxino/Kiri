@@ -31,7 +31,7 @@ import {hitTestHandle} from "../annotation/geom";
 import {VideoAnnotationsEditor} from "./VideoAnnotationsEditor";
 import {paintVideoAnnotation,rasterizeVideoAnnotations} from "./video-annotation-render";
 type EditDocument = VideoEdit;
-const annotationLabel=(mark:AnnotationMark)=>(mark.kind==="text"&&mark.text.trim()?`${t("Text")} · ${mark.text.trim().replace(/\s+/g," ").slice(0,16)}`:t(({pen:"Pen",rectangle:"Rectangle",line:"Line",arrow:"Arrow",text:"Text",callout:"Numbered callout",mosaic:"Mosaic"} as const)[mark.kind]));
+const annotationLabel=(mark:AnnotationMark)=>(mark.kind==="text"&&mark.text.trim()?`${t("Text")} · ${mark.text.trim().replace(/\s+/g," ").slice(0,16)}`:t(({pen:"Pen",rectangle:"Rectangle",line:"Line",arrow:"Arrow",text:"Text",callout:"Numbered callout",mosaic:"Mosaic",watermark:"Watermark"} as const)[mark.kind]));
 const unchanged = sameVideoProjectValue;
 
 async function makeRoomForVideoEditor() {
