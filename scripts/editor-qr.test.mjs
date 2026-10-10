@@ -29,6 +29,9 @@ function editor(options = {}) {
     exportResult: async () => { mutations.push("export"); return null; },
     undo: () => mutations.push("undo"), redo: () => mutations.push("redo"),
     deleteSelection: () => mutations.push("delete"),
+    // Style/text finalizers have no native/library side effect. The annotation
+    // component tests own their content/history behavior; QR must not export.
+    finishAppearanceAdjustment() {}, commitTextEditing() {}, clearSelection() {},
   };
   const api = {
     getAssetAnnotationProject: async () => options.snapshot ? await options.snapshot : snapshot,
@@ -47,6 +50,7 @@ function editor(options = {}) {
         nextCalloutNumber: marks => Math.min(999, marks.reduce((next,mark) => mark.kind === "callout" ? Math.max(next,mark.number+1) : next,1)) },
       "../annotation/LabelControls": {LabelControls: props => ({type:"label-controls",props})},
       "../annotation/CalloutControls": {CalloutControls: "callout-controls"},
+      "../annotation/AnnotationStyleControls": {AnnotationStyleControls: "annotation-style-controls"},
       "../annotation/TextToolPicker": {TextToolPicker: "text-tool-picker"},
       "../annotation/text-composition.js": textComposition,
       "../annotation/useAnnotationAppearance": { useAnnotationAppearance: () => [{ color: "white", penWidth: 3, shapeWidth: 2, textFontSize: 18, textBackgroundStyle: "transparent", mosaicBrushDiameter: 24, mosaicStyle: "pixel", mosaicIntensity: "standard" }, () => {}] },
@@ -152,6 +156,38 @@ test("QR arrows follow centered aspect-fit CSS pixels across resize, independent
   h.component.unmount();
 });
 
+test("a pending crop stays cancellable while annotating without changing marks, tool or canvas coordinates", async () => {
+  const h = await loadedEditor();
+  const before = find(h.component.render(), "annotation-canvas").props;
+  tool(h.component.render(), "Crop (C)").props.onClick();
+  let tree = h.component.render();
+  const pendingCrop = {x: 30, y: 40, width: 350, height: 210};
+  find(tree, "crop-overlay").props.onChange(pendingCrop);
+  tool(h.component.render(), "Rectangle (R)").props.onClick();
+  tree = h.component.render();
+  const marks = [text, {kind: "rectangle", id: 2, rect: {x: 80, y: 60, width: 80, height: 50}, color: "white", width: 3}];
+  find(tree, "annotation-canvas").props.onDocumentChange(marks);
+  tree = h.component.render();
+  const cancel = button(tree, "Cancel crop");
+  assert.ok(cancel, "switching to a drawing tool must retain the pending crop action");
+  assert.equal(find(tree, "annotation-style-controls").props.tool, "rectangle");
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, before.viewSize);
+  assert.deepEqual(find(tree, "annotation-canvas").props.region, before.region);
+  let stopped = false;
+  cancel.props.onKeyDown({key: "Enter", stopPropagation() {stopped = true;}});
+  assert.equal(stopped, true, "Enter activates Cancel crop without also saving the image");
+  cancel.props.onClick();
+  tree = h.component.render();
+  assert.equal(find(tree, "crop-overlay"), undefined);
+  assert.equal(button(tree, "Cancel crop"), undefined);
+  assert.equal(find(tree, "annotation-canvas").props.tool, "rectangle");
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, before.viewSize);
+  assert.deepEqual(find(tree, "annotation-canvas").props.region, before.region);
+  assert.equal(find(tree, "image-close-guard").props.dirty, true, "annotations still require the close guard after removing only the crop");
+  assert.deepEqual(h.mutations, [], "cancelling crop must not export, undo annotations or close the editor");
+  h.component.unmount();
+});
+
 test("QR pauses background shortcuts synchronously and Escape restores crop, marks and an uncommitted text draft", async () => {
   const pending = deferred();
   const h = await loadedEditor({ scanQr: () => pending.promise });
@@ -169,7 +205,7 @@ test("QR pauses background shortcuts synchronously and Escape restores crop, mar
   tree = h.component.render();
   assert.deepEqual(h.mutations, []);
   assert.equal(button(tree, "Save").props.disabled, true);
-  assert.equal(button(tree, "Save As…").props.disabled, true);
+  assert.equal(tool(tree, "Save As…").props.disabled, true);
   assert.ok(nodes(tree).some(node => node?.props?.inert === true));
   const imeEscape = h.key("Escape", { isComposing: true });
   assert.equal(imeEscape.defaultPrevented, false);
@@ -281,10 +317,10 @@ test("OCR images stay read-only after leaving QR and expose only recognition and
   tree = h.component.render();
   assert.equal(qr(tree), undefined);
   assert.ok(tool(tree, "Recognize QR Codes"));
-  assert.ok(button(tree, "Close"));
+  assert.ok(tool(tree, "Close"));
   for (const title of ["Crop (C)", "Pen (P)", "Undo (⌘Z)", "Recognize Saved Image Locally"]) assert.equal(tool(tree, title), undefined);
   assert.equal(button(tree, "Save"), undefined);
-  assert.equal(button(tree, "Save As…"), undefined);
+  assert.equal(tool(tree, "Save As…"), undefined);
   assert.equal(find(tree, "annotation-canvas").props.interactionDisabled, true);
   assert.equal(find(tree, "annotation-canvas").props.interactionLock.locked, true);
   for (const [key, extra] of [["Enter", {}], ["z", { metaKey: true }], ["Delete", {}], ["c", {}]]) h.key(key, extra);

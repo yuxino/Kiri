@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {watermarkTilePlan,watermarkIntersectsRect} from "../src/annotation/watermark-geometry.js";
 
 import {
   cropAnnotationDocument,
@@ -20,6 +21,29 @@ function documentWithMarks() {
     ],
   };
 }
+
+test("crop preserves tiled watermark anchor phase even when the editable master is outside",()=>{
+  const mark={kind:"watermark",id:11,text:"© Kiri",rect:{x:10,y:10,width:100,height:30},color:"black",
+    fontSize:24,opacity:.2,rotation:-30,mode:"tiled",spacing:80};
+  const document={...documentWithMarks(),marks:[mark]},crop={x:200,y:150,width:200,height:160};
+  const result=cropAnnotationDocument(document,crop).document;
+  assert.equal(result.marks.length,1);assert.deepEqual(result.marks[0].rect,{...mark.rect,x:-190,y:-140});
+  const before=watermarkTilePlan(mark,crop),after=watermarkTilePlan(result.marks[0],{x:0,y:0,...result.canvas});
+  assert.equal(before.stepX,after.stepX);assert.equal(before.stepY,after.stepY);
+  assert.equal(before.startColumn,after.startColumn);assert.equal(before.endColumn,after.endColumn);
+  assert.equal(before.startRow,after.startRow);assert.equal(before.endRow,after.endRow);
+});
+
+test("single watermark crop follows rotated content rather than its unrotated rect",()=>{
+  const mark={kind:"watermark",id:12,text:"Kiri",rect:{x:100,y:100,width:100,height:20},color:"black",
+    fontSize:18,opacity:.5,rotation:90,mode:"single",spacing:80};
+  const document={...documentWithMarks(),marks:[mark]},rotatedEdge={x:145,y:145,width:10,height:10};
+  assert.equal(watermarkIntersectsRect(mark,rotatedEdge),true);
+  assert.equal(cropAnnotationDocument(document,rotatedEdge).document.marks.length,1);
+  const unrotatedOnly={x:190,y:100,width:8,height:8};
+  assert.equal(watermarkIntersectsRect(mark,unrotatedOnly),false);
+  assert.equal(cropAnnotationDocument(document,unrotatedOnly).document.marks.length,0);
+});
 
 test("full crop is a no-op at Retina scale", () => {
   const document = documentWithMarks();

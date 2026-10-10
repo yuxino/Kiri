@@ -19,10 +19,14 @@ import {handleTextEditorKey, isTextComposition, setTextComposition} from "./text
 ${editor.getText(tree)}
 export {TextEditor};`;
 
-function input(text = "") {
+function input(text = "", options = {}) {
   let value = "";
-  const writes = [], changes = [], commands = [];
+  const writes = [], changes = [], commands = [], moves = [];
   const textarea = {
+    style: {},
+    getBoundingClientRect() {return {left: node.props.style.left, top: node.props.style.top,
+      width: node.props.style.width, height: node.props.style.height};},
+    setPointerCapture() {},
     selectionStart: 0, selectionEnd: 0,
     get value() {return value;},
     set value(next) {writes.push(next); value = next; this.selectionStart = this.selectionEnd = next.length;},
@@ -50,12 +54,20 @@ function input(text = "") {
   const props = {editing: {id: 1, index: 0, text, callout: {}, rect: {x: 130, y: 80, width: 160, height: 41},
     maxWidth: 280, uiScale: 1, fontSize: 18, color: "cherry", background: "transparent"},
     bounds: {width: 640, height: 360}, disabled: false, onTextChange: text => changes.push(text),
-    onRectChange() {}, onCommit: () => finishes++, onCancel: () => finishes++, onUndo() {}, onRedo() {}, nativeUndo: true};
+    onRectChange() {}, onCommit: () => finishes++, onCancel: () => finishes++, onUndo() {}, onRedo() {}, nativeUndo: true,
+    onMoveCallout: (event, first) => moves.push({clientX: event.clientX, clientY: event.clientY, first}), ...options};
   const component = h.mount("TextEditor", props);
   let node = nodes(component.render()).find(node => node?.type === "textarea");
-  return {textarea, writes, changes, commands, finishes: () => finishes,
+  return {textarea, writes, changes, commands, moves, finishes: () => finishes,
     render(text, patch = {}) {node = nodes(component.render({...props, editing: {...props.editing, text, ...patch}})).find(node => node?.type === "textarea"); return node;},
-    grip() {return nodes(component.render()).find(node => node?.type === "button");},
+    buttons() {return nodes(component.render()).filter(node => node?.type === "button");},
+    pointer(name, clientX, clientY, options = {}) {
+      const event = {clientX, clientY, button: 0, pointerId: 1, currentTarget: textarea, target: textarea,
+        defaultPrevented: false, stopped: false,
+        preventDefault() {this.defaultPrevented = true;}, stopPropagation() {this.stopped = true;}, ...options};
+      assert.equal(typeof node.props[name], "function", `native textarea exposes ${name}`);
+      node.props[name](event); return event;
+    },
     key(options = {}) {
       const event = {key: "Enter", currentTarget: textarea, target: textarea,
         defaultPrevented: false, stopped: false,
@@ -84,14 +96,53 @@ test("delayed callout selection echoes preserve continuous input and the native 
   assert.deepEqual(h.writes, [""]);
 });
 
-test("the inline grip stays inside display edges and ordinary input remains transparent over saved backgrounds", () => {
+test("inline input needs no black move grip and all annotation inputs remain transparent without a white focus ring", () => {
   const h = input();
   h.render("", {rect: {x: 480, y: 0, width: 160, height: 41}});
-  const grip = h.grip();
-  assert.equal(grip.props.style.left, 624);
-  assert.equal(grip.props.style.top, 0);
-  const text = h.render("saved", {callout: undefined, background: "dark"});
-  assert.equal(text.props.style.background, "transparent");
+  assert.deepEqual(h.buttons(), []);
+  for (const patch of [{}, {callout: undefined, background: "dark"}, {callout: undefined, watermark: {}}]) {
+    const text = h.render("saved", patch);
+    assert.equal(text.props.style.background, "transparent");
+    assert.equal(text.props.style.outline, "none"); assert.equal(text.props.style.boxShadow, "none");
+  }
+});
+
+test("description text keeps native selection while its frame starts moving only at three CSS pixels", () => {
+  const h = input("saved");
+  h.textarea.selectionStart = 1; h.textarea.selectionEnd = 3;
+  assert.equal(h.pointer("onPointerDown", 160, 100).defaultPrevented, false);
+  h.pointer("onPointerMove", 180, 100); h.pointer("onPointerUp", 180, 100);
+  assert.deepEqual(h.moves, []);
+  assert.equal(h.textarea.selectionStart, 1); assert.equal(h.textarea.selectionEnd, 3);
+  assert.equal(h.pointer("onPointerDown", 131, 100).defaultPrevented, true);
+  h.pointer("onPointerMove", 133, 100); h.pointer("onPointerUp", 133, 100);
+  assert.deepEqual(h.moves, [], "frame click and jitter leave input/caret in the editor");
+  h.pointer("onPointerDown", 131, 100); h.pointer("onPointerMove", 141, 105);
+  assert.deepEqual(h.moves, [{clientX: 141, clientY: 105, first: {x: 131, y: 100}}]);
+  h.pointer("onPointerMove", 150, 110);
+  assert.equal(h.moves.length, 1, "the original start is handed to Canvas once");
+  assert.equal(h.textarea.value, "saved"); assert.deepEqual(h.writes, ["saved"]);
+  assert.equal(h.textarea.selectionStart, 1); assert.equal(h.textarea.selectionEnd, 3);
+});
+
+test("description frame dragging respects IME, cancellation, pointer identity and disabled state", () => {
+  const h = input("中文");
+  h.compose(true);
+  assert.equal(h.pointer("onPointerDown", 131, 100).defaultPrevented, true);
+  h.pointer("onPointerMove", 145, 110); assert.deepEqual(h.moves, []);
+  h.compose(false);
+  h.pointer("onPointerDown", 131, 100); h.pointer("onPointerMove", 145, 110, {pointerId: 2});
+  h.pointer("onPointerCancel", 131, 100); h.pointer("onPointerMove", 145, 110);
+  assert.deepEqual(h.moves, []);
+  h.pointer("onPointerDown", 131, 100); h.pointer("onLostPointerCapture", 131, 100);
+  h.pointer("onPointerMove", 145, 110); assert.deepEqual(h.moves, []);
+  h.pointer("onPointerDown", 131, 100); h.compose(true); h.pointer("onPointerMove", 145, 110);
+  assert.deepEqual(h.moves, []); h.compose(false);
+  h.pointer("onPointerDown", 131, 100); h.pointer("onPointerMove", 141, 105);
+  assert.equal(h.moves.length, 1); assert.deepEqual(h.writes, ["中文"]);
+  const disabled = input("saved", {disabled: true});
+  disabled.pointer("onPointerDown", 131, 100); disabled.pointer("onPointerMove", 145, 110);
+  assert.deepEqual(disabled.moves, []);
 });
 
 test("callout padding includes its border without narrowing the rendered text area", () => {

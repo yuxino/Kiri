@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import {watermarkPixelCases} from "./helpers/watermark-pixel-cases.mjs";
+import {watermarkBounds,watermarkContainsPoint,watermarkTilePlan,validateWatermarkDensity} from "../src/annotation/watermark-geometry.js";
 
 import {
   ANNOTATION_PROJECT_LIMITS,
@@ -23,54 +25,31 @@ function moduleDataUrl(source) {
   return `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 }
 
-let annotationModel;
-function loadAnnotationModel() {
-  return annotationModel ??= compileAnnotationModel();
+const compiledModules = new Map();
+async function compileAnnotationModule(url) {
+  if (compiledModules.has(url.href)) return compiledModules.get(url.href);
+  const pending = (async () => {
+    const source = await readFile(url, "utf8");
+    let javascript = ts.transpileModule(source, TRANSPILE_OPTIONS).outputText;
+    const imports = [...javascript.matchAll(/from "(\.\/[^"]+)"/g)];
+    for (const [statement, specifier] of imports) {
+      const extension = /\.[a-z]+$/.test(specifier) ? "" : ".ts";
+      const dependency = await compileAnnotationModule(new URL(specifier + extension, url));
+      javascript = javascript.replace(statement, `from ${JSON.stringify(dependency)}`);
+    }
+    return moduleDataUrl(javascript);
+  })();
+  compiledModules.set(url.href, pending);
+  return pending;
 }
-
-async function compileAnnotationModel() {
-  const [geomSource, modelSource] = await Promise.all([
-    readFile(new URL("../src/annotation/geom.ts", import.meta.url), "utf8"),
-    readFile(new URL("../src/annotation/model.ts", import.meta.url), "utf8"),
-  ]);
-  const geomJavaScript = ts.transpileModule(geomSource, TRANSPILE_OPTIONS).outputText;
-  const geomUrl = moduleDataUrl(geomJavaScript);
-  const modelJavaScript = ts.transpileModule(
-    modelSource.replaceAll('"./geom"', JSON.stringify(geomUrl)),
-    TRANSPILE_OPTIONS,
-  ).outputText;
-  return import(moduleDataUrl(modelJavaScript));
+async function loadAnnotationModel() {
+  return import(await compileAnnotationModule(new URL("../src/annotation/model.ts", import.meta.url)));
 }
-
-let annotationRender;
-function loadAnnotationRender() {
-  return annotationRender ??= compileAnnotationRender();
+async function loadAnnotationRender() {
+  return import(await compileAnnotationModule(new URL("../src/annotation/render.ts", import.meta.url)));
 }
-
-async function compileAnnotationRender() {
-  const [geomSource, modelSource, renderSource] = await Promise.all([
-    readFile(new URL("../src/annotation/geom.ts", import.meta.url), "utf8"),
-    readFile(new URL("../src/annotation/model.ts", import.meta.url), "utf8"),
-    readFile(new URL("../src/annotation/render.ts", import.meta.url), "utf8"),
-  ]);
-  const geomUrl = moduleDataUrl(ts.transpileModule(geomSource, TRANSPILE_OPTIONS).outputText);
-  const modelJavaScript = ts.transpileModule(
-    modelSource.replaceAll('"./geom"', JSON.stringify(geomUrl)),
-    TRANSPILE_OPTIONS,
-  ).outputText;
-  const modelUrl = moduleDataUrl(modelJavaScript);
-  const textLayoutUrl = new URL("../src/annotation/text-layout.js", import.meta.url).href;
-  const blurSource=await readFile(new URL("../src/annotation/canvas-blur.ts",import.meta.url),'utf8');
-  const blurUrl=moduleDataUrl(ts.transpileModule(blurSource,TRANSPILE_OPTIONS).outputText);
-  const renderJavaScript = ts.transpileModule(
-    renderSource
-      .replaceAll('"./model"', JSON.stringify(modelUrl))
-      .replaceAll('"./geom"', JSON.stringify(geomUrl))
-      .replaceAll('"./canvas-blur"', JSON.stringify(blurUrl))
-      .replaceAll('"./text-layout.js"', JSON.stringify(textLayoutUrl)),
-    TRANSPILE_OPTIONS,
-  ).outputText;
-  return import(moduleDataUrl(renderJavaScript));
+async function loadWatermarkRender() {
+  return import(await compileAnnotationModule(new URL("../src/annotation/watermark-render.ts", import.meta.url)));
 }
 
 function documentWith(marks = []) {
@@ -623,10 +602,9 @@ for (const direction of ["left","right"]) {
     const geometry=labelGeometry(label.rect,label.fontSize,direction);
     assert.equal(markIndexAt([label],geometry.dot),0);
     const moved=translateMark(label,{x:-1000,y:-1000},{x:0,y:0,width:640,height:360});
-    for(const side of ["left","right"]){
-      const b=labelGeometry(moved.rect,moved.fontSize,side).bounds;
-      assert.ok(b.x>=-1e-8&&b.y>=-1e-8);
-    }
+    const b=labelGeometry(moved.rect,moved.fontSize,direction).bounds;
+    assert.ok(b.x>=-1e-8&&b.y>=-1e-8);
+    assert.ok(b.x+b.width<=640+1e-8&&b.y+b.height<=360+1e-8);
     const crop=cropAnnotationDocument(doc,{x:geometry.dot.x-5,y:geometry.dot.y-5,width:10,height:10});
     assert.equal(crop.document.marks.length,1);
     assert.equal(crop.document.marks[0].labelDirection,direction);
@@ -642,4 +620,115 @@ test("label export scales its complete geometry and keeps neutral body and reada
   drawMark(label,{exporting:true,scaleX:2,scaleY:3},ctx);
   assert.deepEqual(scales,[[2,3]]);
   assert.ok(fills.includes("#303136"));assert.ok(fills.includes("#fafafa"));assert.ok(fills.includes("#141414"));
+});
+
+const WATERMARK = {kind:"watermark",id:80,text:"Kiri © 中文",rect:{x:80,y:60,width:150,height:35},
+  color:"black",fontSize:28,opacity:.2,rotation:-30,mode:"tiled",spacing:80};
+
+test("watermarks round-trip without weakening strict schema or legacy documents",()=>{
+  const input=documentWith([WATERMARK]);
+  const parsed=parseAnnotationDocument(input);
+  assert.deepEqual(parsed,input);
+  assert.notEqual(parsed.marks[0].rect,input.marks[0].rect);
+  assert.deepEqual(parseAnnotationDocument(JSON.parse(JSON.stringify(parsed))),parsed);
+  assert.deepEqual(parseAnnotationDocument(documentWith(ALL_MARKS)).marks,ALL_MARKS);
+  for(const patch of [{opacity:-.1},{opacity:1.1},{rotation:181},{rotation:NaN},{spacing:15},{spacing:4097},
+    {mode:"repeat"},{fontSize:0},{extra:true},{text:"😀".repeat(257)},{rect:{...WATERMARK.rect,width:0}}]) {
+    assert.throws(()=>parseAnnotationDocument(documentWith([{...WATERMARK,...patch}])));
+  }
+  assert.equal(parseAnnotationDocument(documentWith([{...WATERMARK,text:"😀".repeat(256)}])).marks[0].text.length,512);
+});
+
+test("watermark density includes boundary tiles, offscreen anchors and the whole document",()=>{
+  const mark={...WATERMARK,rotation:0,rect:{x:0,y:0,width:1,height:1},spacing:16};
+  assert.equal(watermarkTilePlan(mark,{x:0,y:0,width:1071,height:1071}).count,4096);
+  const region={x:0,y:0,width:1088,height:1088};
+  assert.throws(()=>watermarkTilePlan(mark,region),/Watermark is too dense/);
+  assert.throws(()=>watermarkTilePlan({...mark,rect:{...mark.rect,x:-10013,y:-10013}},region),/Watermark is too dense/);
+  const document={...documentWith(),canvas:{width:1024,height:1024},sourcePixels:{width:1024,height:1024}};
+  assert.equal(validateWatermarkDensity([mark,{...mark,id:81}],{x:0,y:0,...document.canvas}),7442);
+  assert.throws(()=>parseAnnotationDocument({...document,marks:[mark,{...mark,id:81},{...mark,id:82}]}),/Watermark is too dense/);
+  assert.equal(validateWatermarkDensity([{...mark,mode:"single"}],region),1);
+});
+
+test("rotated master hit testing does not let repeated tiles capture other objects",async()=>{
+  const {markIndexAt,selectionBounds}=await loadAnnotationModel();
+  const mark={...WATERMARK,rect:{x:100,y:100,width:200,height:30},rotation:45};
+  const center={x:200,y:115}, bounds=watermarkBounds(mark);
+  assert.deepEqual(selectionBounds(mark),bounds);
+  assert.equal(watermarkContainsPoint(mark,center),true);
+  assert.equal(watermarkContainsPoint(mark,{x:bounds.x+1,y:bounds.y+1}),false);
+  const plan=watermarkTilePlan(mark,{x:0,y:0,width:640,height:360});
+  const copy={x:center.x+plan.stepX,y:center.y};
+  assert.equal(markIndexAt([mark],copy),null);
+  const underneath={kind:"rectangle",id:81,rect:{x:copy.x-10,y:copy.y-10,width:20,height:20},color:"blue",width:3};
+  assert.equal(markIndexAt([underneath,mark],copy),0);
+  assert.equal(markIndexAt([underneath,mark],center),1);
+});
+
+test("watermark movement, rotated resize and one-property styling preserve metadata",async()=>{
+  const {translateMark,resizeAnnotationMark,selectionBounds,applyAnnotationAppearance,DEFAULT_APPEARANCE}=await loadAnnotationModel();
+  const bounds={x:0,y:0,width:640,height:360};
+  const moved=translateMark(WATERMARK,{x:30,y:20},bounds);
+  assert.deepEqual(moved.rect,{...WATERMARK.rect,x:110,y:80});
+  assert.equal(moved.rotation,-30);assert.equal(moved.spacing,80);
+  const clamped=translateMark(WATERMARK,{x:-1000,y:-1000},bounds), box=selectionBounds(clamped);
+  assert.ok(box.x>=-1e-9&&box.y>=-1e-9);
+  const before=selectionBounds(WATERMARK);
+  const resized=resizeAnnotationMark(WATERMARK,"bottomRight",{x:before.x+before.width*1.5,y:before.y+before.height*1.5},bounds);
+  assert.ok(resized.fontSize>WATERMARK.fontSize);
+  assert.ok(Math.abs(resized.rect.width/resized.rect.height-WATERMARK.rect.width/WATERMARK.rect.height)<1e-10);
+  assert.equal(resized.opacity,WATERMARK.opacity);assert.equal(resized.rotation,WATERMARK.rotation);
+  assert.equal(resized.mode,WATERMARK.mode);assert.equal(resized.spacing,WATERMARK.spacing);
+  const changed=applyAnnotationAppearance(WATERMARK,{watermarkOpacity:55});
+  assert.equal(changed.opacity,.55);assert.deepEqual(changed.rect,WATERMARK.rect);
+  const enlarged=applyAnnotationAppearance(WATERMARK,{watermarkFontSize:56});
+  assert.equal(enlarged.rect.x+enlarged.rect.width/2,WATERMARK.rect.x+WATERMARK.rect.width/2);
+  assert.equal(enlarged.rect.width,WATERMARK.rect.width*2);
+  assert.deepEqual(applyAnnotationAppearance(WATERMARK,{colorPreset:"white",textFontSize:64}),WATERMARK);
+  assert.equal(DEFAULT_APPEARANCE.watermarkColor,"black");assert.equal(DEFAULT_APPEARANCE.watermarkOpacity,20);
+  assert.equal(DEFAULT_APPEARANCE.mosaicShape,"brush");
+});
+
+test("watermark drawing isolates alpha/transform and hides only the inline-edit master",async()=>{
+  const {drawWatermark}=await loadWatermarkRender();
+  const state=[],paint=[],scales=[],transforms=[];
+  const ctx={globalAlpha:.8,fillStyle:"sentinel",font:"sentinel",textAlign:"center",textBaseline:"alphabetic",
+    save(){state.push([this.globalAlpha,this.fillStyle,this.font,this.textAlign,this.textBaseline]);},
+    restore(){[this.globalAlpha,this.fillStyle,this.font,this.textAlign,this.textBaseline]=state.pop();},
+    scale(...values){scales.push(values);},beginPath(){},rect(){},clip(){},
+    translate(x,y){transforms.push([x,y]);},rotate(){},measureText:value=>({width:value.length*7}),
+    fillText(value){paint.push({value,alpha:this.globalAlpha});}};
+  const render={regionSize:{width:640,height:360},exporting:true,scaleX:2,scaleY:3};
+  drawWatermark({...WATERMARK,mode:"single"},render,ctx);
+  assert.equal(paint.length,1);assert.ok(Math.abs(paint[0].alpha-.16)<1e-10);assert.deepEqual(scales,[[2,3]]);
+  assert.equal(ctx.globalAlpha,.8);assert.equal(ctx.fillStyle,"sentinel");assert.equal(state.length,0);
+  paint.length=0;transforms.length=0;
+  drawWatermark({...WATERMARK,mode:"single"},render,ctx,true);assert.equal(paint.length,0);
+  drawWatermark(WATERMARK,render,ctx,true);
+  const plan=watermarkTilePlan(WATERMARK,{x:0,y:0,...render.regionSize});
+  assert.equal(transforms.length,plan.count-1);
+  assert.ok(!transforms.some(([x,y])=>x===plan.center.x&&y===plan.center.y));
+  assert.equal(state.length,0);
+  const original=ctx.fillText;ctx.fillText=()=>{throw new Error("injected renderer failure");};
+  assert.throws(()=>drawWatermark({...WATERMARK,mode:"single"},render,ctx),/injected/);
+  assert.equal(state.length,0);assert.equal(ctx.globalAlpha,.8);ctx.fillText=original;
+});
+
+let nativeCanvas;
+try {nativeCanvas=await import(process.env.KIRI_TEST_CANVAS_MODULE??"@napi-rs/canvas");} catch {}
+test("real watermark pixels stay transparent, respect opacity, draw last and keep crop phase",{
+  skip:!nativeCanvas&&"Set KIRI_TEST_CANVAS_MODULE to a native Canvas adapter for this pixel regression.",
+},async()=>{
+  const {renderAll}=await loadAnnotationRender();
+  const {cropAnnotationDocument}=await import("../src/annotation/crop.js");
+  const previous=globalThis.document;
+  globalThis.document={createElement:()=>nativeCanvas.createCanvas(1,1)};
+  try{
+    const result=watermarkPixelCases(nativeCanvas.createCanvas,renderAll,cropAnnotationDocument);
+    assert.equal(result.success,true,JSON.stringify(result));
+    assert.deepEqual(result.checks,{transparentBackground:true,textHasVisiblePixels:true,
+      opacityRespected:true,watermarkDrawnLast:true,cropPhasePreserved:true});
+    assert.equal(result.cropComparedPixels,35916);
+  }finally{globalThis.document=previous;}
 });

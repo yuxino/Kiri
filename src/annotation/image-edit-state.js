@@ -4,7 +4,11 @@ export function hasPendingImageTextChange(marks, draft) {
   const previous = marks.find(mark => mark.id === draft.previousId);
   if (!draft.mark) return Boolean(previous);
   if (!previous) return true;
-  return ["text", "color", "background", "fontSize"].some(key => previous[key] !== draft.mark[key]);
+  if (previous.kind !== draft.mark.kind) return true;
+  const fields = draft.mark.kind === "watermark"
+    ? ["text","color","fontSize","opacity","rotation","mode","spacing"]
+    : ["text", "color", "background", "fontSize"];
+  return fields.some(key => previous[key] !== draft.mark[key]);
 }
 
 /** Undoing back to the saved marks/crop removes the close warning. */

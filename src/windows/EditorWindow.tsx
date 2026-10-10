@@ -1,4 +1,3 @@
-import {LabelControls, type LabelMark} from "../annotation/LabelControls";
 // EditorWindow — annotation editor for saved captures
 // Dark screenshot editor with one compact toolbar and an aspect-fit canvas.
 
@@ -11,20 +10,14 @@ import { t } from "../i18n";
 import { isTextComposition } from "../annotation/text-composition.js";
 import type { Rect } from "../annotation/geom";
 import {
-  COLOR_HEX,
-  COLOR_LABELS,
-  COLOR_PRESETS,
   type AnnotationDocumentV1,
   type AnnotationMark,
-  type MosaicIntensity,
-  type MosaicStyle,
-  type TextBackgroundStyle,
   type Tool,
 } from "../annotation/model";
 import { useAnnotationAppearance } from "../annotation/useAnnotationAppearance";
-import {CalloutControls} from "../annotation/CalloutControls";
+import {AnnotationStyleControls} from "../annotation/AnnotationStyleControls";
 import {TextToolPicker} from "../annotation/TextToolPicker";
-import {nextCalloutNumber, type CalloutMark} from "../annotation/model";
+import {nextCalloutNumber} from "../annotation/model";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { CropOverlay } from "../annotation/CropOverlay";
 import {
@@ -50,6 +43,7 @@ const TOOLS: { tool: EditorTool; icon: IconName; title: string }[] = [
   { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
   { tool: "text", icon: "textformat", title: "Text (T)" },
   { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)" },
+  { tool: "watermark", icon: "watermark", title: "Watermark (W)" },
 ];
 
 export function EditorWindow(props: { id: string }) {
@@ -59,10 +53,9 @@ export function EditorWindow(props: { id: string }) {
   const [document, setDocument] = useState<AnnotationDocumentV1 | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 560 });
   const [tool, setTool] = useState<EditorTool>("select");
-  const [selectedLabel, setSelectedLabel] = useState<LabelMark|null>(null);
-  const [selectedCallout, setSelectedCallout] = useState<CalloutMark | null>(null);
+  const [selectedMark, setSelectedMark] = useState<AnnotationMark | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
-  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => {setSelectedCallout(mark?.kind === "callout" ? mark : null); setSelectedLabel(mark?.kind === "text" && mark.labelDirection ? mark : null);}, []);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedMark(mark), []);
   const [cropSelection, setCropSelection] = useState<Rect | null>(null);
   const [cropUndo, setCropUndo] = useState<Rect[]>([]);
   const [cropRedo, setCropRedo] = useState<Rect[]>([]);
@@ -296,6 +289,7 @@ export function EditorWindow(props: { id: string }) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTextComposition(e)) return;
+      if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable]")) return;
       if (qrRequestRef.current) {
         if (e.key === "Escape") {
           e.preventDefault();
@@ -356,6 +350,7 @@ export function EditorWindow(props: { id: string }) {
           b: "label",
           n: "callout",
           m: "mosaic",
+          w: "watermark",
         };
         const next = keyMap[e.key.toLowerCase()];
         if (next) selectTool(next);
@@ -367,7 +362,11 @@ export function EditorWindow(props: { id: string }) {
 
   function selectTool(next: EditorTool) {
     if (readOnlyRef.current || qrRequestRef.current) return;
+    canvasRef.current?.finishAppearanceAdjustment();
+    canvasRef.current?.commitTextEditing();
+    if (next !== "select") canvasRef.current?.clearSelection();
     setTool(next);
+    if (next === "watermark") canvasRef.current?.editWatermark();
     if (next === "crop" && document) {
       setCropSelection((current) => current ?? fullCropRect(document));
     }
@@ -460,17 +459,6 @@ export function EditorWindow(props: { id: string }) {
     }
   }
 
-  const slider =
-    tool === "pen"
-      ? { min: 1, max: 24, value: appearance.penWidth, onChange: (v: number) => setAppearance({ ...appearance, penWidth: v }) }
-      : tool === "rectangle" || tool === "line" || tool === "arrow"
-        ? { min: 1, max: 16, value: appearance.shapeWidth, onChange: (v: number) => setAppearance({ ...appearance, shapeWidth: v }) }
-        : tool === "text"
-          ? { min: 12, max: 64, value: appearance.textFontSize, onChange: (v: number) => setAppearance({ ...appearance, textFontSize: v }) }
-          : tool === "mosaic"
-            ? { min: 12, max: 120, value: appearance.mosaicBrushDiameter, onChange: (v: number) => setAppearance({ ...appearance, mosaicBrushDiameter: v }) }
-            : null;
-
   return (
     <div
       className="kiri-dark"
@@ -479,202 +467,50 @@ export function EditorWindow(props: { id: string }) {
       inert={completing}
       style={{ height: "100%", display: "flex", flexDirection: "column", background: "#080808", position: "relative" }}
     >
-      {/* 58pt toolbar */}
-      <div
-        style={{
-          height: 58,
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          padding: "0 10px",
-          borderBottom: "1px solid #383838",
-          background: "#101010",
-          opacity: completing ? 0.62 : 1,
-          transition: "opacity 0.12s ease-out",
-        }}
-      >
-        {!readOnly && <div
-          inert={qrActive}
-          style={{
-            minWidth: 0,
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            overflowX: "auto",
-            scrollbarWidth: "none",
-            opacity: qrActive ? 0.5 : 1,
-          }}
-        >
-        {TOOLS.map(({ tool: t2, icon, title }) => t2 === "text" ?
-          <TextToolPicker key={t2} tool={tool} onSelect={selectTool}/> : (
-          <EditorToolButton
-            key={t2}
-            icon={icon}
-            title={t(title)}
-            active={tool === t2}
-            onClick={() => selectTool(t2)}
-          />
-        ))}
-        {cropSelection && (
-          <button type="button" className="kiri-button kiri-button--secondary"
-            style={{ flexShrink: 0, height: 28, padding: "0 8px" }}
-            onClick={cancelCrop}>
-            {t("Cancel crop")}
-          </button>
-        )}
-        {tool !== "crop" && tool !== "select" && tool !== "label" && tool !== "callout" && <>
-          <div style={{ width: 1, height: 26, background: "#383838", margin: "0 4px" }} />
-          {tool === "text" ? (
-          <EditorSegments
-            segments={[
-              { icon: "square.dashed", label: t("Transparent"), title: t("No background") },
-              { icon: "moon.fill", label: t("Dark"), title: t("Dark background") },
-            ]}
-            value={appearance.textBackgroundStyle === "transparent" ? 0 : 1}
-            onChange={(i) =>
-              setAppearance({ ...appearance, textBackgroundStyle: (["transparent", "dark"] as TextBackgroundStyle[])[i] })
-            }
-          />
-        ) : tool === "mosaic" ? (
-          <>
-            <EditorSegments
-              segments={[
-                { label: t("Pixel"), title: t("Pixel mosaic") },
-                { label: t("Blur"), title: t("Gaussian blur") },
-              ]}
-              value={appearance.mosaicStyle === "pixel" ? 0 : 1}
-              onChange={(i) =>
-                setAppearance({ ...appearance, mosaicStyle: (["pixel", "blur"] as MosaicStyle[])[i] })
-              }
-            />
-            <EditorSegments
-              segments={[{ label: "1", title: t("Soft") }, { label: "2", title: t("Standard") }, { label: "3", title: t("Strong") }]}
-              value={appearance.mosaicIntensity === "soft" ? 0 : appearance.mosaicIntensity === "standard" ? 1 : 2}
-              onChange={(i) =>
-                setAppearance({ ...appearance, mosaicIntensity: (["soft", "standard", "strong"] as MosaicIntensity[])[i] })
-              }
-            />
-          </>
-          ) : null}
-          {slider && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 4 }}>
-            <input
-              type="range"
-              className="kiri-range"
-              aria-label={t(tool === "text" ? "Font" : tool === "mosaic" || tool === "pen" ? "Brush" : "Line")}
-              min={slider.min}
-              max={slider.max}
-              value={slider.value}
-              onChange={(e) => {
-                const value = Math.round(Number(e.target.value));
-                slider.onChange(value);
-                if (tool === "text") canvasRef.current?.setTextFontSizeLive(value);
-              }}
-              onPointerDown={() => {
-                if (tool === "text") canvasRef.current?.beginTextFontSizeAdjustment();
-              }}
-              onPointerUp={() => {
-                if (tool === "text") canvasRef.current?.endTextFontSizeAdjustment();
-              }}
-              onPointerLeave={() => {
-                if (tool === "text") canvasRef.current?.endTextFontSizeAdjustment();
-              }}
-              onKeyUp={() => {
-                if (tool === "text") canvasRef.current?.endTextFontSizeAdjustment();
-              }}
-              onBlur={() => {
-                if (tool === "text") canvasRef.current?.endTextFontSizeAdjustment();
-              }}
-              style={{ width: 90, accentColor: "#fff" }}
-            />
-            <span style={{ width: 28, textAlign: "right", fontSize: 9, fontVariantNumeric: "tabular-nums" }}>
-              {slider.value}
-            </span>
+      <div className="kiri-image-editor-toolbar" style={{opacity: completing ? 0.62 : 1}}>
+        {!readOnly && <div className="kiri-image-editor-tools" inert={qrActive}>
+          <div className="kiri-annotation-tool-group">
+            {TOOLS.slice(0, 2).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
-          )}
-          <div style={{ width: 1, height: 26, background: "#383838", margin: "0 4px" }} />
-          {COLOR_PRESETS.map((preset) => (
-          <EditorSwatch
-            key={preset}
-            color={COLOR_HEX[preset]}
-            label={t(COLOR_LABELS[preset])}
-            selected={appearance.colorPreset === preset}
-            onClick={() => setAppearance({ ...appearance, colorPreset: preset })}
-          />
-          ))}
-        </>}
-        <div style={{ width: 1, height: 26, background: "#383838", margin: "0 4px" }} />
-        <EditorToolButton
-          icon="arrow.uturn.backward"
-          title={t("Undo (⌘Z)")}
-          disabled={tool === "crop" ? cropUndo.length === 0 : !canUndo}
-          onClick={() => tool === "crop" ? undoCrop() : canvasRef.current?.undo()}
-        />
-        <EditorToolButton
-          icon="arrow.uturn.forward"
-          title={t("Redo (⇧⌘Z)")}
-          disabled={tool === "crop" ? cropRedo.length === 0 : !canRedo}
-          onClick={() => tool === "crop" ? redoCrop() : canvasRef.current?.redo()}
-        />
-        <EditorToolButton
-          icon="xmark"
-          title={t("Clear Annotations")}
-          disabled={tool === "crop" || !hasMarks}
-          onClick={() => canvasRef.current?.clearAnnotations()}
-        />
+          <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>
+            {TOOLS.slice(2, 6).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+          </div>
+          <div className="kiri-annotation-tool-group"><TextToolPicker tool={tool} onSelect={selectTool}/></div>
+          <div className="kiri-annotation-tool-group">
+            {TOOLS.slice(7).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+          </div>
+          <div className="kiri-annotation-tool-group">
+            <EditorToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={tool === "crop" ? cropUndo.length === 0 : !canUndo}
+              onClick={() => tool === "crop" ? undoCrop() : canvasRef.current?.undo()}/>
+            <EditorToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={tool === "crop" ? cropRedo.length === 0 : !canRedo}
+              onClick={() => tool === "crop" ? redoCrop() : canvasRef.current?.redo()}/>
+            <EditorToolButton icon="xmark" title={t("Clear Annotations")} disabled={tool === "crop" || !hasMarks} onClick={() => canvasRef.current?.clearAnnotations()}/>
+          </div>
         </div>}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: "auto" }}>
-        <EditorToolButton icon="qrcode" title={t("Recognize QR Codes")} active={qrActive} disabled={!image || completing || !!ocrAsset}
-          onClick={() => qrRequestRef.current ? closeQr() : runQr()} />
-        {!readOnly && <EditorToolButton icon="text.viewfinder" title={t("Recognize Saved Image Locally")} disabled={!image || completing || qrActive}
-          onClick={() => { void api.getAsset(props.id).then(setOcrAsset).catch(() => setActionError(t("Can't read this file."))); }} />}
-        {!readOnly && <button
-          type="button"
-          className="kiri-button kiri-button--secondary"
-          disabled={qrActive}
-          style={{
-            height: 32,
-            borderRadius: 10,
-          }}
-          onClick={() => void complete("saveAs")}
-        >
-          {t("Save As…")}
-        </button>}
-        <button
-          type="button"
-          className="kiri-button kiri-button--ghost"
-          title={t("Cancel (Esc)")}
-          style={{
-            height: 32,
-            borderRadius: 10,
-          }}
-          onClick={() => qrRequestRef.current ? closeQr() : closeWindow()}
-        >
-          {t(readOnly ? "Close" : "Cancel")}
-        </button>
-        {!readOnly && <button
-          type="button"
-          className="kiri-primary-button"
-          disabled={qrActive}
-          style={{ minHeight: 32, borderRadius: 10 }}
-          onClick={() => void complete("save")}
-        >
-          {t("Save")}
-        </button>}
+        <div className="kiri-image-editor-actions">
+          <EditorToolButton icon="qrcode" title={t("Recognize QR Codes")} active={qrActive} disabled={!image || completing || !!ocrAsset}
+            onClick={() => qrRequestRef.current ? closeQr() : runQr()}/>
+          {!readOnly && <EditorToolButton icon="text.viewfinder" title={t("Recognize Saved Image Locally")} disabled={!image || completing || qrActive}
+            onClick={() => { void api.getAsset(props.id).then(setOcrAsset).catch(() => setActionError(t("Can't read this file."))); }}/>}
+          {!readOnly && <EditorToolButton icon="doc.on.doc" title={t("Save As…")} disabled={qrActive} onClick={() => void complete("saveAs")}/>}
+          <EditorToolButton icon="xmark" title={t(readOnly ? "Close" : "Cancel (Esc)")} onClick={() => qrRequestRef.current ? closeQr() : closeWindow()}/>
+          {!readOnly && <button type="button" className="kiri-primary-button" disabled={qrActive} style={{minHeight: 32, borderRadius: 10}}
+            onClick={() => void complete("save")}>{t("Save")}</button>}
         </div>
       </div>
-
-      {!readOnly && !qrActive && (tool === "label" || (tool === "select" && selectedLabel)) &&
-        <div className="kiri-editor-callout-row"><LabelControls selected={selectedLabel} appearance={appearance}
-          onChange={(patch,transient)=>{setAppearance({...appearance,...patch});canvasRef.current?.updateSelectionAppearance(patch,transient);}}
-          onFinish={()=>canvasRef.current?.finishAppearanceAdjustment()}/></div>}
-      {!readOnly && !qrActive && (tool === "callout" || (tool === "select" && selectedCallout !== null)) &&
-        <div className="kiri-editor-callout-row"><CalloutControls selected={selectedCallout} nextNumber={calloutNumber} appearance={appearance}
-          onNextNumber={setCalloutNumber} onAppearance={patch => setAppearance({...appearance, ...patch})}
-          onEdit={patch => canvasRef.current?.updateSelectedCallout(patch, true)}
-          onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}/></div>}
+      {!readOnly && <div className="kiri-image-editor-properties" inert={qrActive}>
+        {(tool === "crop" || cropSelection) && <div className="kiri-image-editor-crop-options"><strong>{t("Crop")}</strong>
+          {cropSelection && <button type="button" className="kiri-annotation-action" disabled={qrActive || completing}
+            onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+            onClick={cancelCrop}>{t("Cancel crop")}</button>}</div>}
+        {tool !== "crop" &&
+          <AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance} disabled={qrActive}
+            nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
+            onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
+            onChange={(patch, transient) => {setActionError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient);}}
+            onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
+            onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
+      </div>}
 
       {ocrAsset && <OcrDialog asset={ocrAsset} onClose={() => setOcrAsset(null)} />}
 
@@ -740,6 +576,8 @@ export function EditorWindow(props: { id: string }) {
               interactionLock={canvasLock}
               tool={tool === "crop" ? "select" : tool}
               appearance={appearance}
+              mosaicShape={appearance.mosaicShape}
+              onError={setActionError}
               calloutNumber={calloutNumber}
               onSelectionInfo={onAnnotationSelection}
               onHistoryChange={(u, r, populated) => {
@@ -801,62 +639,5 @@ function EditorToolButton(props: {
     >
       <KiriIcon name={props.icon} size={15} />
     </button>
-  );
-}
-
-function EditorSwatch(props: { color: string; label: string; selected: boolean; onClick(): void }) {
-  return (
-    <button
-      type="button"
-      className="kiri-toolbar-swatch"
-      data-selected={props.selected || undefined}
-      aria-label={props.label}
-      title={props.label}
-      aria-pressed={props.selected}
-      onClick={props.onClick}
-      style={{
-        width: 24,
-        flexShrink: 0,
-        ...(props.selected ? { background: `${props.color}33` } : {}),
-      }}
-    >
-      {props.selected && (
-        <div style={{ position: "absolute", inset: 0, borderRadius: 8, border: `1.5px solid ${props.color}` }} />
-      )}
-      <div
-        style={{
-          width: props.selected ? 12 : 10,
-          height: props.selected ? 12 : 10,
-          borderRadius: "50%",
-          background: props.color,
-          boxShadow: props.color === "#FFFFFF" ? "0 0 0 0.75px rgba(0,0,0,0.18)" : "none",
-        }}
-      />
-    </button>
-  );
-}
-
-function EditorSegments(props: {
-  segments: { label?: string; icon?: IconName; title?: string }[];
-  value: number;
-  onChange(i: number): void;
-}) {
-  return (
-    <div className="kiri-toolbar-segments">
-      {props.segments.map((segment, index) => (
-        <button
-          type="button"
-          className="kiri-toolbar-segment"
-          data-active={props.value === index || undefined}
-          key={index}
-          title={segment.title}
-          aria-pressed={props.value === index}
-          onClick={() => props.onChange(index)}
-        >
-          {segment.icon ? <KiriIcon name={segment.icon} size={12} style={{ opacity: 0.85 }} /> : null}
-          {segment.label}
-        </button>
-      ))}
-    </div>
   );
 }

@@ -182,3 +182,5 @@ development.
 - [ADR 0085: Edit numbered callout descriptions on the canvas](adr/0085-inline-callout-text-editing.md)
 - [ADR 0086: Managed library file actions](adr/0086-library-file-actions.md)
 - [ADR 0087: Keep capture controls clear of the mode selector](adr/0087-capture-hud-layout.md)
+- [ADR 0088: Annotation properties and local text watermarks](adr/0088-annotation-properties-and-watermarks.md)
+- [ADR 0089: Anchored labels and direct callout dragging](adr/0089-anchored-labels-and-direct-callout-drag.md)

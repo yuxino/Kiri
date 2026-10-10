@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Includes sequential toolbar, image editing, and 24 crop/scale regressions
     # through test-ocr.py. The 6m limit expired after all assertions passed.
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -114,6 +114,10 @@ jobs:
         env:
           KIRI_DEMO_DIST: ${{ github.workspace }}/dist
           KIRI_DEMO_OUT: ${{ runner.temp }}/ocr-selection-review
+      - name: Verify annotation properties and watermarks
+        run: python scripts/qa/annotation-tools-ui.py
+        env:
+          KIRI_ANNOTATION_QA_OUT: ${{ runner.temp }}/annotation-tools-review
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -121,6 +125,7 @@ jobs:
           path: |
             countdown-review/
             ${{ runner.temp }}/ocr-selection-review/
+            ${{ runner.temp }}/annotation-tools-review/
             dist/
           retention-days: 5
           if-no-files-found: warn

@@ -57,12 +57,16 @@ async def main():
                                 await page.wait_for_timeout(100)
                                 geometry = await toolbar.evaluate('''el => {
                                     const rect = e => {const r=e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height};};
-                                    return {bar:rect(el), controls:[...el.querySelectorAll('button,input')].map(rect)};
+                                    return {bar:rect(el), controls:[...el.querySelectorAll('button,input')].map(control => {
+                                        const r=rect(control), hit=control.ownerDocument.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+                                        return {...r, hit:hit===control||control.contains(hit)};
+                                    })};
                                 }''')
                                 for r in [geometry['bar'], *geometry['controls']]:
                                     assert r['x'] >= 7.5 and r['y'] >= 95.5, geometry
                                     assert r['x'] + r['width'] <= width - 7.5, geometry
                                     assert r['y'] + r['height'] <= height - 7.5, geometry
+                                assert all(r['hit'] for r in geometry['controls']), geometry
                                 return done, geometry
                             # Four corners at 100%; each remaining scale repeats the exact edge regression.
                             corners = [(10,10), (width-150,10), (10,height-180), (width-150,height-180)] if scale == 1 else [(width-150,height-180)]
@@ -117,8 +121,25 @@ async def main():
                                         await f.get_by_role('button', name=translations[tool], exact=True).click()
                                         done, geometry = await check(f)
                                         assert geometry['bar']['y'] + geometry['bar']['height'] <= y
-                                        more = f.get_by_role('button', name=translations['More Actions'], exact=True)
-                                        assert await more.get_attribute('aria-expanded') == ('false' if tool == 'Select (V)' else 'true')
+                                        options_toggle = f.get_by_role('button', name=translations['Tool options'], exact=True)
+                                        options = f.locator('.kiri-capture-tool-options')
+                                        opened = tool != 'Select (V)'
+                                        assert await options_toggle.get_attribute('aria-expanded') == str(opened).lower()
+                                        assert await options.count() == int(opened)
+                                        if opened:
+                                            # Both keyboard disclosure and direct pointer reopening
+                                            # preserve the full HUD's edge and hit-test contracts.
+                                            await options_toggle.focus()
+                                            await options_toggle.press('Enter')
+                                            await options.wait_for(state='detached')
+                                            assert await options_toggle.get_attribute('aria-expanded') == 'false'
+                                            _, closed_options = await check(f)
+                                            assert closed_options['bar']['y'] + closed_options['bar']['height'] <= y
+                                            await options_toggle.click()
+                                            await options.wait_for()
+                                            assert await options_toggle.get_attribute('aria-expanded') == 'true'
+                                            _, reopened_options = await check(f)
+                                            assert reopened_options['bar']['y'] + reopened_options['bar']['height'] <= y
                                         assert await done.get_attribute('title') == translations['Done — Copy to clipboard · Return']
                                     await done.click()
                                     await page.wait_for_function('state.calls.some(x=>x.c==="confirm_capture")')

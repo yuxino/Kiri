@@ -171,12 +171,12 @@ async def main():
      await page.evaluate("frame('editor',{id:'image-edit-fixture'})")
      f=page.frame_locator('#editor');await f.locator('canvas').wait_for();await page.wait_for_timeout(120);return f
     await page.evaluate('state.editorCloseEvents=true;state.editorDestroyCalls=0')
-    f=await editor();await f.get_by_role('button',name='Cancel',exact=True).click()
+    f=await editor();await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
     await page.locator('#editor').wait_for(state='detached')
     f=await editor();await f.get_by_title('Text (T)',exact=True).click();await page.mouse.click(600,320)
     textarea=f.get_by_role('textbox',name='Text content',exact=True)
     await textarea.press_sequentially('unsaved text',delay=20)
-    await f.get_by_role('button',name='Cancel',exact=True).click()
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
     dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
     assert await page.evaluate('state.editorDestroyCalls')==1,'dirty close bypassed confirmation'
     await page.screenshot(path=str(OUT/'image-close-after.png'))
@@ -186,18 +186,18 @@ async def main():
     await dialog.get_by_role('button',name='Keep editing',exact=True).click();await dialog.wait_for(state='hidden')
     await textarea.press('Escape');await textarea.wait_for(state='detached')
     # The discarded pending text leaves a clean editor, so ordinary close works.
-    await f.get_by_role('button',name='Cancel',exact=True).click();await page.locator('#editor').wait_for(state='detached')
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await page.locator('#editor').wait_for(state='detached')
     f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     # Native close-request event is IPC-injected; the rendered modal must prevent closure.
     await page.locator('#editor').evaluate("el=>el.contentWindow.__emit('tauri://close-requested',null)")
     dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
     await dialog.get_by_role('button',name='Keep editing',exact=True).click()
-    await f.get_by_title('Undo (⌘Z)',exact=True).click();await f.get_by_role('button',name='Cancel',exact=True).click()
+    await f.get_by_title('Undo (⌘Z)',exact=True).click();await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
     await page.locator('#editor').wait_for(state='detached')
     f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     await page.evaluate('state.cancelSaveAs=true');await f.get_by_role('button',name='Save As…',exact=True).click()
     assert await page.evaluate('state.updates')==0
-    await f.get_by_role('button',name='Cancel',exact=True).click();dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
     await page.evaluate('state.failSave=true')
     await dialog.get_by_role('button',name='Save & close',exact=True).click()
     await dialog.get_by_role('alert').wait_for();assert await page.locator('#editor').count()==1
@@ -205,24 +205,24 @@ async def main():
     await dialog.get_by_role('button',name='Save & close',exact=True).click();await page.locator('#editor').wait_for(state='detached')
     assert len((await page.evaluate('state.prepared'))['marks'])==1
     f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
-    await f.get_by_role('button',name='Cancel',exact=True).click();dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True)
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True)
     await dialog.get_by_role('button',name='Discard unsaved changes & close',exact=True).click()
     await page.locator('#editor').wait_for(state='detached')
     # Save As exports only: the editable library asset still has unsaved marks.
     f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     await page.evaluate('state.cancelSaveAs=false');await f.get_by_role('button',name='Save As…',exact=True).click()
     await page.wait_for_function('state.updates===3');await page.wait_for_timeout(100)
-    await f.get_by_role('button',name='Cancel',exact=True).click()
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
     dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
     await page.screenshot(path=str(OUT/'save-as-close-after.png'))
     await dialog.get_by_role('button',name='Keep editing',exact=True).click()
     await drag((700,400),(900,500))
     await f.get_by_role('button',name='Save As…',exact=True).click();await page.wait_for_function('state.updates===4')
     assert len((await page.evaluate('state.prepared'))['marks'])==2,'export lost continuing edits'
-    await f.get_by_role('button',name='Cancel',exact=True).click();await dialog.wait_for()
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await dialog.wait_for()
     await dialog.get_by_role('button',name='Keep editing',exact=True).click()
     await f.get_by_title('Undo (⌘Z)',exact=True).click();await f.get_by_title('Undo (⌘Z)',exact=True).click()
-    await f.get_by_role('button',name='Cancel',exact=True).click();await page.locator('#editor').wait_for(state='detached')
+    await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await page.locator('#editor').wait_for(state='detached')
     assert await page.evaluate('state.editorDestroyCalls')==6,'close never reached SDK destroy'
     assert not errors,errors
     (OUT/'image-editing-check.json').write_text(json.dumps({'native':False,'closeBoundary':'SDK close-request to destroy modeled in IPC; editor-only capability checked separately; native exact-package replay pending','withdrawn':['old Save As baseline assertion contradicted export-only backend'],'passed':['native textarea undo/redo routing','Shift+Enter multiline','localized hint','composition event routing only','first Escape retains capture and marks','second Escape cancels','Enter commits text and completes capture','clean editor close','Cmd/Ctrl+W from focused text','dirty text keep editing','cancel text restores clean baseline','native close event guard','undo to baseline','Save As cancel is no-op','failed save retains dialog and marks','save then close','discard then close','Save As preserves library close protection','continue editing and re-export','undo exported edits to original baseline','SDK close-request completes via destroy','dirty close prevents destroy before confirmation']},indent=2)+'\n')

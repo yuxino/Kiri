@@ -3,7 +3,9 @@
 // image rect (top-left origin).
 
 import type { Point, Rect } from "./geom";
+import {watermarkBounds, watermarkContainsPoint} from "./watermark-geometry.js";
 import {
+  contains,
   distanceToSegment,
   handlePoint,
   maxX,
@@ -15,7 +17,7 @@ import {
   standardized,
 } from "./geom";
 
-export type Tool = "select" | "pen" | "rectangle" | "line" | "arrow" | "text" | "label" | "callout" | "mosaic";
+export type Tool = "select" | "pen" | "rectangle" | "line" | "arrow" | "text" | "label" | "callout" | "mosaic" | "watermark";
 
 export type ColorPreset =
   | "violet"
@@ -78,6 +80,20 @@ export interface CalloutMark {
 export type MosaicIntensity = "soft" | "standard" | "strong";
 export type MosaicStyle = "pixel" | "blur";
 export type MosaicShape = "brush" | "rectangle" | "ellipse";
+export type WatermarkMode = "single" | "tiled";
+export interface WatermarkMark {
+  kind: "watermark";
+  id: number;
+  text: string;
+  /** Unrotated text content in immutable document coordinates. */
+  rect: Rect;
+  color: ColorPreset;
+  fontSize: number;
+  opacity: number;
+  rotation: number;
+  mode: WatermarkMode;
+  spacing: number;
+}
 
 export const MOSAIC_VIEW_BLOCK_SIZE: Record<MosaicIntensity, number> = {
   soft: 7,
@@ -87,6 +103,7 @@ export const MOSAIC_VIEW_BLOCK_SIZE: Record<MosaicIntensity, number> = {
 
 export type AnnotationMark =
   | CalloutMark
+  | WatermarkMark
   | { kind: "pen"; id: number; points: Point[]; color: ColorPreset; width: number }
   | { kind: "rectangle"; id: number; rect: Rect; color: ColorPreset; width: number }
   | { kind: "line"; id: number; start: Point; end: Point; color: ColorPreset; width: number }
@@ -131,12 +148,19 @@ export interface AppearanceSettings {
   labelDirection: LabelDirection;
   mosaicIntensity: MosaicIntensity;
   mosaicStyle: MosaicStyle;
+  mosaicShape: MosaicShape;
   penWidth: number;
   shapeWidth: number;
   textFontSize: number;
   mosaicBrushDiameter: number;
   calloutSize: number;
   calloutStyle: CalloutStyle;
+  watermarkColor: ColorPreset;
+  watermarkFontSize: number;
+  watermarkOpacity: number;
+  watermarkRotation: number;
+  watermarkMode: WatermarkMode;
+  watermarkSpacing: number;
 }
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -145,12 +169,19 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   labelDirection: "left",
   mosaicIntensity: "standard",
   mosaicStyle: "pixel",
+  mosaicShape: "brush",
   penWidth: 3,
   shapeWidth: 3,
   textFontSize: 18,
   mosaicBrushDiameter: 20,
   calloutSize: 36,
   calloutStyle: "filled",
+  watermarkColor: "black",
+  watermarkFontSize: 28,
+  watermarkOpacity: 20,
+  watermarkRotation: -30,
+  watermarkMode: "tiled",
+  watermarkSpacing: 80,
 };
 
 /** Rejects whitespace-only edits without normalizing meaningful user text. */
@@ -173,12 +204,16 @@ export function labelGeometry(rect: Rect, fontSize: number, direction: LabelDire
   return {body, dot, radius, tail, bounds, padX, padY};
 }
 
-/** Reserve either pointing side so flipping never moves the text or clips the dot. */
+/** The content changes sides around the same point; glyphs are never mirrored. */
+export function labelRectAtAnchor(rect: Rect, fontSize: number, direction: LabelDirection, anchor: Point): Rect {
+  const dot = labelGeometry(rect, fontSize, direction).dot;
+  return {...rect, x: rect.x + anchor.x - dot.x, y: rect.y + anchor.y - dot.y};
+}
+
+/** Move the visible bubble and its anchor together, using their current side. */
 export function labelMovementBounds(mark: Extract<AnnotationMark, {kind: "text"}>): Rect {
   if (!mark.labelDirection) return standardized(mark.rect);
-  const left = labelGeometry(mark.rect, mark.fontSize, "left").bounds;
-  const right = labelGeometry(mark.rect, mark.fontSize, "right").bounds;
-  return {x: left.x, y: left.y, width: maxX(right) - left.x, height: left.height};
+  return labelGeometry(mark.rect, mark.fontSize, mark.labelDirection).bounds;
 }
 
 interface HistoryStep {
@@ -314,6 +349,8 @@ function hitTestMark(
   scale: AnnotationHitTestScale,
 ): boolean {
   switch (mark.kind) {
+    case "watermark":
+      return watermarkContainsPoint(mark, p, 7 * scale.x, 6 * scale.y);
     case "pen":
       return (
         polylineDistance(p, mark.points) <=
@@ -382,6 +419,12 @@ export function markIndexAt(
 
 export function translateMark(mark: AnnotationMark, by: Point, bounds: Rect): AnnotationMark {
   switch (mark.kind) {
+    case "watermark": {
+      const b = watermarkBounds(mark);
+      const tx = clampTranslation(by.x, minX(b), maxX(b), minX(bounds), maxX(bounds));
+      const ty = clampTranslation(by.y, minY(b), maxY(b), minY(bounds), maxY(bounds));
+      return {...mark,rect:{...mark.rect,x:mark.rect.x+tx,y:mark.rect.y+ty}};
+    }
     case "callout": {
       const b = selectionBounds(mark);
       const tx = clampTranslation(by.x, minX(b), maxX(b), minX(bounds), maxX(bounds));
@@ -467,7 +510,7 @@ export function resizeAnnotationMark(mark: AnnotationMark, handle: string, point
         y: next.y + (mark.labelRect.y - before.y) * sy,
         width: mark.labelRect.width * sx, height: mark.labelRect.height * sy}};
   }
-  if (mark.kind === "text") {
+  if (mark.kind === "text" || mark.kind === "watermark") {
     // Text scales uniformly so a corner drag does not distort glyphs or rewrap words.
     const horizontal = handle === "left" || handle === "right";
     const vertical = handle === "top" || handle === "bottom";
@@ -485,8 +528,10 @@ export function resizeAnnotationMark(mark: AnnotationMark, handle: string, point
     factor = Math.max(.01,Math.min(factor,roomX/before.width,roomY/before.height));
     const width=before.width*factor,height=before.height*factor;
     const x=left?anchorX-width:right?anchorX:anchorX-width/2, y=top?anchorY-height:bottom?anchorY:anchorY-height/2;
+    const center = {x:x+width/2,y:y+height/2};
     return {...mark,fontSize:mark.fontSize*factor,rect:{
-      x:x+(mark.rect.x-before.x)*factor,y:y+(mark.rect.y-before.y)*factor,
+      x:mark.kind === "watermark" ? center.x-mark.rect.width*factor/2 : x+(mark.rect.x-before.x)*factor,
+      y:mark.kind === "watermark" ? center.y-mark.rect.height*factor/2 : y+(mark.rect.y-before.y)*factor,
       width:mark.rect.width*factor,height:mark.rect.height*factor}};
   }
   if (mark.kind === "mosaic" && mark.shape && mark.shape !== "brush") {
@@ -505,6 +550,8 @@ export function resizeAnnotationMark(mark: AnnotationMark, handle: string, point
   return mark.kind === "pen" ? {...mark,points,width:size} : {...mark,points,brushDiameter:size};
 }
 
+export function changeMosaicShape(mark: Extract<AnnotationMark,{kind:"mosaic"}>, shape: MosaicShape): Extract<AnnotationMark,{kind:"mosaic"}>;
+export function changeMosaicShape(mark: AnnotationMark, shape: MosaicShape): AnnotationMark;
 export function changeMosaicShape(mark: AnnotationMark, shape: MosaicShape): AnnotationMark {
   if (mark.kind !== "mosaic" || (mark.shape ?? "brush") === shape) return mark;
   const b=selectionBounds(mark);
@@ -517,7 +564,17 @@ export function changeMosaicShape(mark: AnnotationMark, shape: MosaicShape): Ann
 
 /** Apply only the changed property; selecting an object never replaces its styling. */
 export function applyAnnotationAppearance(mark: AnnotationMark, patch: Partial<AppearanceSettings>): AnnotationMark {
-  if(mark.kind === "mosaic")return {...mark,
+  if(mark.kind === "watermark") {
+    const fontSize=patch.watermarkFontSize??mark.fontSize, scale=fontSize/mark.fontSize;
+    const center={x:mark.rect.x+mark.rect.width/2,y:mark.rect.y+mark.rect.height/2};
+    return {...mark,color:patch.watermarkColor??mark.color,fontSize,
+      opacity:patch.watermarkOpacity===undefined?mark.opacity:patch.watermarkOpacity/100,
+      rotation:patch.watermarkRotation??mark.rotation,mode:patch.watermarkMode??mark.mode,
+      spacing:patch.watermarkSpacing??mark.spacing,
+      rect:{x:center.x-mark.rect.width*scale/2,y:center.y-mark.rect.height*scale/2,
+        width:mark.rect.width*scale,height:mark.rect.height*scale}};
+  }
+  if(mark.kind === "mosaic")return {...changeMosaicShape(mark,patch.mosaicShape??mark.shape??"brush"),
     ...(patch.mosaicBrushDiameter===undefined?{}:{brushDiameter:patch.mosaicBrushDiameter}),
     ...(patch.mosaicIntensity===undefined?{}:{intensity:patch.mosaicIntensity}),
     ...(patch.mosaicStyle===undefined?{}:{style:patch.mosaicStyle})};
@@ -526,9 +583,13 @@ export function applyAnnotationAppearance(mark: AnnotationMark, patch: Partial<A
     style: patch.calloutStyle ?? mark.style, fontSize: patch.textFontSize ?? mark.fontSize};
   if(mark.kind === "text"){
     const fontSize=patch.textFontSize??mark.fontSize,scale=fontSize/mark.fontSize;
+    const labelDirection = mark.labelDirection ? patch.labelDirection ?? mark.labelDirection : undefined;
+    let rect = {...mark.rect, width:mark.rect.width*scale, height:mark.rect.height*scale};
+    if (mark.labelDirection && labelDirection) {
+      rect = labelRectAtAnchor(rect, fontSize, labelDirection, labelGeometry(mark.rect, mark.fontSize, mark.labelDirection).dot);
+    }
     return {...mark,color,fontSize,background:patch.textBackgroundStyle??mark.background,
-      ...(mark.labelDirection ? {labelDirection:patch.labelDirection??mark.labelDirection} : {}),
-      rect:{...mark.rect,width:mark.rect.width*scale,height:mark.rect.height*scale}};
+      ...(labelDirection ? {labelDirection} : {}), rect};
   }
   return {...mark,color,width:(mark.kind==="pen"?patch.penWidth:patch.shapeWidth)??mark.width};
 }
@@ -584,6 +645,8 @@ export function dragAnnotationHandle(
 /** Selection bounds used for the outline (spec §6.4). */
 export function selectionBounds(mark: AnnotationMark): Rect {
   switch (mark.kind) {
+    case "watermark":
+      return watermarkBounds(mark);
     case "callout": {
       const radius = mark.size / 2;
       const badge = {x: mark.center.x - radius, y: mark.center.y - radius, width: mark.size, height: mark.size};
@@ -627,6 +690,13 @@ export function calloutHandleAt(mark: CalloutMark, point: Point, tolerance: numb
   if (Math.hypot(point.x - mark.center.x, point.y - mark.center.y + mark.size / 2) <= tolerance) return "badge";
   if (mark.text.trim() && Math.hypot(point.x - mark.labelRect.x - mark.labelRect.width,
     point.y - mark.labelRect.y) <= tolerance) return "label";
+  return null;
+}
+
+/** Drag the visible entities independently; the leader remains the whole-note target. */
+export function calloutPartAt(mark: CalloutMark, point: Point): "badge" | "label" | null {
+  if (Math.hypot(point.x - mark.center.x, point.y - mark.center.y) <= mark.size / 2) return "badge";
+  if (mark.text.trim() && contains(mark.labelRect, point)) return "label";
   return null;
 }
 

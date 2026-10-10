@@ -1,3 +1,5 @@
+import {MAX_WATERMARK_TEXT_UNITS,validateWatermarkDensity} from "./watermark-geometry.js";
+
 const COLOR_PRESETS = new Set([
   "violet",
   "cherry",
@@ -20,6 +22,7 @@ export const ANNOTATION_PROJECT_LIMITS = Object.freeze({
   maxMarks: 2_048,
   maxTotalPoints: 100_000,
   maxTotalText: 65_536,
+  maxWatermarkText: MAX_WATERMARK_TEXT_UNITS,
   maxStyleSize: 4_096,
   maxCoordinateMagnitude: 262_144,
 });
@@ -136,6 +139,23 @@ function parseMark(value, index, ids, totals) {
   if (typeof mark.kind !== "string") invalid(`${path}.kind`, "must be a string");
 
   switch (mark.kind) {
+    case "watermark": {
+      exactKeys(mark,["kind","id","text","rect","color","fontSize","opacity","rotation","mode","spacing"],path);
+      if (typeof mark.text !== "string") invalid(`${path}.text`,"must be a string");
+      if (mark.text.length > MAX_WATERMARK_TEXT_UNITS) invalid(`${path}.text`,"exceeds the watermark text limit");
+      if (totals.text + mark.text.length > ANNOTATION_PROJECT_LIMITS.maxTotalText) {
+        invalid(`${path}.text`,"exceeds the total text limit");
+      }
+      totals.text += mark.text.length;
+      const rect = parseRect(mark.rect,`${path}.rect`);
+      if (rect.width <= 0 || rect.height <= 0) invalid(`${path}.rect`,"must have positive dimensions");
+      return {kind:"watermark",id:parseId(mark.id,`${path}.id`,ids),text:mark.text,rect,
+        color:parseColor(mark.color,`${path}.color`),fontSize:parseWidth(mark.fontSize,`${path}.fontSize`),
+        opacity:finiteNumber(mark.opacity,`${path}.opacity`,{min:0,max:1}),
+        rotation:finiteNumber(mark.rotation,`${path}.rotation`,{min:-180,max:180}),
+        mode:enumValue(mark.mode,new Set(["single","tiled"]),`${path}.mode`),
+        spacing:finiteNumber(mark.spacing,`${path}.spacing`,{min:16,max:4096})};
+    }
     case "pen":
       exactKeys(mark, ["kind", "id", "points", "color", "width"], path);
       return {
@@ -243,6 +263,11 @@ export function parseAnnotationDocument(value) {
     sourcePixels: parseSize(document.sourcePixels, "sourcePixels", true),
     marks: document.marks.map((mark, index) => parseMark(mark, index, ids, totals)),
   };
+  try {
+    validateWatermarkDensity(parsed.marks,{x:0,y:0,...parsed.canvas});
+  } catch (error) {
+    invalid("document",error instanceof Error ? error.message : "exceeds watermark rendering limits");
+  }
   const json = JSON.stringify(parsed);
   if (new TextEncoder().encode(json).byteLength > MAX_ANNOTATION_DOCUMENT_BYTES) {
     invalid(

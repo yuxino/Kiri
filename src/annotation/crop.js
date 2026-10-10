@@ -1,4 +1,5 @@
 import { parseAnnotationDocument } from "./project.js";
+import {watermarkBounds,watermarkIntersectsRect} from "./watermark-geometry.js";
 
 export const MIN_CROP_SOURCE_PIXELS = 8;
 
@@ -47,7 +48,8 @@ export function cropAnnotationDocument(document, selection) {
     height: cropPixels.height / scaleY,
   };
   const translated = parsed.marks
-    .filter((mark) => intersects(markBounds(mark), cropRect))
+    .filter((mark) => mark.kind === "watermark" ?
+      mark.mode === "tiled" || watermarkIntersectsRect(mark,cropRect) : intersects(markBounds(mark), cropRect))
     .map((mark) => translateMark(mark, -cropRect.x, -cropRect.y));
   return {
     cropPixels,
@@ -62,6 +64,8 @@ export function cropAnnotationDocument(document, selection) {
 
 function markBounds(mark) {
   switch (mark.kind) {
+    case "watermark":
+      return watermarkBounds(mark);
     case "callout": {
       const badge = {x: mark.center.x - mark.size / 2, y: mark.center.y - mark.size / 2, width: mark.size, height: mark.size};
       if (!mark.text.trim()) return badge;
@@ -107,6 +111,7 @@ function translateMark(mark, dx, dy) {
       return { ...mark, points: mark.points.map((point) => translatePoint(point, dx, dy)) };
     case "rectangle":
     case "text":
+    case "watermark":
       return { ...mark, rect: { ...mark.rect, x: mark.rect.x + dx, y: mark.rect.y + dy } };
     case "line":
     case "arrow":

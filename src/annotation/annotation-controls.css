@@ -1,0 +1,27 @@
+.kiri-annotation-controls { margin:0; padding:8px 10px; border:0; min-width:0; width:100%; box-sizing:border-box; color:#f7f7f4; font:500 11px/1.4 var(--kiri-font-ui); }
+.kiri-annotation-controls-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+.kiri-annotation-controls-heading strong { font-weight:600; }
+.kiri-annotation-controls-heading span, .kiri-annotation-hint { color:#b7b7b2; font-size:10px; }
+.kiri-annotation-hint { margin:6px 0 0; }
+.kiri-annotation-control-fields { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; min-width:0; }
+.kiri-annotation-number { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; max-width:100%; }
+.kiri-annotation-number > span:first-child { white-space:nowrap; }
+.kiri-annotation-number .kiri-range { width:74px; min-width:50px; flex:1 1 60px; margin:0; }
+.kiri-annotation-number-value { width:52px; height:26px; box-sizing:border-box; padding:2px 4px; border:1px solid #555; border-radius:6px; background:#101010; color:#f7f7f4; font:inherit; font-variant-numeric:tabular-nums; text-align:right; }
+.kiri-annotation-unit { color:#b7b7b2; }
+.kiri-annotation-choice { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; max-width:100%; }
+.kiri-annotation-choice-label { white-space:nowrap; }
+.kiri-annotation-choice .kiri-toolbar-segments { flex-wrap:wrap; flex-shrink:1; min-width:0; max-width:100%; }
+.kiri-annotation-colors { display:flex; flex-wrap:wrap; gap:5px; max-width:100%; }
+.kiri-annotation-swatch { width:22px; height:22px; padding:3px; box-sizing:border-box; border:1px solid #555; border-radius:50%; background:var(--swatch); background-clip:content-box; cursor:pointer; }
+.kiri-annotation-swatch[aria-pressed=true] { border-color:#ddd; }
+.kiri-annotation-swatch:hover { border-color:#fff; }
+.kiri-annotation-action { min-height:26px; padding:3px 8px; border:1px solid #555; border-radius:6px; background:transparent; color:#f7f7f4; font:inherit; white-space:nowrap; cursor:pointer; }
+.kiri-annotation-action:hover { background:#232323; }
+.kiri-annotation-action:disabled, .kiri-annotation-swatch:disabled { opacity:.45; cursor:default; }
+.kiri-annotation-controls :is(input,button):focus { outline:none; box-shadow:none; }
+.kiri-annotation-controls :is(input:not([type=range]),button):focus-visible { box-shadow:inset 0 0 0 1px #777; }
+.kiri-annotation-controls input[type=number] { appearance:textfield; -moz-appearance:textfield; }
+.kiri-annotation-controls input[type=number]::-webkit-inner-spin-button,
+.kiri-annotation-controls input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.kiri-annotation-controls:disabled { opacity:.45; }
