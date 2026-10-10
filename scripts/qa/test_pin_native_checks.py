@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from pin_native_checks import pin_lifecycle_evidence, proportional_resize_evidence
+from pin_native_checks import pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 from windows_qa_profile import isolated_windows_profile
 
 
@@ -40,6 +40,12 @@ class NativePinChecks(unittest.TestCase):
     def test_pin_for_another_asset_is_rejected(self):
         with self.assertRaises(RuntimeError):
             pin_lifecycle_evidence(self.trace(["[window] destroyed label=overlay", self.opened], count=1), "other")
+
+    def test_swift_compatible_uppercase_index_matches_native_uuid_log(self):
+        self.assertEqual(pin_open_log_marker(self.asset.upper()), self.opened)
+        proof = pin_lifecycle_evidence(self.trace([
+            "[window] destroyed label=overlay", self.opened], count=1), self.asset.upper())
+        self.assertTrue(proof["pin_after_all_overlay_destroyed"])
 
     def test_native_rounding_is_allowed_but_noop_and_stretch_are_rejected(self):
         proportional_resize_evidence((580, 235), (638, 259))

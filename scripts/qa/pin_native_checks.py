@@ -5,10 +5,16 @@ from pathlib import Path
 import re
 
 
+def pin_open_log_marker(asset_id):
+    # The Swift-compatible library index writes uppercase UUIDs, whereas Rust
+    # Display uses lowercase in the native diagnostics.
+    return f"[pin] screenshot opened asset_id={asset_id.lower()}"
+
+
 def pin_lifecycle_evidence(log, asset_id):
     """Use only the log suffix recorded before clicking this capture's Pin."""
     queued = list(re.finditer(r"completion queued until overlay destruction labels=(\d+)", log))
-    opened = list(re.finditer(r"\[pin\] screenshot opened asset_id=" + re.escape(asset_id) + r"\b", log))
+    opened = list(re.finditer(re.escape(pin_open_log_marker(asset_id)) + r"\b", log))
     if len(queued) != 1 or len(opened) != 1:
         raise RuntimeError("Direct pin must queue one completion and open its saved asset once")
     destroyed = list(re.finditer(r"\[window\] destroyed label=(overlay[^\s]*)", log))
