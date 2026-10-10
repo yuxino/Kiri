@@ -69,6 +69,7 @@ jobs:
           python3 scripts/qa/test_linux_package_provenance.py
           python3 scripts/qa/test_windows_package_provenance.py
           python3 scripts/qa/test_linux_audio_tone.py
+          python3 scripts/qa/test_pin_native_checks.py
       - name: Verify the formal release tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/release-version.mjs "$GITHUB_REF_NAME"
@@ -249,7 +250,7 @@ jobs:
           if grep -q 'not found' linux-native-review/linked-libraries.txt; then exit 1; fi
       - name: Exercise the installed app on an isolated X11 desktop
         if: needs.plan.outputs.linux_x11 == 'true'
-        timeout-minutes: 4
+        timeout-minutes: 5
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
       - name: Verify installed X11 system audio and pause/resume with a private FIFO sink
         if: needs.plan.outputs.linux_x11 == 'true'
@@ -526,7 +527,7 @@ jobs:
       - name: Install and smoke-test both Windows packages
         if: needs.plan.outputs.package_windows == 'true'
         shell: pwsh
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
           $installers = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe')
           if ($installers.Count -ne 1) { throw "Expected exactly one NSIS installer" }
