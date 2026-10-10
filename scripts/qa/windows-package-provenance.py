@@ -22,9 +22,14 @@ def command(*args):
     return subprocess.check_output(args, text=True, encoding="utf-8").strip()
 
 
+def official_repository(name):
+    # GitHub preserves the repository's display casing in API responses.
+    return isinstance(name, str) and name.isascii() and name.lower() == REPOSITORY.lower()
+
+
 def validate(run, jobs, run_id, tag, source_sha):
-    require(run.get("id") == run_id and run.get("repository", {}).get("full_name") == REPOSITORY
-            and run.get("head_repository", {}).get("full_name") == REPOSITORY,
+    require(run.get("id") == run_id and official_repository(run.get("repository", {}).get("full_name"))
+            and official_repository(run.get("head_repository", {}).get("full_name")),
             "Candidate must belong to the official repository")
     require(run.get("path") == WORKFLOW and run.get("event") == "push"
             and run.get("head_branch") == tag and run.get("head_sha") == source_sha,
@@ -38,6 +43,23 @@ def validate(run, jobs, run_id, tag, source_sha):
     require(all(steps.get(name) == "success" for name in (
         "Package and verify portable Windows build", "Install and smoke-test both Windows packages",
         "Upload Windows bundle")), "Candidate package and native desktop checks must succeed")
+
+
+def candidate_files(directory, tag):
+    filename = f"kiri_{tag[1:]}_x64-setup.exe"
+    required = {filename, filename + ".sig"}
+    # Older tag artifacts contain only the installer and signature. Newer
+    # artifacts also retain the portable package verified by the same build.
+    allowed = required | {f"Kiri-{tag[1:]}-Windows-x64-Portable.zip"}
+    paths = sorted(directory.iterdir())
+    names = {path.name for path in paths}
+    require(required <= names <= allowed,
+            "Candidate artifact must contain exactly one release installer and signature, "
+            "with only its matching portable archive optionally present")
+    require(all(path.is_file() and not path.is_symlink() for path in paths),
+            "Candidate artifact entries must be regular files")
+    return {path.name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                        "size_bytes": path.stat().st_size} for path in paths}
 
 
 def main():
@@ -61,11 +83,7 @@ def main():
     args.directory.mkdir(parents=True, exist_ok=True)
     subprocess.run(["gh", "run", "download", str(args.run), "--repo", REPOSITORY,
                     "--name", "kiri-windows", "--dir", str(args.directory)], check=True)
-    filename = f"kiri_{args.tag[1:]}_x64-setup.exe"
-    require(sorted(path.name for path in args.directory.iterdir()) == [filename, filename + ".sig"],
-            "Candidate artifact must contain exactly the release installer and its signature")
-    files = {path.name: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                         "size_bytes": path.stat().st_size} for path in args.directory.iterdir()}
+    files = candidate_files(args.directory, args.tag)
     manifest = {"repository": REPOSITORY, "workflow_path": WORKFLOW,
                 "run_id": args.run, "run_attempt": run["run_attempt"],
                 "tag": args.tag, "source_sha": source_sha, "harness_sha": harness_sha,
