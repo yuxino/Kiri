@@ -201,14 +201,28 @@ async def callout_pointer_case(browser, report):
         editor = page.locator("textarea")
         await editor.wait_for()
         await page.keyboard.type("Callout drag test")
-        track = await page.locator('input[type=range][aria-label="Number size"]').bounding_box()
-        await page.mouse.move(track["x"] + track["width"] * .3, track["y"] + track["height"] / 2)
+        slider = page.locator('input[type=range][aria-label="Number size"]')
+        track = await slider.bounding_box()
+        limits = await slider.evaluate("""e => ({min: Number(e.min), max: Number(e.max),
+          thumb: parseFloat(getComputedStyle(e, '::-webkit-slider-thumb').width)})""")
+        # The thumb travels between its own half-widths. A percentage of the
+        # entire flex-sized element does not identify a fixed range value.
+        def slider_x(value):
+            return track["x"] + limits["thumb"] / 2 + (track["width"] - limits["thumb"]) * (value - limits["min"]) / (limits["max"] - limits["min"])
+        await page.mouse.move(slider_x(38), track["y"] + track["height"] / 2)
         await page.mouse.down()
-        await page.mouse.move(track["x"] + track["width"] * .82, track["y"] + track["height"] / 2, steps=8)
+        await page.mouse.move(slider_x(66), track["y"] + track["height"] / 2, steps=8)
         await page.mouse.up()
         assert await editor.input_value() == "Callout drag test"
-        assert await page.locator('input[type=range][aria-label="Number size"]').input_value() == "66"
-        assert await page.locator('input[type=range][aria-label="Number size"]').evaluate("e=>getComputedStyle(e).outlineStyle") == "none"
+        try:
+            await page.wait_for_function("document.querySelector('input[type=range][aria-label=\"Number size\"]').value === '66'", timeout=1000)
+        except Exception:
+            report["calloutSliderFailure"] = {"track": track, "limits": limits,
+                "actual": await slider.input_value(), "target": 66}
+            await page.screenshot(path=str(OUT / "callout-slider-failure.png"))
+            raise
+        assert await slider.input_value() == "66"
+        assert await slider.evaluate("e=>getComputedStyle(e).outlineStyle") == "none"
         assert await page.get_by_role("button", name="Move description", exact=True).count() == 0
         save = page.get_by_role("button", name="Save As…", exact=True)
         await save.click()
