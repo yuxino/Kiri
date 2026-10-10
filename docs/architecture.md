@@ -228,6 +228,11 @@ one number, optional multiline description, badge center and label rectangle;
 its handles move the badge and label independently. Both parts translate when
 cropped and use the common preview/export renderer. Badge style and size join
 the local appearance preference; note content stays in the editable document.
+Like normal text editing (ADR 0060), the description textarea owns its live
+value, composition, caret and native history. Canvas selection notifications
+observe edits without writing text back into that editor. Canvas Undo/Redo and
+document revision loads clear selection, so picking a callout initializes a
+fresh textarea from the document, keyed by mark ID.
 See ADR 0083.
 
 ## Managed library flow
