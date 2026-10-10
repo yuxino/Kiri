@@ -723,8 +723,7 @@
   "Filled": "塗りつぶし",
   "Outline": "輪郭",
   "Description (optional)": "説明（任意）",
+  "Move description": "説明を移動",
   "Add a description…": "説明を追加…",
-  "Place a number to add a description": "番号を配置して説明を追加",
-  "Number size": "番号のサイズ",
-  "Drag the dots to move the number or description": "点をドラッグして番号や説明を移動"
+  "Number size": "番号のサイズ"
 }

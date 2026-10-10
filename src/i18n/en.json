@@ -723,8 +723,7 @@
   "Filled": "Filled",
   "Outline": "Outline",
   "Description (optional)": "Description (optional)",
+  "Move description": "Move description",
   "Add a description…": "Add a description…",
-  "Place a number to add a description": "Place a number to add a description",
-  "Number size": "Number size",
-  "Drag the dots to move the number or description": "Drag the dots to move the number or description"
+  "Number size": "Number size"
 }

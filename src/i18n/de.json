@@ -723,8 +723,7 @@
   "Filled": "Gefüllt",
   "Outline": "Umriss",
   "Description (optional)": "Beschreibung (optional)",
+  "Move description": "Beschreibung verschieben",
   "Add a description…": "Beschreibung hinzufügen…",
-  "Place a number to add a description": "Nummer platzieren, dann Beschreibung hinzufügen",
-  "Number size": "Nummerngröße",
-  "Drag the dots to move the number or description": "Punkte ziehen, um Nummer oder Beschreibung zu verschieben"
+  "Number size": "Nummerngröße"
 }

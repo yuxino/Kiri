@@ -178,3 +178,4 @@ development.
 - [ADR 0081: Direct capture toolbar pin](adr/0081-direct-capture-toolbar-pin.md)
 - [ADR 0082: Screenshot hover color picker](adr/0082-screenshot-hover-color-picker.md)
 - [ADR 0083: Editable numbered screenshot callouts](adr/0083-numbered-screenshot-callouts.md)
+- [ADR 0085: Edit numbered callout descriptions on the canvas](adr/0085-inline-callout-text-editing.md)

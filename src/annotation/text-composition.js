@@ -35,7 +35,7 @@ export function handleTextEditorKey(event, actions, nativeUndo) {
         if (event.shiftKey) actions.redo();
         else actions.undo();
       }
-    } else if (event.key === "Enter" && !event.shiftKey) {
+    } else if (event.key === "Enter" && !event.shiftKey && (!actions.multiline || event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       actions.commit();
       actions.finish?.();

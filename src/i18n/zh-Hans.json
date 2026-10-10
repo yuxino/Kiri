@@ -723,8 +723,7 @@
   "Filled": "实心",
   "Outline": "空心",
   "Description (optional)": "说明文字（可选）",
+  "Move description": "移动说明",
   "Add a description…": "添加说明文字…",
-  "Place a number to add a description": "先放置序号，再添加说明文字",
-  "Number size": "序号大小",
-  "Drag the dots to move the number or description": "拖动圆点可分别移动序号和说明"
+  "Number size": "序号大小"
 }
