@@ -79,13 +79,13 @@ test("watermark reads independent color and percentage, preserving saved large v
   assert.match(controls({...watermark, mode: "tiled"}), /value="700"/);
 });
 
-function numberControl() {
+function numberControl(overrides = {}) {
   const changes = [], finishes = [];
   const source = 'import React from "react";\n' + readFileSync(resolve(root, "src/annotation/AnnotationControlFields.tsx"), "utf8");
   const harness = createLibraryHarness({}, source, {modules: {"./model": load("src/annotation/model.ts")}});
   let props = {label: "Opacity", value: 20, min: 0, max: 100,
     onChange(value, transient) {changes.push({value, transient}); props = {...props, value};},
-    onFinish() {finishes.push(true);}};
+    onFinish() {finishes.push(true);}, ...overrides};
   const component = harness.mount("AnnotationNumberControl", props);
   const input = type => nodes(component.render(props)).find(node => node.type === "input" && node.props.type === type);
   return {input, changes, finishes};
@@ -98,6 +98,38 @@ test("one pointer gesture previews live and finishes once despite capture cleanu
   h.input("range").props.onPointerMove({clientX: 66, currentTarget: target});
   h.input("range").props.onPointerUp(); h.input("range").props.onLostPointerCapture();
   assert.deepEqual(h.changes, [{value: 20, transient: true}, {value: 60, transient: true}]);
+  assert.equal(h.finishes.length, 1);
+});
+
+test("a stationary drag preserves saved values beyond the default slider limits", () => {
+  const h = numberControl({label: "Font", value: 256, min: 12, max: 128});
+  const target = {focus() {}, setPointerCapture() {}, getBoundingClientRect: () => ({left: 0, width: 112})};
+  h.input("range").props.onPointerDown({button: 0, clientX: 66, pointerId: 1, currentTarget: target, preventDefault() {}});
+  assert.equal(h.changes.at(-1).value, 158);
+  // React receives the live value between moves. A stationary pointer must
+  // retain its value and the same track bounds throughout the gesture.
+  assert.equal(h.input("range").props.max, 256);
+  h.input("range").props.onPointerMove({clientX: 66, currentTarget: target});
+  assert.equal(h.changes.at(-1).value, 158);
+  h.input("range").props.onPointerMove({clientX: 106, currentTarget: target});
+  assert.equal(h.changes.at(-1).value, 256);
+  assert.equal(h.finishes.length, 0);
+  h.input("range").props.onPointerUp();
+  h.input("range").props.onLostPointerCapture();
+  assert.equal(h.finishes.length, 1);
+});
+
+test("range arrow keys retain native input handling and finish after key release", () => {
+  const h = numberControl({label: "Number size", value: 36, min: 24, max: 72});
+  let stopped = 0;
+  h.input("range").props.onKeyDown({key: "ArrowRight", stopPropagation() {stopped++;},
+    preventDefault() {assert.fail("Arrow keys must retain native range stepping");}});
+  h.input("range").props.onChange({target: {value: "37"}});
+  assert.equal(h.input("range").props.value, 37);
+  assert.equal(h.finishes.length, 0);
+  h.input("range").props.onKeyUp();
+  assert.equal(stopped, 1);
+  assert.deepEqual(h.changes, [{value: 37, transient: true}]);
   assert.equal(h.finishes.length, 1);
 });
 

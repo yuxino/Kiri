@@ -45,7 +45,7 @@
 
 In Screenshot mode, hover to magnify the original pixels and see their coordinates and HEX color. Press `⌘C` on macOS or `Ctrl+C` to copy the color while keeping the selection. The loupe hides once annotation starts.
 
-Use the arrow beside Text to choose Label bubble (B). Click the image to type a note, then click its dot to switch the pointing side. Adjust the font size and dot color, or double-click the text to edit it again.
+Use the arrow beside Text to choose Label bubble (B). Click the image to type a note, then click its dot to move the bubble to the other side of that same point. Adjust the font size and dot color, or double-click the text to edit it again.
 
 Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
 

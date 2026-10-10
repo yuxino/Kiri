@@ -10,11 +10,14 @@ export function AnnotationNumberControl(props: {
   const [draft, setDraft] = useState(String(props.value));
   const editing = useRef(false);
   const dragging = useRef(false);
+  const dragBounds = useRef<{min: number; max: number} | null>(null);
   const step = props.step ?? 1;
-  const min = Math.min(props.min, props.value), max = Math.max(props.max, props.value);
+  const min = dragBounds.current?.min ?? Math.min(props.min, props.value);
+  const max = dragBounds.current?.max ?? Math.max(props.max, props.value);
   useEffect(() => { if (!editing.current) setDraft(String(Math.round(props.value * 100) / 100)); }, [props.value]);
   function finish() {
     editing.current = false; dragging.current = false;
+    dragBounds.current = null;
     setDraft(String(Math.round(props.value * 100) / 100));
     props.onFinish();
   }
@@ -29,6 +32,9 @@ export function AnnotationNumberControl(props: {
       onPointerDown={event => {
         if (event.button !== 0) return;
         event.preventDefault(); event.currentTarget.focus(); dragging.current = true;
+        // Saved annotations may exceed the default limits. Shrinking the
+        // track after each preview would change its value at the same point.
+        dragBounds.current = {min, max};
         event.currentTarget.setPointerCapture(event.pointerId); point(event);
       }}
       onPointerMove={event => { if (dragging.current) point(event); }}

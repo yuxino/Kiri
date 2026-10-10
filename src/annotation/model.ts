@@ -5,6 +5,7 @@
 import type { Point, Rect } from "./geom";
 import {watermarkBounds, watermarkContainsPoint} from "./watermark-geometry.js";
 import {
+  contains,
   distanceToSegment,
   handlePoint,
   maxX,
@@ -203,12 +204,16 @@ export function labelGeometry(rect: Rect, fontSize: number, direction: LabelDire
   return {body, dot, radius, tail, bounds, padX, padY};
 }
 
-/** Reserve either pointing side so flipping never moves the text or clips the dot. */
+/** The content changes sides around the same point; glyphs are never mirrored. */
+export function labelRectAtAnchor(rect: Rect, fontSize: number, direction: LabelDirection, anchor: Point): Rect {
+  const dot = labelGeometry(rect, fontSize, direction).dot;
+  return {...rect, x: rect.x + anchor.x - dot.x, y: rect.y + anchor.y - dot.y};
+}
+
+/** Move the visible bubble and its anchor together, using their current side. */
 export function labelMovementBounds(mark: Extract<AnnotationMark, {kind: "text"}>): Rect {
   if (!mark.labelDirection) return standardized(mark.rect);
-  const left = labelGeometry(mark.rect, mark.fontSize, "left").bounds;
-  const right = labelGeometry(mark.rect, mark.fontSize, "right").bounds;
-  return {x: left.x, y: left.y, width: maxX(right) - left.x, height: left.height};
+  return labelGeometry(mark.rect, mark.fontSize, mark.labelDirection).bounds;
 }
 
 interface HistoryStep {
@@ -578,9 +583,13 @@ export function applyAnnotationAppearance(mark: AnnotationMark, patch: Partial<A
     style: patch.calloutStyle ?? mark.style, fontSize: patch.textFontSize ?? mark.fontSize};
   if(mark.kind === "text"){
     const fontSize=patch.textFontSize??mark.fontSize,scale=fontSize/mark.fontSize;
+    const labelDirection = mark.labelDirection ? patch.labelDirection ?? mark.labelDirection : undefined;
+    let rect = {...mark.rect, width:mark.rect.width*scale, height:mark.rect.height*scale};
+    if (mark.labelDirection && labelDirection) {
+      rect = labelRectAtAnchor(rect, fontSize, labelDirection, labelGeometry(mark.rect, mark.fontSize, mark.labelDirection).dot);
+    }
     return {...mark,color,fontSize,background:patch.textBackgroundStyle??mark.background,
-      ...(mark.labelDirection ? {labelDirection:patch.labelDirection??mark.labelDirection} : {}),
-      rect:{...mark.rect,width:mark.rect.width*scale,height:mark.rect.height*scale}};
+      ...(labelDirection ? {labelDirection} : {}), rect};
   }
   return {...mark,color,width:(mark.kind==="pen"?patch.penWidth:patch.shapeWidth)??mark.width};
 }
@@ -681,6 +690,13 @@ export function calloutHandleAt(mark: CalloutMark, point: Point, tolerance: numb
   if (Math.hypot(point.x - mark.center.x, point.y - mark.center.y + mark.size / 2) <= tolerance) return "badge";
   if (mark.text.trim() && Math.hypot(point.x - mark.labelRect.x - mark.labelRect.width,
     point.y - mark.labelRect.y) <= tolerance) return "label";
+  return null;
+}
+
+/** Drag the visible entities independently; the leader remains the whole-note target. */
+export function calloutPartAt(mark: CalloutMark, point: Point): "badge" | "label" | null {
+  if (Math.hypot(point.x - mark.center.x, point.y - mark.center.y) <= mark.size / 2) return "badge";
+  if (mark.text.trim() && contains(mark.labelRect, point)) return "label";
   return null;
 }
 

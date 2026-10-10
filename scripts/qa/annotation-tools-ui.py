@@ -152,6 +152,109 @@ async def existing_text_case(browser, report):
         await context.close()
 
 
+async def callout_pointer_case(browser, report):
+    context = await browser.new_context(viewport={"width": 1200, "height": 720})
+    page = await context.new_page()
+    try:
+        await page.goto(f"{URL}?lang=en")
+        canvas = page.locator("canvas")
+        await canvas.wait_for()
+        await page.get_by_role("button", name="Text tools", exact=True).click()
+        await page.get_by_role("menuitemradio").filter(has_text="Numbered callout").click()
+        box = await canvas.bounding_box()
+        await page.mouse.click(box["x"] + box["width"] * .3, box["y"] + box["height"] * .45)
+        editor = page.locator("textarea")
+        await editor.wait_for()
+        await page.keyboard.type("Callout drag test")
+        track = await page.locator('input[type=range][aria-label="Number size"]').bounding_box()
+        await page.mouse.move(track["x"] + track["width"] * .3, track["y"] + track["height"] / 2)
+        await page.mouse.down()
+        await page.mouse.move(track["x"] + track["width"] * .82, track["y"] + track["height"] / 2, steps=8)
+        await page.mouse.up()
+        assert await editor.input_value() == "Callout drag test"
+        assert await page.locator('input[type=range][aria-label="Number size"]').input_value() == "66"
+        assert await page.locator('input[type=range][aria-label="Number size"]').evaluate("e=>getComputedStyle(e).outlineStyle") == "none"
+        assert await page.get_by_role("button", name="Move description", exact=True).count() == 0
+        save = page.get_by_role("button", name="Save As…", exact=True)
+        await save.click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===1")
+        before = await page.evaluate("__annotationToolsQa.document.marks[0]")
+        assert before["size"] == 66 and before["text"] == "Callout drag test", before
+        await page.get_by_role("button", name="Edit text", exact=True).click()
+        await editor.wait_for()
+        frame = await editor.bounding_box()
+        await page.mouse.move(frame["x"] + 1, frame["y"] + frame["height"] / 2)
+        await page.mouse.down()
+        await page.mouse.move(frame["x"] + 41, frame["y"] + frame["height"] / 2 + 20, steps=8)
+        await page.mouse.up()
+        await save.click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===2")
+        description_moved = await page.evaluate("__annotationToolsQa.document.marks[0]")
+        scale = box["width"] / 960
+        assert description_moved["center"] == before["center"], description_moved
+        assert abs(description_moved["labelRect"]["x"] - before["labelRect"]["x"] - 40 / scale) < 1
+        assert abs(description_moved["labelRect"]["y"] - before["labelRect"]["y"] - 20 / scale) < 1
+        assert description_moved["text"] == before["text"]
+        await page.get_by_role("button", name="Select (V)", exact=True).click()
+        center = description_moved["center"]
+        x, y = box["x"] + center["x"] * scale, box["y"] + center["y"] * scale
+        await page.mouse.move(x, y)
+        await page.mouse.down()
+        await page.mouse.move(x + 35, y + 15, steps=8)
+        await page.mouse.up()
+        await save.click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===3")
+        badge_moved = await page.evaluate("__annotationToolsQa.document.marks[0]")
+        assert badge_moved["labelRect"] == description_moved["labelRect"]
+        assert abs(badge_moved["center"]["x"] - center["x"] - 35 / scale) < 1
+        assert abs(badge_moved["center"]["y"] - center["y"] - 15 / scale) < 1
+        await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+        await save.click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===4")
+        assert await page.evaluate("__annotationToolsQa.document.marks[0]") == description_moved
+        await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+        await save.click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===5")
+        assert await page.evaluate("__annotationToolsQa.document.marks[0]") == badge_moved
+        report["calloutPointer"] = {"passed": True, "liveSize": 66, "directFrameDrag": True, "firstBadgeDrag": True, "singleUndo": True}
+    finally:
+        await context.close()
+
+
+async def anchored_label_case(browser, report):
+    context = await browser.new_context(viewport={"width": 1200, "height": 720})
+    page = await context.new_page()
+    try:
+        await page.goto(f"{URL}?lang=en")
+        await page.locator("canvas").wait_for()
+        await page.get_by_role("button", name="Text tools", exact=True).click()
+        await page.get_by_role("menuitemradio").filter(has_text="Label bubble").click()
+        box = await page.locator("canvas").bounding_box()
+        await page.mouse.click(box["x"] + box["width"] * .6, box["y"] + box["height"] * .3)
+        await page.locator("textarea").wait_for()
+        await page.wait_for_function("document.activeElement === document.querySelector('textarea')")
+        await page.keyboard.type("line one")
+        await page.keyboard.press("Shift+Enter")
+        await page.keyboard.type("line two!!")
+        await page.keyboard.press("Enter")
+        await page.locator("textarea").wait_for(state="detached")
+        dot = page.locator(".kiri-label-dot")
+        before = await dot.bounding_box()
+        await dot.click()
+        after = await dot.bounding_box()
+        assert abs(after["x"] - before["x"]) < .5 and abs(after["y"] - before["y"]) < .5, (before, after)
+        await page.get_by_role("button", name="Save As…", exact=True).click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===1")
+        mark = await page.evaluate("__annotationToolsQa.document.marks[0]")
+        assert mark["text"] == "line one\nline two!!" and mark["labelDirection"] == "right", mark
+        await dot.click()
+        restored = await dot.bounding_box()
+        assert abs(restored["x"] - before["x"]) < .5 and abs(restored["y"] - before["y"]) < .5
+        report["anchoredLabel"] = {"passed": True, "fixedDot": True, "roundTrip": True, "unchangedText": True}
+    finally:
+        await context.close()
+
+
 async def verify():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"scope": "Actual product windows with isolated IPC; no native or IME claim", "editor": [], "overlay": []}
@@ -169,6 +272,8 @@ async def verify():
             await editor_cases(browser, report)
             await overlay_cases(browser, report)
             await existing_text_case(browser, report)
+            await callout_pointer_case(browser, report)
+            await anchored_label_case(browser, report)
             await browser.close()
             report["passed"] = True
     finally:

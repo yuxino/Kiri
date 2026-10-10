@@ -25,13 +25,68 @@ const rectangle = {kind: "rectangle", id: 2, rect: {x: 100, y: 100, width: 100, 
 const appearance = model.DEFAULT_APPEARANCE;
 
 const label = {...text, color:"cherry", labelDirection:"left", rect:{x:140,y:100,width:150,height:45}};
+const dotOf = mark => model.labelGeometry(mark.rect, mark.fontSize, mark.labelDirection).dot;
+function assertPoint(actual, expected) {
+  assert.ok(Math.abs(actual.x - expected.x) < 1e-7, `x ${actual.x} must stay at ${expected.x}`);
+  assert.ok(Math.abs(actual.y - expected.y) < 1e-7, `y ${actual.y} must stay at ${expected.y}`);
+}
 function dotButton(h) {
   const node = nodes(h.component.render()).find(node=>node?.type?.name==="LabelDot");
   assert.ok(node, "the visible label has an accessible dot control");
   return node.type(node.props);
 }
 
-test("clicking a label dot flips once without moving text, starts no drag, and survives undo/reopen", async()=>{
+test("a label flips around its dot through saved and inline controls without mirroring its text", async () => {
+  const mark = {...label, rect: {...label.rect, x: 330}}, anchor = dotOf(mark);
+  const h = annotation(documentWith([mark]), {selectedMarkId: mark.id});
+  dotButton(h).props.onClick({stopPropagation() {}}); h.component.render();
+  const flipped = h.changes.at(-1)[0];
+  assertPoint(dotOf(flipped), anchor);
+  assert.equal(flipped.labelDirection, "right"); assert.equal(flipped.text, mark.text);
+  assert.ok(flipped.rect.x < anchor.x && mark.rect.x > anchor.x);
+  h.ref.current.editSelectedText(); h.component.render();
+  const editor = () => nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
+  editor().props.onToggleDirection(); h.component.render();
+  const result = await h.ref.current.exportResult();
+  assertPoint(dotOf(result.document.marks[0]), anchor);
+  assert.equal(result.document.marks[0].labelDirection, "left");
+  assert.equal(result.document.marks[0].text, mark.text);
+  const reopened = annotation(result.document, {selectedMarkId: mark.id});
+  reopened.ref.current.updateSelectionAppearance({labelDirection: "right", textFontSize: 24}); reopened.component.render();
+  assertPoint(dotOf((await reopened.ref.current.exportResult()).document.marks[0]), anchor);
+});
+
+test("an edge label wraps on its new side while its dot and saved text remain unchanged", async () => {
+  const h = annotation(documentWith([label]), {selectedMarkId: label.id}), anchor = dotOf(label);
+  for (const direction of ["right", "left", "right"]) {
+    dotButton(h).props.onClick({stopPropagation() {}}); h.component.render();
+    const mark = (await h.ref.current.exportResult()).document.marks[0];
+    assert.equal(mark.labelDirection, direction); assert.equal(mark.text, label.text);
+    assertPoint(dotOf(mark), anchor);
+    const bounds = model.selectionBounds(mark);
+    assert.ok(bounds.x >= -1e-7 && bounds.y >= -1e-7 && bounds.x + bounds.width <= 640 + 1e-7 && bounds.y + bounds.height <= 360 + 1e-7);
+  }
+});
+
+test("opening a saved label keeps its anchor and layout, and inline wrapping grows around that same point", async () => {
+  const h = annotation(documentWith([label]), {selectedMarkId: label.id}), anchor = dotOf(label);
+  h.ref.current.editSelectedText(); h.component.render();
+  const editor = () => nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
+  const first = editor().props.editing;
+  assertPoint(dotOf({...label, rect: {x: first.rect.x + 9, y: first.rect.y + 6,
+    width: first.rect.width - 18, height: first.rect.height - 12}}), anchor);
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [label]);
+  assert.deepEqual(h.changes, [], "opening and closing does not repair or move a saved label");
+  h.ref.current.editSelectedText(); h.component.render();
+  editor().props.onTextChange("中文\nlonger explanation"); h.component.render();
+  editor().props.onRectChange({...first.rect, width: first.rect.width + 60, height: first.rect.height + 20}); h.component.render();
+  const result = (await h.ref.current.exportResult()).document.marks[0];
+  assertPoint(dotOf(result), anchor); assert.equal(result.text, "中文\nlonger explanation");
+  assert.equal(h.changes.length, 1);
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [label]);
+});
+
+test("clicking a label dot flips once around its point, starts no drag, and survives undo/reopen", async()=>{
   const h=annotation(documentWith([label]),{selectedMarkId:label.id});
   let stopped=0, prevented=0;
   const event={key:"Enter",stopPropagation(){stopped++;},preventDefault(){prevented++;}};
@@ -39,8 +94,9 @@ test("clicking a label dot flips once without moving text, starts no drag, and s
   button.props.onPointerDown(event); button.props.onKeyDown(event); button.props.onKeyUp(event);
   assert.equal(stopped,3); assert.equal(prevented,1);
   button.props.onClick(event); h.component.render();
-  const flipped={...label,labelDirection:"right"};
-  assert.deepEqual(h.changes.at(-1),[flipped]);
+  const flipped=h.changes.at(-1)[0];
+  assertPoint(dotOf(flipped),dotOf(label)); assert.equal(flipped.labelDirection,"right");
+  assert.equal(flipped.text,label.text);
   assert.equal(h.changes.length,1);
   const saved=await h.ref.current.exportResult();
   const reopened=annotation(saved.document);
@@ -49,7 +105,7 @@ test("clicking a label dot flips once without moving text, starts no drag, and s
   h.ref.current.redo();h.component.render();assert.deepEqual(h.changes.at(-1),[flipped]);
 });
 
-test("label font changes remain a single edit and keep both possible dots inside narrow canvases",()=>{
+test("label font changes remain a single edit and keep its fixed point and visible bubble in the canvas",()=>{
   const h=annotation(documentWith([label]),{selectedMarkId:label.id});
   h.ref.current.updateSelectionAppearance({textFontSize:64},true);
   h.ref.current.updateSelectionAppearance({textFontSize:32},true);
@@ -59,6 +115,7 @@ test("label font changes remain a single edit and keep both possible dots inside
   const bounds=model.labelMovementBounds(resized);
   assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=640&&bounds.y+bounds.height<=360);
   assert.equal(resized.labelDirection,"left");
+  assertPoint(dotOf(resized),dotOf(label));
   h.ref.current.undo();h.component.render();assert.deepEqual(h.changes.at(-1),[label]);
 });
 
@@ -288,6 +345,72 @@ const initialFrame = {left: 0, top: 0, width: 640, height: 360};
 const inspectorFrame = {left: 80, top: 60, width: 480, height: 270};
 const calloutEditor = h => nodes(h.component.render()).find(node => node?.props?.editing?.callout);
 
+for (const part of ["badge", "description"]) {
+  test(`the ${part} body drags directly without selecting a handle, with one undo`, () => {
+    const h = annotation(documentWith([reflowCallout]));
+    const start = part === "badge" ? reflowCallout.center : {x: 250, y: 80};
+    h.pointer("onPointerDown", start.x, start.y); h.pointer("onPointerMove", start.x + 40, start.y + 30);
+    h.pointer("onPointerUp", start.x + 40, start.y + 30);
+    const moved = h.changes.at(-1)[0];
+    if (part === "badge") {
+      assert.deepEqual(moved.center, {x: start.x + 40, y: start.y + 30});
+      assert.deepEqual(moved.labelRect, reflowCallout.labelRect);
+    } else {
+      assert.deepEqual(moved.center, reflowCallout.center);
+      assert.deepEqual(moved.labelRect, {...reflowCallout.labelRect, x: 240, y: 90});
+    }
+    assert.equal(h.changes.length, 1);
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [reflowCallout]);
+    h.ref.current.redo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [moved]);
+  });
+}
+
+test("a callout click below the drag threshold edits; its connector still moves the whole callout", () => {
+  const h = annotation(documentWith([reflowCallout]));
+  h.pointer("onPointerDown", 250, 80); h.pointer("onPointerMove", 252, 81); h.pointer("onPointerUp", 252, 81);
+  assert.deepEqual(h.changes, []); assert.equal(calloutEditor(h).props.editing.id, reflowCallout.id);
+  h.ref.current.commitTextEditing(); h.component.render();
+  h.pointer("onPointerDown", 140, 80); h.pointer("onPointerMove", 180, 110); h.pointer("onPointerUp", 180, 110);
+  const moved = h.changes.at(-1)[0];
+  assert.deepEqual(moved.center, {x: 120, y: 110});
+  assert.deepEqual(moved.labelRect, {...reflowCallout.labelRect, x: 240, y: 90});
+});
+
+test("shared callout controls update the inline draft live and save one complete undoable edit", async () => {
+  const selections = [];
+  const h = annotation(documentWith([reflowCallout]), {selectedMarkId: reflowCallout.id,
+    onSelectionInfo: mark => selections.push(structuredClone(mark))});
+  h.ref.current.editSelectedText(); h.component.render();
+  calloutEditor(h).props.onTextChange("中文\nabcdef"); h.component.render();
+  const updates = [
+    {calloutSize: 48, calloutStyle: "outline", textFontSize: 24, colorPreset: "white"},
+    {calloutSize: 60, calloutStyle: "filled"},
+    {calloutSize: 40, calloutStyle: "outline"},
+  ];
+  const live = [];
+  for (const patch of updates) {
+    h.ref.current.updateSelectionAppearance(patch, true); h.component.render();
+    const editor = calloutEditor(h).props.editing, selection = selections.at(-1);
+    assert.equal(editor.id, reflowCallout.id, "live properties keep the same native text editor");
+    assert.equal(editor.text, "中文\nabcdef");
+    assert.equal(selection.fontSize, 24); assert.equal(selection.color, "white");
+    live.push([selection.size, selection.style]);
+  }
+  assert.deepEqual(live, [[48, "outline"], [60, "filled"], [40, "outline"]],
+    "the HUD must receive each size/style preview rather than snapping back to the saved mark");
+  h.ref.current.finishAppearanceAdjustment(); h.component.render();
+  assert.deepEqual(h.changes, [], "inline changes remain one text draft until commit");
+  const result = await h.ref.current.exportResult(); h.component.render();
+  assert.equal(h.changes.length, 1);
+  const saved = result.document.marks[0];
+  assert.equal(saved.size, 40); assert.equal(saved.style, "outline");
+  assert.equal(saved.fontSize, 24); assert.equal(saved.color, "white");
+  assert.equal(saved.text, "中文\nabcdef"); assert.equal(saved.number, reflowCallout.number);
+  assert.deepEqual((await annotation(result.document).ref.current.exportResult()).document.marks, [saved]);
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [reflowCallout]);
+  h.ref.current.redo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [saved]);
+});
+
 function reflowClick(extraMarks = []) {
   let frame = initialFrame;
   const h = annotation(documentWith([reflowCallout, ...extraMarks]), {boundingRect: () => frame});
@@ -420,15 +543,18 @@ test("saved callout placement survives reopening and text growth stays away from
   assert.deepEqual((await h.ref.current.exportResult()).document.marks, [mark]);
 });
 
-test("the inline callout grip moves only its label and preserves typed text", () => {
+test("a newly created inline callout frame moves only its label and preserves typed text", () => {
   const h = annotation(documentWith([]), {tool: "callout"});
   h.pointer("onPointerDown", 80, 90); h.pointer("onPointerUp", 80, 90);
   const editor = nodes(h.component.render()).find(node => node?.props?.editing?.callout);
   editor.props.onTextChange("explanation"); h.component.render();
   const frame = editor.props.editing.rect;
-  editor.props.onMoveCallout({clientX: frame.x + frame.width, clientY: frame.y, pointerId: 1, preventDefault() {}, stopPropagation() {}});
+  editor.props.onMoveCallout({clientX: frame.x + frame.width + 4, clientY: frame.y + 3, pointerId: 1, preventDefault() {}, stopPropagation() {}},
+    {x: frame.x + frame.width, y: frame.y});
   h.component.render();
   const before = h.changes.at(-1)[0];
+  assert.deepEqual(h.frames.at(-1).marks[0].labelRect, {...before.labelRect,
+    x: before.labelRect.x + 4, y: before.labelRect.y + 3}, "the threshold-crossing movement is not dropped");
   h.pointer("onPointerMove", frame.x + frame.width + 40, frame.y + 30);
   h.pointer("onPointerUp", frame.x + frame.width + 40, frame.y + 30);
   const after = h.changes.at(-1)[0];
@@ -476,8 +602,9 @@ test("number and description handles move independently, stay in bounds, and und
   assert.deepEqual(h.changes.at(-1)[0].center, {x: 120, y: 120});
   h.ref.current.undo(); h.component.render();
   h.pointer("onPointerDown", 250, 80); h.pointer("onPointerMove", 620, 350); h.pointer("onPointerUp", 620, 350);
-  // Undo clears selection; this first drag moves the whole note. Select again for a handle drag.
+  // Undo clears selection; dragging the description body still moves it independently.
   const current = h.changes.at(-1)[0];
+  assert.deepEqual(current.center,mark.center);
   assert.ok(current.labelRect.x + current.labelRect.width <= 640);
   assert.ok(current.labelRect.y + current.labelRect.height <= 360);
   h.ref.current.undo(); h.component.render();
@@ -505,7 +632,7 @@ test("opening the callout inspector during selection cannot move a mark or disto
   rect = {left: 80, top: 100, width: 480, height: 270};
   h.pointer("onPointerMove", 100, 90); h.pointer("onPointerUp", 100, 90);
   assert.deepEqual(h.changes.at(-1)[0].center, {x: 100, y: 90});
-  assert.deepEqual(h.changes.at(-1)[0].labelRect, {...mark.labelRect, x: 220, y: 70});
+  assert.deepEqual(h.changes.at(-1)[0].labelRect, mark.labelRect);
 });
 
 test("keyboard-style live font changes update the selected mark and commit one undoable edit", () => {
@@ -788,5 +915,7 @@ test("selecting a label stays stationary when its inspector changes the stage mi
   assert.deepEqual(h.frames.at(-1).marks,[label]);
   const button=dotButton(h);
   button.props.onClick({stopPropagation(){}});h.component.render();
-  assert.deepEqual(h.changes.at(-1),[{...label,labelDirection:"right"}]);
+  assertPoint(dotOf(h.changes.at(-1)[0]),dotOf(label));
+  assert.equal(h.changes.at(-1)[0].labelDirection,"right");
+  assert.equal(h.changes.at(-1)[0].text,label.text);
 });

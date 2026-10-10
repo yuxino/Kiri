@@ -602,10 +602,9 @@ for (const direction of ["left","right"]) {
     const geometry=labelGeometry(label.rect,label.fontSize,direction);
     assert.equal(markIndexAt([label],geometry.dot),0);
     const moved=translateMark(label,{x:-1000,y:-1000},{x:0,y:0,width:640,height:360});
-    for(const side of ["left","right"]){
-      const b=labelGeometry(moved.rect,moved.fontSize,side).bounds;
-      assert.ok(b.x>=-1e-8&&b.y>=-1e-8);
-    }
+    const b=labelGeometry(moved.rect,moved.fontSize,direction).bounds;
+    assert.ok(b.x>=-1e-8&&b.y>=-1e-8);
+    assert.ok(b.x+b.width<=640+1e-8&&b.y+b.height<=360+1e-8);
     const crop=cropAnnotationDocument(doc,{x:geometry.dot.x-5,y:geometry.dot.y-5,width:10,height:10});
     assert.equal(crop.document.marks.length,1);
     assert.equal(crop.document.marks[0].labelDirection,direction);

@@ -105,21 +105,20 @@ body,
 .kiri-label-dot { display:grid; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; cursor:pointer; }
 .kiri-label-dot span { display:block; border-radius:50%; pointer-events:none; }
 .kiri-label-dot:hover:not(:disabled) { background:rgba(255,255,255,.24); box-shadow:0 0 0 1px rgba(0,0,0,.35); }
-.kiri-label-dot:focus-visible { outline:2px solid #fff; box-shadow:0 0 0 3px #333; }
+.kiri-label-dot:focus { outline:none; box-shadow:none; }
+.kiri-label-dot:focus-visible { box-shadow:inset 0 0 0 1px #777; }
 .kiri-label-dot:disabled { opacity:.5; cursor:default; }
 .kiri-label-controls { width:260px; max-width:100%; box-sizing:border-box; padding:10px 12px; display:flex; flex-direction:column; gap:10px; font-size:11px; }
-.kiri-label-swatch:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.kiri-label-swatch:focus { outline:none; box-shadow:none; }
+.kiri-label-swatch:focus-visible { box-shadow:inset 0 0 0 1px #777; }
 .kiri-label-size { display:flex; align-items:center; gap:8px; min-width:0; }
 .kiri-label-size input { flex:1; min-width:60px; width:60px; }
 .kiri-label-size output { min-width:20px; text-align:right; font-variant-numeric:tabular-nums; }
 .kiri-label-colors { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
-.kiri-label-swatch { width:19px; height:19px; padding:0; border:2px solid #171717; outline:1px solid #666; border-radius:50%; cursor:pointer; }
-.kiri-label-swatch[aria-pressed=true] { outline-color:#fff; }
+.kiri-label-swatch { width:19px; height:19px; padding:0; border:2px solid #666; outline:none; border-radius:50%; cursor:pointer; }
+.kiri-label-swatch[aria-pressed=true] { border-color:#ddd; }
 .kiri-label-swatch:hover { opacity:.7; }
 .kiri-label-text-editor:focus { outline:none; box-shadow:none; }
-.kiri-callout-move-grip:hover:not(:disabled) { box-shadow:0 0 0 2px rgba(255,255,255,.65); }
-.kiri-callout-move-grip:focus-visible { outline:2px solid #fff; outline-offset:2px; }
-.kiri-callout-move-grip:disabled { opacity:.5; cursor:default; }
 
 .kiri-primary-button {
   font: 600 12.5px var(--kiri-font-ui);
@@ -930,6 +929,9 @@ button:active:not(:disabled) {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
+.kiri-mode-btn:focus { outline:none; box-shadow:none; }
+.kiri-mode-btn:focus-visible { box-shadow:inset 0 0 0 1px #777; }
+
 /* --- Custom range slider (annotation thickness/size) --- */
 .kiri-range {
   -webkit-appearance: none;
@@ -939,6 +941,11 @@ button:active:not(:disabled) {
   background: transparent;
   cursor: default;
 }
+
+/* Range focus belongs to the track, so it never draws a box around the HUD. */
+.kiri-range:focus { outline:none; box-shadow:none; }
+.kiri-range:focus-visible::-webkit-slider-runnable-track { background:#777; }
+.kiri-range:focus-visible::-moz-range-track { background:#777; }
 
 .kiri-range::-webkit-slider-runnable-track {
   height: 4px;
@@ -1027,6 +1034,9 @@ button:active:not(:disabled) {
   opacity: 0.35;
 }
 
+.kiri-toolbar-button:focus { outline:none; box-shadow:none; }
+.kiri-toolbar-button:focus-visible { box-shadow:inset 0 0 0 1px #777; }
+
 /* Tools wrap as small groups; primary actions remain visible at narrow widths. */
 .kiri-annotation-tool-group { display:flex; align-items:center; flex:0 0 auto; gap:2px; }
 .kiri-annotation-tool-group + .kiri-annotation-tool-group { padding-left:5px; margin-left:3px; border-left:1px solid rgba(255,255,255,.14); }
@@ -1044,6 +1054,12 @@ button:active:not(:disabled) {
 .kiri-image-editor-properties::-webkit-scrollbar, .kiri-capture-tool-options::-webkit-scrollbar { width:6px; height:6px; }
 .kiri-image-editor-properties::-webkit-scrollbar-thumb, .kiri-capture-tool-options::-webkit-scrollbar-thumb { background:#777; border-radius:6px; }
 .kiri-image-editor-properties::-webkit-scrollbar-track, .kiri-capture-tool-options::-webkit-scrollbar-track { background:transparent; }
+.kiri-capture-toolbar :is(input,button):focus,
+.kiri-image-editor-toolbar :is(input,button):focus,
+.kiri-image-editor-properties :is(input,button):focus { outline:none; box-shadow:none; }
+.kiri-capture-toolbar :is(input:not([type=range]),button):focus-visible,
+.kiri-image-editor-toolbar :is(input:not([type=range]),button):focus-visible,
+.kiri-image-editor-properties :is(input:not([type=range]),button):focus-visible { box-shadow:inset 0 0 0 1px #777; }
 .kiri-image-editor-crop-options { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:6px 10px; background:#101010; color:#f7f7f4; font:500 11px var(--kiri-font-ui); }
 @media (max-width:740px) {
   .kiri-image-editor-toolbar { height:88px; flex-basis:88px; }
@@ -1131,6 +1147,9 @@ button:active:not(:disabled) {
 .kiri-toolbar-segment:active {
   transform: scale(0.94);
 }
+
+.kiri-toolbar-segment:focus { outline:none; box-shadow:none; }
+.kiri-toolbar-segment:focus-visible { box-shadow:inset 0 0 0 1px #777; }
 
 .kiri-output-format {
   height: 32px;

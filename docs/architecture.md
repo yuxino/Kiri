@@ -243,14 +243,17 @@ A callout draft keeps the badge and connector visible while the textarea present
 the description. Clicking another canvas location, switching tools or exporting
 commits that draft as one edit to the existing callout. Return adds a line;
 Cmd/Ctrl+Return commits, and Escape cancels the draft without removing its badge.
-The canvas grip moves the description independently. The V1 document fields and
-crop/export boundary remain unchanged. See ADRs 0083 and 0085.
+Dragging the badge or description moves that part independently, including on
+the first drag. During typing, the transparent frame's border and padding move
+the description; text selection keeps native behavior. The V1 document fields
+and crop/export boundary remain unchanged. See ADRs 0083, 0085 and 0089.
 
 Screenshot label bubbles share the text mark and inline editor, with an optional
-`labelDirection` field. The text rect remains fixed when its dot is clicked;
-only the tip and dot change sides. Shared document geometry drives canvas/export,
-selection bounds and the accessible dot control. New labels reserve room for
-both sides, while crops keep the intersecting body, tip or dot. See ADR 0084.
+`labelDirection` field. Clicking its dot keeps that pointing location fixed and
+moves the bubble to its other side. Shared document geometry drives canvas/export,
+selection bounds and the accessible dot control. Edge layout fits the text on
+the requested side; crops keep the intersecting body, tip or dot. See ADRs 0084
+and 0089.
 
 Capture and saved-image editing share context-sensitive property controls.
 Selection reads the mark's properties without modifying preferences; explicit
