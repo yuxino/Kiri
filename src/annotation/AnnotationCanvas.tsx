@@ -1760,7 +1760,7 @@ function TextEditor(props: {
         pointerEvents: "auto",
       }}
     />
-    {editing.callout ? <button type="button" aria-label={t("Move description")} title={t("Move description")}
+    {editing.callout ? <button type="button" className="kiri-callout-move-grip" aria-label={t("Move description")} title={t("Move description")}
       onKeyDown={event => event.stopPropagation()}
       disabled={disabled} onPointerDown={event => {
         if (ref.current && isTextComposition({target: ref.current})) {event.preventDefault(); event.stopPropagation(); return;}
