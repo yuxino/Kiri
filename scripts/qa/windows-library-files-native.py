@@ -174,7 +174,12 @@ def launch(executable):
     global process, library_window
     process = subprocess.Popen([str(executable)], env=app_environment)
     library_window = find("Settings", kinds=("Button",), timeout=40).top_level_parent()
+    focus_library()
+
+
+def focus_library():
     library_window.set_focus()
+    wait_for("library window in the foreground", lambda: user32.GetForegroundWindow() == library_window.handle)
 
 
 def index():
@@ -186,7 +191,7 @@ def current(asset_id):
 
 
 def card(title):
-    library_window.set_focus()
+    focus_library()
     search = find("Search captures", kinds=("Edit",), scope=library_window)
     search.set_edit_text(title)
     return find(title, scope=library_window, predicate=lambda control: control.rectangle().height() > 150)
@@ -294,14 +299,17 @@ def seed_clipboard(seed_file):
 
 def verify_folder_and_rename(assets):
     phase("Open Folder on extended-length custom library root")
-    find("Settings", kinds=("Button",), scope=library_window).click_input()
+    focus_library()
+    find("Settings", kinds=("Button",), scope=library_window).invoke()
     find("Open Folder", kinds=("Button",), scope=library_window, scroll=True).click_input()
     window = explorer_for(root)
     report["open_folder"] = explorer_evidence(window)
     if normalized(window.Document.Folder.Self.Path) != normalized(root):
         raise RuntimeError("Open Folder opened a parent rather than the current library")
     snapshot("current-library-folder")
-    find("Library", kinds=("Button",), scope=library_window).click_input()
+    focus_library()
+    find("Library", kinds=("Button",), scope=library_window).invoke()
+    find("Search captures", kinds=("Edit",), scope=library_window)
     for asset in assets:
         phase(f"Rename and Show in Folder: {asset['kind']}")
         before = current(asset["id"])
