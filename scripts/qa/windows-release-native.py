@@ -202,7 +202,7 @@ def direct_pin_acceptance(source, expected, region, user32):
     corner = (moved[2] - 12, moved[3] - 12)
     delta = (max(40, round(before_size[0] * 0.1)), max(25, round(before_size[1] * 0.2)))
     mouse.move(coords=corner)
-    drag_mouse(corner, (corner[0] + delta[0], corner[1] + delta[1]))
+    drag_mouse(corner, (corner[0] + delta[0], corner[1] + delta[1]), native=True)
     resized = wait_for("native reference grows after corner resize", lambda:
                       (bounds := client_bounds(pin)) and bounds[2] - bounds[0] >= before_size[0] + 20 and bounds)
     resize = proportional_resize_evidence(before_size, (resized[2] - resized[0], resized[3] - resized[1]))

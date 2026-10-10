@@ -460,7 +460,24 @@ def native_pin_acceptance():
     size = (int(moved["WIDTH"]), int(moved["HEIGHT"]))
     corner = (int(moved["X"]) + size[0] - 12, int(moved["Y"]) + size[1] - 12)
     # Unequal normalized pointer deltas must still preserve the image aspect.
-    drag_region((*corner, corner[0] + round(size[0] * 0.1), corner[1] + round(size[1] * 0.2)))
+    target = (corner[0] + round(size[0] * 0.1), corner[1] + round(size[1] * 0.2))
+    command("xdotool", "mousemove", str(corner[0]), str(corner[1]))
+    wait_for_control("Unpin")
+    pause(0.3)
+    screenshot("direct-pin-ready-for-resize.png")
+    report["pin_resize_gesture"] = {"start": corner, "target": target, "samples": []}
+    command("xdotool", "mousedown", "1")
+    pause(0.3)
+    try:
+        # Small first motions stay inside the painted WebKitGTK client while
+        # its pointer capture and asynchronous resize request are established.
+        for step in range(1, 17):
+            point = tuple(round(a + (b - a) * step / 16) for a, b in zip(corner, target))
+            command("xdotool", "mousemove", "--sync", str(point[0]), str(point[1]))
+            pause(0.06)
+            report["pin_resize_gesture"]["samples"].append(geometry(pin))
+    finally:
+        command("xdotool", "mouseup", "1")
     resized = wait_for("native X11 pin grows after corner drag", lambda:
                       (bounds := geometry(pin)) and int(bounds["WIDTH"]) >= size[0] + 20 and bounds)
     resize = proportional_resize_evidence(size, (int(resized["WIDTH"]), int(resized["HEIGHT"])))
