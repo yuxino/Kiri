@@ -35,8 +35,10 @@ post-annotation blue-channel pixel-difference assertion. The same assertion
 failed when that test was run alone. The new label serialization test passed.
 No native video-renderer or pixel-threshold change is part of this feature.
 
-A stable signed app candidate is packaged separately. Installation and native
-acceptance at `/Applications/Kiri.app` belong to the coordinated Kiri test slot;
-this task does not replace another chat's running app. Browser checks do not
+A local app bundle was built before the final dependency merge, but packaging
+failed at updater signing because no updater private key was configured. That
+bundle is not the final candidate. The coordinating test slot builds and tests
+the integrated app at `/Applications/Kiri.app`; this task does not replace
+another chat's running app. Browser checks do not
 establish macOS WebKit IME, native focus/clipboard, Windows, or installed Ubuntu
 acceptance. Those results must be recorded before promoting the integrated app.
