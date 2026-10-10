@@ -31,6 +31,26 @@ Native macOS requires the fixed-path stable-signed package and a real frozen
 screen. Windows CI, the Ubuntu `.deb`/X11 job, mixed-scale displays and GNOME
 Wayland remain separate acceptance checks; browser pixels do not prove those.
 
+## Installed Windows desktop acceptance
+
+Dispatch the build workflow on this change's branch with `profile=windows`:
+
+```sh
+gh workflow run build.yml --ref feat/screenshot-hover-color-picker -f profile=windows
+```
+
+The `package_windows` route builds and installs NSIS, verifies the portable ZIP,
+and then runs `windows-capture-color-native.py` against that installed executable.
+A separate Tk process paints known public pixels; the global shortcut opens the
+shipping capture backend. The script reads the loupe's accessible HEX/coordinates,
+compares them to physical source pixels and the native Unicode clipboard, verifies
+selection/overlay retention and Escape focus restoration, and checks dimension
+and annotation text copying plus Record/OCR mode isolation. It never starts an
+actual recording or sends OCR content to a provider. Evidence is uploaded as
+`windows-capture-color-review`, including screenshots, UIA controls, executable
+checksum, source SHA, clipboard receipts, application logs and failure diagnostics.
+This standard hosted desktop does not establish mixed-DPI hardware acceptance.
+
 ## 2026-10-10 local verification
 
 - Based on main `f9db76c` (v1.6.14), on macOS 27.0.1.
@@ -47,6 +67,8 @@ Wayland remain separate acceptance checks; browser pixels do not prove those.
   `native_annotations_follow_live_frames_and_independent_time_ranges` also
   failed alone at `video_export.rs:1843`, on the blue-channel contrast assertion
   after the annotation ends. This work does not change video/media source files.
+  An isolated unmodified main at the same base commit also reproduces that
+  assertion locally; the original PR's macOS Rust job passes in CI.
 - The local arm64 `.app` bundled successfully and passed strict/deep codesign
   verification outside the sandbox. Its designated requirement matches the
   installed `io.yuxino.kiri` identity. The packaging command then failed at
