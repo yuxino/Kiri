@@ -135,7 +135,8 @@ try:
     wait_for(lambda: all(not (root / "Assets" / asset["filename"]).exists() for asset in assets[1:]), "trash file cleanup")
     if not (root / "Assets" / assets[0]["filename"]).is_file():
         raise RuntimeError("Empty Trash deleted the active fixture")
-    find("Library").click_input()
+    # The navigation group also exposes the name Library; click its button.
+    find("Library", predicate=lambda c: c.element_info.control_type == "Button").click_input()
     find("Keep this image")
     library.capture_as_image().save(output / "active-asset-preserved.png")
     report["checks"].append("confirmed empty-trash deletes only trashed fixtures and the library remains interactive")
