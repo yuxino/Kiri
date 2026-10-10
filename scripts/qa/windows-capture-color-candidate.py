@@ -62,7 +62,7 @@ def main():
     validate(run, jobs, args.run, changes)
     candidate = Path(os.environ["RUNNER_TEMP"]) / "kiri-color-candidate"
     candidate.mkdir()
-    for artifact, subdir in (("countdown-debug-build", "binary"), ("windows-capture-color-review", "review")):
+    for artifact, subdir in (("windows-capture-color-candidate", "binary"), ("windows-capture-color-review", "review")):
         subprocess.run(["gh", "run", "download", str(args.run), "--repo", REPOSITORY,
                         "--name", artifact, "--dir", str(candidate / subdir)], check=True)
     previous = json.loads((candidate / "review/report.json").read_text(encoding="utf-8-sig"))

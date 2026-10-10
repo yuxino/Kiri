@@ -558,6 +558,13 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
         with:
+          name: windows-capture-color-candidate
+          path: ${{ runner.temp }}/kiri-installed-review/kiri.exe
+          retention-days: 5
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
           name: windows-release-review
           path: windows-release-review/
           retention-days: 5
@@ -586,7 +593,7 @@ jobs:
           retention-days: 2
           if-no-files-found: warn
       - name: Upload Windows bundle
-        if: needs.plan.outputs.package_windows == 'true'
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' && hashFiles('src-tauri/target/release/bundle/nsis/*-setup.exe') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: kiri-windows
