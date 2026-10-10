@@ -33,7 +33,8 @@ output.mkdir(exist_ok=True)
 configure_crash_capture(output)
 executable = Path(os.environ["KIRI_COLOR_QA_EXE"]).resolve()
 report = {"success": False, "native": True, "checks": [],
-          "source_sha": os.environ.get("GITHUB_SHA"),
+          "source_sha": os.environ.get("KIRI_COLOR_CANDIDATE_SHA", os.environ.get("GITHUB_SHA")),
+          "harness_sha": os.environ.get("GITHUB_SHA"),
           "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest()}
 app = fixture = source = None
 capture_handle = None
@@ -78,6 +79,18 @@ def find(name, kind="Button", timeout=20):
 
 def names():
     return [control.window_text() for control in controls()]
+
+
+def displayed_coordinates():
+    # WebView2 exposes JSX's x, comma, and y as three separate text nodes
+    # under output's UIA StatusBar; its own accessible name is empty.
+    for control in controls():
+        if control.element_info.control_type == "StatusBar":
+            text = "".join(child.window_text() for child in control.descendants(control_type="Text"))
+            match = re.fullmatch(r"(\d+),\s*(\d+)", text)
+            if match:
+                return tuple(map(int, match.groups()))
+    return None
 
 
 def overlay_open():
@@ -125,6 +138,7 @@ def begin():
     global capture_handle
     source.set_focus()
     wait_for("public source focus", lambda: user32.GetForegroundWindow() == source.handle)
+    mouse.move(coords=(900, 600))
     keyboard.send_keys("^+a")
     capture_handle = find("Screenshot").top_level_parent().handle
     wait_for("native capture window", overlay_open)
@@ -168,7 +182,7 @@ def pick(label, selected=False):
     seed_clipboard("KIRI COLOR SENTINEL")
     mouse.move(coords=point)
     wait_for("hover HEX " + expected, lambda: expected in names())
-    wait_for("physical coordinates", lambda: f"{point[0]}, {point[1]}" in names())
+    wait_for("physical coordinates", lambda: displayed_coordinates() == point)
     snapshot(f"{label}-{'selected' if selected else 'idle'}")
     keyboard.send_keys("^c")
     wait_for("native HEX clipboard", lambda: clipboard_text() == expected)
