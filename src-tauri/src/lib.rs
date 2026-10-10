@@ -290,6 +290,7 @@ pub fn run() {
             ocr_commands::recognize_prepared_ocr_remote,
             ocr_commands::cancel_prepared_ocr,
             commands::copy_text,
+            commands::copy_capture_color,
             commands::start_recording_flow,
             commands::recording_countdown_ready,
             commands::get_recording_state,

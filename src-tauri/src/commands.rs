@@ -3511,6 +3511,25 @@ pub fn set_tags(app: AppHandle, id: String, tags: Vec<String>) -> Result<(), Str
 }
 
 #[tauri::command]
+pub fn copy_capture_color(
+    app: AppHandle,
+    window: WebviewWindow,
+    hex: String,
+) -> Result<(), String> {
+    if hex.len() != 7 || !hex.starts_with('#') || !hex.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit) {
+        return Err("Invalid color value.".into());
+    }
+    let state = app.state::<AppState>();
+    let capture = state.capture.lock().unwrap();
+    capture.session.as_ref()
+        .filter(|session| session.overlay_labels.iter().any(|label| label == window.label()))
+        .ok_or("Capture command is only available to its overlay.")?;
+    // Keep the frozen screen and selection available for more samples. OCR's
+    // copy_text deliberately completes its session and is a separate action.
+    platform::write_text_to_clipboard(&hex.to_ascii_uppercase()).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn copy_text(app: AppHandle, window: WebviewWindow, text: String) -> Result<(), String> {
     platform::write_text_to_clipboard(&text).map_err(|e| e.to_string())?;
     // OCR runs inside a screen-covering always-on-top overlay. Tear that

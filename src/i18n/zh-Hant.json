@@ -707,5 +707,11 @@
   "Checking video… %d%": "正在檢查影片… %d%",
   "GIF conversion cancelled": "已取消 GIF 轉換",
   "Cancel all": "全部取消",
-  "Could not save the language preference.": "無法儲存語言設定。"
+  "Could not save the language preference.": "無法儲存語言設定。",
+  "Coordinates": "座標",
+  "⌘C to copy color": "按 ⌘C 複製色值",
+  "Ctrl+C to copy color": "按 Ctrl+C 複製色值",
+  "Color copied": "色值已複製",
+  "Could not copy color": "複製色值失敗",
+  "Color value": "色值"
 }

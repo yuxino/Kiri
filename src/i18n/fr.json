@@ -707,5 +707,11 @@
   "Checking video… %d%": "Vérification de la vidéo… %d%",
   "GIF conversion cancelled": "Conversion GIF annulée",
   "Cancel all": "Tout annuler",
-  "Could not save the language preference.": "Impossible d’enregistrer la langue choisie."
+  "Could not save the language preference.": "Impossible d’enregistrer la langue choisie.",
+  "Coordinates": "Coordonnées",
+  "⌘C to copy color": "⌘C pour copier",
+  "Ctrl+C to copy color": "Ctrl+C pour copier",
+  "Color copied": "Couleur copiée",
+  "Could not copy color": "Échec de la copie",
+  "Color value": "Couleur"
 }
