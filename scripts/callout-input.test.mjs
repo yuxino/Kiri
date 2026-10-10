@@ -27,6 +27,7 @@ function input(text = "") {
     get value() {return value;},
     set value(next) {writes.push(next); value = next; this.selectionStart = this.selectionEnd = next.length;},
     ownerDocument: {execCommand(command) {commands.push(command); return true;}},
+    focus() {this.ownerDocument.activeElement = this;},
     blur() {node.props.onBlur({currentTarget: textarea});},
     type(next) {
       const start = this.selectionStart;
@@ -67,6 +68,7 @@ function input(text = "") {
 
 test("delayed callout selection echoes preserve continuous input and the native caret", () => {
   const h = input();
+  assert.equal(h.textarea.ownerDocument.activeElement, h.textarea);
   for (const char of "abcdef") h.textarea.type(char);
   h.textarea.selectionStart = h.textarea.selectionEnd = 3;
   h.textarea.type("XY");

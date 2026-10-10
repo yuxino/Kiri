@@ -1639,6 +1639,12 @@ function TextEditor(props: {
   const hintHeight = 32 * editing.uiScale;
   const hintTop = editing.rect.y + editing.rect.height + 4 * editing.uiScale;
 
+  // Callouts open on pointerup, after the canvas mouse focus action. Give
+  // their editor focus before another key can be routed as a tool shortcut.
+  useLayoutEffect(() => {
+    if (editing.callout) ref.current?.focus();
+  }, []);
+
   // Spec §6.6 resizeTextEditor: min 120×34, grows with text/font, clamped
   // to the right/bottom edges of the region.
   useEffect(() => {
