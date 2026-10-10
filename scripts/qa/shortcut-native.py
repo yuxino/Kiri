@@ -8,6 +8,7 @@ import subprocess
 import time
 
 from pywinauto import Desktop, keyboard
+from PIL import ImageGrab
 
 if os.environ.get("GITHUB_ACTIONS") != "true" or os.name != "nt":
     raise SystemExit("Use an isolated Windows CI desktop")
@@ -22,7 +23,7 @@ hotkey_id = 2122
 held = False
 
 
-def find(name, timeout=15):
+def find(name, timeout=15, control_type=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -30,7 +31,7 @@ def find(name, timeout=15):
         for window in desktop.windows(process=process.pid, visible_only=True):
             for control in window.descendants():
                 try:
-                    if re.fullmatch(name, control.window_text()) and control.is_visible() and control.is_enabled():
+                    if (control_type is None or control.element_info.control_type == control_type) and re.fullmatch(name, control.window_text()) and control.is_visible() and control.is_enabled():
                         return control
                 except Exception:
                     pass
@@ -41,8 +42,11 @@ def find(name, timeout=15):
 def start():
     global process
     process = subprocess.Popen([str(executable)])
-    find("Settings", timeout=35).click_input()
-    find("Change Shortcut")
+    settings = find("Settings", timeout=35, control_type="Button")
+    settings.top_level_parent().set_focus()
+    ImageGrab.grab().save(output / "before-settings.png")
+    find("Settings", control_type="Button").click_input()
+    find("Change Shortcut", control_type="Button")
 
 
 def stop():
@@ -106,8 +110,13 @@ except Exception as error:
     report["error"] = str(error)
     report["windows"] = []
     if process and process.poll() is None:
+        ImageGrab.grab().save(output / "failure-desktop.png")
         for window in desktop.windows(process=process.pid, visible_only=True):
-            report["windows"].append([control.window_text() for control in window.descendants()])
+            report["windows"].append([
+                {"text": control.window_text(), "name": control.element_info.name,
+                 "type": control.element_info.control_type}
+                for control in window.descendants()
+            ])
 finally:
     if held:
         ctypes.windll.user32.UnregisterHotKey(None, hotkey_id)
