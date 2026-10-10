@@ -423,6 +423,8 @@ def native_pin_acceptance():
     lifecycle = pin_lifecycle_evidence(trace, created[0]["id"])
     if "_NET_WM_STATE_ABOVE" not in command("xprop", "-id", pin, "_NET_WM_STATE").stdout:
         raise RuntimeError("X11 reference did not request native above stacking")
+    report["pin_native_properties"] = command("xprop", "-id", pin,
+                                              "_NET_WM_ALLOWED_ACTIONS", "_NET_WM_STATE").stdout
     command("xdotool", "windowactivate", "--sync", pin)
     before = geometry(pin)
     command("xdotool", "mousemove", str(int(before["X"]) + 30), str(int(before["Y"]) + 30))
