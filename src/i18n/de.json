@@ -729,5 +729,11 @@
   "Label bubble (B)": "Beschriftungsblase (B)",
   "Point label left": "Beschriftung nach links richten",
   "Point label right": "Beschriftung nach rechts richten",
-  "Move description": "Beschreibung verschieben"
+  "Move description": "Beschreibung verschieben",
+  "Use a valid file name.": "Bitte einen gültigen Dateinamen eingeben.",
+  "A file with that name already exists.": "Eine Datei mit diesem Namen existiert bereits.",
+  "Couldn't rename this capture.": "Diese Aufnahme konnte nicht umbenannt werden.",
+  "Renamed; the old file could not be removed.": "Umbenannt; die alte Datei konnte nicht entfernt werden.",
+  "Renamed; disk synchronization failed.": "Umbenannt; die Synchronisierung mit dem Datenträger ist fehlgeschlagen.",
+  "Wait for GIF conversion to finish before renaming.": "Bitte vor dem Umbenennen die GIF-Konvertierung abwarten."
 }

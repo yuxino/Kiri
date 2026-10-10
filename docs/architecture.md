@@ -258,6 +258,15 @@ library UUID, copy generation, availability, and loaded `AssetLibrary`.
 Commands and custom protocol reads resolve metadata and files through that
 same context.
 
+Library rename publishes a non-overwriting file path, atomically updates the
+index, and then cleans up the previous path. ID-keyed sidecars and thumbnails
+stay in place; video content identity ignores filename changes. Rename shares
+the thumbnail-generation barrier and waits for active GIF conversion. Media
+serving opens a file under the library lock and streams the retained handle.
+Explicit Copy File uses the native file clipboard independently of image-pixel
+Copy. Windows folder actions use Shell paths/PIDLs instead of Explorer argument
+parsing. See [ADR 0086](adr/0086-library-file-actions.md).
+
 The default root is created in the operating-system application-data location
 only when no saved library exists. After that, any remembered root is accepted
 only when its marker matches the saved library. If the root is unavailable, the

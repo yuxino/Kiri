@@ -92,14 +92,14 @@ export function ViewerWindow(props: { id: string }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const copy = useCallback(async () => {
+  const copy = useCallback(async (file = false) => {
     if (copyInFlight.current || state.kind !== "ready" || videoEditorOpen) return;
     copyInFlight.current = true;
     setCopying(true);
     setOperationError(null);
     const generation = loadGeneration.current;
     try {
-      await api.copyAsset(state.asset.id);
+      await (file ? api.copyAssetFile(state.asset.id) : api.copyAsset(state.asset.id));
     } catch {
       if (mounted.current && generation === loadGeneration.current) {
         setOperationError("Couldn't copy this capture.");
@@ -183,10 +183,16 @@ export function ViewerWindow(props: { id: string }) {
 
   const mediaKind = viewerMediaKind(state);
   const copyButton = (
+    <>
     <button type="button" className="kiri-button kiri-button--secondary" disabled={copying}
       onClick={() => void copy()}>
       <KiriIcon name="doc.on.doc" size={14} />{t("Copy")}
     </button>
+    <button type="button" className="kiri-button kiri-button--secondary" disabled={copying}
+      onClick={() => void copy(true)}>
+      <KiriIcon name="doc.on.doc" size={14} />{t("Copy File")}
+    </button>
+    </>
   );
 
   return (

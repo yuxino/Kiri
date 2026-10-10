@@ -6,7 +6,7 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -57,11 +57,21 @@ impl MediaPlaybackServer {
                         let _ = serve_connection(&mut stream, &authority, &token, &stopped, |id| {
                             let state = app.state::<AppState>();
                             let mut context = state.library.lock().unwrap();
-                            let library = context.library().ok()?;
-                            let asset = library.asset_by_id(&id)?;
-                            (asset.kind == CaptureKind::Video)
-                                .then(|| library.readable_asset_url(asset).ok())
-                                .flatten()
+                            let Ok(library) = context.library() else {
+                                return Ok(None);
+                            };
+                            let Some(asset) = library.asset_by_id(&id) else {
+                                return Ok(None);
+                            };
+                            if asset.kind != CaptureKind::Video {
+                                return Ok(None);
+                            }
+                            let Ok(path) = library.readable_asset_url(asset) else {
+                                return Ok(None);
+                            };
+                            // Open under the library lock: a rename can remove
+                            // the path while this request continues streaming.
+                            open_playback_source(&path).map(Some)
                         });
                     }
                 })?;
@@ -180,12 +190,25 @@ fn parse_request(bytes: &[u8], authority: &str, token: &str) -> Option<PlaybackR
     })
 }
 
+fn open_playback_source(path: &Path) -> Result<(std::fs::File, &'static str)> {
+    let content_type = if path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mov"))
+    {
+        "video/quicktime"
+    } else {
+        "video/mp4"
+    };
+    Ok((std::fs::File::open(path)?, content_type))
+}
+
 fn serve_connection(
     stream: &mut TcpStream,
     authority: &str,
     token: &str,
     stopped: &AtomicBool,
-    resolve: impl FnOnce(uuid::Uuid) -> Option<PathBuf>,
+    resolve: impl FnOnce(uuid::Uuid) -> Result<Option<(std::fs::File, &'static str)>>,
 ) -> Result<()> {
     let mut header = Vec::with_capacity(1024);
     let mut byte = [0u8; 1];
@@ -203,22 +226,12 @@ fn serve_connection(
         )?;
         return Ok(());
     };
-    let Some(path) = resolve(request.id) else {
+    let Some((mut file, content_type)) = resolve(request.id)? else {
         stream.write_all(
             b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
         )?;
         return Ok(());
     };
-    let content_type = if path
-        .extension()
-        .and_then(|value| value.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("mov"))
-    {
-        "video/quicktime"
-    } else {
-        "video/mp4"
-    };
-    let mut file = std::fs::File::open(path)?;
     let total = file.metadata()?.len();
     let decision = parse_media_range(request.range.as_deref(), total);
     let (status, start, length, range_header) = match decision {
@@ -294,6 +307,15 @@ mod tests {
     }
 
     fn response_for_extension(extra: &str, method: &str, extension: &str) -> Vec<u8> {
+        response_for_source_change(extra, method, extension, false)
+    }
+
+    fn response_for_source_change(
+        extra: &str,
+        method: &str,
+        extension: &str,
+        remove_source: bool,
+    ) -> Vec<u8> {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(format!("video.{extension}"));
         std::fs::write(&path, b"0123456789").unwrap();
@@ -312,7 +334,17 @@ mod tests {
                 &authority,
                 TOKEN,
                 &AtomicBool::new(false),
-                |_| Some(path),
+                |_| {
+                    let source = open_playback_source(&path)?;
+                    if remove_source {
+                        let renamed = path.with_file_name("renamed-video");
+                        std::fs::rename(&path, &renamed)?;
+                        std::fs::remove_file(&renamed)?;
+                        assert!(!path.exists());
+                        assert!(!renamed.exists());
+                    }
+                    Ok(Some(source))
+                },
             )
             .unwrap();
         });
@@ -320,6 +352,24 @@ mod tests {
         client.read_to_end(&mut response).unwrap();
         worker.join().unwrap();
         response
+    }
+
+    #[test]
+    fn opened_playback_sources_survive_rename_and_removal() {
+        for (extension, content_type) in [("mp4", "video/mp4"), ("mov", "video/quicktime")] {
+            let range = response_for_source_change("Range: bytes=2-5\r\n", "GET", extension, true);
+            assert!(range.starts_with(b"HTTP/1.1 206 Partial Content"));
+            assert!(range.ends_with(b"2345"));
+            let range = String::from_utf8(range).unwrap();
+            assert!(range.contains("Content-Range: bytes 2-5/10\r\n"));
+            assert!(range.contains(&format!("Content-Type: {content_type}\r\n")));
+            let head = response_for_source_change("", "HEAD", extension, true);
+            assert!(head.starts_with(b"HTTP/1.1 200 OK"));
+            assert!(head.ends_with(b"\r\n\r\n"));
+            let head = String::from_utf8(head).unwrap();
+            assert!(head.contains("Content-Length: 10\r\n"));
+            assert!(head.contains(&format!("Content-Type: {content_type}\r\n")));
+        }
     }
 
     #[test]

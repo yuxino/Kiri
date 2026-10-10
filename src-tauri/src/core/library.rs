@@ -28,6 +28,10 @@ pub enum AssetLibraryError {
     OcrTextChanged,
     #[error("invalid filename")]
     InvalidFilename,
+    #[error("a file with that name already exists")]
+    FilenameInUse,
+    #[error("rename was committed, but directory synchronization failed")]
+    CommittedRenameSyncFailed,
     #[error("library index contains duplicate asset ids or filenames")]
     DuplicateIndexEntry,
     #[error("the asset file is missing")]
@@ -950,8 +954,65 @@ impl AssetLibrary {
         self.update(id, |asset| asset.is_favorite = favorite)
     }
 
-    pub fn set_title(&mut self, title: Option<String>, id: &uuid::Uuid) -> Result<()> {
-        self.update(id, |asset| asset.title = title)
+    /// Publish a new file path before changing the index, so a failed index
+    /// write or interrupted operation cannot lose the previously indexed file.
+    /// Sidecars and thumbnails are keyed by the unchanged asset ID.
+    pub fn rename_file(&mut self, title: Option<String>, id: &uuid::Uuid) -> Result<()> {
+        self.validate_storage_layout()?;
+        let position = self.index.iter().position(|asset| &asset.id == id)
+            .ok_or(AssetLibraryError::AssetNotFound)?;
+        let previous = self.index[position].clone();
+        let filename = renamed_asset_filename(&previous, title.as_deref())?;
+        let mut next_index = self.index.clone();
+        next_index[position].title = title;
+        next_index[position].filename = filename.clone();
+        if filename == previous.filename {
+            self.persist_index(&next_index)?;
+            self.index = next_index;
+            return Ok(());
+        }
+        let original = self.readable_asset_url(&previous)?;
+        // Check both managed and unindexed files, case-insensitively on every
+        // platform, so the renamed library remains portable to Windows/macOS.
+        if self.index.iter().any(|asset| asset.id != *id && asset.filename.to_lowercase() == filename.to_lowercase()) {
+            return Err(AssetLibraryError::FilenameInUse);
+        }
+        for entry in std::fs::read_dir(&self.assets_url)? {
+            let name = entry?.file_name();
+            if name != std::ffi::OsStr::new(&previous.filename)
+                && name.to_string_lossy().to_lowercase() == filename.to_lowercase() {
+                return Err(AssetLibraryError::FilenameInUse);
+            }
+        }
+        let destination = self.assets_url.join(&filename);
+        let case_only_alias = previous.filename.to_lowercase() == filename.to_lowercase()
+            && std::fs::symlink_metadata(&destination).is_ok();
+        if case_only_alias {
+            // On a case-insensitive volume both paths still resolve to the
+            // original file throughout this case-only spelling adjustment.
+            std::fs::rename(&original, &destination)?;
+            if let Err(error) = self.persist_index(&next_index) {
+                if let Err(rollback) = std::fs::rename(&destination, &original) {
+                    log::warn!("Could not restore file-name casing after a failed index write: {rollback}");
+                }
+                return Err(error);
+            }
+            self.index = next_index;
+            return Ok(());
+        }
+        publish_renamed_file(&original, &destination)?;
+        if let Err(error) = self.persist_index(&next_index) {
+            if let Err(cleanup) = std::fs::remove_file(&destination) {
+                log::warn!("Could not remove an uncommitted renamed file: {cleanup}");
+            }
+            return Err(error);
+        }
+        self.index = next_index;
+        if std::fs::remove_file(&original).is_err() {
+            return Err(AssetLibraryError::CleanupFailed { failed_files: 1 });
+        }
+        sync_directory(&self.assets_url).map_err(|_| AssetLibraryError::CommittedRenameSyncFailed)?;
+        Ok(())
     }
 
     pub fn set_tags(&mut self, tags: Vec<String>, id: &uuid::Uuid) -> Result<()> {
@@ -1390,12 +1451,7 @@ impl AssetLibrary {
         created_at: f64,
     ) -> CaptureAsset {
         // DateFormatter with en_US_POSIX locale and local timezone.
-        let stamp = Local
-            .timestamp_millis_opt(created_at as i64)
-            .single()
-            .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
-            .unwrap_or_else(|| "19700101-000000".to_string());
-        let filename = format!("{stamp}-{}.{file_extension}", id.to_string().to_lowercase());
+        let filename = capture_filename(id, created_at, file_extension);
         CaptureAsset {
             id,
             kind,
@@ -1495,6 +1551,72 @@ pub(crate) fn is_safe_library_filename(filename: &str) -> bool {
     let mut components = Path::new(filename).components();
     matches!(components.next(), Some(std::path::Component::Normal(_)))
         && components.next().is_none()
+}
+
+fn renamed_asset_filename(asset: &CaptureAsset, title: Option<&str>) -> Result<String> {
+    let extension = Path::new(&asset.filename).extension().and_then(|extension| extension.to_str())
+        .ok_or(AssetLibraryError::InvalidFilename)?;
+    let Some(title) = title else {
+        return Ok(if asset.title.is_none() { asset.filename.clone() }
+            else { capture_filename(asset.id, asset.created_at, extension) });
+    };
+    let title = title.trim();
+    let suffix = format!(".{extension}");
+    let stem = if title.to_lowercase().ends_with(&suffix.to_lowercase()) {
+        &title[..title.len() - suffix.len()]
+    } else { title };
+    // Windows's device names and filename restrictions apply on all platforms
+    // to preserve libraries when they are moved to another supported OS.
+    let device = stem.split('.').next().unwrap_or_default().to_uppercase();
+    let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| device.strip_prefix(prefix)
+            .is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")));
+    let filename = format!("{stem}.{extension}");
+    if stem.is_empty() || stem.ends_with(['.', ' ']) || reserved
+        || stem.chars().any(|character| character.is_control() || "<>:\"/\\|?*".contains(character))
+        || !is_safe_library_filename(&filename) || filename.len() > 255 || filename.encode_utf16().count() > 255 {
+        return Err(AssetLibraryError::InvalidFilename);
+    }
+    Ok(filename)
+}
+
+fn capture_filename(id: uuid::Uuid, created_at: f64, extension: &str) -> String {
+    let stamp = Local.timestamp_millis_opt(created_at as i64).single()
+        .map(|time| time.format("%Y%m%d-%H%M%S").to_string())
+        .unwrap_or_else(|| "19700101-000000".to_string());
+    format!("{stamp}-{}.{extension}", id.to_string().to_lowercase())
+}
+
+fn publish_renamed_file(source: &Path, destination: &Path) -> Result<()> {
+    match std::fs::hard_link(source, destination) {
+        Ok(()) => {
+            let result = sync_directory(destination.parent().ok_or(AssetLibraryError::InvalidFilename)?);
+            if result.is_err() { let _ = std::fs::remove_file(destination); }
+            return result;
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Err(AssetLibraryError::FilenameInUse),
+        Err(_) => {}, // FAT/exFAT and some external disks have no hard links.
+    }
+    copy_renamed_file(source, destination)
+}
+
+fn copy_renamed_file(source: &Path, destination: &Path) -> Result<()> {
+    let modified = std::fs::metadata(source)?.modified()?;
+    let parent = destination.parent().ok_or(AssetLibraryError::InvalidFilename)?;
+    let staged = stage_verified_copy(source, parent, "rename", None)?;
+    if std::fs::metadata(source)?.modified()? != modified {
+        return Err(AssetLibraryError::Io(std::io::Error::other("asset changed while renaming")));
+    }
+    staged.as_file().set_times(std::fs::FileTimes::new().set_modified(modified))?;
+    staged.as_file().sync_all()?;
+    install_staged_new_file(staged, destination).map_err(|error| match error {
+        AssetLibraryError::AssetFileStillPresent => AssetLibraryError::FilenameInUse,
+        AssetLibraryError::Io(ref io) if io.kind() == std::io::ErrorKind::AlreadyExists => AssetLibraryError::FilenameInUse,
+        _ => error,
+    })?;
+    let synced = sync_directory(parent);
+    if synced.is_err() { let _ = std::fs::remove_file(destination); }
+    synced
 }
 
 fn validate_index(index: &[CaptureAsset]) -> Result<()> {
@@ -1850,6 +1972,111 @@ fn sync_directory_after_commit(path: &Path, operation: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rename_preserves_annotations_thumbnails_and_recoverable_trash() {
+        let (_directory, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = library.import_data(b"flat image", CaptureKind::Image, "png", 100, 80, None, None, None).unwrap();
+        save_test_project(&library, &asset, "editable note");
+        let snapshot = library.load_editor_snapshot(&asset.id).unwrap();
+        let thumbnail = library.thumbnails_url.join(format!("{}.jpg", asset.id));
+        std::fs::write(&thumbnail, b"thumbnail").unwrap();
+        library.set_favorite(true, &asset.id).unwrap();
+        library.set_tags(vec!["keep".into()], &asset.id).unwrap();
+        library.rename_file(Some("素材 test, 129.png".into()), &asset.id).unwrap();
+        let renamed = library.asset_by_id(&asset.id).unwrap().clone();
+        assert_eq!(renamed.filename, "素材 test, 129.png");
+        assert_eq!(renamed.id, asset.id);
+        assert!(renamed.is_favorite);
+        assert_eq!(renamed.tags, ["keep"]);
+        assert!(!library.asset_url(&asset).exists());
+        assert_eq!(std::fs::read(library.asset_url(&renamed)).unwrap(), b"flat image");
+        assert_eq!(library.load_editor_snapshot(&asset.id).unwrap(), snapshot);
+        assert_eq!(std::fs::read(&thumbnail).unwrap(), b"thumbnail");
+        let reopened = AssetLibrary::open_existing(root).unwrap();
+        assert_eq!(reopened.asset_by_id(&asset.id).unwrap(), &renamed);
+        library.move_to_trash(&asset.id).unwrap();
+        library.restore(&asset.id).unwrap();
+        assert_eq!(library.asset_availability(&asset.id).unwrap(), AssetAvailability::Ready);
+        library.move_to_trash(&asset.id).unwrap();
+        library.empty_trash().unwrap();
+        assert!(!library.asset_url(&renamed).exists());
+        assert!(!thumbnail.exists());
+        let (document, source) = library.annotation_project_urls(&renamed);
+        assert!(!document.exists() && !source.exists());
+    }
+
+    #[test]
+    fn rename_index_failure_keeps_original_and_allows_retry() {
+        let (_directory, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = library.import_data(b"original", CaptureKind::Image, "png", 10, 10, None, None, None).unwrap();
+        let before = std::fs::read(&library.index_url).unwrap();
+        library.persist_fail.set(true);
+        assert!(library.rename_file(Some("new name".into()), &asset.id).is_err());
+        assert_eq!(std::fs::read(&library.index_url).unwrap(), before);
+        assert_eq!(library.asset_by_id(&asset.id).unwrap(), &asset);
+        assert_eq!(std::fs::read(library.asset_url(&asset)).unwrap(), b"original");
+        assert!(!root.join("Assets/new name.png").exists());
+        library.persist_fail.set(false);
+        library.rename_file(Some("new name".into()), &asset.id).unwrap();
+        library.rename_file(None, &asset.id).unwrap();
+        assert_eq!(library.asset_by_id(&asset.id).unwrap().filename, asset.filename);
+        assert_eq!(library.asset_by_id(&asset.id).unwrap().title, None);
+    }
+
+    #[test]
+    fn rename_rejects_invalid_names_and_never_overwrites_unindexed_files() {
+        let (_directory, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = library.import_data(b"original", CaptureKind::Image, "png", 10, 10, None, None, None).unwrap();
+        for title in ["../escape", "CON", "NUL.txt", "COM¹", "name.", "a:b", "a\\b", "a\nb", ".png"] {
+            assert!(matches!(library.rename_file(Some(title.into()), &asset.id), Err(AssetLibraryError::InvalidFilename)), "{title:?}");
+        }
+        let occupied = root.join("Assets/Already Exists.PNG");
+        std::fs::write(&occupied, b"not managed, keep").unwrap();
+        assert!(matches!(library.rename_file(Some("already exists".into()), &asset.id), Err(AssetLibraryError::FilenameInUse)));
+        assert_eq!(std::fs::read(occupied).unwrap(), b"not managed, keep");
+        assert_eq!(std::fs::read(library.asset_url(&asset)).unwrap(), b"original");
+        assert_eq!(library.asset_by_id(&asset.id).unwrap(), &asset);
+    }
+
+    #[test]
+    fn rename_preserves_existing_video_drafts_and_open_editor_revision() {
+        let (_directory, root) = temp_root();
+        let mut library = AssetLibrary::open(root).unwrap();
+        let asset = library.import_data(b"video fixture", CaptureKind::Video, "mp4", 1920, 1080, Some(20.0), None, None).unwrap();
+        let library_id = uuid::Uuid::new_v4();
+        let generation = uuid::Uuid::new_v4();
+        let initial = library.load_video_project(&asset.id, library_id, generation).unwrap();
+        let saved = library.save_video_project(&asset.id, library_id, generation, &initial.revision, video_project::test_project()).unwrap();
+        let stored = std::fs::read(library.video_project_url(&asset)).unwrap();
+        library.rename_file(Some("renamed video.mp4".into()), &asset.id).unwrap();
+        let current = library.load_video_project(&asset.id, library_id, generation).unwrap();
+        assert_eq!(current, saved);
+        assert_eq!(std::fs::read(library.video_project_url(&asset)).unwrap(), stored);
+        // The already-open editor's revision remains accepted without reload.
+        library.save_video_project(&asset.id, library_id, generation, &saved.revision, video_project::test_project()).unwrap();
+        let renamed = library.asset_by_id(&asset.id).unwrap();
+        std::fs::write(library.asset_url(renamed), b"a different video with different bytes").unwrap();
+        assert_eq!(library.load_video_project(&asset.id, library_id, generation).unwrap().state, video_project::VideoProjectState::Invalid);
+    }
+
+    #[test]
+    fn rename_copy_fallback_keeps_bytes_timestamp_and_does_not_overwrite() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = directory.path().join("original.mp4");
+        let renamed = directory.path().join("renamed.mp4");
+        std::fs::write(&original, b"video bytes").unwrap();
+        let modified = std::fs::metadata(&original).unwrap().modified().unwrap();
+        copy_renamed_file(&original, &renamed).unwrap();
+        assert_eq!(std::fs::read(&renamed).unwrap(), b"video bytes");
+        assert_eq!(std::fs::metadata(&renamed).unwrap().modified().unwrap(), modified);
+        std::fs::write(&original, b"different bytes").unwrap();
+        assert!(matches!(copy_renamed_file(&original, &renamed), Err(AssetLibraryError::FilenameInUse)));
+        assert_eq!(std::fs::read(&renamed).unwrap(), b"video bytes");
+    }
 
     #[test]
     fn file_size_tracks_current_media_without_changing_the_index() {

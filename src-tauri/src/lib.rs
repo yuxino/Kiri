@@ -248,6 +248,7 @@ pub fn run() {
             commands::batch_set_favorite,
             batch_export::export_selected_assets,
             commands::copy_asset,
+            commands::copy_asset_file,
             commands::open_asset,
             commands::pin_asset,
             commands::open_editor,

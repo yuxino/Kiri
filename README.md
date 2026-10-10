@@ -1,7 +1,9 @@
 <div align="center">
   <img src="src-tauri/icons/128x128.png" width="112" alt="Kiri 应用图标">
   <h1>Kiri</h1>
-  <p>截图、文字识别和录屏，素材保存在本机。</p>
+  <p>截图、文字识别和录屏，素材库中重命名会同时更新实际文件名，并保留文件类型；右键菜单的「复制文件」可直接粘贴到文件夹。原有「复制」仍可将图片粘贴到聊天或编辑器。
+
+素材保存在本机。</p>
   <p>
     <a href="https://kiri.yuxino.cn">官网</a>
     · <strong>简体中文</strong>

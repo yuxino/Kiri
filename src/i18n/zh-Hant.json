@@ -729,5 +729,11 @@
   "Label bubble (B)": "標籤氣泡 (B)",
   "Point label left": "氣泡指向左側",
   "Point label right": "氣泡指向右側",
-  "Move description": "移動說明"
+  "Move description": "移動說明",
+  "Use a valid file name.": "請使用有效的檔案名稱。",
+  "A file with that name already exists.": "已存在同名檔案。",
+  "Couldn't rename this capture.": "無法重新命名此素材。",
+  "Renamed; the old file could not be removed.": "已重新命名，但舊檔案未能移除。",
+  "Renamed; disk synchronization failed.": "已重新命名，但磁碟同步失敗。",
+  "Wait for GIF conversion to finish before renaming.": "請等待 GIF 轉換結束後再重新命名。"
 }

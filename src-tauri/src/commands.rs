@@ -421,8 +421,8 @@ pub fn batch_set_favorite(app: AppHandle, ids: Vec<String>, favorite: bool) -> R
 pub fn copy_asset(app: AppHandle, window: WebviewWindow, id: String) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let state = app.state::<AppState>();
+    let mut context = state.library.lock().unwrap();
     let (asset, path) = {
-        let mut context = state.library.lock().unwrap();
         let library = context.library().map_err(|error| error.to_string())?;
         let asset = library
             .asset_by_id(&parsed)
@@ -442,6 +442,7 @@ pub fn copy_asset(app: AppHandle, window: WebviewWindow, id: String) -> Result<(
             platform::write_file_to_clipboard(&path).map_err(|e| e.to_string())?;
         }
     }
+    drop(context);
     if window.label() != "toast" {
         emit_notice_local(
             &app,
@@ -449,6 +450,24 @@ pub fn copy_asset(app: AppHandle, window: WebviewWindow, id: String) -> Result<(
             "checkmark.circle.fill".into(),
         );
     }
+    Ok(())
+}
+
+/// Copy the saved file rather than its image pixels, for file-manager paste.
+#[tauri::command]
+pub fn copy_asset_file(app: AppHandle, id: String) -> Result<(), String> {
+    let parsed = uuid::Uuid::parse_str(&id).map_err(|error| error.to_string())?;
+    let state = app.state::<AppState>();
+    let mut context = state.library.lock().unwrap();
+    let path = {
+        let library = context.library().map_err(|error| error.to_string())?;
+        let asset = library.asset_by_id(&parsed)
+            .ok_or_else(|| "The capture could not be found.".to_string())?;
+        library.readable_asset_url(asset).map_err(|error| error.to_string())?
+    };
+    platform::write_file_to_clipboard(&path).map_err(|error| error.to_string())?;
+    drop(context);
+    emit_notice_local(&app, "Copied to Clipboard".into(), "checkmark.circle.fill".into());
     Ok(())
 }
 
@@ -711,7 +730,7 @@ pub fn get_asset(app: AppHandle, id: String) -> Result<AssetDto, String> {
 }
 
 #[tauri::command]
-pub fn reveal_asset(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn reveal_asset(app: AppHandle, id: String) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let state = app.state::<AppState>();
     let path = {
@@ -725,8 +744,15 @@ pub fn reveal_asset(app: AppHandle, id: String) -> Result<(), String> {
             .readable_asset_url(&asset)
             .map_err(|error| error.to_string())?
     };
-    platform::reveal_path(&path);
-    Ok(())
+    reveal_path_async(path).await
+}
+
+async fn reveal_path_async(path: PathBuf) -> Result<(), String> {
+    #[cfg(windows)]
+    { tauri::async_runtime::spawn_blocking(move || platform::reveal_path(&path).map_err(|error| error.to_string()))
+        .await.map_err(|error| error.to_string())? }
+    #[cfg(not(windows))]
+    { platform::reveal_path(&path).map_err(|error| error.to_string()) }
 }
 
 #[tauri::command]
@@ -759,15 +785,14 @@ pub fn get_asset_availability(app: AppHandle, id: String) -> Result<AssetAvailab
 }
 
 #[tauri::command]
-pub fn reveal_library(app: AppHandle) -> Result<(), String> {
+pub async fn reveal_library(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let root = {
         let mut context = state.library.lock().unwrap();
         context.library().map_err(|error| error.to_string())?;
         context.root().to_path_buf()
     };
-    platform::reveal_path(&root);
-    Ok(())
+    reveal_path_async(root).await
 }
 
 #[tauri::command]
@@ -1638,24 +1663,16 @@ pub fn convert_to_gif(app: AppHandle, window: WebviewWindow, id: String) -> Resu
         let source_path = library
             .readable_asset_url(&asset)
             .map_err(|error| error.to_string())?;
-        (asset, source_path, library_id, generation)
-    };
-    if asset.kind != CaptureKind::Video
-        || !crate::core::policy::RecordingPolicy::is_gif_eligible(asset.duration)
-    {
-        return Err("Only recordings with a known duration can be converted to GIF.".into());
-    }
-    if window.label() != "library" && window.label() != "toast" && window.label() != format!("viewer-{parsed}") {
-        return Err("GIF conversion requires its library or preview.".into());
-    }
-    let control = crate::gif::GifControl::default();
-    let from_completion = window.label() == "toast";
-    let completion_monitor = from_completion
-        .then(|| window.current_monitor().ok().flatten())
-        .flatten();
-    let completion_id = uuid::Uuid::new_v4().to_string();
-    {
-        let state = app.state::<AppState>();
+        if asset.kind != CaptureKind::Video
+            || !crate::core::policy::RecordingPolicy::is_gif_eligible(asset.duration)
+        {
+            return Err("Only recordings with a known duration can be converted to GIF.".into());
+        }
+        if window.label() != "library" && window.label() != "toast" && window.label() != format!("viewer-{parsed}") {
+            return Err("GIF conversion requires its library or preview.".into());
+        }
+        // Register while the source path is protected by the library lock.
+        // rename_asset follows the same library -> conversion-map lock order.
         let mut converting = state.gif_conversions.lock().unwrap();
         if converting.get(&parsed).is_some_and(|job| job.is_converting) {
             return Err("Already converting.".into());
@@ -1663,7 +1680,14 @@ pub fn convert_to_gif(app: AppHandle, window: WebviewWindow, id: String) -> Resu
         converting.insert(parsed, GifConversionStateDto {
             id: id.clone(), is_converting: true, phase: "preparing", progress: None, error: None,
         });
-    }
+        (asset, source_path, library_id, generation)
+    };
+    let control = crate::gif::GifControl::default();
+    let from_completion = window.label() == "toast";
+    let completion_monitor = from_completion
+        .then(|| window.current_monitor().ok().flatten())
+        .flatten();
+    let completion_id = uuid::Uuid::new_v4().to_string();
     app.state::<AppState>().gif_controls.lock().unwrap().insert(parsed, control.clone());
     publish_gif_state(&app, GifConversionStateDto {
         id: id.clone(), is_converting: true, phase: "preparing", progress: None, error: None,
@@ -3538,29 +3562,40 @@ pub fn update_asset(
     })
 }
 
-/// Sets a friendly display title for a capture (metadata only; the on-disk
-/// filename is unchanged so existing libraries stay compatible).
+/// Update the display title and the managed asset's actual file name together.
 #[tauri::command]
-pub fn rename_asset(app: AppHandle, id: String, title: String) -> Result<(), String> {
+pub async fn rename_asset(app: AppHandle, id: String, title: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || rename_asset_inner(app, id, title))
+        .await.map_err(|error| error.to_string())?
+}
+
+fn rename_asset_inner(app: AppHandle, id: String, title: String) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let trimmed = title.trim().to_string();
     let state = app.state::<AppState>();
-    let mut context = state.library.lock().unwrap();
-    context
-        .library_mut()
-        .map_err(|error| error.to_string())?
-        .set_title(
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed)
-            },
-            &parsed,
-        )
-        .map_err(|e| e.to_string())?;
-    drop(context);
-    emit_library_changed(&app);
-    Ok(())
+    // Existing thumbnail generation retains a path after releasing the library
+    // lock. Share its barrier, preserving all cached ID-keyed thumbnails.
+    let result = crate::protocol::with_thumbnail_invalidations(&app.state::<crate::protocol::ProtocolStore>(), &[], || -> Result<_, String> {
+        let mut context = state.library.lock().unwrap();
+        // Conversion start follows the same library -> conversion-map order.
+        if state.gif_conversions.lock().unwrap().get(&parsed).is_some_and(|job| job.is_converting) {
+            return Err("Wait for GIF conversion to finish before renaming.".into());
+        }
+        Ok(context.library_mut().map_err(|error| error.to_string())?
+            .rename_file(if trimmed.is_empty() { None } else { Some(trimmed) }, &parsed))
+    })?;
+    // CleanupFailed is committed: the new name is valid and persisted, while
+    // an old duplicate needs attention. Never hide that successful mutation.
+    if result.is_ok() || matches!(result, Err(AssetLibraryError::CleanupFailed { .. } | AssetLibraryError::CommittedRenameSyncFailed)) {
+        emit_library_changed(&app);
+    }
+    result.map_err(|error| match error {
+        AssetLibraryError::InvalidFilename => "Use a valid file name.".to_string(),
+        AssetLibraryError::FilenameInUse => "A file with that name already exists.".to_string(),
+        AssetLibraryError::CleanupFailed { .. } => "Renamed; the old file could not be removed.".to_string(),
+        AssetLibraryError::CommittedRenameSyncFailed => "Renamed; disk synchronization failed.".to_string(),
+        _ => "Couldn't rename this capture.".to_string(),
+    })
 }
 
 /// Replaces the tag list of a capture (metadata only).

@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
@@ -337,14 +337,20 @@ pub fn handle(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Response<Ve
     if route == "media" {
         let rest = &path.trim_end_matches('/');
         if let Ok(id) = uuid::Uuid::parse_str(rest) {
-            let (kind, file_path) = {
+            let (kind, file) = {
                 let mut context = state.library.lock().unwrap();
                 let Ok(library) = context.library() else {
                     return not_found();
                 };
                 match library.asset_by_id(&id).cloned() {
                     Some(asset) => match library.readable_asset_url(&asset) {
-                        Ok(path) => (asset.kind, path),
+                        // Acquire the handle while library mutations are locked.
+                        // Renaming may remove this path once the lock is released,
+                        // but an open handle keeps the current request readable.
+                        Ok(path) => match std::fs::File::open(path) {
+                            Ok(file) => (asset.kind, file),
+                            Err(_) => return not_found(),
+                        },
                         Err(_) => return not_found(),
                     },
                     None => return not_found(),
@@ -355,7 +361,7 @@ pub fn handle(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Response<Ve
                 CaptureKind::Gif => "image/gif",
                 CaptureKind::Video => "video/mp4",
             };
-            return respond_media(request, &file_path, content_type).unwrap_or_else(not_found);
+            return respond_media(request, file, content_type).unwrap_or_else(not_found);
         }
         return not_found();
     }
@@ -505,10 +511,9 @@ pub(crate) fn parse_media_range(header: Option<&str>, total: u64) -> MediaRangeD
 /// complete recording before slicing it.
 fn respond_media(
     request: &Request<Vec<u8>>,
-    path: &Path,
+    mut file: std::fs::File,
     content_type: &str,
 ) -> Option<Response<Vec<u8>>> {
-    let mut file = std::fs::File::open(path).ok()?;
     let total = file.metadata().ok()?.len();
     if request.method() == Method::HEAD {
         return Some(
@@ -1019,6 +1024,57 @@ mod tests {
     }
 
     #[test]
+    fn opened_media_handles_survive_asset_rename_and_old_path_removal() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = directory.path().join("original.mp4");
+        let renamed = directory.path().join("renamed.mp4");
+        std::fs::write(&original, b"0123456789").unwrap();
+        let file = std::fs::File::open(&original).unwrap();
+
+        // The request owns its handle before a library rename changes paths.
+        std::fs::rename(&original, &renamed).unwrap();
+        assert!(!original.exists());
+        let request = Request::builder()
+            .uri("kiri://media/test")
+            .header("Range", "bytes=2-5")
+            .body(Vec::new())
+            .unwrap();
+        let response = respond_media(&request, file.try_clone().unwrap(), "video/mp4").unwrap();
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get("Content-Range").unwrap(),
+            "bytes 2-5/10"
+        );
+        assert_eq!(response.headers().get("Content-Type").unwrap(), "video/mp4");
+        assert_eq!(response.body(), b"2345");
+
+        // Removing the last path must not invalidate an already opened range.
+        std::fs::remove_file(&renamed).unwrap();
+        assert!(!renamed.exists());
+        let head = Request::builder()
+            .method(Method::HEAD)
+            .uri("kiri://media/test")
+            .body(Vec::new())
+            .unwrap();
+        let response = respond_media(&head, file.try_clone().unwrap(), "video/mp4").unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("Content-Length").unwrap(), "10");
+        assert!(response.body().is_empty());
+        let request = Request::builder()
+            .uri("kiri://media/test")
+            .header("Range", "bytes=6-9")
+            .body(Vec::new())
+            .unwrap();
+        let response = respond_media(&request, file, "video/mp4").unwrap();
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response.headers().get("Content-Range").unwrap(),
+            "bytes 6-9/10"
+        );
+        assert_eq!(response.body(), b"6789");
+    }
+
+    #[test]
     fn media_response_reads_only_the_bounded_requested_range() {
         let file = tempfile::NamedTempFile::new().unwrap();
         let data = vec![7; MEDIA_RANGE_MAX_BYTES as usize + 128];
@@ -1029,7 +1085,7 @@ mod tests {
             .body(Vec::new())
             .unwrap();
 
-        let response = respond_media(&request, file.path(), "video/mp4").unwrap();
+        let response = respond_media(&request, file.reopen().unwrap(), "video/mp4").unwrap();
 
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body().len(), MEDIA_RANGE_MAX_BYTES as usize);
@@ -1053,7 +1109,7 @@ mod tests {
             .body(Vec::new())
             .unwrap();
 
-        let response = respond_media(&request, file.path(), "video/mp4").unwrap();
+        let response = respond_media(&request, file.reopen().unwrap(), "video/mp4").unwrap();
         let expected_start = data.len() - MEDIA_RANGE_MAX_BYTES as usize;
 
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
@@ -1081,7 +1137,7 @@ mod tests {
                 request = request.header("Range", range);
             }
             let request = request.body(Vec::new()).unwrap();
-            let response = respond_media(&request, file.path(), "video/mp4").unwrap();
+            let response = respond_media(&request, file.reopen().unwrap(), "video/mp4").unwrap();
 
             assert_eq!(
                 response.status(),
@@ -1102,7 +1158,7 @@ mod tests {
             .body(Vec::new())
             .unwrap();
 
-        let response = respond_media(&request, file.path(), "image/gif").unwrap();
+        let response = respond_media(&request, file.reopen().unwrap(), "image/gif").unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "image/gif");
@@ -1119,7 +1175,7 @@ mod tests {
             .body(Vec::new())
             .unwrap();
 
-        let response = respond_media(&request, file.path(), "video/mp4").unwrap();
+        let response = respond_media(&request, file.reopen().unwrap(), "video/mp4").unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("Content-Length").unwrap(), "4");
@@ -1138,7 +1194,7 @@ mod tests {
             .body(Vec::new())
             .unwrap();
 
-        let response = respond_media(&request, file.path(), "video/mp4").unwrap();
+        let response = respond_media(&request, file.reopen().unwrap(), "video/mp4").unwrap();
 
         assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
         assert_eq!(
@@ -1236,7 +1292,10 @@ mod tests {
         }
         let result = with_selected_thumbnail_invalidations(&store, || {
             assert!(store.thumbnail_generation.try_lock().is_err());
-            (vec![deleted], Err::<(), _>("cleanup failed after index commit"))
+            (
+                vec![deleted],
+                Err::<(), _>("cleanup failed after index commit"),
+            )
         });
         assert_eq!(result, Err("cleanup failed after index commit"));
         let mut cache = store.thumbnails.lock().unwrap();

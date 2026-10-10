@@ -305,6 +305,7 @@ export const api = {
   ) => invoke<void>("show_confirm_dialog", { kind, title, message, confirmLabel, ids, localize }),
   setLanguage: (language: string) => invoke<void>("set_language", { language }),
   copyAsset: (id: string) => invoke<void>("copy_asset", { id }),
+  copyAssetFile: (id: string) => invoke<void>("copy_asset_file", { id }),
   openAsset: (id: string) => invoke<void>("open_asset", { id }),
   pinAsset: (id: string) => invoke<void>("pin_asset", { id }),
   openEditor: (id: string, recognizeQr = false) => invoke<void>("open_editor", { id, recognizeQr }),

@@ -729,5 +729,11 @@
   "Label bubble (B)": "Bulle de texte (B)",
   "Point label left": "Orienter la bulle à gauche",
   "Point label right": "Orienter la bulle à droite",
-  "Move description": "Déplacer la description"
+  "Move description": "Déplacer la description",
+  "Use a valid file name.": "Saisissez un nom de fichier valide.",
+  "A file with that name already exists.": "Un fichier de ce nom existe déjà.",
+  "Couldn't rename this capture.": "Impossible de renommer cette capture.",
+  "Renamed; the old file could not be removed.": "Renommage effectué, mais l’ancien fichier n’a pas pu être supprimé.",
+  "Renamed; disk synchronization failed.": "Renommage effectué, mais la synchronisation du disque a échoué.",
+  "Wait for GIF conversion to finish before renaming.": "Attendez la fin de la conversion GIF avant de renommer."
 }

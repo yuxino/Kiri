@@ -207,7 +207,9 @@ pub fn write_file_to_clipboard(path: &Path) -> Result<()> {
     {
         linux::write_file_to_clipboard(path)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    { windows::write_file_to_clipboard(path) }
+    #[cfg(target_os = "macos")]
     {
         let mut clipboard = arboard::Clipboard::new()
             .map_err(|error| anyhow::anyhow!("The system clipboard is unavailable: {error}"))?;
@@ -239,8 +241,11 @@ pub fn activate_application(pid: u32) {
 }
 
 /// Reveal a file in Finder / Explorer.
-pub fn reveal_path(path: &Path) {
-    current::reveal_path(path);
+pub fn reveal_path(path: &Path) -> Result<()> {
+    #[cfg(windows)]
+    { current::reveal_path(path) }
+    #[cfg(not(windows))]
+    { current::reveal_path(path); Ok(()) }
 }
 
 /// Returns (pid, name) of the frontmost application.
