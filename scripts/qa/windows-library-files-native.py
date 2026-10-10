@@ -190,16 +190,37 @@ def current(asset_id):
     return next(asset for asset in index() if asset["id"].lower() == asset_id.lower())
 
 
+def replace_text(control, text):
+    # WebView2's UIA SetValue can lose React's focused inline editor. Use the
+    # same native SendInput path as the accepted capture-color text check.
+    # VK_PACKET preserves Unicode and never touches the file clipboard offer.
+    if any(character in text for character in "{}+^%~()"):
+        raise RuntimeError("Native text fixture contains SendKeys control syntax")
+    control.click_input()
+    keyboard.send_keys("^a")
+    keyboard.send_keys(text, with_spaces=True, vk_packet=True)
+    wait_for("native text input value", lambda: control.get_value() == text)
+
+
 def card(title):
     focus_library()
     search = find("Search captures", kinds=("Edit",), scope=library_window)
-    search.set_edit_text(title)
+    replace_text(search, title)
     return find(title, scope=library_window, predicate=lambda control: control.rectangle().height() > 150)
 
 
 def action(title, label):
     card(title).click_input(button="right")
-    find(label, kinds=("MenuItem", "Button"), scope=library_window).click_input()
+    # A card's Copy button remains visible to UIA underneath the popup. Click
+    # the actual menu item, rather than its occluded same-name card action.
+    item = find(label, kinds=("MenuItem",), scope=library_window)
+    bounds = item.rectangle()
+    targets = report.setdefault("action_targets", [])
+    targets.append({"title": title, "label": label, "type": item.element_info.control_type,
+                    "bounds": [bounds.left, bounds.top, bounds.right, bounds.bottom]})
+    if label in ("Copy", "Copy File"):
+        snapshot(f"copy-menu-{len(targets)}")
+    item.click_input()
 
 
 def explorer_windows():
@@ -307,6 +328,7 @@ def verify_folder_and_rename(assets):
     if normalized(window.Document.Folder.Self.Path) != normalized(root):
         raise RuntimeError("Open Folder opened a parent rather than the current library")
     snapshot("current-library-folder")
+    report["checks"].append("Open Folder opens the current canonicalized custom library root")
     focus_library()
     find("Library", kinds=("Button",), scope=library_window).click_input()
     find("Search captures", kinds=("Edit",), scope=library_window)
@@ -321,8 +343,9 @@ def verify_folder_and_rename(assets):
         field = find(kinds=("Edit",), scope=library_window,
                      predicate=lambda control: control.element_info.name != "Search captures"
                      and control.window_text() != "Search captures")
-        field.set_edit_text(title)
-        field.set_focus()
+        snapshot(f"rename-{asset['kind']}-before-input")
+        replace_text(field, title)
+        snapshot(f"rename-{asset['kind']}-entered")
         keyboard.send_keys("{ENTER}")
         renamed = wait_for("actual file name and persisted title", lambda: (
             item if (item := current(asset["id"]))["title"] == title and item["filename"] == title else None))
@@ -330,18 +353,27 @@ def verify_folder_and_rename(assets):
         if (old_path.exists() or not path.is_file() or digest(path) != original_hash
                 or path.suffix != extension or renamed["id"] != before["id"]):
             raise RuntimeError("Rename changed bytes/ID/extension or retained only a display title")
-        action(title, "Show in Folder")
-        window = explorer_for(root / "Assets", path)
-        report.setdefault("renames", []).append({"kind": asset["kind"], "asset_id": renamed["id"],
+        evidence = {"kind": asset["kind"], "asset_id": renamed["id"],
             "old_filename": before["filename"], "new_filename": renamed["filename"],
-            "sha256": original_hash, "explorer": explorer_evidence(window)})
+            "sha256": original_hash}
+        report.setdefault("renames", []).append(evidence)
         asset.update(renamed)
+        try:
+            action(title, "Show in Folder")
+            window = explorer_for(root / "Assets", path)
+            evidence["explorer"] = explorer_evidence(window)
+        except Exception as error:
+            report.setdefault("reveal_errors", []).append({"kind": asset["kind"], "error": str(error)})
+            snapshot(f"reveal-{asset['kind']}-failure")
     snapshot("renamed-files-and-selected-item")
-    report["checks"].append("Open Folder opens current custom root; all three file types rename bytes/ID/extension and Explorer selects actual renamed files")
+    report["checks"].append("All three file types rename the real file while preserving bytes, ID and extension")
+    if not report.get("reveal_errors"):
+        report["checks"].append("Explorer selects each actual renamed file in the current Assets folder")
 
 
 def verify_copy(assets, seed_file):
     phase("Image Copy remains clipboard pixels")
+    close_own_explorers()
     image = next(asset for asset in assets if asset["kind"] == "image")
     seed_clipboard(seed_file)
     action(image["title"], "Copy")
@@ -363,8 +395,6 @@ def verify_copy(assets, seed_file):
         folder.mkdir()
         placeholder = folder / "Kiri paste target.txt"
         placeholder.write_text("Own QA folder focus target", encoding="utf-8")
-        shell.Explore(str(folder))
-        explorer = explorer_for(folder)
         seed_clipboard(seed_file)
         action(asset["title"], label)
         source = root / "Assets" / asset["filename"]
@@ -376,6 +406,11 @@ def verify_copy(assets, seed_file):
                 and value["preferred_drop_effect"] == 1 and not value["unicode_text_available"]
                 and not value["pixel_format_available"]) else None
         offer = wait_for("CF_HDROP + explicit COPY and no old formats", file_offer)
+        # Open the paste destination after Copy. An asynchronously opening
+        # Explorer window can otherwise steal foreground after set_focus.
+        # Shell navigation does not replace the authenticated file offer.
+        shell.Explore(str(folder))
+        explorer = explorer_for(folder)
         explorer_window = desktop.window(handle=int(explorer.HWND)).wrapper_object()
         explorer_window.set_focus()
         target = find(kinds=("ListItem", "DataItem"), scope=explorer_window,
@@ -516,6 +551,8 @@ try:
                     raise RuntimeError("Restart changed the renamed files or persisted library metadata")
                 report["checks"].append("Restart preserves all renamed IDs, file names, hashes and current library root")
                 verify_current_root_capture()
+                if report.get("reveal_errors"):
+                    raise RuntimeError("Native selected-file reveal failed: " + json.dumps(report["reveal_errors"], ensure_ascii=False))
                 report["native_acceptance_success"] = True
             except Exception as error:
                 report["acceptance_error"] = str(error)
