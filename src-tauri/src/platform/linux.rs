@@ -33,6 +33,51 @@ pub fn is_wayland_session() -> bool {
             .is_ok_and(|session| session.eq_ignore_ascii_case("wayland"))
 }
 
+/// GTK's non-resizable windows also constrain programmatic resize requests.
+/// Keep native resizing enabled and give the window manager the same fixed
+/// aspect as the web grip, before the reference is mapped for the first time.
+pub fn show_pinned_screenshot(window: &tauri::WebviewWindow, width: f64, height: f64) -> Result<()> {
+    let pending = Arc::new(Mutex::new(Some(window.clone())));
+    let scheduled = pending.clone();
+    let (sender, receiver) = mpsc::sync_channel(1);
+    // build() returns before Wry processes its CreateWindow message. Use the
+    // same Tauri event queue, not a separate GLib idle callback which can run
+    // before the native window has entered Wry's registry.
+    window.run_on_main_thread(move || {
+        let Some(window) = scheduled.lock().unwrap().take() else { return };
+        let result: Result<()> = (|| {
+            let native = window
+                .gtk_window()
+                .context("Could not access the pinned screenshot window.")?;
+            let aspect = width / height;
+            let geometry = gtk::gdk::Geometry::new(
+                80, 60, 0, 0, 0, 0, 0, 0, aspect, aspect, gtk::gdk::Gravity::NorthWest,
+            );
+            native.set_geometry_hints(
+                None::<&gtk::Widget>,
+                Some(&geometry),
+                // Otherwise GTK uses the minimum as the base and X11 applies
+                // the aspect to (size - base), rather than the whole frame.
+                gtk::gdk::WindowHints::MIN_SIZE
+                    | gtk::gdk::WindowHints::BASE_SIZE
+                    | gtk::gdk::WindowHints::ASPECT,
+            );
+            native.show_all();
+            native.present();
+            native.display().sync();
+            Ok(())
+        })();
+        let _ = sender.send(result);
+    }).context("Could not schedule the pinned screenshot window.")?;
+    match receiver.recv_timeout(Duration::from_secs(5)) {
+        Ok(result) => result,
+        Err(_) => {
+            pending.lock().unwrap().take();
+            Err(anyhow!("Pinned screenshot initialization did not respond."))
+        }
+    }
+}
+
 /// Present the capture overlay only after its borderless native window has
 /// been configured. Capture creation runs on GTK's main thread.
 pub fn show_capture_overlay(window: &tauri::WebviewWindow, frame: Rect) -> Result<()> {
@@ -130,7 +175,7 @@ pub fn show_recording_countdown(window: &tauri::WebviewWindow) -> Result<()> {
     Ok(())
 }
 
-/// Clipboard commands may run in an IPC worker as well as on the GTK thread.
+/// Desktop commands may run in an IPC worker as well as on the GTK thread.
 /// Never move GTK objects between threads or acquire the main context on a
 /// worker: an unowned main context can otherwise run an invocation there.
 fn on_gtk_main_thread<T, F>(action: F) -> Result<T>
@@ -157,7 +202,7 @@ where
     match receiver.recv_timeout(Duration::from_secs(5)) {
         Ok(result) => result,
         Err(_) => {
-            // Do not leave an unstarted write queued to replace newer data if
+            // Do not leave an unstarted action queued to replace newer state if
             // the main loop is stopping or cannot service the request.
             pending.lock().unwrap().take();
             Err(anyhow!("The desktop clipboard did not respond."))

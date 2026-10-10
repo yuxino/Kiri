@@ -163,6 +163,19 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             policy.plan("workflow_dispatch", "refs/heads/qa", {"profile": "recheck-linux-x11"}, [])
 
+    def test_windows_recheck_never_builds_and_requires_one_explicit_candidate(self):
+        result = policy.plan("workflow_dispatch", "refs/heads/qa", {
+            "profile": "recheck-windows", "windows_native_candidate_run_id": "38026417382"}, [])
+        self.assertEqual(result["profile"], "recheck-windows")
+        self.assertTrue(all(value == "false" for key, value in result.items() if key != "profile"))
+        for inputs in ({"profile": "recheck-windows"},
+                       {"windows_native_candidate_run_id": "12"},
+                       {"profile": "recheck-windows", "windows_native_candidate_run_id": "12;bad"},
+                       {"profile": "windows", "windows_native_candidate_run_id": "12"},
+                       {"profile": "recheck-windows", "windows_native_candidate_run_id": "12", "linux_candidate_run_id": "13"}):
+            with self.subTest(inputs=inputs), self.assertRaises(ValueError):
+                policy.plan("workflow_dispatch", "refs/heads/qa", inputs, [])
+
     def test_quality_gate_rejects_failure_cancellation_and_unexpected_skips(self):
         flags = self.auto("src/windows/EditorWindow.tsx")
         needs = {"plan": {"result": "success", "outputs": flags}, "fast-checks": {"result": "success"},

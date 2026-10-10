@@ -130,6 +130,9 @@ def serve(events_path):
                 root.focus_force()
             elif action == "hide":
                 root.withdraw()
+            elif action == "windowed":
+                root.attributes("-fullscreen", False)
+                root.geometry("1000x650+100+80")
             elif action == "draw":
                 draw(message["stage"])
             elif action == "probe_expose":

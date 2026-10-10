@@ -1,6 +1,6 @@
 import {LabelControls, type LabelMark} from "../../src/annotation/LabelControls";
 // Isolated annotation QA: generated source pixels, no native app or user library.
-import React, {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 import AnnotationCanvas, {type AnnotationCanvasHandle} from "../../src/annotation/AnnotationCanvas";
 import {DEFAULT_APPEARANCE, nextCalloutNumber, type CalloutMark, type AnnotationMark, type AnnotationDocumentV1, type Tool} from "../../src/annotation/model";
@@ -54,7 +54,7 @@ function Harness() {
     {callouts&&<Toolbar selection={{x:0,y:0,width:Math.min(640,bounds.width),height:Math.min(640,bounds.width)*360/640}} bounds={bounds}
       tool={tool} setTool={setTool} appearance={appearance} setAppearance={setAppearance} canUndo={undo} canRedo={redo}
       canSetSize={false} sizeControlsOpen={false} onToggleSize={()=>{}} disabled={false}
-      onUndo={()=>canvas.current?.undo()} onRedo={()=>canvas.current?.redo()} onQr={()=>{}} onCancel={()=>{}}
+      onUndo={()=>canvas.current?.undo()} onRedo={()=>canvas.current?.redo()} onPin={()=>{}} onQr={()=>{}} onCancel={()=>{}}
       onDone={()=>{void canvas.current?.exportResult().then(result=>{if(result){Object.assign(window,{__qaExport:result.document});setExported(URL.createObjectURL(new Blob([result.png as BlobPart],{type:"image/png"})));}});}}
       showLabelControls={tool==="label"||(tool==="select"&&selectedLabel!==null)} selectedLabelId={selectedLabel?.id}
       labelControls={<LabelControls selected={selectedLabel} appearance={appearance}

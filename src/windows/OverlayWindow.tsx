@@ -385,7 +385,7 @@ export function OverlayWindow() {
   }, [discardPreparedOcr, discardQr]);
 
   const complete = useCallback(
-    async () => {
+    async (pinOnTop = false) => {
       if (!completionLock.acquire()) return;
       const modeSelectorGesture = modeSelectorDragRef.current;
       if (modeSelectorGesture) {
@@ -411,7 +411,7 @@ export function OverlayWindow() {
           reportFrontend("complete: exportResult returned no data");
           return;
         }
-        await api.confirmCapture(result.png, { selection, document: result.document });
+        await api.confirmCapture(result.png, { selection, document: result.document }, pinOnTop);
         // The backend confirmation is synchronous. Close this owner WebView
         // only after its IPC response has arrived; dispatching a backend
         // close while WebView2 is still waiting can deadlock the Windows UI
@@ -1311,6 +1311,7 @@ export function OverlayWindow() {
           onUndo={() => canvasRef.current?.undo()}
           onRedo={() => canvasRef.current?.redo()}
           onDone={() => void complete()}
+          onPin={() => void complete(true)}
           onQr={() => { if (selectionRef.current && !completionLock.locked) void runQr(selectionRef.current); }}
           onCancel={cancel}
           onTextFontBegin={() => canvasRef.current?.beginTextFontSizeAdjustment()}
@@ -1929,6 +1930,7 @@ interface ToolbarProps {
   onUndo(): void;
   onRedo(): void;
   onDone(): void;
+  onPin(): void;
   onQr(): void;
   onCancel(): void;
   onTextFontBegin?(): void;
@@ -1975,6 +1977,7 @@ export function Toolbar(props: ToolbarProps) {
     onUndo,
     onRedo,
     onDone,
+    onPin,
     onQr,
     onCancel,
     onTextFontBegin,
@@ -2061,7 +2064,8 @@ export function Toolbar(props: ToolbarProps) {
             active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
             onClick={() => canSetSize ? onToggleSize() : setDetailsOpen(open => !open)} />
           {sep}
-          <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary onClick={onDone} />
+          <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin} />
+          <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone} />
         </div>
         {detailsOpen && props.showLabelControls && !canSetSize && props.labelControls}
         {detailsOpen && props.showCalloutControls && !canSetSize && props.calloutControls}
@@ -2181,8 +2185,8 @@ function ToolButton(props: {
       aria-pressed={props.active}
       aria-expanded={props.expanded}
       onKeyDown={(event) => {
-        // Disclosure activation must not reach the overlay's Return-to-save shortcut.
-        if (props.expanded !== undefined && (event.key === "Enter" || event.key === " ")) {
+        // Activate the focused toolbar action without also triggering Return-to-save.
+        if (event.key === "Enter" || event.key === " ") {
           event.stopPropagation();
         }
       }}

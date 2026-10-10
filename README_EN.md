@@ -41,7 +41,7 @@
 
 1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.
 2. Choose Screenshot, Record, or OCR.
-3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Choose **Pin** on the completion card to open a floating reference image.
+3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Click the toolbar’s pin icon to save and pin in one step, or choose **Pin** on the completion card. The borderless reference can be dragged and resized proportionally from its lower-right corner. Hover to unpin or close it.
 
 In Screenshot mode, hover to magnify the original pixels and see their coordinates and HEX color. Press `⌘C` on macOS or `Ctrl+C` to copy the color while keeping the selection. The loupe hides once annotation starts.
 

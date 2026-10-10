@@ -24,7 +24,7 @@ Kiri est une application de capture et d’enregistrement d’écran pour macOS,
 
 1. Appuyez sur `⇧⌘A` sous macOS ou `Shift+Ctrl+A` sous Windows / Linux X11, puis sélectionnez une fenêtre ou faites glisser une zone.
 2. Choisissez Capture d’écran, Enregistrer ou OCR.
-3. Appuyez sur `Entrée` ou double-cliquez sur une partie sans annotation de la sélection pour terminer une capture ; `Échap` annule. Pendant l’annotation, revenez d’abord à l’outil de sélection. Un double-clic sur du texte sert toujours à le modifier. Les captures sont copiées dans le presse-papiers et enregistrées dans la bibliothèque. Choisissez « Épingler » sur la carte de fin pour ouvrir une référence flottante.
+3. Appuyez sur `Entrée` ou double-cliquez sur une partie sans annotation de la sélection pour terminer une capture ; `Échap` annule. Pendant l’annotation, revenez d’abord à l’outil de sélection. Un double-clic sur du texte sert toujours à le modifier. Les captures sont copiées dans le presse-papiers et enregistrées dans la bibliothèque. L’icône d’épingle de la barre d’outils enregistre et épingle la capture en un clic. « Épingler » reste disponible sur la carte de fin. La référence sans bordure se déplace par glissement et se redimensionne proportionnellement depuis son coin inférieur droit. Survolez-la pour afficher les boutons de désépinglage et de fermeture.
 
 En mode Capture, survolez l’écran pour agrandir les pixels d’origine et voir leurs coordonnées et leur couleur HEX. `⌘C` sur macOS ou `Ctrl+C` copie la couleur tout en conservant la sélection. La loupe disparaît pendant l’annotation.
 

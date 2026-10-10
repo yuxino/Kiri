@@ -175,6 +175,7 @@ development.
 - [ADR 0078: Cancellable GIF conversion and video validation](adr/0078-cancellable-gif-video-validation.md)
 - [ADR 0079: Seven languages and a shared preference](adr/0079-seven-language-preferences.md)
 - [ADR 0080: Pinned macOS release signing](adr/0080-pinned-macos-release-signing.md)
+- [ADR 0081: Direct capture toolbar pin](adr/0081-direct-capture-toolbar-pin.md)
 - [ADR 0082: Screenshot hover color picker](adr/0082-screenshot-hover-color-picker.md)
 - [ADR 0083: Editable numbered screenshot callouts](adr/0083-numbered-screenshot-callouts.md)
 - [ADR 0084: Directional label bubbles](adr/0084-directional-label-bubbles.md)
