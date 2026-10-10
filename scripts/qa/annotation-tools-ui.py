@@ -203,12 +203,13 @@ async def callout_pointer_case(browser, report):
         await page.keyboard.type("Callout drag test")
         slider = page.locator('input[type=range][aria-label="Number size"]')
         track = await slider.bounding_box()
-        limits = await slider.evaluate("""e => ({min: Number(e.min), max: Number(e.max),
-          thumb: parseFloat(getComputedStyle(e, '::-webkit-slider-thumb').width)})""")
-        # The thumb travels between its own half-widths. A percentage of the
-        # entire flex-sized element does not identify a fixed range value.
+        limits = await slider.evaluate("e => ({min: Number(e.min), max: Number(e.max)})")
+        # The custom control leaves 6px at each end of its pointer track.
+        # A percentage of the whole flex-sized element is not a fixed value.
+        # Chromium exposes host styles for its private thumb pseudo-element,
+        # so getComputedStyle cannot measure that thumb's width here.
         def slider_x(value):
-            return track["x"] + limits["thumb"] / 2 + (track["width"] - limits["thumb"]) * (value - limits["min"]) / (limits["max"] - limits["min"])
+            return track["x"] + 6 + (track["width"] - 12) * (value - limits["min"]) / (limits["max"] - limits["min"])
         await page.mouse.move(slider_x(38), track["y"] + track["height"] / 2)
         await page.mouse.down()
         await page.mouse.move(slider_x(66), track["y"] + track["height"] / 2, steps=8)
