@@ -62,6 +62,16 @@ class CandidateTests(unittest.TestCase):
         exec(compile(ast.Module(body=[function], type_ignores=[]), "coordinate reader", "exec"), scope)
         self.assertEqual(scope["displayed_coordinates"](), (110, 250))
 
+    def test_edit_lookup_uses_accessible_name_instead_of_current_value(self):
+        tree = ast.parse((ROOT / "windows-capture-color-native.py").read_text())
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "find")
+        for label, value in [("Width (px)", "680"), ("Text content", "")]:
+            control = SimpleNamespace(element_info=SimpleNamespace(name=label, control_type="Edit"),
+                                      window_text=lambda: value, is_enabled=lambda: True)
+            scope = {"controls": lambda: [control], "wait_for": lambda description, predicate, timeout: predicate()}
+            exec(compile(ast.Module(body=[function], type_ignores=[]), "edit lookup", "exec"), scope)
+            self.assertIs(scope["find"](label, kind="Edit"), control)
+
 
 if __name__ == "__main__":
     unittest.main()

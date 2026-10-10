@@ -28,6 +28,8 @@ Kiri est une application de capture et d’enregistrement d’écran pour macOS,
 
 En mode Capture, survolez l’écran pour agrandir les pixels d’origine et voir leurs coordonnées et leur couleur HEX. `⌘C` sur macOS ou `Ctrl+C` copie la couleur tout en conservant la sélection. La loupe disparaît pendant l’annotation.
 
+En mode Capture, survolez l’écran pour agrandir les pixels d’origine et voir leurs coordonnées et leur couleur HEX. `⌘C` sur macOS ou `Ctrl+C` copie la couleur tout en conservant la sélection. La loupe disparaît pendant l’annotation.
+
 Avant d’annoter ou d’enregistrer, cliquez sur le bouton des curseurs pour saisir la largeur et la hauteur en pixels directement au bord de la sélection.
 
 « Réglages → Général → Langue » propose sept langues d’interface. Votre choix s’applique à toutes les fenêtres de Kiri et reste mémorisé après un redémarrage. Au premier lancement, Kiri suit la langue du système.

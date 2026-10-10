@@ -73,7 +73,8 @@ def controls():
 
 def find(name, kind="Button", timeout=20):
     return wait_for(name, lambda: next((control for control in controls()
-        if control.window_text() == name and control.element_info.control_type == kind
+        if (control.element_info.name == name or control.window_text() == name)
+        and control.element_info.control_type == kind
         and control.is_enabled()), None), timeout)
 
 
@@ -130,6 +131,7 @@ def snapshot(label):
     ImageGrab.grab().save(output / f"{label}.png")
     report.setdefault("evidence", []).append({"label": label, "controls": [
         {"name": c.window_text(), "type": c.element_info.control_type,
+         "accessible_name": c.element_info.name,
          "bounds": [c.rectangle().left, c.rectangle().top,
                     c.rectangle().right, c.rectangle().bottom]} for c in controls()]})
 

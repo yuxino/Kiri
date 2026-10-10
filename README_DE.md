@@ -28,6 +28,8 @@ Kiri ist eine Screenshot- und Bildschirmaufnahme-App für macOS, Windows und Lin
 
 Im Screenshot-Modus zeigt die Lupe beim Bewegen des Mauszeigers die ursprünglichen Pixel, Koordinaten und den HEX-Farbwert. Mit `⌘C` auf macOS oder `Ctrl+C` kopierst du die Farbe; die Auswahl bleibt erhalten. Beim Annotieren wird die Lupe ausgeblendet.
 
+Im Screenshot-Modus zeigt die Lupe beim Bewegen des Mauszeigers die ursprünglichen Pixel, Koordinaten und den HEX-Farbwert. Mit `⌘C` auf macOS oder `Ctrl+C` kopierst du die Farbe; die Auswahl bleibt erhalten. Beim Annotieren wird die Lupe ausgeblendet.
+
 Klicken Sie vor dem Zeichnen oder Aufnehmen auf die Schieberegler, um Breite und Höhe direkt am Auswahlrand in Pixeln einzugeben.
 
 Unter „Einstellungen → Allgemein → Sprache“ stehen sieben Oberflächensprachen zur Auswahl. Ihre Wahl gilt für alle Kiri-Fenster und bleibt nach einem Neustart erhalten. Beim ersten Start wird die Systemsprache verwendet.
