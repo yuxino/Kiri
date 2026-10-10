@@ -373,6 +373,7 @@ def verify_folder_and_rename(assets):
 
 def verify_copy(assets, seed_file):
     phase("Image Copy remains clipboard pixels")
+    close_own_explorers()
     image = next(asset for asset in assets if asset["kind"] == "image")
     seed_clipboard(seed_file)
     action(image["title"], "Copy")
@@ -394,8 +395,6 @@ def verify_copy(assets, seed_file):
         folder.mkdir()
         placeholder = folder / "Kiri paste target.txt"
         placeholder.write_text("Own QA folder focus target", encoding="utf-8")
-        shell.Explore(str(folder))
-        explorer = explorer_for(folder)
         seed_clipboard(seed_file)
         action(asset["title"], label)
         source = root / "Assets" / asset["filename"]
@@ -407,6 +406,11 @@ def verify_copy(assets, seed_file):
                 and value["preferred_drop_effect"] == 1 and not value["unicode_text_available"]
                 and not value["pixel_format_available"]) else None
         offer = wait_for("CF_HDROP + explicit COPY and no old formats", file_offer)
+        # Open the paste destination after Copy. An asynchronously opening
+        # Explorer window can otherwise steal foreground after set_focus.
+        # Shell navigation does not replace the authenticated file offer.
+        shell.Explore(str(folder))
+        explorer = explorer_for(folder)
         explorer_window = desktop.window(handle=int(explorer.HWND)).wrapper_object()
         explorer_window.set_focus()
         target = find(kinds=("ListItem", "DataItem"), scope=explorer_window,
