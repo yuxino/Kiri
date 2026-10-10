@@ -190,10 +190,22 @@ def current(asset_id):
     return next(asset for asset in index() if asset["id"].lower() == asset_id.lower())
 
 
+def replace_text(control, text):
+    # WebView2's UIA SetValue can lose React's focused inline editor. Use the
+    # same native SendInput path as the accepted capture-color text check.
+    # VK_PACKET preserves Unicode and never touches the file clipboard offer.
+    if any(character in text for character in "{}+^%~()"):
+        raise RuntimeError("Native text fixture contains SendKeys control syntax")
+    control.click_input()
+    keyboard.send_keys("^a")
+    keyboard.send_keys(text, with_spaces=True, vk_packet=True)
+    wait_for("native text input value", lambda: control.get_value() == text)
+
+
 def card(title):
     focus_library()
     search = find("Search captures", kinds=("Edit",), scope=library_window)
-    search.set_edit_text(title)
+    replace_text(search, title)
     return find(title, scope=library_window, predicate=lambda control: control.rectangle().height() > 150)
 
 
@@ -321,8 +333,9 @@ def verify_folder_and_rename(assets):
         field = find(kinds=("Edit",), scope=library_window,
                      predicate=lambda control: control.element_info.name != "Search captures"
                      and control.window_text() != "Search captures")
-        field.set_edit_text(title)
-        field.set_focus()
+        snapshot(f"rename-{asset['kind']}-before-input")
+        replace_text(field, title)
+        snapshot(f"rename-{asset['kind']}-entered")
         keyboard.send_keys("{ENTER}")
         renamed = wait_for("actual file name and persisted title", lambda: (
             item if (item := current(asset["id"]))["title"] == title and item["filename"] == title else None))
