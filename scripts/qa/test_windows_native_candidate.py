@@ -137,6 +137,31 @@ class ArchiveTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     candidate.extract_verified(self.archive, self.root / str(index), "sha256:" + candidate.digest(self.archive))
 
+    def test_different_original_compiled_bytes_are_recorded_and_payload_install_must_match(self):
+        compiled, payload, installed = (self.root / name for name in ("compiled.exe", "payload.exe", "installed.exe"))
+        compiled.write_bytes(b"original compiled __TAURI_BUNDLE_TYPE_VAR_UNK portable executable")
+        payload.write_bytes(compiled.read_bytes().replace(b"_VAR_UNK", b"_VAR_NSS"))
+        installed.write_bytes(payload.read_bytes())
+        identities = candidate.executable_identities(compiled, payload, installed)
+        self.assertFalse(identities["compiled_matches_installed"])
+        self.assertEqual(identities["installer_payload_sha256"], identities["executable_sha256"])
+        self.assertNotEqual(identities["compiled_executable_sha256"], identities["executable_sha256"])
+        self.assertEqual(identities["bundle_marker_proof"]["cli_version"], "2.11.4")
+        installed.write_bytes(b"a different installed executable")
+        with self.assertRaisesRegex(RuntimeError, "installer payload"):
+            candidate.executable_identities(compiled, payload, installed)
+
+    def test_no_extra_payload_change_or_duplicate_marker_can_pass(self):
+        compiled, payload, installed = (self.root / name for name in ("compiled.exe", "payload.exe", "installed.exe"))
+        compiled.write_bytes(b"__TAURI_BUNDLE_TYPE_VAR_UNK")
+        payload.write_bytes(b"__TAURI_BUNDLE_TYPE_VAR_NSS" + b"another change")
+        installed.write_bytes(payload.read_bytes())
+        with self.assertRaisesRegex(RuntimeError, "beyond"):
+            candidate.executable_identities(compiled, payload, installed)
+        compiled.write_bytes(compiled.read_bytes() * 2)
+        with self.assertRaisesRegex(RuntimeError, "exactly one"):
+            candidate.executable_identities(compiled, payload, installed)
+
 
 if __name__ == "__main__":
     unittest.main()

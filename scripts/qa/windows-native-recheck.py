@@ -12,7 +12,9 @@ from windows_qa_profile import isolated_windows_profile
 output = Path("windows-native-review")
 manifest = json.loads((output / "candidate-provenance.json").read_text(encoding="utf-8"))
 report = {"success": False, "source_sha": manifest["source_sha"],
-          "executable_sha256": manifest["executable_sha256"], "gates": []}
+          "executable_sha256": manifest["executable_sha256"],
+          "compiled_executable_sha256": manifest["compiled_executable_sha256"],
+          "compiled_matches_installed": manifest["compiled_matches_installed"], "gates": []}
 timeouts = {"countdown-native.py": 240, "shortcut-native.py": 180,
             "confirmation-native.py": 180, "windows-release-native.py": 480,
             "windows-capture-color-native.py": 240}
@@ -37,9 +39,10 @@ try:
         try:
             if gate not in timeouts:
                 raise RuntimeError("Unknown original native gate: " + gate)
-            for app in (Path("src-tauri/target/release/kiri.exe"),
-                        Path(os.environ["KIRI_QA_INSTALLED_EXE"]), Path(os.environ["KIRI_QA_PORTABLE_EXE"])):
-                if hashlib.sha256(app.read_bytes()).hexdigest() != manifest["executable_sha256"]:
+            for app, expected in ((Path("src-tauri/target/release/kiri.exe"), manifest["compiled_executable_sha256"]),
+                                  (Path(os.environ["KIRI_QA_INSTALLED_EXE"]), manifest["executable_sha256"]),
+                                  (Path(os.environ["KIRI_QA_PORTABLE_EXE"]), manifest["compiled_executable_sha256"])):
+                if hashlib.sha256(app.read_bytes()).hexdigest() != expected:
                     raise RuntimeError("Candidate executable changed before native QA")
             # Each gate gets fresh app-only directories and restores prior
             # CI data afterward. A failed gate does not suppress later gates.

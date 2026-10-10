@@ -119,6 +119,29 @@ def extract_verified(archive, directory, expected_digest):
         bundle.extractall(directory)
 
 
+def executable_identities(compiled, payload, installed):
+    require(all(path.is_file() for path in (compiled, payload, installed)),
+            "Original compiled, installer-payload and installed executables must exist")
+    original = compiled.read_bytes()
+    marker, nsis_marker = b"__TAURI_BUNDLE_TYPE_VAR_UNK", b"__TAURI_BUNDLE_TYPE_VAR_NSS"
+    require(original.count(marker) == 1 and original.count(nsis_marker) == 0,
+            "Expected exactly one unpatched Tauri bundle marker in the compiled executable")
+    # Tauri CLI 2.11.4 patches this marker for NSIS, then restores the build
+    # output. Accept only this exact byte substitution, never other differences.
+    expected = hashlib.sha256(original.replace(marker, nsis_marker, 1)).hexdigest()
+    checksums = {"compiled_executable_sha256": digest(compiled),
+                 "installer_payload_sha256": digest(payload), "executable_sha256": digest(installed)}
+    require(checksums["installer_payload_sha256"] == expected,
+            "Original NSIS payload differs beyond the exact Tauri bundle marker")
+    require(checksums["installer_payload_sha256"] == checksums["executable_sha256"],
+            "Installed executable differs from the original installer payload")
+    checksums["compiled_matches_installed"] = checksums["compiled_executable_sha256"] == checksums["executable_sha256"]
+    checksums["bundle_marker_proof"] = {"cli_version": "2.11.4", "offset": original.index(marker),
+                                       "from": marker.decode(), "to": nsis_marker.decode(),
+                                       "expected_nsis_sha256": expected}
+    return checksums
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=int, required=True)
@@ -139,6 +162,8 @@ def main():
     require(not command("git", "diff", "--name-only", "HEAD"), "Recheck checkout must be clean")
     for gate in gates:
         require(Path("scripts/qa", gate).is_file(), "Missing original native driver: " + gate)
+    require("'@tauri-apps/cli@2.11.4':" in Path("pnpm-lock.yaml").read_text(encoding="utf-8"),
+            "Bundle-marker verification requires the reviewed locked Tauri CLI 2.11.4")
     evidence = Path("windows-native-review")
     evidence.mkdir(exist_ok=True)
     flags = ["--allow-escape-sequences"] if "--allow-escape-sequences" in command("gh", "api", "--help") else []
@@ -163,6 +188,13 @@ def main():
     installers = list((candidate / "installer").rglob("*-setup.exe"))
     binaries = list((candidate / "compiled").rglob("kiri.exe"))
     require(len(installers) == 1 and len(binaries) == 1, "Expected one original installer and compiled executable")
+    # Bind installation to the original NSIS payload, retaining the distinct
+    # compiled/portable identity instead of treating different bytes as equal.
+    seven_zip = shutil.which("7z") or str(Path(os.environ["ProgramFiles"]) / "7-Zip/7z.exe")
+    payload_root = candidate / "payload"
+    subprocess.run([seven_zip, "x", "-y", "-bso0", "-bsp0", "-o" + str(payload_root), str(installers[0])], check=True)
+    payloads = list(payload_root.rglob("kiri.exe"))
+    require(len(payloads) == 1 and not payloads[0].is_symlink(), "Expected one executable in the original NSIS payload")
     install = Path(os.environ["RUNNER_TEMP"]) / "kiri-installed-review"
     require(not install.exists(), "Candidate install destination must be fresh")
     subprocess.run(["pwsh", "-NoProfile", "-File", "scripts/qa/windows-install-candidate.ps1",
@@ -172,15 +204,15 @@ def main():
     actual_checksum = digest(installed) if installed.is_file() else None
     (evidence / "installer-check.json").write_text(json.dumps({
         "source_sha": source_sha, "compiled_sha256": checksum,
+        "installer_payload_sha256": digest(payloads[0]), "installer_sha256": digest(installers[0]),
         "installed_exists": installed.is_file(), "installed_sha256": actual_checksum,
         "installed_files": [str(path.relative_to(install)) for path in install.rglob("*")] if install.exists() else [],
     }, indent=2), encoding="utf-8")
-    require(actual_checksum == checksum,
-            "Installed executable differs from the original compiled candidate")
+    identities = executable_identities(binaries[0], payloads[0], installed)
     app = Path("src-tauri/target/release/kiri.exe")
     app.parent.mkdir(parents=True, exist_ok=True)
     require(not app.exists(), "Recheck must not overwrite a local build")
-    shutil.copy2(installed, app)
+    shutil.copy2(binaries[0], app)
     portable = Path(os.environ["RUNNER_TEMP"]) / "kiri-portable-verify/kiri.exe"
     archives = list((candidate / "installer").rglob("Kiri-*-Windows-x64-Portable.zip"))
     require(len(archives) <= 1, "Candidate contains multiple portable packages")
@@ -193,7 +225,7 @@ def main():
     require(digest(portable) == checksum, "Repacked portable executable differs from the candidate")
     manifest = {
         "run_id": args.run, "run_attempt": 1, "source_sha": source_sha, "harness_sha": harness_sha,
-        "harness_changes": changes, "executable_sha256": checksum,
+        "harness_changes": changes, **identities,
         "installer_sha256": digest(installers[0]), "artifacts": records,
         "source_evidence": {"job_id": job["id"], "checkout_sha": source_sha,
                             "job_log_sha256": hashlib.sha256(log.encode()).hexdigest()},
