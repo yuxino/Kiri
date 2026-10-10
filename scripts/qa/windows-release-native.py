@@ -128,10 +128,15 @@ def client_bounds(window):
     return origin.x, origin.y, origin.x + rect.right, origin.y + rect.bottom
 
 
-def drag_mouse(start, end):
+def drag_mouse(start, end, native=False):
     mouse.press(coords=start)
-    time.sleep(0.15)
-    mouse.move(coords=end)
+    time.sleep(0.3 if native else 0.15)
+    if native:
+        for step in range(1, 9):
+            mouse.move(coords=tuple(round(a + (b - a) * step / 8) for a, b in zip(start, end)))
+            time.sleep(0.1)
+    else:
+        mouse.move(coords=end)
     time.sleep(0.15)
     mouse.release(coords=end)
 
@@ -170,8 +175,17 @@ def direct_pin_acceptance(source, expected, region, user32):
 
     pin.set_focus()
     before = client_bounds(pin)
+    mouse.move(coords=(before[0] + 30, before[1] + 30))
+    find("Unpin", scope=pin)  # React must have mounted before pointer input.
+    def initial_image_painted():
+        actual = ImageGrab.grab(bbox=before).convert("RGB")
+        expected_image = captured.resize(actual.size, Image.Resampling.LANCZOS)
+        error = sum(ImageStat.Stat(ImageChops.difference(actual, expected_image)).mean) / 3
+        return {"mean_pixel_error": error} if error <= 3 else None
+    report["pin_ready"] = wait_for("actual annotated pin image painted before drag", initial_image_painted)
+    ImageGrab.grab().save(output / "direct-pin-ready-for-drag.png")
     start = ((before[0] + before[2]) // 2, (before[1] + before[3]) // 2)
-    drag_mouse(start, (start[0] + 80, start[1] + 50))
+    drag_mouse(start, (start[0] + 80, start[1] + 50), native=True)
     moved = wait_for("dragging the reference image moves its native window", lambda:
                     (bounds := client_bounds(pin)) and abs(bounds[0] - before[0]) >= 30 and abs(bounds[1] - before[1]) >= 20 and bounds)
     before_size = (moved[2] - moved[0], moved[3] - moved[1])
