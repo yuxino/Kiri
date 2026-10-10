@@ -24,7 +24,7 @@ Kiri ist eine Screenshot- und Bildschirmaufnahme-App für macOS, Windows und Lin
 
 1. Drücken Sie `⇧⌘A` auf macOS oder `Shift+Ctrl+A` auf Windows / Linux X11. Wählen Sie ein Fenster oder ziehen Sie einen Bereich auf.
 2. Wählen Sie Screenshot, Aufnahme oder OCR.
-3. Bestätigen Sie einen Screenshot mit `Enter` oder einem Doppelklick auf eine unmarkierte Stelle im Bereich; `Esc` bricht ab. Wechseln Sie beim Zeichnen zunächst zum Auswahlwerkzeug. Ein Doppelklick auf Text bearbeitet ihn weiterhin. Screenshots werden in die Zwischenablage kopiert und in der Bibliothek gespeichert. Mit „Anheften“ auf der Abschlusskarte öffnen Sie eine schwebende Referenz.
+3. Bestätigen Sie einen Screenshot mit `Enter` oder einem Doppelklick auf eine unmarkierte Stelle im Bereich; `Esc` bricht ab. Wechseln Sie beim Zeichnen zunächst zum Auswahlwerkzeug. Ein Doppelklick auf Text bearbeitet ihn weiterhin. Screenshots werden in die Zwischenablage kopiert und in der Bibliothek gespeichert. Das Pinsymbol in der Werkzeugleiste speichert und heftet den Screenshot mit einem Klick an. „Anheften“ auf der Abschlusskarte bleibt verfügbar. Die rahmenlose Referenz lässt sich ziehen und an der unteren rechten Ecke proportional vergrößern oder verkleinern. Beim Darüberfahren erscheinen die Schaltflächen zum Lösen und Schließen.
 
 Im Screenshot-Modus zeigt die Lupe beim Bewegen des Mauszeigers die ursprünglichen Pixel, Koordinaten und den HEX-Farbwert. Mit `⌘C` auf macOS oder `Ctrl+C` kopierst du die Farbe; die Auswahl bleibt erhalten. Beim Annotieren wird die Lupe ausgeblendet.
 

@@ -52,6 +52,9 @@ unrestricted filesystem path.
 Each active screenshot has at most one pin window. It reads the saved flattened
 image through the existing local media route. Unpinning or closing that window
 does not change the library asset.
+The screenshot toolbar can request a direct pin through its existing capture
+confirmation. After the overlay is destroyed, Rust opens the saved image's
+reference window; a pin failure retains the completion card for retry (ADR 0081).
 
 Windows dispatches confirmation, resident feedback, and library-window
 presentation to one serial worker. WebView2 creation never blocks their IPC or

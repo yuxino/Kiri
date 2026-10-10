@@ -7,7 +7,7 @@ import re
 import subprocess
 
 
-PROFILES = {"quick", "linux", "linux-package", "windows", "macos", "release", "full", "recheck-linux", "recheck-linux-x11"}
+PROFILES = {"quick", "linux", "linux-package", "windows", "macos", "release", "full", "recheck-linux", "recheck-linux-x11", "recheck-windows"}
 TARGET_PREFIXES = {
     "linux": ("src-tauri/src/capture/linux", "src-tauri/src/platform/linux", "src-tauri/src/linux_media"),
     "windows": ("src-tauri/src/capture/windows", "src-tauri/src/platform/windows"),
@@ -23,8 +23,14 @@ def plan(event, ref, inputs, paths, labels=()):
     if event == "workflow_dispatch":
         profile = inputs.get("profile") or "quick"
         candidate = inputs.get("linux_candidate_run_id") or ""
+        windows_candidate = inputs.get("windows_native_candidate_run_id") or ""
         if profile not in PROFILES:
             raise ValueError("Unknown CI profile")
+        if windows_candidate and (not re.fullmatch(r"[1-9][0-9]*", windows_candidate)
+                                  or profile != "recheck-windows" or candidate):
+            raise ValueError("Choose recheck-windows with one positive Windows candidate run ID")
+        if profile == "recheck-windows" and not windows_candidate:
+            raise ValueError("recheck-windows needs a completed candidate run ID")
         if candidate:
             if not re.fullmatch(r"[1-9][0-9]*", candidate):
                 raise ValueError("Candidate run ID must be a positive integer")
@@ -39,7 +45,9 @@ def plan(event, ref, inputs, paths, labels=()):
         # Keep all source/package checks; desktop acceptance remains explicit.
         profile = "release"
 
-    if profile == "recheck-linux-x11":
+    if profile == "recheck-windows":
+        pass  # The separate job replays native gates without any new build.
+    elif profile == "recheck-linux-x11":
         selected["x11_recheck"] = True
     elif profile == "recheck-linux":
         selected["wayland"] = True

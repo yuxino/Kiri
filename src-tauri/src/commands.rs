@@ -539,6 +539,10 @@ pub async fn pin_asset(window: WebviewWindow, app: AppHandle, id: String) -> Res
     if !matches!(window.label(), "library" | "toast") {
         return Err("Only the library or completion preview can pin a screenshot.".into());
     }
+    open_pinned_screenshot(app, id).await
+}
+
+async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|_| "Invalid screenshot.".to_string())?;
     let asset = {
         let state = app.state::<AppState>();
@@ -557,24 +561,39 @@ pub async fn pin_asset(window: WebviewWindow, app: AppHandle, id: String) -> Res
         restore_pinned_window(&window)?;
         return Ok(());
     }
-    let aspect = if asset.pixel_width > 0 && asset.pixel_height > 0 {
-        (asset.pixel_width as f64 / asset.pixel_height as f64).clamp(0.5, 3.0)
-    } else { 1.0 };
-    let width = (340.0 * aspect).clamp(240.0, 680.0);
+    let source_width = asset.pixel_width.max(1) as f64;
+    let source_height = asset.pixel_height.max(1) as f64;
+    let scale = (680.0 / source_width).min(480.0 / source_height).min(1.0);
+    let (width, height) = ((source_width * scale).max(80.0), (source_height * scale).max(60.0));
     let asset_id = asset.id;
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(window) = app.get_webview_window(&label) {
             restore_pinned_window(&window)?; return Ok(());
         }
-        WebviewWindowBuilder::new(&app, label,
+        let builder = WebviewWindowBuilder::new(&app, label,
             WebviewUrl::App(format!("index.html?window=pin&id={asset_id}").into()))
             .title("Pinned Screenshot — Kiri")
-            .inner_size(width, 380.0)
-            .min_inner_size(220.0, 180.0)
-            .resizable(true)
-            .decorations(true)
-            .always_on_top(true)
-            .build().map_err(|error| format!("Pinned screenshot could not be opened: {error}"))?;
+            .inner_size(width, height)
+            .min_inner_size(80.0, 60.0)
+            // GTK needs resizable windows for both native and programmatic
+            // sizing; Linux installs fixed-aspect geometry hints before mapping.
+            // Other platforms keep native edges from bypassing the web grip.
+            .resizable(cfg!(target_os = "linux"))
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .always_on_top(true);
+        #[cfg(target_os = "linux")]
+        let builder = builder.visible(false);
+        let window = builder.build()
+            .map_err(|error| format!("Pinned screenshot could not be opened: {error}"))?;
+        #[cfg(target_os = "linux")]
+        if let Err(error) = platform::linux::show_pinned_screenshot(&window, width, height) {
+            let _ = window.close();
+            return Err(format!("Pinned screenshot could not be opened: {error:#}"));
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = window;
         log::info!("[pin] screenshot opened asset_id={asset_id}");
         Ok(())
     }).await.map_err(|error| format!("Pinned screenshot window stopped: {error}"))?
@@ -2581,6 +2600,12 @@ pub fn confirm_capture(
     app: AppHandle,
     request: tauri::ipc::Request<'_>,
 ) -> Result<(), String> {
+    let pin_on_top = match request.headers().get("x-kiri-pin-on-top") {
+        None => false,
+        Some(value) if value == "false" => false,
+        Some(value) if value == "true" => true,
+        Some(_) => return Err("The capture pin action is invalid.".into()),
+    };
     let annotation_token = request
         .headers()
         .get("x-kiri-annotation-token")
@@ -2697,6 +2722,7 @@ pub fn confirm_capture(
         session,
         preview: session_feedback.preview,
         monitor: session_feedback.monitor,
+        pin_on_top,
     });
     Ok(())
 }
@@ -2876,8 +2902,31 @@ pub(crate) fn finalize_confirmed_capture_after_overlay_destroyed(app: &AppHandle
     }
 
     if let Some(completed) = completed {
-        show_completion_preview(app, &completed.preview, completed.monitor);
         restore_focus(app, &completed.session);
+        if completed.pin_on_top {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut preview = completed.preview;
+                let result = match preview.asset_id.clone() {
+                    Some(id) => open_pinned_screenshot(app.clone(), id).await,
+                    None => Err("The saved screenshot is unavailable.".into()),
+                };
+                if let Err(error) = result {
+                    log::error!("confirm_capture: pin failed: {error}");
+                    preview.title = "Could not pin this screenshot.".into();
+                    show_completion_preview(&app, &preview, completed.monitor);
+                } else if !preview.copied {
+                    emit_notice_on_monitor(
+                        &app,
+                        "Saved — Copy Failed".into(),
+                        "exclamationmark.triangle.fill".into(),
+                        completed.monitor,
+                    );
+                }
+            });
+        } else {
+            show_completion_preview(app, &completed.preview, completed.monitor);
+        }
         log::info!("confirm_capture: completion flow returned after overlay destruction");
     }
 }

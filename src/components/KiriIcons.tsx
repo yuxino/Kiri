@@ -23,6 +23,8 @@ import {
   MousePointer2,
   Pause,
   Pen,
+  Pin,
+  PinOff,
   Play,
   PlaySquare,
   Redo2,
@@ -70,6 +72,8 @@ export type IconName =
   | "record.circle" // Record mode
   | "text.viewfinder" // OCR mode
   | "qrcode"
+  | "pin"
+  | "pin.slash"
   | "square.dashed" // text background: transparent
   | "moon.fill" // text background: dark
   | "character.textbox" // text context icon
@@ -116,6 +120,8 @@ const ICONS: Record<IconName, React.ComponentType<Record<string, unknown>>> = {
   "record.circle": Video,
   "text.viewfinder": ScanText,
   "qrcode": QrCode,
+  pin: Pin,
+  "pin.slash": PinOff,
   "square.dashed": SquareDashed,
   "moon.fill": Moon,
   "character.textbox": TextCursorInput,

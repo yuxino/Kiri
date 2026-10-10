@@ -1,10 +1,15 @@
-.pin-window { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--kiri-card); color: var(--kiri-label); }
-.pin-window__header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--kiri-surface-border); }
-.pin-window__header strong { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pin-window__actions { display: flex; gap: 6px; flex-shrink: 0; }
-.kiri-pin-action { border: 1px solid var(--kiri-surface-border); border-radius: 6px; background: var(--kiri-card); color: var(--kiri-label); padding: 5px 8px; font: inherit; font-size: 11px; cursor: pointer; }
+.pin-window { position: relative; width: 100vw; height: 100vh; overflow: hidden; color: var(--kiri-label); }
+.pin-window__image { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; cursor: move; }
+.pin-window__image img { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; }
+.pin-window__actions { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 4px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }
+.pin-window:hover .pin-window__actions, .pin-window:focus-within .pin-window__actions { opacity: 1; pointer-events: auto; }
+.kiri-pin-action { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--kiri-surface-border); border-radius: 6px; background: var(--kiri-card); color: var(--kiri-label); padding: 0; cursor: pointer; }
 .kiri-pin-action:hover:not(:disabled) { background: var(--kiri-group-fill); }
+.kiri-pin-action:focus-visible { outline: 2px solid var(--kiri-label); outline-offset: 2px; }
 .kiri-pin-action:disabled { opacity: .5; cursor: default; }
-.pin-window__image { display: flex; align-items: center; justify-content: center; min-height: 0; flex: 1; padding: 8px; }
-.pin-window__image img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
-.pin-window__image p, .pin-window__error { color: var(--kiri-secondary-label); font-size: 12px; text-align: center; }
+.pin-window__image p, .pin-window__error { margin: 0; padding: 8px 12px; background: var(--kiri-card); color: var(--kiri-secondary-label); font-size: 12px; text-align: center; }
+.pin-window__error { position: absolute; bottom: 12px; left: 12px; right: 12px; z-index: 3; border-radius: 6px; }
+.pin-window__resize { position: absolute; bottom: 0; right: 0; width: 16px; height: 16px; z-index: 2; cursor: nwse-resize; }
+.pin-window__resize::after { content: ""; position: absolute; bottom: 3px; right: 3px; width: 6px; height: 6px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; filter: drop-shadow(0 0 1px #000); opacity: 0; }
+.pin-window:hover .pin-window__resize::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pin-window__actions { transition: none; } }
