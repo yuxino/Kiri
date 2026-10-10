@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { handleTextEditorKey, isTextComposition, setTextComposition } from "../src/annotation/text-composition.js";
 import { installVideoProjectShortcuts } from "../src/windows/video-project-shortcuts.js";
+import { createLibraryHarness, nodes } from "./helpers/library-render-harness.mjs";
 
 function key(options = {}) {
   return { key: "Enter", target: {}, isComposing: false, keyCode: 13,
@@ -152,4 +153,36 @@ for (const [file, name, ordinaryKey, expected] of [
   setTextComposition(target, false);
   run(key({ target, key: ordinaryKey, stopImmediatePropagation() { this.stopped = true; } }));
   assert.deepEqual(calls, [expected]);
+});
+
+for (const eventKey of ["Enter", " "]) test(`text tool buttons activate with ${JSON.stringify(eventKey)} without completing capture`, () => {
+  const source = 'import React from "react";\n' + readFileSync(new URL("../src/annotation/TextToolPicker.tsx", import.meta.url), "utf8");
+  const selected = [];
+  const anchor = {getBoundingClientRect: () => ({left: 20, top: 20, bottom: 48}), focus() {}};
+  const h = createLibraryHarness({}, source, {
+    modules: {"./callout-controls.css": {}},
+    attachRef(node) {if (node.props?.className === "kiri-text-tool-toggle") node.props.ref.current = anchor;},
+  });
+  h.window.innerWidth = 800; h.window.innerHeight = 600;
+  const picker = h.mount("TextToolPicker", {tool: "select", onSelect: value => selected.push(value)});
+  const overlay = windowHandler("OverlayWindow.tsx", "onKeyDown");
+  const activate = button => {
+    const event = key({key: eventKey});
+    button.props.onKeyDown(event);
+    if (!event.stopped) overlay.run(event);
+    assert.equal(event.defaultPrevented, false, "native button activation remains available");
+    button.props.onClick();
+  };
+  let tree = picker.render();
+  activate(nodes(tree).find(node => node?.props?.className === "kiri-text-tool-main"));
+  assert.deepEqual(selected, ["text"]);
+  tree = picker.render();
+  activate(nodes(tree).find(node => node?.props?.className === "kiri-text-tool-toggle"));
+  tree = picker.render();
+  assert.ok(nodes(tree).some(node => node?.props?.role === "menu"));
+  const option = nodes(tree).find(node => node?.props?.role === "menuitemradio" && nodes(node).includes("Numbered callout"));
+  option.props.onClick();
+  assert.deepEqual(selected, ["text", "callout"]);
+  assert.deepEqual(overlay.calls, [], "tool activation never reaches confirmCapture");
+  picker.unmount();
 });

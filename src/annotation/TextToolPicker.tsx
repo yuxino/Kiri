@@ -36,9 +36,12 @@ export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(
     <button type="button" className="kiri-text-tool-main" aria-pressed={active}
       title={t(choice === "text" ? "Text (T)" : "Numbered callout (N)")}
       aria-label={t(choice === "text" ? "Text (T)" : "Numbered callout (N)")}
+      onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
       onClick={() => onSelect(choice)}><KiriIcon name={choice === "text" ? "textformat" : "number.circle"} size={16}/></button>
     <button ref={anchor} type="button" className="kiri-text-tool-toggle" aria-label={t("Text tools")}
-      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+      aria-haspopup="menu" aria-expanded={open}
+      onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+      onClick={() => setOpen(value => !value)}>
       <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
     </button>
     {open && createPortal(<div ref={menu} role="menu" className="kiri-text-tool-menu kiri-dark" style={position}

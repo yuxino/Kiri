@@ -214,6 +214,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const [selectCursor, setSelectCursor] = useState<string>("default");
     const [editing, setEditing] = useState<EditingState | null>(null);
     const interactionRef = useRef<Interaction>({ kind: "none" });
+    const gestureRectRef = useRef<{left: number; top: number; width: number; height: number} | null>(null);
     const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false });
     const blankDoubleClickRef = useRef(false);
     const appearanceRef = useRef(appearance);
@@ -425,7 +426,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
 
     const toPoint = useCallback((e: React.PointerEvent | MouseEvent): Point => {
       const canvas = canvasRef.current!;
-      const rect = canvas.getBoundingClientRect();
+      // Selecting a callout can open its inspector and resize the editor stage
+      // before pointerup. Keep this gesture in the coordinate space it began in.
+      const rect = interactionRef.current.kind !== "none" && gestureRectRef.current
+        ? gestureRectRef.current : canvas.getBoundingClientRect();
       return viewPointToDocument(
         { x: e.clientX - rect.left, y: e.clientY - rect.top },
         { width: rect.width, height: rect.height },
@@ -609,6 +613,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         };
         finishAppearanceAdjustment();
         const canvas = canvasRef.current!;
+        gestureRectRef.current = canvas.getBoundingClientRect();
         canvas.setPointerCapture(e.pointerId);
         const p = clampPoint(toPoint(e), {
           x: 0,
