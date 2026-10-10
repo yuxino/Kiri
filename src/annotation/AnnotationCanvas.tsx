@@ -191,6 +191,8 @@ type Interaction =
   | { kind: "resize"; index: number; original: AnnotationMark; handle: string; start: Point }
   | { kind: "endpoint"; index: number; original: AnnotationMark; isStart: boolean; start: Point };
 
+type CanvasFrame = {left: number; top: number; width: number; height: number};
+
 const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
   function AnnotationCanvas(
     {
@@ -256,8 +258,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const [selectCursor, setSelectCursor] = useState<string>("default");
     const [editing, setEditing] = useState<EditingState | null>(null);
     const interactionRef = useRef<Interaction>({ kind: "none" });
-    const gestureRectRef = useRef<{left: number; top: number; width: number; height: number} | null>(null);
-    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false });
+    const gestureRectRef = useRef<CanvasFrame | null>(null);
+    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false,
+      editingCalloutId: null as number | null });
+    const calloutClickRef = useRef<{id: number; frame: CanvasFrame} | null>(null);
     const blankDoubleClickRef = useRef(false);
     const appearanceRef = useRef(appearance);
     appearanceRef.current = appearance;
@@ -710,7 +714,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if(e.button!==0)return;
         canvasClickRef.current = {
           start: { x: e.clientX, y: e.clientY }, moved: false, wasEditing: editingRef.current !== null,
+          editingCalloutId: editingRef.current?.callout ? editingRef.current.id : null,
         };
+        if (canvasClickRef.current.editingCalloutId !== calloutClickRef.current?.id) calloutClickRef.current = null;
         finishAppearanceAdjustment();
         const canvas = canvasRef.current!;
         gestureRectRef.current = canvas.getBoundingClientRect();
@@ -1180,7 +1186,13 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             syncMarks();
           }
           setDraft(null);
-          if (preview?.kind === "callout" && !changed) editCallout(interaction.index);
+          if (preview?.kind === "callout" && !changed) {
+            if (toolRef.current === "select" && gestureRectRef.current) {
+              const {left, top, width, height} = gestureRectRef.current;
+              calloutClickRef.current = {id: preview.id, frame: {left, top, width, height}};
+            }
+            editCallout(interaction.index);
+          }
         }
         redraw();
       },
@@ -1529,14 +1541,35 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           }}
           onDoubleClick={(event) => {
             if (interactionsDisabled() || toolRef.current !== "select" || editingRef.current) return;
-            const index = markIndexAt(history.elements, toPoint(event.nativeEvent), hitTestScale);
+            // The inspector may shrink the stage on the first click and hide
+            // again on the second. Resolve the second click in its own frame,
+            // rather than the layout React rendered after that click ended.
+            const frame = gestureRectRef.current ?? canvasRef.current!.getBoundingClientRect();
+            const pointInFrame = (rect: CanvasFrame) => viewPointToDocument(
+              {x: event.clientX - rect.left, y: event.clientY - rect.top}, rect, documentSize);
+            const index = markIndexAt(history.elements, pointInFrame(frame),
+              documentUnitsPerViewPixel(frame, documentSize));
             if (index !== null && history.elements[index].kind === "text") {
               editText(index);
-            } else if (index === null && blankDoubleClickRef.current) {
-              onFinishOnBlankDoubleClick?.();
+            } else if (index === null) {
+              const first = calloutClickRef.current;
+              calloutClickRef.current = null;
+              const reflowed = first && (["left", "top", "width", "height"] as const).some(
+                key => Math.abs(frame[key] - first.frame[key]) > .5);
+              if (first && reflowed && !canvasClickRef.current.moved &&
+                canvasClickRef.current.editingCalloutId === first.id) {
+                const previousIndex = markIndexAt(history.elements, pointInFrame(first.frame),
+                  documentUnitsPerViewPixel(first.frame, documentSize));
+                if (previousIndex !== null && history.elements[previousIndex].kind === "callout" &&
+                  history.elements[previousIndex].id === first.id) {
+                  editCallout(previousIndex);
+                  return;
+                }
+              }
+              if (blankDoubleClickRef.current) onFinishOnBlankDoubleClick?.();
             }
           }}
-          onPointerCancel={()=>{interactionRef.current={kind:"none"};setDraft(null);setSelectCursor("default");}}
+          onPointerCancel={()=>{interactionRef.current={kind:"none"};calloutClickRef.current=null;setDraft(null);setSelectCursor("default");}}
           onPointerLeave={()=>setBrushCursor(null)}
         />
         {dotMarks.map((mark, index) => {

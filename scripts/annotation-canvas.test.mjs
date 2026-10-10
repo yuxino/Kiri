@@ -98,10 +98,16 @@ function annotation(initialDocument, options = {}) {
   const component = harness.mount("default", props);
   component.render();
   return {component, props, ref, changes, exports, frames, creations, live,
-    pointer(name, x, y) {
+    pointer(name, x, y, event = {}) {
       const node = nodes(component.render()).find(node => node?.type === "canvas");
       node.props[name]({clientX: x, clientY: y, button: 0, pointerId: 1, detail: 1,
-        currentTarget: live, preventDefault() {}, stopPropagation() {}});
+        currentTarget: live, preventDefault() {}, stopPropagation() {}, ...event});
+      component.render();
+    },
+    mouse(name, x, y, detail) {
+      const node = nodes(component.render()).find(node => node?.type === "canvas");
+      node.props[name]({clientX: x, clientY: y, detail, nativeEvent: {clientX: x, clientY: y},
+        preventDefault() {}, stopPropagation() {}});
       component.render();
     },
   };
@@ -128,6 +134,92 @@ test("callout text edits directly on canvas, saves in the same mark and cancels 
   assert.equal(h.changes.at(-1)[0].text, "中文\nabcdef");
   h.ref.current.undo(); h.component.render();
   assert.deepEqual(h.changes.at(-1), [placed], "one canvas Undo restores the empty numbered badge");
+});
+
+const reflowCallout = {kind: "callout", id: 81, center: {x: 80, y: 80}, number: 1, text: "explanation",
+  labelRect: {x: 200, y: 60, width: 100, height: 40}, size: 36, fontSize: 18, color: "cherry", style: "filled"};
+const initialFrame = {left: 0, top: 0, width: 640, height: 360};
+const inspectorFrame = {left: 80, top: 60, width: 480, height: 270};
+const calloutEditor = h => nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+
+function reflowClick(extraMarks = []) {
+  let frame = initialFrame;
+  const h = annotation(documentWith([reflowCallout, ...extraMarks]), {boundingRect: () => frame});
+  const resize = next => {
+    frame = next;
+    h.component.render({...h.props, viewSize: {width: next.width, height: next.height}});
+  };
+  // PointerEvent.detail is deliberately zero: recovery must depend on the
+  // native dblclick event, not a mouse click count on pointerdown.
+  h.pointer("onPointerDown", 250, 80, {detail: 0});
+  resize(inspectorFrame);
+  h.pointer("onPointerUp", 250, 80, {detail: 0});
+  h.mouse("onClick", 250, 80, 1);
+  assert.equal(calloutEditor(h)?.props.editing.id, reflowCallout.id);
+  return {...h, resize};
+}
+
+test("a native double click restores the same callout after its inspector reflows the stage", async () => {
+  const h = reflowClick();
+  h.pointer("onPointerDown", 250, 80, {detail: 0});
+  // Clearing selection hides the inspector before dblclick is dispatched.
+  h.resize(initialFrame);
+  h.pointer("onPointerUp", 250, 80, {detail: 0});
+  h.mouse("onClick", 250, 80, 2);
+  assert.equal(calloutEditor(h), undefined, "the second canvas click initially commits the editor");
+  h.mouse("onDoubleClick", 250, 80, 2);
+  assert.equal(calloutEditor(h)?.props.editing.id, reflowCallout.id);
+  assert.deepEqual(h.changes, [], "recovery does not create an undo step or change saved placement");
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [reflowCallout]);
+});
+
+test("an ordinary single click on reflowed blank canvas still commits the callout draft", async () => {
+  const h = reflowClick();
+  calloutEditor(h).props.onTextChange("updated explanation"); h.component.render();
+  h.pointer("onPointerDown", 250, 80, {detail: 0});
+  h.resize(initialFrame);
+  h.pointer("onPointerUp", 250, 80, {detail: 0});
+  h.mouse("onClick", 250, 80, 1);
+  assert.equal(calloutEditor(h), undefined);
+  assert.equal(h.changes.at(-1)[0].text, "updated explanation");
+  assert.equal(h.changes.length, 1);
+  assert.equal((await h.ref.current.exportResult()).document.marks[0].text, "updated explanation");
+});
+
+test("double clicking another mark after reflow edits that mark without restoring the old callout", () => {
+  const other = {...text, id: 82, text: "another mark", rect: {x: 210, y: 15, width: 100, height: 35}};
+  const h = reflowClick([other]);
+  h.pointer("onPointerDown", 250, 80, {detail: 0});
+  h.resize(initialFrame);
+  h.pointer("onPointerUp", 250, 80, {detail: 0});
+  h.mouse("onClick", 250, 80, 2);
+  h.mouse("onDoubleClick", 250, 80, 2);
+  const editor = nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
+  assert.equal(editor?.props.editing.id, other.id);
+  assert.equal(editor.props.editing.callout, undefined);
+  assert.deepEqual(h.changes, []);
+});
+
+test("a dragged second click never restores the previous callout after stage reflow", () => {
+  const h = reflowClick();
+  h.pointer("onPointerDown", 250, 80, {detail: 0});
+  h.resize(initialFrame);
+  h.pointer("onPointerMove", 270, 90, {detail: 0});
+  h.pointer("onPointerUp", 270, 90, {detail: 0});
+  h.mouse("onDoubleClick", 250, 80, 2);
+  assert.equal(calloutEditor(h), undefined);
+  assert.deepEqual(h.changes, []);
+});
+
+test("double clicking blank canvas without a stage reflow never reopens a callout", () => {
+  const h = annotation(documentWith([reflowCallout]));
+  h.pointer("onPointerDown", 250, 80, {detail: 0}); h.pointer("onPointerUp", 250, 80, {detail: 0});
+  h.mouse("onClick", 250, 80, 1);
+  assert.ok(calloutEditor(h));
+  h.pointer("onPointerDown", 310, 80, {detail: 0}); h.pointer("onPointerUp", 310, 80, {detail: 0});
+  h.mouse("onClick", 310, 80, 2); h.mouse("onDoubleClick", 310, 80, 2);
+  assert.equal(calloutEditor(h), undefined);
+  assert.deepEqual(h.changes, []);
 });
 
 test("saved callout placement survives reopening and text growth stays away from its number", async () => {
