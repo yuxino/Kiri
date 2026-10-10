@@ -713,5 +713,18 @@
   "Ctrl+C to copy color": "Ctrl+C to copy color",
   "Color copied": "Color copied",
   "Could not copy color": "Could not copy color",
-  "Color value": "Color value"
+  "Color value": "Color value",
+  "Numbered callout (N)": "Numbered callout (N)",
+  "Numbered callout": "Numbered callout",
+  "Text tools": "Text tools",
+  "Number": "Number",
+  "Next number": "Next number",
+  "Number style": "Number style",
+  "Filled": "Filled",
+  "Outline": "Outline",
+  "Description (optional)": "Description (optional)",
+  "Add a description…": "Add a description…",
+  "Place a number to add a description": "Place a number to add a description",
+  "Number size": "Number size",
+  "Drag the dots to move the number or description": "Drag the dots to move the number or description"
 }

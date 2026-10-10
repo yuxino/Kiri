@@ -177,3 +177,4 @@ development.
 - [ADR 0080: Pinned macOS release signing](adr/0080-pinned-macos-release-signing.md)
 - [ADR 0081: Direct capture toolbar pin](adr/0081-direct-capture-toolbar-pin.md)
 - [ADR 0082: Screenshot hover color picker](adr/0082-screenshot-hover-color-picker.md)
+- [ADR 0083: Editable numbered screenshot callouts](adr/0083-numbered-screenshot-callouts.md)

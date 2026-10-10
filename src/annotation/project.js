@@ -189,6 +189,19 @@ function parseMark(value, index, ids, totals) {
         fontSize: parseWidth(mark.fontSize, `${path}.fontSize`),
       };
     }
+    case "callout": {
+      exactKeys(mark, ["kind", "id", "center", "number", "text", "labelRect", "color", "size", "fontSize", "style"], path);
+      if (typeof mark.text !== "string") invalid(`${path}.text`, "must be a string");
+      totals.text += mark.text.length;
+      if (totals.text > ANNOTATION_PROJECT_LIMITS.maxTotalText) invalid(`${path}.text`, "exceeds the total text limit");
+      return {kind: "callout", id: parseId(mark.id, `${path}.id`, ids),
+        center: parsePoint(mark.center, `${path}.center`),
+        number: finiteNumber(mark.number, `${path}.number`, {min: 1, max: 999, integer: true}),
+        text: mark.text, labelRect: parseRect(mark.labelRect, `${path}.labelRect`),
+        color: parseColor(mark.color, `${path}.color`), size: parseWidth(mark.size, `${path}.size`),
+        fontSize: parseWidth(mark.fontSize, `${path}.fontSize`),
+        style: enumValue(mark.style, new Set(["filled", "outline"]), `${path}.style`)};
+    }
     case "mosaic":
       exactKeys(
         mark,

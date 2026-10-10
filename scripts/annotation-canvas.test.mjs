@@ -71,6 +71,57 @@ function annotation(initialDocument, options = {}) {
 
 const documentWith = marks => ({schemaVersion: 1, canvas: {width: 640, height: 360}, sourcePixels: {width: 640, height: 360}, marks});
 
+test("numbered notes create on click or drag and retain descriptions through export and reopen", async () => {
+  const h = annotation(documentWith([]), {tool: "callout", calloutNumber: 7});
+  h.pointer("onPointerDown", 80, 90); h.pointer("onPointerUp", 80, 90);
+  const placed = h.changes.at(-1)[0];
+  assert.equal(placed.kind, "callout"); assert.equal(placed.number, 7);
+  assert.equal(placed.style, "filled"); assert.equal(model.nextCalloutNumber([placed]), 8);
+  h.ref.current.updateSelectedCallout({text: "标题\nA short explanation", number: 12}, true);
+  h.component.render();
+  h.ref.current.updateSelectedCallout({size: 48, style: "outline"}, true);
+  h.component.render();
+  h.ref.current.finishAppearanceAdjustment(); h.component.render();
+  const saved = h.changes.at(-1)[0];
+  assert.equal(saved.text, "标题\nA short explanation"); assert.equal(saved.number, 12);
+  assert.ok(saved.labelRect.height > saved.fontSize * 2);
+  const exported = await h.ref.current.exportResult();
+  assert.deepEqual(exported.document.marks, [saved]);
+  const reopened = annotation(exported.document);
+  assert.deepEqual(reopened.frames.at(-1).marks, [saved]);
+  h.ref.current.undo(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), [placed], "one undo restores the complete inspector edit");
+  h.ref.current.redo(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), [saved]);
+  h.component.render({...h.props, calloutNumber: 13});
+  h.pointer("onPointerDown", 90, 260); h.pointer("onPointerUp", 350, 280);
+  assert.equal(h.changes.at(-1)[1].number, 13);
+  assert.ok(h.changes.at(-1)[1].labelRect.x > 300);
+});
+
+test("number and description handles move independently, stay in bounds, and undo exactly", () => {
+  const mark = {kind: "callout", id: 1, center: {x: 80, y: 80}, number: 1, text: "説明",
+    labelRect: {x: 200, y: 60, width: 100, height: 40}, size: 36, fontSize: 18, color: "cherry", style: "filled"};
+  const h = annotation(documentWith([mark]), {selectedMarkId: mark.id});
+  h.pointer("onPointerDown", 80, 62); h.pointer("onPointerMove", 120, 102); h.pointer("onPointerUp", 120, 102);
+  assert.deepEqual(h.changes.at(-1)[0].labelRect, mark.labelRect);
+  assert.deepEqual(h.changes.at(-1)[0].center, {x: 120, y: 120});
+  h.ref.current.undo(); h.component.render();
+  h.pointer("onPointerDown", 250, 80); h.pointer("onPointerMove", 620, 350); h.pointer("onPointerUp", 620, 350);
+  // Undo clears selection; this first drag moves the whole note. Select again for a handle drag.
+  const current = h.changes.at(-1)[0];
+  assert.ok(current.labelRect.x + current.labelRect.width <= 640);
+  assert.ok(current.labelRect.y + current.labelRect.height <= 360);
+  h.ref.current.undo(); h.component.render();
+  h.pointer("onPointerDown", 250, 80); h.pointer("onPointerUp", 250, 80);
+  h.pointer("onPointerDown", 300, 60); h.pointer("onPointerUp", 340, 90);
+  const movedLabel = h.changes.at(-1)[0];
+  assert.deepEqual(movedLabel.center, mark.center);
+  assert.deepEqual(movedLabel.labelRect, {...mark.labelRect, x: 240, y: 90});
+  h.ref.current.undo(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), [mark]);
+});
+
 test("keyboard-style live font changes update the selected mark and commit one undoable edit", () => {
   const h = annotation(documentWith([text]), {selectedMarkId: text.id});
   h.ref.current.setTextFontSizeLive(32); // Keyboard input has no pointerdown.

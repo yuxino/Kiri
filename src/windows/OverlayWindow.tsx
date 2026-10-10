@@ -38,6 +38,9 @@ import {
   COLOR_HEX,
   COLOR_LABELS,
   COLOR_PRESETS,
+  nextCalloutNumber,
+  type AnnotationMark,
+  type CalloutMark,
   type AppearanceSettings,
   type MosaicIntensity,
   type MosaicStyle,
@@ -45,6 +48,8 @@ import {
   type Tool,
 } from "../annotation/model";
 import { useAnnotationAppearance } from "../annotation/useAnnotationAppearance";
+import {CalloutControls} from "../annotation/CalloutControls";
+import {TextToolPicker} from "../annotation/TextToolPicker";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
@@ -130,6 +135,10 @@ export function OverlayWindow() {
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [moveDrag, setMoveDrag] = useState<{ start: Point; original: Rect } | null>(null);
   const [tool, setTool] = useState<Tool>("select");
+  const [selectedCallout, setSelectedCallout] = useState<CalloutMark | null>(null);
+  const [calloutNumber, setCalloutNumber] = useState(1);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedCallout(mark?.kind === "callout" ? mark : null), []);
+  const onAnnotationDocument = useCallback((marks: AnnotationMark[]) => setCalloutNumber(nextCalloutNumber(marks)), []);
   const [appearance, setAppearance] = useAnnotationAppearance();
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -545,6 +554,7 @@ export function OverlayWindow() {
       if (e.key !== "Escape") return;
       if (isTextComposition(e)) return;
       if (e.target instanceof Element && e.target.closest(".kiri-capture-dimension-input")) return;
+      if (e.target instanceof Element && e.target.closest(".kiri-callout-description textarea, .kiri-text-tool-menu")) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (completionLock.locked) return;
@@ -625,6 +635,7 @@ export function OverlayWindow() {
           l: "line",
           a: "arrow",
           t: "text",
+          n: "callout",
           m: "mosaic",
         };
         if (key in map && phaseRef.current !== "mode-select") {
@@ -1097,6 +1108,9 @@ export function OverlayWindow() {
             interactionLock={completionLock}
             tool={tool}
             appearance={appearance}
+            calloutNumber={calloutNumber}
+            onSelectionInfo={onAnnotationSelection}
+            onDocumentChange={onAnnotationDocument}
             onHistoryChange={(u, r) => {
               setCanUndo(u);
               setCanRedo(r);
@@ -1274,6 +1288,12 @@ export function OverlayWindow() {
           }}
           appearance={appearance}
           setAppearance={setAppearance}
+          calloutControls={<CalloutControls selected={selectedCallout} nextNumber={calloutNumber} appearance={appearance}
+            onNextNumber={setCalloutNumber} onAppearance={patch => setAppearance({...appearance, ...patch})}
+            onEdit={patch => canvasRef.current?.updateSelectedCallout(patch, true)}
+            onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}/>}
+          showCalloutControls={tool === "callout" || (tool === "select" && selectedCallout !== null)}
+          selectedCalloutId={selectedCallout?.id}
           canUndo={canUndo}
           canRedo={canRedo}
           canSetSize={phase === "selecting"}
@@ -1887,6 +1907,9 @@ interface ToolbarProps {
   setTool(tool: Tool): void;
   appearance: AppearanceSettings;
   setAppearance(a: AppearanceSettings): void;
+  calloutControls?: React.ReactNode;
+  showCalloutControls?: boolean;
+  selectedCalloutId?: number;
   canUndo: boolean;
   canRedo: boolean;
   canSetSize: boolean;
@@ -1952,7 +1975,7 @@ export function Toolbar(props: ToolbarProps) {
   } = props;
 
   const [detailsOpen, setDetailsOpen] = useState(false);
-  useEffect(() => setDetailsOpen(tool !== "select"), [tool]);
+  useEffect(() => setDetailsOpen(tool !== "select" || props.selectedCalloutId !== undefined), [tool, props.selectedCalloutId]);
 
   const slider =
     tool === "pen"
@@ -2012,7 +2035,8 @@ export function Toolbar(props: ToolbarProps) {
         <div className="kiri-hud" style={toolbarRowStyle}>
           <ToolButton icon="xmark" title={t("Cancel capture · Esc")} onClick={onCancel} />
           {sep}
-          {TOOLS.map(({ tool: t2, icon, title }) => (
+          {TOOLS.map(({ tool: t2, icon, title }) => t2 === "text" ?
+            <TextToolPicker key={t2} tool={tool} onSelect={setTool}/> : (
             <ToolButton
               key={t2}
               icon={icon}
@@ -2032,7 +2056,8 @@ export function Toolbar(props: ToolbarProps) {
           <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin} />
           <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone} />
         </div>
-        {detailsOpen && !canSetSize && (
+        {detailsOpen && props.showCalloutControls && !canSetSize && props.calloutControls}
+        {detailsOpen && !canSetSize && !props.showCalloutControls && (
           <div className="kiri-hud" style={toolbarRowStyle}>
             {/* Context row */}
             {tool === "text" ? (

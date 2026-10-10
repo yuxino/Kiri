@@ -223,6 +223,13 @@ mosaic style, strength, and diameter. Changes are debounced as field-level patch
 lock, and broadcast to open windows. The active tool, selection, crop,
 and document content are never persisted as appearance preferences.
 
+Text and numbered callouts share a compact toolbar picker. A callout persists
+one number, optional multiline description, badge center and label rectangle;
+its handles move the badge and label independently. Both parts translate when
+cropped and use the common preview/export renderer. Badge style and size join
+the local appearance preference; note content stays in the editable document.
+See ADR 0081.
+
 ## Managed library flow
 
 `AppState` owns one mutex-guarded library context containing the active root,
