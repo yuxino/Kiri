@@ -80,40 +80,90 @@ pub fn reveal_path(path: &Path) -> Result<()> {
     // space or non-ASCII character must not change the requested destination.
     // Use a fresh STA: Tauri's worker pool may already have an MTA apartment.
     let path = path.to_owned();
-    thread::Builder::new().name("kiri-reveal-file".into()).spawn(move || {
-        use std::os::windows::ffi::OsStrExt;
-        use windows::core::{w, PCWSTR};
-        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
-        use windows::Win32::UI::Shell::{ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, ShellExecuteW};
-        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-        let metadata = std::fs::metadata(&path)?;
-        let mut encoded: Vec<u16> = path.as_os_str().encode_wide().collect();
-        if !path.is_absolute() || encoded.contains(&0) { bail!("The capture path is not an absolute local path."); }
-        encoded.push(0);
-        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).ok()?; }
-        struct Apartment;
-        impl Drop for Apartment { fn drop(&mut self) { unsafe { CoUninitialize(); } } }
-        let _apartment = Apartment;
-        if metadata.is_dir() {
-            let result = unsafe { ShellExecuteW(None, w!("open"), PCWSTR(encoded.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
-            if result.0 as isize <= 32 { bail!("The capture folder could not be opened."); }
-        } else {
-            let item = unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) };
-            if item.is_null() { bail!("The capture could not be located in its folder."); }
-            // With no child array the full item PIDL selects the file in its
-            // parent folder; directories above deliberately open themselves.
-            let result = unsafe { SHOpenFolderAndSelectItems(item, None, 0) };
-            unsafe { ILFree(Some(item)); }
-            result?;
-        }
-        Ok(())
-    })?.join().map_err(|_| anyhow!("The file manager request did not finish."))?
+    thread::Builder::new()
+        .name("kiri-reveal-file".into())
+        .spawn(move || {
+            use windows::core::{w, PCWSTR};
+            use windows::Win32::System::Com::{
+                CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+            };
+            use windows::Win32::UI::Shell::{
+                ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, ShellExecuteW,
+            };
+            use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+            let metadata = std::fs::metadata(&path)?;
+            let encoded = shell_encoded_path(&path)?;
+            unsafe {
+                CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).ok()?;
+            }
+            struct Apartment;
+            impl Drop for Apartment {
+                fn drop(&mut self) {
+                    unsafe {
+                        CoUninitialize();
+                    }
+                }
+            }
+            let _apartment = Apartment;
+            if metadata.is_dir() {
+                let result = unsafe {
+                    ShellExecuteW(
+                        None,
+                        w!("open"),
+                        PCWSTR(encoded.as_ptr()),
+                        PCWSTR::null(),
+                        PCWSTR::null(),
+                        SW_SHOWNORMAL,
+                    )
+                };
+                if result.0 as isize <= 32 {
+                    bail!("The capture folder could not be opened.");
+                }
+            } else {
+                let item = unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) };
+                if item.is_null() {
+                    bail!("The capture could not be located in its folder.");
+                }
+                // With no child array the full item PIDL selects the file in its
+                // parent folder; directories above deliberately open themselves.
+                let result = unsafe { SHOpenFolderAndSelectItems(item, None, 0) };
+                unsafe {
+                    ILFree(Some(item));
+                }
+                result?;
+            }
+            Ok(())
+        })?
+        .join()
+        .map_err(|_| anyhow!("The file manager request did not finish."))?
+}
+
+fn shell_encoded_path(path: &Path) -> Result<Vec<u16>> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::UI::Shell::PathCchStripPrefix;
+    let mut encoded: Vec<u16> = path.as_os_str().encode_wide().collect();
+    if !path.is_absolute() || encoded.contains(&0) {
+        bail!("The capture path is not an absolute local path.");
+    }
+    encoded.push(0);
+    // Library migration persists canonicalized filesystem paths. The Shell
+    // expects DOS/UNC paths rather than their \\?\ extended-length spelling.
+    // Strip only that prefix through the native UTF-16 API, preserving names.
+    unsafe {
+        PathCchStripPrefix(&mut encoded).ok()?;
+    }
+    if let Some(end) = encoded.iter().position(|unit| *unit == 0) {
+        encoded.truncate(end + 1);
+    }
+    Ok(encoded)
 }
 
 pub fn write_file_to_clipboard(path: &Path) -> Result<()> {
     use windows::core::w;
     use windows::Win32::Foundation::{GlobalFree, HANDLE};
-    use windows::Win32::System::DataExchange::{EmptyClipboard, RegisterClipboardFormatW, SetClipboardData};
+    use windows::Win32::System::DataExchange::{
+        EmptyClipboard, RegisterClipboardFormatW, SetClipboardData,
+    };
     use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
     use windows::Win32::System::Ole::DROPEFFECT_COPY;
     let mut clipboard = arboard::Clipboard::new()?;
@@ -123,7 +173,9 @@ pub fn write_file_to_clipboard(path: &Path) -> Result<()> {
     let offer = clipboard.set();
     unsafe {
         let format = RegisterClipboardFormatW(w!("Preferred DropEffect"));
-        if format == 0 { return Err(windows::core::Error::from_thread().into()); }
+        if format == 0 {
+            return Err(windows::core::Error::from_thread().into());
+        }
         let memory = GlobalAlloc(GMEM_MOVEABLE, std::mem::size_of::<u32>())?;
         let pointer = GlobalLock(memory);
         if pointer.is_null() {
@@ -133,7 +185,8 @@ pub fn write_file_to_clipboard(path: &Path) -> Result<()> {
         }
         pointer.cast::<u32>().write(DROPEFFECT_COPY.0);
         let _ = GlobalUnlock(memory);
-        let result = EmptyClipboard().and_then(|_| SetClipboardData(format, Some(HANDLE(memory.0))));
+        let result =
+            EmptyClipboard().and_then(|_| SetClipboardData(format, Some(HANDLE(memory.0))));
         if let Err(error) = result {
             let _ = GlobalFree(Some(memory));
             return Err(error.into());
@@ -470,6 +523,33 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_paths_preserve_names_and_remove_canonical_prefixes() {
+        for (input, expected) in [
+            (
+                r"C:\素材 test, 🐈\Kiri Library",
+                r"C:\素材 test, 🐈\Kiri Library",
+            ),
+            (
+                r"\\?\C:\素材 test, 🐈\Kiri Library\Assets\说明.png",
+                r"C:\素材 test, 🐈\Kiri Library\Assets\说明.png",
+            ),
+            (
+                r"\\?\UNC\server\share\素材 test, 🐈\说明.png",
+                r"\\server\share\素材 test, 🐈\说明.png",
+            ),
+        ] {
+            let encoded = shell_encoded_path(Path::new(input)).unwrap();
+            assert_eq!(encoded.last(), Some(&0));
+            assert_eq!(
+                String::from_utf16(&encoded[..encoded.len() - 1]).unwrap(),
+                expected
+            );
+        }
+        assert!(shell_encoded_path(Path::new("relative.png")).is_err());
+        assert!(shell_encoded_path(Path::new("C:\\bad\0path")).is_err());
+    }
 
     #[test]
     fn message_loop_shutdown_wakes_joins_and_is_idempotent() {

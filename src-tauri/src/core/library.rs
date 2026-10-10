@@ -1451,12 +1451,7 @@ impl AssetLibrary {
         created_at: f64,
     ) -> CaptureAsset {
         // DateFormatter with en_US_POSIX locale and local timezone.
-        let stamp = Local
-            .timestamp_millis_opt(created_at as i64)
-            .single()
-            .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
-            .unwrap_or_else(|| "19700101-000000".to_string());
-        let filename = format!("{stamp}-{}.{file_extension}", id.to_string().to_lowercase());
+        let filename = capture_filename(id, created_at, file_extension);
         CaptureAsset {
             id,
             kind,
@@ -1561,7 +1556,10 @@ pub(crate) fn is_safe_library_filename(filename: &str) -> bool {
 fn renamed_asset_filename(asset: &CaptureAsset, title: Option<&str>) -> Result<String> {
     let extension = Path::new(&asset.filename).extension().and_then(|extension| extension.to_str())
         .ok_or(AssetLibraryError::InvalidFilename)?;
-    let Some(title) = title else { return Ok(format!("{}.{}", asset.id.to_string().to_uppercase(), extension)); };
+    let Some(title) = title else {
+        return Ok(if asset.title.is_none() { asset.filename.clone() }
+            else { capture_filename(asset.id, asset.created_at, extension) });
+    };
     let title = title.trim();
     let suffix = format!(".{extension}");
     let stem = if title.to_lowercase().ends_with(&suffix.to_lowercase()) {
@@ -1580,6 +1578,13 @@ fn renamed_asset_filename(asset: &CaptureAsset, title: Option<&str>) -> Result<S
         return Err(AssetLibraryError::InvalidFilename);
     }
     Ok(filename)
+}
+
+fn capture_filename(id: uuid::Uuid, created_at: f64, extension: &str) -> String {
+    let stamp = Local.timestamp_millis_opt(created_at as i64).single()
+        .map(|time| time.format("%Y%m%d-%H%M%S").to_string())
+        .unwrap_or_else(|| "19700101-000000".to_string());
+    format!("{stamp}-{}.{extension}", id.to_string().to_lowercase())
 }
 
 fn publish_renamed_file(source: &Path, destination: &Path) -> Result<()> {

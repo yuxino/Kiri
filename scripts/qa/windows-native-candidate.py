@@ -24,6 +24,7 @@ NATIVE_STEPS = {
     "Verify configurable shortcuts on the actual desktop": "shortcut-native.py",
     "Verify destructive confirmation windows on the actual desktop": "confirmation-native.py",
     "Install and smoke-test both Windows packages": "windows-release-native.py",
+    "Verify library file actions on the installed Windows app": "windows-library-files-native.py",
     "Verify hover colors and native clipboard on the installed Windows app": "windows-capture-color-native.py",
 }
 REQUIRED_NATIVE = ("countdown-native.py", "shortcut-native.py", "windows-release-native.py")
@@ -176,7 +177,12 @@ def main():
     # Legacy failed builds retained the compiled executable here. Future
     # candidates retain the same file together with their installed checksum.
     binary_name = "windows-native-candidate" if any(item["name"] == "windows-native-candidate" for item in artifacts) else "countdown-debug-build"
-    for name, folder in (("kiri-windows", "installer"), (binary_name, "compiled")):
+    requested_artifacts = [("kiri-windows", "installer"), (binary_name, "compiled")]
+    if "windows-library-files-native.py" in gates:
+        # Replay the exact native-media fixture retained by the original Rust
+        # gate; do not weaken file-copy acceptance with a fabricated MP4.
+        requested_artifacts.append(("windows-video-export-review", "video-fixtures"))
+    for name, folder in requested_artifacts:
         artifact = artifact_for(run, artifacts, name)
         archive = candidate / (folder + ".zip")
         with archive.open("wb") as stream:
@@ -237,7 +243,9 @@ def main():
     (evidence / "candidate-provenance.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
         env.write(f"KIRI_QA_PORTABLE_EXE={portable}\nKIRI_QA_INSTALLED_EXE={installed}\n"
-                  f"KIRI_COLOR_QA_EXE={installed}\nKIRI_COLOR_CANDIDATE_SHA={source_sha}\n")
+                  f"KIRI_COLOR_QA_EXE={installed}\nKIRI_COLOR_CANDIDATE_SHA={source_sha}\n"
+                  f"KIRI_LIBRARY_FILES_QA_EXE={installed}\nKIRI_LIBRARY_FILES_CANDIDATE_SHA={source_sha}\n"
+                  f"KIRI_LIBRARY_FILES_QA_VIDEO_DIR={candidate / 'video-fixtures'}\n")
 
 
 if __name__ == "__main__":

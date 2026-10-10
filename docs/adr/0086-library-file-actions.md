@@ -14,10 +14,13 @@ UUIDs, and copying screenshot pixels does not offer a file for folder paste.
 - Open Folder opens the active managed library root. Show in Folder selects the
   current indexed asset inside its Assets directory. Windows uses literal Shell
   paths and item ID lists, with a dedicated COM apartment and reported errors.
+  Canonicalized extended-length filesystem paths are normalized to DOS/UNC
+  Shell paths through UTF-16 without changing the persisted library location.
 - Rename changes both the display title and managed filename, preserving the
   existing extension. Names are portable across the supported operating systems;
   invalid names and case-insensitive conflicts are rejected without overwrite.
-  Clearing the title restores the asset's UUID filename.
+  Clearing a custom title restores the generated capture filename; unnamed
+  legacy files keep their existing filename.
 - Publish a non-overwriting new path before atomically committing the index,
   then remove the old path. A failed index write preserves the original asset;
   committed cleanup/synchronization failures refresh the UI and report the

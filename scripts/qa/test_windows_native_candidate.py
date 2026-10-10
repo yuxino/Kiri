@@ -35,11 +35,13 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(gates, list(candidate.NATIVE_STEPS.values()))
         self.assertIn("confirmation-native.py", gates)
         self.assertIn("windows-capture-color-native.py", gates)
+        self.assertIn("windows-library-files-native.py", gates)
 
     def test_older_candidate_without_new_features_keeps_existing_gates(self):
         self.job["steps"] = [step for step in self.job["steps"] if step["name"] not in {
             "Verify destructive confirmation windows on the actual desktop",
-            "Verify hover colors and native clipboard on the installed Windows app"}]
+            "Verify hover colors and native clipboard on the installed Windows app",
+            "Verify library file actions on the installed Windows app"}]
         self.assertEqual(self.validate()[1], list(candidate.REQUIRED_NATIVE))
 
     def test_rejects_unfinished_other_or_ambiguous_builds(self):
