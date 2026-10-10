@@ -74,6 +74,7 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
   useEffect(()=>{
     const key=(event:KeyboardEvent)=>{
       if(props.disabled||event.defaultPrevented)return;
+      if(event.target instanceof HTMLElement&&event.target.closest(".kiri-label-dot"))return;
       if(event.target instanceof HTMLElement&&event.target.closest("[role=listbox],[role=dialog]"))return;
       if(event.target instanceof HTMLElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName))return;
       if(!props.active){const entry=tools.find(item=>item.key===event.key.toLowerCase());if(entry&&!event.metaKey&&!event.ctrlKey&&!event.altKey){event.preventDefault();event.stopImmediatePropagation();selectTool(entry.tool);}return;}

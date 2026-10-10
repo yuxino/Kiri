@@ -1,3 +1,4 @@
+import {LabelControls, type LabelMark} from "../annotation/LabelControls";
 // OverlayWindow — capture overlay: mode selector, window hover, region
 // selection, annotation toolbar, OCR, and recording options. Port of
 // SelectionOverlayController.swift.
@@ -135,9 +136,10 @@ export function OverlayWindow() {
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [moveDrag, setMoveDrag] = useState<{ start: Point; original: Rect } | null>(null);
   const [tool, setTool] = useState<Tool>("select");
+  const [selectedLabel, setSelectedLabel] = useState<LabelMark|null>(null);
   const [selectedCallout, setSelectedCallout] = useState<CalloutMark | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
-  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedCallout(mark?.kind === "callout" ? mark : null), []);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => {setSelectedCallout(mark?.kind === "callout" ? mark : null); setSelectedLabel(mark?.kind === "text" && mark.labelDirection ? mark : null);}, []);
   const onAnnotationDocument = useCallback((marks: AnnotationMark[]) => setCalloutNumber(nextCalloutNumber(marks)), []);
   const [appearance, setAppearance] = useAnnotationAppearance();
   const [canUndo, setCanUndo] = useState(false);
@@ -635,6 +637,7 @@ export function OverlayWindow() {
           l: "line",
           a: "arrow",
           t: "text",
+          b: "label",
           n: "callout",
           m: "mosaic",
         };
@@ -1292,6 +1295,11 @@ export function OverlayWindow() {
             onNextNumber={setCalloutNumber} onAppearance={patch => setAppearance({...appearance, ...patch})}
             onEdit={patch => canvasRef.current?.updateSelectedCallout(patch, true)}
             onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}/>}
+          labelControls={<LabelControls selected={selectedLabel} appearance={appearance}
+            onChange={(patch,transient)=>{setAppearance({...appearance,...patch});canvasRef.current?.updateSelectionAppearance(patch,transient);}}
+            onFinish={()=>canvasRef.current?.finishAppearanceAdjustment()}/>}
+          showLabelControls={tool === "label" || (tool === "select" && selectedLabel !== null)}
+          selectedLabelId={selectedLabel?.id}
           showCalloutControls={tool === "callout" || (tool === "select" && selectedCallout !== null)}
           selectedCalloutId={selectedCallout?.id}
           canUndo={canUndo}
@@ -1907,6 +1915,9 @@ interface ToolbarProps {
   setTool(tool: Tool): void;
   appearance: AppearanceSettings;
   setAppearance(a: AppearanceSettings): void;
+  labelControls?: React.ReactNode;
+  showLabelControls?: boolean;
+  selectedLabelId?: number;
   calloutControls?: React.ReactNode;
   showCalloutControls?: boolean;
   selectedCalloutId?: number;
@@ -1975,7 +1986,7 @@ export function Toolbar(props: ToolbarProps) {
   } = props;
 
   const [detailsOpen, setDetailsOpen] = useState(false);
-  useEffect(() => setDetailsOpen(tool !== "select" || props.selectedCalloutId !== undefined), [tool, props.selectedCalloutId]);
+  useEffect(() => setDetailsOpen(tool !== "select" || props.selectedCalloutId !== undefined || props.selectedLabelId !== undefined), [tool, props.selectedCalloutId, props.selectedLabelId]);
 
   const slider =
     tool === "pen"
@@ -2056,8 +2067,9 @@ export function Toolbar(props: ToolbarProps) {
           <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin} />
           <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone} />
         </div>
+        {detailsOpen && props.showLabelControls && !canSetSize && props.labelControls}
         {detailsOpen && props.showCalloutControls && !canSetSize && props.calloutControls}
-        {detailsOpen && !canSetSize && !props.showCalloutControls && (
+        {detailsOpen && !canSetSize && !props.showCalloutControls && !props.showLabelControls && (
           <div className="kiri-hud" style={toolbarRowStyle}>
             {/* Context row */}
             {tool === "text" ? (

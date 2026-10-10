@@ -8,7 +8,7 @@ import type {
   MosaicShape,
   TextBackgroundStyle,
 } from "./model";
-import { COLOR_HEX, MOSAIC_VIEW_BLOCK_SIZE, arrowHeadPoints, calloutConnectorEnd, selectionBounds } from "./model";
+import { COLOR_HEX, MOSAIC_VIEW_BLOCK_SIZE, arrowHeadPoints, calloutConnectorEnd, selectionBounds, labelGeometry } from "./model";
 import type { Point, Rect } from "./geom";
 import { inset, intersection, maxX, maxY, minX, minY, standardized } from "./geom";
 import { layoutTextLines, textLineRuns } from "./text-layout.js";
@@ -242,6 +242,29 @@ export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRend
     case "text": {
       const rect = standardized(mark.rect);
       const scale = geometryScale(r);
+      if (mark.labelDirection) {
+        const {body, dot, radius, tail} = labelGeometry(rect, mark.fontSize, mark.labelDirection);
+        ctx.save();
+        ctx.scale(scale.x, scale.y);
+        ctx.fillStyle = "#303136";
+        roundRectPath(ctx, body.x, body.y, body.width, body.height, mark.fontSize * .45);
+        ctx.fill();
+        const edge = mark.labelDirection === "left" ? body.x : maxX(body);
+        const sign = mark.labelDirection === "left" ? -1 : 1;
+        ctx.beginPath();
+        ctx.moveTo(edge - sign, dot.y - tail);
+        ctx.lineTo(edge + sign * tail, dot.y);
+        ctx.lineTo(edge - sign, dot.y + tail);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = colorValue(mark.color);
+        ctx.beginPath(); ctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fafafa";
+        ctx.font = textFont(mark.fontSize);
+        ctx.textBaseline = "top";
+        wrapText(ctx, mark.text, rect.x, rect.y, rect.width, mark.fontSize);
+        ctx.restore();
+        break;
+      }
       const outputRect = scaleRectForRender(rect, scale);
       const p = { x: minX(outputRect), y: minY(outputRect) };
       const background = backgroundValue(mark.background);
