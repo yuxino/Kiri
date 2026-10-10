@@ -88,7 +88,8 @@ pub fn reveal_path(path: &Path) -> Result<()> {
                 CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
             };
             use windows::Win32::UI::Shell::{
-                ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, ShellExecuteW,
+                Common::ITEMIDLIST, ILClone, ILCreateFromPathW, ILFindLastID, ILFree,
+                ILRemoveLastID, SHOpenFolderAndSelectItems, ShellExecuteW,
             };
             use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
             let metadata = std::fs::metadata(&path)?;
@@ -124,13 +125,29 @@ pub fn reveal_path(path: &Path) -> Result<()> {
                 if item.is_null() {
                     bail!("The capture could not be located in its folder.");
                 }
-                // With no child array the full item PIDL selects the file in its
-                // parent folder; directories above deliberately open themselves.
-                let result = unsafe { SHOpenFolderAndSelectItems(item, None, 0) };
-                unsafe {
-                    ILFree(Some(item));
+                struct OwnedItemIdList(*mut ITEMIDLIST);
+                impl Drop for OwnedItemIdList {
+                    fn drop(&mut self) {
+                        unsafe {
+                            ILFree(Some(self.0));
+                        }
+                    }
                 }
-                result?;
+                let item = OwnedItemIdList(item);
+                let parent = unsafe { ILClone(item.0) };
+                if parent.is_null() {
+                    bail!("The capture folder could not be located.");
+                }
+                let parent = OwnedItemIdList(parent);
+                // Pass an explicit containing-folder PIDL and one relative
+                // child. The documented cidl=0/full-item shortcut opened the
+                // folder without selecting the file in installed Windows QA.
+                let child = unsafe { ILFindLastID(item.0) };
+                if child.is_null() || !unsafe { ILRemoveLastID(Some(parent.0)) }.as_bool() {
+                    bail!("The capture folder could not be located.");
+                }
+                let children = [child.cast_const()];
+                unsafe { SHOpenFolderAndSelectItems(parent.0, Some(&children), 0) }?;
             }
             Ok(())
         })?
