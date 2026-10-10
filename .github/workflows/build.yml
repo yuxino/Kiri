@@ -13,9 +13,14 @@ on:
         type: choice
         required: true
         default: quick
-        options: [quick, linux, linux-package, windows, macos, release, full, recheck-linux, recheck-linux-x11]
+        options: [quick, linux, linux-package, windows, macos, release, full, recheck-linux, recheck-linux-x11, recheck-windows]
       linux_candidate_run_id:
         description: 'Completed build run containing the Linux candidate to recheck'
+        required: false
+        default: ''
+        type: string
+      windows_native_candidate_run_id:
+        description: 'Completed Windows package dispatch to replay all native gates without rebuilding'
         required: false
         default: ''
         type: string
@@ -70,6 +75,7 @@ jobs:
           python3 scripts/qa/test_windows_package_provenance.py
           python3 scripts/qa/test_linux_audio_tone.py
           python3 scripts/qa/test_pin_native_checks.py
+          python3 scripts/qa/test_windows_native_candidate.py
       - name: Verify the formal release tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/release-version.mjs "$GITHUB_REF_NAME"
@@ -567,19 +573,65 @@ jobs:
             src-tauri/target/release/*.pdb
           retention-days: 2
           if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' && hashFiles('src-tauri/target/release/kiri.exe') != '' }}
+        with:
+          name: windows-native-candidate
+          path: src-tauri/target/release/kiri.exe
+          retention-days: 5
+          if-no-files-found: error
       - name: Upload Windows bundle
-        if: needs.plan.outputs.package_windows == 'true'
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' && hashFiles('src-tauri/target/release/bundle/nsis/*-setup.exe') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: kiri-windows
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/nsis/*.sig
+            Kiri-*-Windows-x64-Portable.zip
+          if-no-files-found: error
+
+  windows-native-recheck:
+    name: Recheck every native Windows gate with the original installer
+    needs: plan
+    if: inputs.windows_native_candidate_run_id != ''
+    runs-on: windows-2025
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KIRI_WINDOWS_CANDIDATE_RUN: ${{ inputs.windows_native_candidate_run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify original installer, executable and unchanged application sources
+        run: python scripts/qa/windows-native-candidate.py --run "$env:KIRI_WINDOWS_CANDIDATE_RUN"
+      - run: python -m pip install pywinauto==0.6.9 Pillow==11.3.0
+      - name: Replay every original native gate including earlier failures and skipped gates
+        run: python scripts/qa/windows-native-recheck.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-native-recheck-review
+          path: |
+            windows-native-review/
+            windows-release-review/
+            shortcut-native-review/
+            countdown-native-review/
+            confirmation-native-review/
+            windows-capture-color-review/
+          retention-days: 5
           if-no-files-found: error
 
   quality:
     name: CI quality gate
-    needs: [plan, fast-checks, countdown-ui, test-rust, build-linux, build-windows, build-macos, test-linux-wayland, recheck-linux-x11]
+    needs: [plan, fast-checks, countdown-ui, test-rust, build-linux, build-windows, build-macos, test-linux-wayland, recheck-linux-x11, windows-native-recheck]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -588,3 +640,8 @@ jobs:
         env:
           KIRI_CI_CHECK_RESULTS: ${{ toJSON(needs) }}
         run: python3 scripts/qa/ci-plan.py
+      - name: Require requested Windows native recheck to pass
+        if: inputs.windows_native_candidate_run_id != ''
+        env:
+          KIRI_WINDOWS_RECHECK_RESULT: ${{ needs.windows-native-recheck.result }}
+        run: test "$KIRI_WINDOWS_RECHECK_RESULT" = success
