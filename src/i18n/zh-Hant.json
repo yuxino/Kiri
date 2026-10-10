@@ -713,5 +713,18 @@
   "Ctrl+C to copy color": "按 Ctrl+C 複製色值",
   "Color copied": "色值已複製",
   "Could not copy color": "複製色值失敗",
-  "Color value": "色值"
+  "Color value": "色值",
+  "Numbered callout (N)": "序號標註 (N)",
+  "Numbered callout": "序號標註",
+  "Text tools": "文字工具",
+  "Number": "序號",
+  "Next number": "下一個序號",
+  "Number style": "序號樣式",
+  "Filled": "實心",
+  "Outline": "空心",
+  "Description (optional)": "說明文字（選填）",
+  "Add a description…": "新增說明文字…",
+  "Place a number to add a description": "先放置序號，再新增說明文字",
+  "Number size": "序號大小",
+  "Drag the dots to move the number or description": "拖曳圓點可分別移動序號和說明"
 }

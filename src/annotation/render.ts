@@ -8,7 +8,7 @@ import type {
   MosaicShape,
   TextBackgroundStyle,
 } from "./model";
-import { COLOR_HEX, MOSAIC_VIEW_BLOCK_SIZE, arrowHeadPoints, selectionBounds } from "./model";
+import { COLOR_HEX, MOSAIC_VIEW_BLOCK_SIZE, arrowHeadPoints, calloutConnectorEnd, selectionBounds } from "./model";
 import type { Point, Rect } from "./geom";
 import { inset, intersection, maxX, maxY, minX, minY, standardized } from "./geom";
 import { layoutTextLines, textLineRuns } from "./text-layout.js";
@@ -125,6 +125,56 @@ function strokePolyline(ctx: CanvasRenderingContext2D, points: Point[]) {
 /** Draws one mark into the given context (already in the right space). */
 export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRenderingContext2D) {
   switch (mark.kind) {
+    case "callout": {
+      // Lay out the whole object in document space, preserving preview/export parity.
+      const scale = geometryScale(r);
+      ctx.save();
+      ctx.scale(scale.x, scale.y);
+      const color = colorValue(mark.color);
+      const radius = mark.size / 2;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.5, mark.size / 20);
+      ctx.lineCap = "round";
+      // A live drag shows where the optional label will appear; empty saved
+      // notes still export only their number.
+      if (mark.text.trim() || (mark.id < 0 && !r.exporting)) {
+        const end = calloutConnectorEnd(mark);
+        const distance = Math.hypot(end.x - mark.center.x, end.y - mark.center.y);
+        if (distance > radius) {
+          ctx.beginPath();
+          ctx.moveTo(mark.center.x + (end.x - mark.center.x) * radius / distance,
+            mark.center.y + (end.y - mark.center.y) * radius / distance);
+          ctx.lineTo(end.x, end.y);
+          ctx.stroke();
+        }
+        const rect = mark.labelRect;
+        const pad = Math.max(4, mark.fontSize * .5);
+        roundRectPath(ctx, rect.x, rect.y, rect.width, rect.height, Math.min(8, mark.fontSize * .35));
+        ctx.fillStyle = mark.color === "white" ? "rgba(20,20,20,0.96)" : "rgba(255,255,255,0.96)";
+        ctx.fill();
+        ctx.stroke();
+        if (mark.text.trim()) {
+          ctx.font = textFont(mark.fontSize);
+          ctx.textBaseline = "top";
+          ctx.fillStyle = mark.color === "white" ? "#FFFFFF" : "#141414";
+          wrapText(ctx, mark.text, rect.x + pad, rect.y + pad, Math.max(1, rect.width - pad * 2), mark.fontSize);
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(mark.center.x, mark.center.y, Math.max(1, radius - ctx.lineWidth / 2), 0, Math.PI * 2);
+      ctx.fillStyle = mark.style === "filled" ? color : "rgba(255,255,255,0.96)";
+      ctx.fill();
+      ctx.stroke();
+      const digits = String(mark.number);
+      ctx.font = textFont(mark.size * (digits.length === 1 ? .5 : digits.length === 2 ? .43 : .33));
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = mark.style === "outline" ? color :
+        ["yellow", "mint", "orange", "white"].includes(mark.color) ? "#141414" : "#FFFFFF";
+      ctx.fillText(digits, mark.center.x, mark.center.y + mark.size * .025);
+      ctx.restore();
+      break;
+    }
     case "pen": {
       const points = mark.points.map((p) => exportPoint(p, r));
       ctx.strokeStyle = colorValue(mark.color);
@@ -509,6 +559,13 @@ function drawSelectionOutline(
   });
   ctx.save();
   ctx.scale(1 / viewScaleX, 1 / viewScaleY);
+  if (mark.kind === "callout") {
+    drawSelectionHandle(ctx, toViewPoint({x: mark.center.x, y: mark.center.y - mark.size / 2}));
+    if (mark.text.trim()) drawSelectionHandle(ctx, toViewPoint({x: mark.labelRect.x + mark.labelRect.width,
+      y: mark.labelRect.y}));
+    ctx.restore();
+    return;
+  }
   if (mark.kind === "line" || mark.kind === "arrow") {
     drawSelectionHandle(ctx, toViewPoint(mark.start));
     drawSelectionHandle(ctx, toViewPoint(mark.end));

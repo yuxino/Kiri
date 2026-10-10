@@ -54,6 +54,7 @@ export type IconName =
   | "line.diagonal" // Line (L)
   | "arrow.up.right" // Arrow (A)
   | "textformat" // Text (T)
+  | "number.circle"
   | "square.grid.3x3.fill" // Mosaic (M)
   | "arrow.uturn.backward" // Undo
   | "arrow.uturn.forward" // Redo
@@ -102,6 +103,7 @@ const ICONS: Record<IconName, React.ComponentType<Record<string, unknown>>> = {
   "line.diagonal": Slash,
   "arrow.up.right": ArrowUpRight,
   textformat: Type,
+  "number.circle": CircleDot,
   "square.grid.3x3.fill": Grid3x3,
   "arrow.uturn.backward": Undo2,
   "arrow.uturn.forward": Redo2,
@@ -149,6 +151,10 @@ export function KiriIcon(props: {
   style?: React.CSSProperties;
 }) {
   const { name, size = 16, style } = props;
+  if (name === "number.circle") return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={style} aria-hidden="true">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+    <path d="M10 9l2-1v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
   // Notice symbols arrive from Rust at runtime. An unknown symbol must not
   // crash the entire feedback window while it is reporting an error.
   const Glyph = ICONS[name] ?? TriangleAlert;

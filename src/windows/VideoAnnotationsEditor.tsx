@@ -49,11 +49,12 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
   const scaled={...appearance,penWidth:appearance.penWidth*scale,shapeWidth:appearance.shapeWidth*scale,textFontSize:appearance.textFontSize*scale,mosaicBrushDiameter:appearance.mosaicBrushDiameter*scale};
   const selected=selection.mark;
   const editingTool=selected?.kind??tool;
-  const definition=tools.find(item=>item.tool===editingTool)!;
+  const definition=tools.find(item=>item.tool===editingTool)??tools[0];
   const shape=selected?.kind==="mosaic"?selected.shape??"brush":mosaicShape;
   const values:AppearanceSettings={...appearance,...(selected?.kind==="mosaic"?{
     mosaicBrushDiameter:selected.brushDiameter/scale,mosaicIntensity:selected.intensity,mosaicStyle:selected.style,
   }:selected?{colorPreset:selected.color,...(selected.kind==="text"?{textFontSize:selected.fontSize/scale,textBackgroundStyle:selected.background}:
+    selected.kind==="callout"?{textFontSize:selected.fontSize/scale,calloutSize:selected.size/scale,calloutStyle:selected.style}:
     selected.kind==="pen"?{penWidth:selected.width/scale}:{shapeWidth:selected.width/scale})}:{})};
   function selectTool(next:Tool) {
     canvas.current?.finishAppearanceAdjustment();canvas.current?.commitTextEditing();

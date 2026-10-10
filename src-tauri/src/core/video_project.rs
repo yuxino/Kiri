@@ -212,7 +212,7 @@ impl VideoProject {
                 AnnotationMark::Pen { points, .. } | AnnotationMark::Mosaic { points, .. } => {
                     annotation_points = annotation_points.saturating_add(points.len());
                 }
-                AnnotationMark::Text { text, .. } => {
+                AnnotationMark::Text { text, .. } | AnnotationMark::Callout { text, .. } => {
                     // Match the shared validator's cap before cloning marks.
                     annotation_text_units = annotation_text_units
                         .saturating_add(text.encode_utf16().take(65_537).count());

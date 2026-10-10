@@ -83,6 +83,7 @@ function documentWith(marks = []) {
 }
 
 const ALL_MARKS = [
+  // Keep the original fixture order; existing text/render tests address it below.
   {
     kind: "pen",
     id: 1.25,
@@ -556,4 +557,53 @@ test("text rendering places tab-separated columns at the same explicit stops", a
   assert.deepEqual(calls.map(call => call.slice(0, 2)), [
     ["A", 10], ["B", 90], ["C", 170], ["AA", 10], ["BB", 90], ["CC", 170],
   ]);
+});
+
+
+const numberedNote = {kind: "callout", id: 80, center: {x: 60, y: 80}, number: 123,
+  text: "第一步\n説明を追加", labelRect: {x: 180, y: 60, width: 150, height: 70},
+  color: "cherry", size: 36, fontSize: 18, style: "filled"};
+
+test("numbered notes validate, crop, and preserve independent editable geometry", async () => {
+  const {cropAnnotationDocument} = await import("../src/annotation/crop.js");
+  const {markIndexAt, nextCalloutNumber, selectionBounds} = await loadAnnotationModel();
+  const document = parseAnnotationDocument(documentWith([numberedNote]));
+  assert.deepEqual(document.marks, [numberedNote]);
+  assert.equal(nextCalloutNumber(document.marks), 124);
+  assert.equal(markIndexAt(document.marks, {x: 60, y: 80}), 0);
+  assert.equal(markIndexAt(document.marks, {x: 190, y: 80}), 0);
+  assert.equal(markIndexAt(document.marks, {x: 120, y: 300}), null);
+  assert.deepEqual(selectionBounds(numberedNote), {x: 42, y: 60, width: 288, height: 70});
+  const crop = cropAnnotationDocument(document, {x: 40, y: 40, width: 320, height: 180});
+  assert.deepEqual(crop.document.marks[0].center, {x: 20, y: 40});
+  assert.deepEqual(crop.document.marks[0].labelRect, {...numberedNote.labelRect, x: 140, y: 20});
+  for (const patch of [{number: 0}, {number: 1000}, {number: 1.2}, {style: "unknown"}, {size: 0}, {text: "x".repeat(65537)}]) {
+    assert.throws(() => parseAnnotationDocument(documentWith([{...numberedNote, ...patch}])));
+  }
+});
+
+test("numbered note export uses identical label layout at Retina scale and contrasts light colors", async () => {
+  const {drawMark} = await loadAnnotationRender();
+  const calls = [];
+  const ctx = {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},arcTo(){},arc(){},stroke(){},fill(){},
+    scale: (...args) => calls.push(["scale", ...args]),
+    measureText: text => ({width: text.length * 9}),
+    fillText(text, x, y) {calls.push(["text", text, x, y, this.fillStyle]);}};
+  drawMark({...numberedNote, color: "yellow"}, {exporting: true, scaleX: 2, scaleY: 2}, ctx);
+  assert.deepEqual(calls[0], ["scale", 2, 2]);
+  assert.deepEqual(calls.at(-1).slice(0, 4), ["text", "123", 60, 80.9]);
+  assert.equal(calls.at(-1)[4], "#141414");
+  assert.ok(calls.some(call => call[0] === "text" && call[1] === "第一步"));
+});
+
+test("empty callout drags preview their label position without exporting an empty box", async () => {
+  const {drawMark} = await loadAnnotationRender();
+  let leaders = 0;
+  const ctx = {save(){},restore(){},scale(){},beginPath(){},moveTo(){},lineTo(){leaders++;},
+    closePath(){},arcTo(){},arc(){},stroke(){},fill(){},fillText(){}};
+  drawMark({...numberedNote, id: -1, text: ""}, {exporting: false, viewScaleX: 1, viewScaleY: 1}, ctx);
+  assert.ok(leaders > 0);
+  leaders = 0;
+  drawMark({...numberedNote, text: ""}, {exporting: true, scaleX: 1, scaleY: 1}, ctx);
+  assert.equal(leaders, 0);
 });
