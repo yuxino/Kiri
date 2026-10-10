@@ -55,11 +55,38 @@ initial animation frame. All 14 text/composition checks passed, including
 execution of the actual delayed focus callback against early multiline input
 and an existing caret; untouched reopened text retains its initial selection.
 This dependency merged without conflicts and leaves only the label feature
-and its tests/documentation in this stacked PR's diff.
+and its tests/documentation in the diff against main.
 
-`pnpm build`, `pnpm test:release-tools` (370 tests), `cargo check`, a separate
-TypeScript check including the isolated QA harness, and
-`git diff --check` passed after this integration. The complete macOS 27.0.1 Rust run had 334 passing tests,
+## Input feedback follow-up
+
+After feedback about missing Chinese input and repeated English input, the
+isolated label editor was checked with continuous key events rather than
+Unicode insertion alone. Two complete alphabets separated by a space produced
+exactly 53 characters and 53 input events, without remounting or losing focus.
+Reopening the same label, appending English, native Cmd+Z/Cmd+Shift+Z, and
+typing another alphabet after a dot click all preserved the expected text.
+
+Chromium's CDP composition interface exercised `n → ni → 你好` and
+`zhong → 中文`. The input events had `isComposing=true`; switching direction
+during the first composition retained the same focused textarea. An Enter
+keydown during composition left the editor open. CDP does not provide the OS
+candidate-selection UI, and its submit operation emitted an untrusted
+`compositionend`; these results do not establish macOS system Pinyin acceptance.
+Normal Enter after composition committed exactly the displayed text.
+[Input results](label-input-results.json) record this boundary and the source
+hashes. No label-input source change was justified by these checks. The
+coordinating slot reproduced a separate controlled numbered-description input
+problem. Its minimal native-editor repair from `f045e3f` (PR #127) is now included
+here. The combined `src` and `src-tauri` trees were verified identical to the
+coordinator's `7ef78b9` candidate; the new renderer tree is
+`629b46592bb8df62cbcd9d90e4f4b84610e4951a`. Label TextEditor, geometry and
+rendering are unchanged. The coordinating slot owns native input acceptance
+before merging; isolated composition checks do not replace that acceptance.
+
+`pnpm build`, `pnpm test:release-tools` (373 tests) and the separate frontend
+TypeScript check including the isolated QA harness passed after the description
+repair. `cargo check` and `git diff --check` passed for the integration; the
+description repair leaves native sources unchanged. The complete macOS 27.0.1 Rust run had 334 passing tests,
 one ignored test and one failure in the pre-existing
 `native_annotations_follow_live_frames_and_independent_time_ranges` test at its
 post-annotation blue-channel pixel-difference assertion. The same assertion

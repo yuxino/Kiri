@@ -1,0 +1,176 @@
+{
+  "scope": "Isolated Chromium harness, not macOS system IME or native overlay",
+  "sourceCommit": "2826013ed8d5b8659197dd4731ee620347014d22",
+  "rendererTree": "da7311168e3846c3b85f412ac592ebbda8316ce2",
+  "harnessBlob": "9e0fb3889806750ca2c0dd7450e41030b6920624",
+  "initialTyping": {
+    "expected": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz",
+    "observed": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz",
+    "characters": 53,
+    "inputEvents": 53,
+    "sameElement": true,
+    "focused": true
+  },
+  "firstComposition": {
+    "updates": [
+      "n",
+      "ni",
+      "你好"
+    ],
+    "committed": "你好",
+    "dotClickDuringCompositionPreservedFocus": true,
+    "sameElement": true
+  },
+  "secondEdit": {
+    "appended": " repeated text",
+    "undoRestored": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好",
+    "redoRestored": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好 repeated text",
+    "compositionUpdates": [
+      "zhong",
+      "中文"
+    ],
+    "committed": "中文",
+    "dotClickThenAlphabetPreserved": true
+  },
+  "value": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好 repeated text中文 abcdefghijklmnopqrstuvwxyz是",
+  "focused": true,
+  "sameReopenedElement": true,
+  "compositionLifecycle": [
+    {
+      "type": "compositionstart",
+      "data": "",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "n",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "ni",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "你好",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "你好",
+      "trusted": true
+    },
+    {
+      "type": "compositionend",
+      "data": "你好",
+      "trusted": false
+    },
+    {
+      "type": "compositionstart",
+      "data": "",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "zhong",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "中文",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "中文",
+      "trusted": true
+    },
+    {
+      "type": "compositionend",
+      "data": "中文",
+      "trusted": false
+    },
+    {
+      "type": "compositionstart",
+      "data": "",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "shi",
+      "trusted": true
+    },
+    {
+      "type": "compositionupdate",
+      "data": "是",
+      "trusted": true
+    },
+    {
+      "type": "compositionend",
+      "data": "是",
+      "trusted": false
+    }
+  ],
+  "enterDuringComposition": [
+    {
+      "type": "keydown",
+      "key": "Enter",
+      "code": 13,
+      "isComposing": true,
+      "trusted": true,
+      "value": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好 repeated text中文 abcdefghijklmnopqrstuvwxyzshi"
+    },
+    {
+      "type": "keyup",
+      "key": "Enter",
+      "code": 13,
+      "isComposing": true,
+      "trusted": true,
+      "value": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好 repeated text中文 abcdefghijklmnopqrstuvwxyzshi\n"
+    }
+  ],
+  "nativeUndo": [
+    {
+      "type": "input",
+      "data": null,
+      "inputType": "historyUndo",
+      "isComposing": false,
+      "trusted": true,
+      "value": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好"
+    }
+  ],
+  "nativeRedo": [
+    {
+      "type": "input",
+      "data": null,
+      "inputType": "historyRedo",
+      "isComposing": false,
+      "trusted": true,
+      "value": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好 repeated text"
+    }
+  ],
+  "finalMarks": [
+    {
+      "id": 1791620933447.874,
+      "kind": "text",
+      "text": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz\n你好 repeated text中文 abcdefghijklmnopqrstuvwxyz是",
+      "rect": {
+        "x": 275.36,
+        "y": 186,
+        "width": 328.82,
+        "height": 90
+      },
+      "color": "cherry",
+      "background": "transparent",
+      "fontSize": 18,
+      "labelDirection": "left"
+    }
+  ],
+  "finalCommitMatchesDOM": true,
+  "limitations": [
+    "CDP engine composition does not establish macOS system Pinyin candidate acceptance",
+    "CDP commit emits compositionend with isTrusted=false",
+    "Enter during CDP composition left editor open and produced an engine line break; this is not an OS candidate-confirmation result"
+  ]
+}
