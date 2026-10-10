@@ -75,7 +75,9 @@ mockIPC((command, payload) => {
     case "take_editor_qr_request": return false;
     case "save_file_dialog": actions.push({command, payload}); return "qa-save-token";
     case "prepare_capture_annotation": case "prepare_asset_annotation": {
-      const request = payload as {documentJson: string};
+      const request = command === "prepare_capture_annotation"
+        ? (payload as {request: {documentJson: string}}).request
+        : payload as {documentJson: string};
       actions.push({command, payload}); stored = JSON.parse(request.documentJson); return "qa-annotation-token";
     }
     case "update_asset": case "confirm_capture":
