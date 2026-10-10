@@ -228,12 +228,15 @@ one number, optional multiline description, badge center and label rectangle;
 its handles move the badge and label independently. Both parts translate when
 cropped and use the common preview/export renderer. Badge style and size join
 the local appearance preference; note content stays in the editable document.
-Like normal text editing (ADR 0060), the description textarea owns its live
-value, composition, caret and native history. Canvas selection notifications
-observe edits without writing text back into that editor. Canvas Undo/Redo and
-document revision loads clear selection, so picking a callout initializes a
-fresh textarea from the document, keyed by mark ID.
-See ADR 0083.
+Descriptions are edited directly in a transparent canvas textarea; the inspector
+contains number, style, size and color controls. Like normal text editing (ADR
+0060), the textarea owns its live value, composition, caret and native history.
+A callout draft keeps the badge and connector visible while the textarea presents
+the description. Clicking another canvas location, switching tools or exporting
+commits that draft as one edit to the existing callout. Return adds a line;
+Cmd/Ctrl+Return commits, and Escape cancels the draft without removing its badge.
+The canvas grip moves the description independently. The V1 document fields and
+crop/export boundary remain unchanged. See ADRs 0083 and 0085.
 
 Screenshot label bubbles share the text mark and inline editor, with an optional
 `labelDirection` field. The text rect remains fixed when its dot is clicked;

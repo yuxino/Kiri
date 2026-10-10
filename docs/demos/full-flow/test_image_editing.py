@@ -142,7 +142,7 @@ async def main():
     await f.get_by_title('Numbered callout (N)',exact=True).click();await page.mouse.click(950,480)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='2'")
     await description.press_sequentially('second description',delay=10)
-    await f.get_by_title('Select (V)',exact=True).click();await page.mouse.click(480,410)
+    await f.get_by_title('Select (V)',exact=True).click();await page.mouse.click(480,380)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     await page.screenshot(path=str(OUT/'callout-reselection.png'))
     assert await description.input_value()==expected,{'stage':'reselection','actual':await description.input_value()}
@@ -152,10 +152,10 @@ async def main():
     await description.press(mod+'+Shift+z');assert await description.input_value()==expected+'x'
     await description.press(mod+'+z');assert await description.input_value()==expected
     await description.press_sequentially(' edited',delay=10)
-    await f.get_by_title('Undo (⌘Z)',exact=True).click();await page.mouse.click(480,410)
+    await f.get_by_title('Undo (⌘Z)',exact=True).click();await page.mouse.click(480,380)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     assert await description.input_value()==expected,'canvas Undo did not restore the callout field'
-    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click();await page.mouse.click(480,410)
+    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click();await page.mouse.click(480,380)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     expected+=' edited'
     assert await description.input_value()==expected,'canvas Redo did not restore the callout field'

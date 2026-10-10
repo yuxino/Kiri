@@ -109,6 +109,64 @@ function annotation(initialDocument, options = {}) {
 
 const documentWith = marks => ({schemaVersion: 1, canvas: {width: 640, height: 360}, sourcePixels: {width: 640, height: 360}, marks});
 
+test("callout text edits directly on canvas, saves in the same mark and cancels without deleting the badge", async () => {
+  const h = annotation(documentWith([]), {tool: "callout"});
+  h.pointer("onPointerDown", 80, 90); h.pointer("onPointerUp", 80, 90);
+  const editor = () => nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+  let input = editor();
+  assert.ok(input, "creation opens the canvas editor");
+  assert.ok(input.props.editing.rect.x - 80 - 18 >= 32);
+  const placed = h.changes.at(-1)[0];
+  input.props.onTextChange("中文\nabcdef"); h.component.render();
+  assert.equal(h.frames.at(-1).marks[0].text, "中文\nabcdef", "preview includes the draft's badge and text geometry");
+  const result = await h.ref.current.exportResult();
+  assert.equal(result.document.marks[0].text, "中文\nabcdef");
+  assert.equal(result.document.marks[0].id, placed.id);
+  h.ref.current.editSelectedText(); h.component.render();
+  editor().props.onTextChange("discarded draft"); h.component.render();
+  h.ref.current.cancelTextEditing(); h.component.render();
+  assert.equal(h.changes.at(-1)[0].text, "中文\nabcdef");
+  h.ref.current.undo(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), [placed], "one canvas Undo restores the empty numbered badge");
+});
+
+test("saved callout placement survives reopening and text growth stays away from its number", async () => {
+  const mark = {kind: "callout", id: 1, center: {x: 580, y: 90}, number: 1, text: "saved",
+    labelRect: {x: 370, y: 70, width: 160, height: 40}, size: 36, fontSize: 18, color: "cherry", style: "filled"};
+  const h = annotation(documentWith([mark]), {selectedMarkId: 1});
+  h.ref.current.editSelectedText(); h.component.render();
+  let editor = nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+  assert.deepEqual(editor.props.editing.rect, mark.labelRect);
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [mark]);
+  h.ref.current.editSelectedText(); h.component.render();
+  editor = nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+  editor.props.onTextChange("a longer explanation"); h.component.render();
+  editor.props.onRectChange({...mark.labelRect, width: 280}); h.component.render();
+  editor = nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+  assert.equal(editor.props.editing.rect.x, 250);
+  assert.equal(editor.props.editing.rect.x + editor.props.editing.rect.width, 530);
+  h.ref.current.cancelTextEditing(); h.component.render();
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [mark]);
+});
+
+test("the inline callout grip moves only its label and preserves typed text", () => {
+  const h = annotation(documentWith([]), {tool: "callout"});
+  h.pointer("onPointerDown", 80, 90); h.pointer("onPointerUp", 80, 90);
+  const editor = nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+  editor.props.onTextChange("explanation"); h.component.render();
+  const frame = editor.props.editing.rect;
+  editor.props.onMoveCallout({clientX: frame.x + frame.width, clientY: frame.y, pointerId: 1, preventDefault() {}, stopPropagation() {}});
+  h.component.render();
+  const before = h.changes.at(-1)[0];
+  h.pointer("onPointerMove", frame.x + frame.width + 40, frame.y + 30);
+  h.pointer("onPointerUp", frame.x + frame.width + 40, frame.y + 30);
+  const after = h.changes.at(-1)[0];
+  assert.deepEqual(after.center, before.center);
+  assert.equal(after.text, "explanation");
+  assert.deepEqual(after.labelRect, {...before.labelRect, x: before.labelRect.x + 40, y: before.labelRect.y + 30});
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1)[0], before);
+});
+
 test("numbered notes create on click or drag and retain descriptions through export and reopen", async () => {
   const h = annotation(documentWith([]), {tool: "callout", calloutNumber: 7});
   h.pointer("onPointerDown", 80, 90); h.pointer("onPointerUp", 80, 90);
@@ -120,6 +178,7 @@ test("numbered notes create on click or drag and retain descriptions through exp
   h.ref.current.updateSelectedCallout({size: 48, style: "outline"}, true);
   h.component.render();
   h.ref.current.finishAppearanceAdjustment(); h.component.render();
+  h.ref.current.commitTextEditing(); h.component.render();
   const saved = h.changes.at(-1)[0];
   assert.equal(saved.text, "标题\nA short explanation"); assert.equal(saved.number, 12);
   assert.ok(saved.labelRect.height > saved.fontSize * 2);

@@ -582,10 +582,10 @@ test("numbered notes validate, crop, and preserve independent editable geometry"
   }
 });
 
-test("numbered note export uses identical label layout at Retina scale and contrasts light colors", async () => {
+test("numbered note export uses transparent labels at Retina scale and contrasts light badge digits", async () => {
   const {drawMark} = await loadAnnotationRender();
   const calls = [];
-  const ctx = {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},arcTo(){},arc(){},stroke(){},fill(){},
+  const ctx = {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},arcTo(){},arc(){},stroke(){},fill(){calls.push(["fill", this.fillStyle]);},
     scale: (...args) => calls.push(["scale", ...args]),
     measureText: text => ({width: text.length * 9}),
     fillText(text, x, y) {calls.push(["text", text, x, y, this.fillStyle]);}};
@@ -594,6 +594,10 @@ test("numbered note export uses identical label layout at Retina scale and contr
   assert.deepEqual(calls.at(-1).slice(0, 4), ["text", "123", 60, 80.9]);
   assert.equal(calls.at(-1)[4], "#141414");
   assert.ok(calls.some(call => call[0] === "text" && call[1] === "第一步"));
+  assert.equal(calls.filter(call => call[0] === "fill").length, 1, "only the badge fills pixels behind text");
+  calls.length = 0;
+  drawMark(numberedNote, {exporting: false, scaleX: 1, scaleY: 1}, ctx, true);
+  assert.equal(calls.filter(call => call[0] === "text").length, 1, "inline editing leaves badge digits but never duplicates the textarea text");
 });
 
 test("empty callout drags preview their label position without exporting an empty box", async () => {

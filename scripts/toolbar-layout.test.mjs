@@ -131,5 +131,18 @@ test("only visible HUD rows receive pointer input, with measurement updated when
   const settings = nodes(tree).find(node => node?.props?.children?.includes("callout-controls"));
   assert.equal(settings.props.style.pointerEvents, "auto");
   assert.equal(settings.props.style.width, "max-content");
+  height = 130;
+  tree = component.render({ ...props, tool: "select", selectedLabelId: 2,
+    showLabelControls: true, labelControls: "label-controls" });
+  root = nodes(tree).find(node => node?.props?.className === "kiri-capture-toolbar");
+  assert.equal(root.props.style.pointerEvents, "none", "a selected label must keep blank toolbar space pass-through");
+  const labelSettings = nodes(tree).find(node => node?.props?.children?.includes("label-controls"));
+  assert.ok(labelSettings, "selecting an existing label opens its settings");
+  assert.equal(labelSettings.props.style.pointerEvents, "auto", "label color and font controls remain interactive");
+  assert.equal(labelSettings.props.style.width, "max-content", "label settings must not fill the wider main toolbar");
+  assert.equal(labelSettings.props.style.maxWidth, "100%");
+  assert.ok(root.props.style.top >= props.selection.y + 10);
+  assert.ok(root.props.style.top + height <= props.selection.y + props.selection.height - 10);
+  assert.ok(!nodes(tree).some(node => node?.props?.children?.includes("callout-controls")), "changing to a label must remove stale callout settings");
   component.unmount();
 });
