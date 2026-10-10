@@ -21,6 +21,9 @@ import {
   type Tool,
 } from "../annotation/model";
 import { useAnnotationAppearance } from "../annotation/useAnnotationAppearance";
+import {CalloutControls} from "../annotation/CalloutControls";
+import {TextToolPicker} from "../annotation/TextToolPicker";
+import {nextCalloutNumber, type CalloutMark} from "../annotation/model";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { CropOverlay } from "../annotation/CropOverlay";
 import {
@@ -55,6 +58,9 @@ export function EditorWindow(props: { id: string }) {
   const [document, setDocument] = useState<AnnotationDocumentV1 | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 560 });
   const [tool, setTool] = useState<EditorTool>("select");
+  const [selectedCallout, setSelectedCallout] = useState<CalloutMark | null>(null);
+  const [calloutNumber, setCalloutNumber] = useState(1);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedCallout(mark?.kind === "callout" ? mark : null), []);
   const [cropSelection, setCropSelection] = useState<Rect | null>(null);
   const [cropUndo, setCropUndo] = useState<Rect[]>([]);
   const [cropRedo, setCropRedo] = useState<Rect[]>([]);
@@ -69,6 +75,7 @@ export function EditorWindow(props: { id: string }) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [currentMarks, setCurrentMarks] = useState<AnnotationMark[]>([]);
+  useEffect(() => setCalloutNumber(nextCalloutNumber(currentMarks)), [currentMarks]);
   const [textDraft, setTextDraft] = useState<ImageTextDraft | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState<ImageEditSnapshot>({ marks: [], crop: null });
   const closeGuardRef = useRef<ImageCloseGuardHandle>(null);
@@ -344,6 +351,7 @@ export function EditorWindow(props: { id: string }) {
           l: "line",
           a: "arrow",
           t: "text",
+          n: "callout",
           m: "mosaic",
         };
         const next = keyMap[e.key.toLowerCase()];
@@ -496,7 +504,8 @@ export function EditorWindow(props: { id: string }) {
             opacity: qrActive ? 0.5 : 1,
           }}
         >
-        {TOOLS.map(({ tool: t2, icon, title }) => (
+        {TOOLS.map(({ tool: t2, icon, title }) => t2 === "text" ?
+          <TextToolPicker key={t2} tool={tool} onSelect={selectTool}/> : (
           <EditorToolButton
             key={t2}
             icon={icon}
@@ -512,7 +521,7 @@ export function EditorWindow(props: { id: string }) {
             {t("Cancel crop")}
           </button>
         )}
-        {tool !== "crop" && tool !== "select" && <>
+        {tool !== "crop" && tool !== "select" && tool !== "callout" && <>
           <div style={{ width: 1, height: 26, background: "#383838", margin: "0 4px" }} />
           {tool === "text" ? (
           <EditorSegments
@@ -654,6 +663,12 @@ export function EditorWindow(props: { id: string }) {
         </div>
       </div>
 
+      {!readOnly && !qrActive && (tool === "callout" || (tool === "select" && selectedCallout !== null)) &&
+        <div className="kiri-editor-callout-row"><CalloutControls selected={selectedCallout} nextNumber={calloutNumber} appearance={appearance}
+          onNextNumber={setCalloutNumber} onAppearance={patch => setAppearance({...appearance, ...patch})}
+          onEdit={patch => canvasRef.current?.updateSelectedCallout(patch, true)}
+          onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}/></div>}
+
       {ocrAsset && <OcrDialog asset={ocrAsset} onClose={() => setOcrAsset(null)} />}
 
       {actionError && (
@@ -718,6 +733,8 @@ export function EditorWindow(props: { id: string }) {
               interactionLock={canvasLock}
               tool={tool === "crop" ? "select" : tool}
               appearance={appearance}
+              calloutNumber={calloutNumber}
+              onSelectionInfo={onAnnotationSelection}
               onHistoryChange={(u, r, populated) => {
                 setCanUndo(u);
                 setCanRedo(r);

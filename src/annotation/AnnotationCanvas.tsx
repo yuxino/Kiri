@@ -22,11 +22,13 @@ import {
   applyAnnotationAppearance,
   annotationTextForCommit,
   changeMosaicShape,
+  calloutHandleAt,
   dragAnnotationHandle,
   markIndexAt,
   selectionBounds,
   translateMark,
   type AnnotationMark,
+  type CalloutMark,
   type AnnotationDocumentV1,
   type AppearanceSettings,
   type TextBackgroundStyle,
@@ -57,6 +59,7 @@ export interface AnnotationCanvasHandle {
   updateSelectionAppearance(patch: Partial<AppearanceSettings>, transient?: boolean): void;
   finishAppearanceAdjustment(): void;
   setMosaicShape(shape: MosaicShape): void;
+  updateSelectedCallout(patch: Partial<Omit<CalloutMark, "kind" | "id">>, transient?: boolean): void;
   exportResult(cropSelection?: Rect): Promise<AnnotationExportResult | null>;
   /**
    * Live text font-size adjustment (spec §6.6): begin records the selected
@@ -114,6 +117,7 @@ interface Props {
   interactionLock?: { readonly locked: boolean };
   tool: Tool;
   appearance: AppearanceSettings;
+  calloutNumber?: number;
   onHistoryChange(canUndo: boolean, canRedo: boolean, hasMarks: boolean): void;
   onCancel(): void;
   /**
@@ -171,6 +175,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       interactionLock,
       tool,
       appearance,
+      calloutNumber = 1,
       onHistoryChange,
       onCancel,
       onFinishAfterTextCommit,
@@ -215,6 +220,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     appearanceRef.current = appearance;
     const toolRef = useRef(tool);
     toolRef.current = tool;
+    const calloutNumberRef = useRef(calloutNumber);
+    calloutNumberRef.current = calloutNumber;
     const mosaicShapeRef=useRef(mosaicShape);mosaicShapeRef.current=mosaicShape;
     const markCreatedRef=useRef(onMarkCreated);markCreatedRef.current=onMarkCreated;
     const interactionDisabledRef = useRef(interactionDisabled);
@@ -503,6 +510,41 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     },[history,documentSize.width,documentSize.height,selectMark,publishHistory,hitTestScale.radial]);
 
     const styleAdjustment=useRef<{index:number;original:AnnotationMark}|null>(null);
+    const fitCallout = useCallback((mark: CalloutMark): CalloutMark => {
+      const context = canvasRef.current?.getContext("2d");
+      const size = Math.min(mark.size, documentSize.width, documentSize.height);
+      const center = {x: Math.max(size / 2, Math.min(documentSize.width - size / 2, mark.center.x)),
+        y: Math.max(size / 2, Math.min(documentSize.height - size / 2, mark.center.y))};
+      if (!mark.text.trim() || !context) return {...mark, size, center};
+      let fontSize = mark.fontSize;
+      let width = 1, height = 1;
+      for (let attempt = 0; attempt < 32; attempt++) {
+        context.font = textFont(fontSize);
+        const pad = Math.max(4, fontSize * .5);
+        const longest = Math.max(...mark.text.split("\n").map(line => context.measureText(line).width));
+        width = Math.min(documentSize.width, Math.max(Math.min(72, documentSize.width), Math.min(280, longest + pad * 2)));
+        const lines = layoutTextLines(mark.text, Math.max(1, width - pad * 2), value => context.measureText(value).width);
+        height = lines.length * fontSize * 1.25 + pad * 2;
+        if (height <= documentSize.height || fontSize <= .1) break;
+        fontSize *= .8;
+      }
+      height = Math.min(height, documentSize.height);
+      return {...mark, size, center, fontSize, labelRect: {
+        x: Math.max(0, Math.min(documentSize.width - width, mark.labelRect.x)),
+        y: Math.max(0, Math.min(documentSize.height - height, mark.labelRect.y)), width, height}};
+    }, [documentSize.width, documentSize.height]);
+    const createCallout = useCallback((start: Point, end: Point, id: number): CalloutMark => {
+      const ap = appearanceRef.current;
+      const size = Math.min(ap.calloutSize, documentSize.width, documentSize.height);
+      const dragged = Math.hypot(end.x - start.x, end.y - start.y) >= 12 * hitTestScale.radial;
+      const width = Math.min(160, documentSize.width), height = Math.min(ap.textFontSize * 2.25, documentSize.height);
+      const right = dragged ? end.x >= start.x : start.x + size + 24 + width <= documentSize.width;
+      const anchor = dragged ? end : {x: start.x + (right ? 1 : -1) * (size / 2 + 24), y: start.y};
+      return fitCallout({kind: "callout", id, number: calloutNumberRef.current, text: "", center: start,
+        labelRect: {x: Math.max(0, Math.min(documentSize.width - width, right ? anchor.x : anchor.x - width)),
+          y: Math.max(0, Math.min(documentSize.height - height, anchor.y - height / 2)), width, height},
+        color: ap.colorPreset, size, fontSize: ap.textFontSize, style: ap.calloutStyle});
+    }, [documentSize.width, documentSize.height, hitTestScale.radial, fitCallout]);
     const finishAppearanceAdjustment=useCallback(()=>{
       const adjustment=styleAdjustment.current;styleAdjustment.current=null;if(!adjustment)return;
       if(JSON.stringify(history.elements[adjustment.index])!==JSON.stringify(adjustment.original)){
@@ -519,10 +561,24 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const index=selectedIndexRef.current;if(index===null)return;
       const mark=history.elements[index];if(!mark)return;
       styleAdjustment.current??={index,original:mark};
-      const next=applyAnnotationAppearance(mark,patch);
+      const updated=applyAnnotationAppearance(mark,patch);
+      const next=updated.kind === "callout" ? fitCallout(updated) : updated;
       const elements=history.elements.slice();elements[index]=next;history.overwrite(elements);setMarks(elements);
       if(!transient)finishAppearanceAdjustment();
-    },[history,interactionsDisabled,finishAppearanceAdjustment]);
+    },[history,interactionsDisabled,finishAppearanceAdjustment,fitCallout]);
+
+    const updateSelectedCallout = useCallback((patch: Partial<Omit<CalloutMark, "kind" | "id">>, transient = false) => {
+      if (interactionsDisabled()) return;
+      const index = selectedIndexRef.current;
+      const mark = index === null ? null : history.elements[index];
+      if (index === null || !mark || mark.kind !== "callout") return;
+      styleAdjustment.current ??= {index, original: mark};
+      const next = fitCallout({...mark, ...patch});
+      const elements = history.elements.slice(); elements[index] = next;
+      history.overwrite(elements); setMarks(elements);
+      documentChangeRef.current?.(elements);
+      if (!transient) finishAppearanceAdjustment();
+    }, [history, interactionsDisabled, fitCallout, finishAppearanceAdjustment]);
 
     const cancelInteraction=useCallback(()=>{
       if(editingRef.current){editingRef.current=null;setEditing(null);publishHistory();return true;}
@@ -607,9 +663,15 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           (Math.hypot(p.x - selectedLine.start.x, p.y - selectedLine.start.y) <= 10 * hitTestScale.radial ||
             Math.hypot(p.x - selectedLine.end.x, p.y - selectedLine.end.y) <= 10 * hitTestScale.radial ||
             markIndexAt(current, p, hitTestScale) === selectedIndex);
-        if (t === "select" || editingSelectedLine) {
+        const calloutHit = t === "callout" ? markIndexAt(current, p, hitTestScale) : null;
+        const editingCallout = (calloutHit !== null && current[calloutHit].kind === "callout") ||
+          (t === "callout" && selectedLine?.kind === "callout" && calloutHandleAt(selectedLine, p, 9 * hitTestScale.radial) !== null);
+        if (t === "select" || editingSelectedLine || editingCallout) {
           let handleInteraction: string | null = null;
-          if (selectedIndex !== null && current[selectedIndex] && !["line","arrow"].includes(current[selectedIndex].kind)) {
+          const selectedMark = selectedIndex === null ? null : current[selectedIndex];
+          if (selectedMark?.kind === "callout") {
+            handleInteraction = calloutHandleAt(selectedMark, p, 9 * hitTestScale.radial);
+          } else if (selectedIndex !== null && current[selectedIndex] && !["line","arrow"].includes(current[selectedIndex].kind)) {
             handleInteraction = hitTestHandle(
               p,
               selectionBounds(current[selectedIndex]),
@@ -664,7 +726,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
 
         const points = [p];
         interactionRef.current = { kind: "draw", tool: t, start: p, points };
-        if (t === "pen") {
+        if (t === "callout") {
+          setDraft(createCallout(p, p, -1));
+        } else if (t === "pen") {
           setDraft({ kind: "pen", id: -1, points, color: ap.colorPreset, width: ap.penWidth });
         } else if (t === "mosaic") {
           setDraft({
@@ -697,7 +761,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         commitText,
         history,
         hitTestScale,
-        publishHistory,editText,finishAppearanceAdjustment,
+        publishHistory,editText,finishAppearanceAdjustment,createCallout,
       ],
     );
 
@@ -778,7 +842,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
                 Math.hypot(p.x - selectedMark.end.x, p.y - selectedMark.end.y) <= 10 * hitTestScale.radial)) {
               cursor = "crosshair";
             }
-            if (toolRef.current === "select" && selected !== null && current[selected] && !["line","arrow"].includes(current[selected].kind)) {
+            if (toolRef.current === "select" && selectedMark?.kind === "callout") {
+              if (calloutHandleAt(selectedMark, p, 9 * hitTestScale.radial)) cursor = "crosshair";
+            } else if (toolRef.current === "select" && selected !== null && current[selected] && !["line","arrow"].includes(current[selected].kind)) {
               if (
                 hitTestHandle(
                   p,
@@ -806,7 +872,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           const t = interaction.tool;
           // Spec §7.4: the brush cursor tracks the drag point while drawing.
           if (t === "mosaic" && mosaicShapeRef.current==="brush") setBrushCursor(p);
-          if (t === "pen" || t === "mosaic") {
+          if (t === "callout") {
+            setDraft(createCallout(interaction.start, p, -1));
+          } else if (t === "pen" || t === "mosaic") {
             const points = interaction.points;
             const last = points[points.length - 1];
             if (Math.hypot(p.x - last.x, p.y - last.y) >= 0.5) points.push(p);
@@ -882,7 +950,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             { x: p.x-interaction.start.x, y: p.y-interaction.start.y }, {x:0,y:0,width:documentSize.width,height:documentSize.height}));
         }
       },
-      [toPoint, documentSize.height, documentSize.width, history, hitTestScale, fitTextBounds],
+      [toPoint, documentSize.height, documentSize.width, history, hitTestScale, fitTextBounds, createCallout],
     );
 
     const onPointerUp = useCallback(
@@ -901,7 +969,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if (interaction.kind === "draw") {
           const t = interaction.tool;
           const ap = appearanceRef.current;
-          if (t === "pen") {
+          if (t === "callout") {
+            appendMark(createCallout(interaction.start, p, Date.now() + Math.random()));
+          } else if (t === "pen") {
             const points = interaction.points;
             const last = points[points.length - 1];
             if (Math.hypot(p.x - last.x, p.y - last.y) >= 0.5) points.push(p);
@@ -992,7 +1062,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         documentSize.width,
         redraw,
         syncMarks,
-        history,appendMark,fitTextBounds,
+        history,appendMark,fitTextBounds,createCallout,
       ],
     );
 
@@ -1026,6 +1096,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     undoRef.current = () => {
       if (interactionsDisabled()) return;
       commitText();
+      finishAppearanceAdjustment();
       if (onUndo) { onUndo(); return; }
       history.undo();
       selectMark(null);
@@ -1034,6 +1105,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     redoRef.current = () => {
       if (interactionsDisabled()) return;
       commitText();
+      finishAppearanceAdjustment();
       if (onRedo) { onRedo(); return; }
       history.redo();
       selectMark(null);
@@ -1042,6 +1114,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     deleteRef.current = () => {
       if (interactionsDisabled()) return;
       if (selectedIndexRef.current === null) return;
+      finishAppearanceAdjustment();
       history.remove(selectedIndexRef.current);
       selectMark(null);
       syncMarks();
@@ -1118,6 +1191,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       // This is intentionally synchronous: the PNG and sidecar below must be
       // derived from the exact same committed text/mark snapshot.
       finishFontAdjustment();
+      finishAppearanceAdjustment();
       commitText();
       const scaleX =
         sourceImage.naturalWidth / (displaySize?.width ?? documentSize.width);
@@ -1229,6 +1303,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       history,
       initialProject,
       finishFontAdjustment,
+      finishAppearanceAdjustment,
       region.x,
       region.y,
     ]);
@@ -1260,6 +1335,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         clearSelection:()=>{if(!interactionsDisabled()){finishAppearanceAdjustment();selectMark(null);}},
         cancelInteraction,
         updateSelectionAppearance,
+        updateSelectedCallout,
         finishAppearanceAdjustment,
         setMosaicShape:(shape)=>{
           if(interactionsDisabled())return;finishAppearanceAdjustment();
@@ -1272,7 +1348,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         setTextFontSizeLive: (value: number) => setFontLiveRef.current(value),
         endTextFontSizeAdjustment: () => endFontAdjustRef.current(),
       }),
-      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,selectMark,cancelInteraction,updateSelectionAppearance,finishAppearanceAdjustment],
+      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
     );
 
     return (

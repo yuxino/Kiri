@@ -43,7 +43,10 @@ function editor(options = {}) {
     modules: {
       "../lib/ipc": { api, isEditorRevisionMismatch: error => String(error) === "The screenshot changed after the editor opened.",
         onEditorRecognizeQr: async callback => { listener = callback; if (options.listenerReady) await options.listenerReady; return () => { if (listener === callback) listener = null; }; } },
-      "../annotation/model": { COLOR_HEX: { white: "#fff" }, COLOR_LABELS: { white: "White" }, COLOR_PRESETS: ["white"] },
+      "../annotation/model": { COLOR_HEX: { white: "#fff" }, COLOR_LABELS: { white: "White" }, COLOR_PRESETS: ["white"],
+        nextCalloutNumber: marks => Math.min(999, marks.reduce((next,mark) => mark.kind === "callout" ? Math.max(next,mark.number+1) : next,1)) },
+      "../annotation/CalloutControls": {CalloutControls: "callout-controls"},
+      "../annotation/TextToolPicker": {TextToolPicker: "text-tool-picker"},
       "../annotation/text-composition.js": textComposition,
       "../annotation/useAnnotationAppearance": { useAnnotationAppearance: () => [{ color: "white", penWidth: 3, shapeWidth: 2, textFontSize: 18, textBackgroundStyle: "transparent", mosaicBrushDiameter: 24, mosaicStyle: "pixel", mosaicIntensity: "standard" }, () => {}] },
       "../annotation/AnnotationCanvas": { __esModule: true, default: "annotation-canvas" },

@@ -62,6 +62,13 @@ export function cropAnnotationDocument(document, selection) {
 
 function markBounds(mark) {
   switch (mark.kind) {
+    case "callout": {
+      const badge = {x: mark.center.x - mark.size / 2, y: mark.center.y - mark.size / 2, width: mark.size, height: mark.size};
+      if (!mark.text.trim()) return badge;
+      const x = Math.min(badge.x, mark.labelRect.x), y = Math.min(badge.y, mark.labelRect.y);
+      return {x, y, width: Math.max(badge.x + badge.width, mark.labelRect.x + mark.labelRect.width) - x,
+        height: Math.max(badge.y + badge.height, mark.labelRect.y + mark.labelRect.height) - y};
+    }
     case "pen":
       return pointsBounds(mark.points, mark.width / 2);
     case "mosaic":
@@ -85,6 +92,9 @@ function markBounds(mark) {
 
 function translateMark(mark, dx, dy) {
   switch (mark.kind) {
+    case "callout":
+      return {...mark, center: translatePoint(mark.center, dx, dy),
+        labelRect: {...mark.labelRect, x: mark.labelRect.x + dx, y: mark.labelRect.y + dy}};
     case "pen":
     case "mosaic":
       return { ...mark, points: mark.points.map((point) => translatePoint(point, dx, dy)) };

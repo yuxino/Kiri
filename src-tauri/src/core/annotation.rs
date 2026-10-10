@@ -99,6 +99,13 @@ pub enum MosaicShape {
     Ellipse,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CalloutStyle {
+    Filled,
+    Outline,
+}
+
 /// Last-used annotation styling shared by the capture overlay and editor.
 /// The active tool is deliberately excluded so every new surface still opens
 /// in its predictable selection state.
@@ -113,6 +120,8 @@ pub struct AnnotationAppearance {
     pub shape_width: u16,
     pub text_font_size: u16,
     pub mosaic_brush_diameter: u16,
+    pub callout_size: u16,
+    pub callout_style: CalloutStyle,
 }
 
 impl Default for AnnotationAppearance {
@@ -126,6 +135,8 @@ impl Default for AnnotationAppearance {
             shape_width: 3,
             text_font_size: 18,
             mosaic_brush_diameter: 20,
+            callout_size: 36,
+            callout_style: CalloutStyle::Filled,
         }
     }
 }
@@ -136,6 +147,7 @@ impl AnnotationAppearance {
         self.shape_width = self.shape_width.clamp(1, 16);
         self.text_font_size = self.text_font_size.clamp(12, 64);
         self.mosaic_brush_diameter = self.mosaic_brush_diameter.clamp(12, 120);
+        self.callout_size = self.callout_size.clamp(24, 72);
         self
     }
 }
@@ -153,6 +165,8 @@ pub struct AnnotationAppearancePatch {
     pub shape_width: Option<u16>,
     pub text_font_size: Option<u16>,
     pub mosaic_brush_diameter: Option<u16>,
+    pub callout_size: Option<u16>,
+    pub callout_style: Option<CalloutStyle>,
 }
 
 impl AnnotationAppearancePatch {
@@ -165,6 +179,8 @@ impl AnnotationAppearancePatch {
         if let Some(value) = self.shape_width { saved.shape_width = value; }
         if let Some(value) = self.text_font_size { saved.text_font_size = value; }
         if let Some(value) = self.mosaic_brush_diameter { saved.mosaic_brush_diameter = value; }
+        if let Some(value) = self.callout_size { saved.callout_size = value; }
+        if let Some(value) = self.callout_style { saved.callout_style = value; }
         saved.normalized()
     }
 }
@@ -177,6 +193,17 @@ impl AnnotationAppearancePatch {
     deny_unknown_fields
 )]
 pub enum AnnotationMark {
+    Callout {
+        id: f64,
+        center: AnnotationPoint,
+        number: u16,
+        text: String,
+        label_rect: AnnotationRect,
+        color: AnnotationColor,
+        size: f64,
+        font_size: f64,
+        style: CalloutStyle,
+    },
     Pen {
         id: f64,
         points: Vec<AnnotationPoint>,
@@ -270,6 +297,16 @@ impl AnnotationDocument {
         let mut total_text_bytes = 0usize;
         for mark in &self.marks {
             let (id, points, text_bytes) = match mark {
+                AnnotationMark::Callout { id, center, number, text, label_rect, size, font_size, .. } => {
+                    if !(1..=999).contains(number) {
+                        return Err("The annotation number is invalid.".into());
+                    }
+                    validate_point(*center, coordinate_limit)?;
+                    validate_rect(*label_rect, coordinate_limit, true)?;
+                    validate_visual_size(*size)?;
+                    validate_visual_size(*font_size)?;
+                    (*id, 0, text.encode_utf16().count())
+                }
                 AnnotationMark::Pen {
                     id, points, width, ..
                 } => {
@@ -465,6 +502,7 @@ mod tests {
             r#"{"kind":"arrow","id":4,"start":{"x":1,"y":2},"end":{"x":3,"y":4},"color":"yellow","width":3}"#,
             r#"{"kind":"text","id":5,"text":"Kiri","rect":{"x":1,"y":2,"width":30,"height":20},"color":"mint","background":"transparent","fontSize":18}"#,
             r#"{"kind":"mosaic","id":6,"points":[{"x":1,"y":2}],"brushDiameter":20,"intensity":"standard","style":"pixel"}"#,
+            r#"{"kind":"callout","id":7,"center":{"x":20,"y":30},"number":1,"text":"説明\nStep one","labelRect":{"x":45,"y":20,"width":40,"height":40},"color":"cherry","size":36,"fontSize":18,"style":"filled"}"#,
         ];
         let json = format!(
             r#"{{"schemaVersion":1,"canvas":{{"width":100,"height":80}},"sourcePixels":{{"width":200,"height":160}},"marks":[{}]}}"#,
@@ -496,6 +534,26 @@ mod tests {
             r#"{"kind":"line","id":0,"start":{"x":1,"y":2},"end":{"x":3,"y":4},"color":"blue","width":3},{"kind":"arrow","id":-0,"start":{"x":1,"y":2},"end":{"x":3,"y":4},"color":"white","width":3}"#,
         );
         assert!(AnnotationDocument::from_json(&signed_zero_duplicate).is_err());
+    }
+
+    #[test]
+    fn numbered_notes_validate_content_and_old_preferences_keep_defaults() {
+        let mark = r#"{"kind":"callout","id":1,"center":{"x":20,"y":30},"number":999,"text":"说明","labelRect":{"x":45,"y":20,"width":40,"height":40},"color":"white","size":36,"fontSize":18,"style":"outline"}"#;
+        assert!(AnnotationDocument::from_json(&document_json(mark)).is_ok());
+        for invalid in [mark.replace("999", "0"), mark.replace("999", "1000"), mark.replace("999", "1.5"), mark.replace("outline", "unknown")] {
+            assert!(AnnotationDocument::from_json(&document_json(&invalid)).is_err());
+        }
+        let mut oversized = serde_json::from_str::<serde_json::Value>(mark).unwrap();
+        oversized["text"] = serde_json::Value::String("x".repeat(MAX_TOTAL_TEXT_UNITS + 1));
+        assert!(AnnotationDocument::from_json(&document_json(&oversized.to_string())).is_err());
+        let old: AnnotationAppearance = serde_json::from_str(r#"{"textFontSize":24}"#).unwrap();
+        assert_eq!(old.callout_style, CalloutStyle::Filled);
+        assert_eq!(old.callout_size, 36);
+        let patch: AnnotationAppearancePatch = serde_json::from_str(r#"{"calloutSize":999,"calloutStyle":"outline"}"#).unwrap();
+        let saved = patch.apply(old);
+        assert_eq!(saved.callout_size, 72);
+        assert_eq!(saved.callout_style, CalloutStyle::Outline);
+        assert_eq!(saved.text_font_size, 24);
     }
 
     #[test]

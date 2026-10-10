@@ -707,5 +707,18 @@
   "Checking video… %d%": "正在檢查影片… %d%",
   "GIF conversion cancelled": "已取消 GIF 轉換",
   "Cancel all": "全部取消",
-  "Could not save the language preference.": "無法儲存語言設定。"
+  "Could not save the language preference.": "無法儲存語言設定。",
+  "Numbered callout (N)": "序號標註 (N)",
+  "Numbered callout": "序號標註",
+  "Text tools": "文字工具",
+  "Number": "序號",
+  "Next number": "下一個序號",
+  "Number style": "序號樣式",
+  "Filled": "實心",
+  "Outline": "空心",
+  "Description (optional)": "說明文字（選填）",
+  "Add a description…": "新增說明文字…",
+  "Place a number to add a description": "先放置序號，再新增說明文字",
+  "Number size": "序號大小",
+  "Drag the dots to move the number or description": "拖曳圓點可分別移動序號和說明"
 }

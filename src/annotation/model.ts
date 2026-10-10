@@ -15,7 +15,7 @@ import {
   standardized,
 } from "./geom";
 
-export type Tool = "select" | "pen" | "rectangle" | "line" | "arrow" | "text" | "mosaic";
+export type Tool = "select" | "pen" | "rectangle" | "line" | "arrow" | "text" | "callout" | "mosaic";
 
 export type ColorPreset =
   | "violet"
@@ -61,6 +61,19 @@ export const COLOR_LABELS: Record<ColorPreset, string> = {
 };
 
 export type TextBackgroundStyle = "transparent" | "dark";
+export type CalloutStyle = "filled" | "outline";
+export interface CalloutMark {
+  kind: "callout";
+  id: number;
+  center: Point;
+  number: number;
+  text: string;
+  labelRect: Rect;
+  color: ColorPreset;
+  size: number;
+  fontSize: number;
+  style: CalloutStyle;
+}
 export type MosaicIntensity = "soft" | "standard" | "strong";
 export type MosaicStyle = "pixel" | "blur";
 export type MosaicShape = "brush" | "rectangle" | "ellipse";
@@ -72,6 +85,7 @@ export const MOSAIC_VIEW_BLOCK_SIZE: Record<MosaicIntensity, number> = {
 };
 
 export type AnnotationMark =
+  | CalloutMark
   | { kind: "pen"; id: number; points: Point[]; color: ColorPreset; width: number }
   | { kind: "rectangle"; id: number; rect: Rect; color: ColorPreset; width: number }
   | { kind: "line"; id: number; start: Point; end: Point; color: ColorPreset; width: number }
@@ -117,6 +131,8 @@ export interface AppearanceSettings {
   shapeWidth: number;
   textFontSize: number;
   mosaicBrushDiameter: number;
+  calloutSize: number;
+  calloutStyle: CalloutStyle;
 }
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -128,6 +144,8 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   shapeWidth: 3,
   textFontSize: 18,
   mosaicBrushDiameter: 20,
+  calloutSize: 36,
+  calloutStyle: "filled",
 };
 
 /** Rejects whitespace-only edits without normalizing meaningful user text. */
@@ -292,6 +310,14 @@ function hitTestMark(
       const r = standardized(mark.rect);
       return containsPadded(r, p, 7 * scale.x, 6 * scale.y);
     }
+    case "callout": {
+      const radius = mark.size / 2 + 5 * scale.radial;
+      if (Math.hypot(p.x - mark.center.x, p.y - mark.center.y) <= radius) return true;
+      if (!mark.text.trim()) return false;
+      const end = calloutConnectorEnd(mark);
+      return containsPadded(mark.labelRect, p, 5 * scale.x, 5 * scale.y) ||
+        distanceToSegment(p, mark.center, end) <= 6 * scale.radial;
+    }
     case "mosaic":
       if (mark.shape && mark.shape !== "brush") {
         const b = pointBounds(mark.points);
@@ -328,6 +354,13 @@ export function markIndexAt(
 
 export function translateMark(mark: AnnotationMark, by: Point, bounds: Rect): AnnotationMark {
   switch (mark.kind) {
+    case "callout": {
+      const b = selectionBounds(mark);
+      const tx = clampTranslation(by.x, minX(b), maxX(b), minX(bounds), maxX(bounds));
+      const ty = clampTranslation(by.y, minY(b), maxY(b), minY(bounds), maxY(bounds));
+      return {...mark, center: {x: mark.center.x + tx, y: mark.center.y + ty},
+        labelRect: {...mark.labelRect, x: mark.labelRect.x + tx, y: mark.labelRect.y + ty}};
+    }
     case "pen": {
       const b = pointBoundsPadded(mark.points, Math.max(1, mark.width / 2));
       const tx = clampTranslation(by.x, minX(b), maxX(b), minX(bounds), maxX(bounds));
@@ -395,6 +428,17 @@ export function resizeAnnotationMark(mark: AnnotationMark, handle: string, point
   const before = selectionBounds(mark);
   const next = resizeRect(before, handle, point, bounds);
   if (mark.kind === "rectangle") return {...mark, rect: next};
+  if (mark.kind === "callout") {
+    const sx = next.width / before.width, sy = next.height / before.height;
+    const factor = Math.min(sx, sy);
+    return {...mark,
+      center: {x: next.x + (mark.center.x - before.x) * sx, y: next.y + (mark.center.y - before.y) * sy},
+      size: Math.min(4096, Math.max(8, mark.size * factor)),
+      fontSize: Math.min(4096, Math.max(6, mark.fontSize * factor)),
+      labelRect: {x: next.x + (mark.labelRect.x - before.x) * sx,
+        y: next.y + (mark.labelRect.y - before.y) * sy,
+        width: mark.labelRect.width * sx, height: mark.labelRect.height * sy}};
+  }
   if (mark.kind === "text") {
     // Text scales uniformly so a corner drag does not distort glyphs or rewrap words.
     const horizontal = handle === "left" || handle === "right";
@@ -447,6 +491,8 @@ export function applyAnnotationAppearance(mark: AnnotationMark, patch: Partial<A
     ...(patch.mosaicIntensity===undefined?{}:{intensity:patch.mosaicIntensity}),
     ...(patch.mosaicStyle===undefined?{}:{style:patch.mosaicStyle})};
   const color=patch.colorPreset??mark.color;
+  if (mark.kind === "callout") return {...mark, color, size: patch.calloutSize ?? mark.size,
+    style: patch.calloutStyle ?? mark.style, fontSize: patch.textFontSize ?? mark.fontSize};
   if(mark.kind === "text"){
     const fontSize=patch.textFontSize??mark.fontSize,scale=fontSize/mark.fontSize;
     return {...mark,color,fontSize,background:patch.textBackgroundStyle??mark.background,
@@ -479,6 +525,16 @@ export function dragAnnotationHandle(
   bounds: Rect,
 ): AnnotationMark {
   if (Math.hypot(delta.x, delta.y) < 1) return mark;
+  if (mark.kind === "callout" && handle === "badge") {
+    const radius = mark.size / 2;
+    return {...mark, center: {x: Math.min(maxX(bounds) - radius, Math.max(bounds.x + radius, mark.center.x + delta.x)),
+      y: Math.min(maxY(bounds) - radius, Math.max(bounds.y + radius, mark.center.y + delta.y))}};
+  }
+  if (mark.kind === "callout" && handle === "label") {
+    return {...mark, labelRect: {...mark.labelRect,
+      x: Math.min(maxX(bounds) - mark.labelRect.width, Math.max(bounds.x, mark.labelRect.x + delta.x)),
+      y: Math.min(maxY(bounds) - mark.labelRect.height, Math.max(bounds.y, mark.labelRect.y + delta.y))}};
+  }
   if (mark.kind === "line" || mark.kind === "arrow") {
     const original = handle === "start" ? mark.start : mark.end;
     return moveEndpointMark(mark, handle === "start", {
@@ -496,6 +552,14 @@ export function dragAnnotationHandle(
 /** Selection bounds used for the outline (spec §6.4). */
 export function selectionBounds(mark: AnnotationMark): Rect {
   switch (mark.kind) {
+    case "callout": {
+      const radius = mark.size / 2;
+      const badge = {x: mark.center.x - radius, y: mark.center.y - radius, width: mark.size, height: mark.size};
+      if (!mark.text.trim()) return badge;
+      const x = Math.min(badge.x, mark.labelRect.x), y = Math.min(badge.y, mark.labelRect.y);
+      return {x, y, width: Math.max(maxX(badge), maxX(mark.labelRect)) - x,
+        height: Math.max(maxY(badge), maxY(mark.labelRect)) - y};
+    }
     case "pen": {
       const b = pointBounds(mark.points);
       const pad = Math.max(1, mark.width / 2);
@@ -518,6 +582,24 @@ export function selectionBounds(mark: AnnotationMark): Rect {
       return { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
     }
   }
+}
+
+/** Closest point on the label boundary; the leader always follows both objects. */
+export function calloutConnectorEnd(mark: CalloutMark): Point {
+  const r = mark.labelRect;
+  return {x: Math.max(r.x, Math.min(mark.center.x, maxX(r))),
+    y: Math.max(r.y, Math.min(mark.center.y, maxY(r)))};
+}
+
+export function calloutHandleAt(mark: CalloutMark, point: Point, tolerance: number): "badge" | "label" | null {
+  if (Math.hypot(point.x - mark.center.x, point.y - mark.center.y + mark.size / 2) <= tolerance) return "badge";
+  if (mark.text.trim() && Math.hypot(point.x - mark.labelRect.x - mark.labelRect.width,
+    point.y - mark.labelRect.y) <= tolerance) return "label";
+  return null;
+}
+
+export function nextCalloutNumber(marks: AnnotationMark[]): number {
+  return Math.min(999, marks.reduce((next, mark) => mark.kind === "callout" ? Math.max(next, mark.number + 1) : next, 1));
 }
 
 /** Arrow head geometry (spec §5.4). */

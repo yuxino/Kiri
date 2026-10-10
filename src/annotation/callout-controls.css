@@ -1,0 +1,41 @@
+.kiri-text-tool { display:flex; align-items:center; flex-shrink:0; }
+.kiri-text-tool button { color:#ddd; border:0; background:transparent; cursor:pointer; }
+.kiri-text-tool-main { width:28px; height:28px; border-radius:5px; display:grid; place-items:center; }
+.kiri-text-tool-main[aria-pressed=true] { background:#fff; color:#111; }
+.kiri-text-tool-toggle { width:20px; height:28px; border-radius:4px; display:grid; place-items:center; }
+.kiri-text-tool button:hover { background:#333; color:#fff; }
+.kiri-text-tool-main:hover, .kiri-text-tool-toggle:hover { background:#333; color:#fff; }
+.kiri-text-tool button:focus-visible, .kiri-text-tool-menu button:focus-visible { outline:2px solid #fff; outline-offset:-2px; }
+.kiri-text-tool-menu { position:fixed; z-index:1000; width:196px; padding:5px; box-sizing:border-box; background:#171717; border:1px solid #444; border-radius:8px; }
+.kiri-text-tool-menu button { width:100%; display:flex; align-items:center; gap:9px; min-height:38px; padding:7px 9px; border:0; border-radius:4px; background:transparent; color:#eee; cursor:pointer; font:inherit; font-size:12px; text-align:left; }
+.kiri-text-tool-menu button[aria-checked=true] { background:#333; }
+.kiri-text-tool-menu button:hover { background:#444; }
+.kiri-text-tool-option:hover { background:#444; }
+.kiri-text-tool-menu kbd { margin-left:auto; color:#aaa; font:inherit; font-size:11px; }
+.kiri-callout-controls { width:400px; max-width:100%; box-sizing:border-box; padding:10px 12px; display:flex; flex-direction:column; gap:10px; color:#eee; font-size:11px; }
+.kiri-callout-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.kiri-callout-number { display:flex; align-items:center; gap:8px; }
+.kiri-callout-number input { width:56px; height:28px; padding:0 4px; box-sizing:border-box; background:#101010; border:1px solid #444; border-radius:4px; color:#fff; text-align:center; font:inherit; font-size:13px; font-variant-numeric:tabular-nums; }
+.kiri-callout-styles { display:flex; gap:2px; margin-left:auto; }
+.kiri-callout-styles button { display:flex; align-items:center; gap:6px; height:30px; padding:0 8px; background:transparent; color:#aaa; border:1px solid transparent; border-radius:5px; font:inherit; cursor:pointer; }
+.kiri-callout-styles button[aria-pressed=true] { background:#303030; border-color:#555; color:#fff; }
+.kiri-callout-style-button:hover { background:#333; color:#fff; }
+.kiri-callout-style-preview { width:18px; height:18px; box-sizing:border-box; border:1.5px solid currentColor; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:600; }
+.kiri-callout-style-preview--filled { color:#171717; background:#eee; border-color:#eee; }
+.kiri-callout-description { display:flex; flex-direction:column; gap:5px; color:#bbb; }
+.kiri-callout-description textarea { resize:vertical; min-height:46px; max-height:120px; width:100%; padding:7px 9px; box-sizing:border-box; border:1px solid #444; border-radius:5px; color:#fff; background:#101010; font:inherit; font-size:12px; line-height:1.5; }
+.kiri-callout-description textarea::placeholder { color:#777; }
+.kiri-callout-description textarea:disabled { opacity:.6; resize:none; }
+.kiri-callout-controls input:focus-visible, .kiri-callout-controls textarea:focus-visible, .kiri-callout-controls button:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.kiri-callout-slider { display:flex; flex:1; align-items:center; gap:8px; min-width:150px; }
+.kiri-callout-slider input { flex:1; min-width:50px; width:70px; }
+.kiri-callout-slider output { width:24px; text-align:right; font-variant-numeric:tabular-nums; }
+.kiri-callout-colors { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.kiri-callout-colors button { flex-shrink:0; width:21px; height:21px; padding:3px; border:1px solid #555; border-radius:50%; background:var(--swatch); background-clip:content-box; cursor:pointer; }
+.kiri-callout-colors button[aria-pressed=true] { border-color:#fff; }
+.kiri-callout-swatch {
+  --swatch: #fff;
+}
+.kiri-callout-swatch:hover { border-color:#fff; }
+.kiri-callout-colors span { flex-basis:100%; color:#999; font-size:10px; line-height:1.4; }
+.kiri-editor-callout-row { display:flex; justify-content:center; max-height:38vh; overflow:auto; flex-shrink:0; background:#101010; border-bottom:1px solid #383838; padding:8px 10px; }

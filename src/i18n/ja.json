@@ -707,5 +707,18 @@
   "Checking video… %d%": "動画を確認中… %d%",
   "GIF conversion cancelled": "GIF 変換をキャンセルしました",
   "Cancel all": "すべてキャンセル",
-  "Could not save the language preference.": "言語設定を保存できませんでした。"
+  "Could not save the language preference.": "言語設定を保存できませんでした。",
+  "Numbered callout (N)": "番号付き注釈 (N)",
+  "Numbered callout": "番号付き注釈",
+  "Text tools": "テキストツール",
+  "Number": "番号",
+  "Next number": "次の番号",
+  "Number style": "番号のスタイル",
+  "Filled": "塗りつぶし",
+  "Outline": "輪郭",
+  "Description (optional)": "説明（任意）",
+  "Add a description…": "説明を追加…",
+  "Place a number to add a description": "番号を配置して説明を追加",
+  "Number size": "番号のサイズ",
+  "Drag the dots to move the number or description": "点をドラッグして番号や説明を移動"
 }

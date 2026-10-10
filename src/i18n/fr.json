@@ -707,5 +707,18 @@
   "Checking video… %d%": "Vérification de la vidéo… %d%",
   "GIF conversion cancelled": "Conversion GIF annulée",
   "Cancel all": "Tout annuler",
-  "Could not save the language preference.": "Impossible d’enregistrer la langue choisie."
+  "Could not save the language preference.": "Impossible d’enregistrer la langue choisie.",
+  "Numbered callout (N)": "Note numérotée (N)",
+  "Numbered callout": "Note numérotée",
+  "Text tools": "Outils de texte",
+  "Number": "Numéro",
+  "Next number": "Numéro suivant",
+  "Number style": "Style du numéro",
+  "Filled": "Plein",
+  "Outline": "Contour",
+  "Description (optional)": "Description (facultative)",
+  "Add a description…": "Ajouter une description…",
+  "Place a number to add a description": "Placez un numéro, puis ajoutez une description",
+  "Number size": "Taille du numéro",
+  "Drag the dots to move the number or description": "Faites glisser les points pour déplacer le numéro ou la description"
 }
