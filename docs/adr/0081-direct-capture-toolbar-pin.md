@@ -39,6 +39,9 @@ also asks for a borderless reference image.
 - A lower-right grip resizes proportionally through serialized native size
   updates. This works around the unsupported native resize-dragging API on macOS
   without expanding window permissions. It uses the window's actual scale factor.
+  Native user resizing is disabled so the operating system cannot intercept
+  the corner and resize its axes independently; the grip still requests native
+  sizes programmatically.
 
 ## Consequences
 

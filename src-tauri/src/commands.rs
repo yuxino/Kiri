@@ -575,7 +575,10 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
             .title("Pinned Screenshot — Kiri")
             .inner_size(width, height)
             .min_inner_size(80.0, 60.0)
-            .resizable(true)
+            // Native border hit-testing can intercept the web grip and resize
+            // each axis independently. Only the proportional web gesture may
+            // resize references; programmatic set_size remains available.
+            .resizable(false)
             .decorations(false)
             .transparent(true)
             .shadow(false)
