@@ -726,5 +726,11 @@
   "Add a description…": "Ajouter une description…",
   "Place a number to add a description": "Placez un numéro, puis ajoutez une description",
   "Number size": "Taille du numéro",
-  "Drag the dots to move the number or description": "Faites glisser les points pour déplacer le numéro ou la description"
+  "Drag the dots to move the number or description": "Faites glisser les points pour déplacer le numéro ou la description",
+  "Use a valid file name.": "Saisissez un nom de fichier valide.",
+  "A file with that name already exists.": "Un fichier de ce nom existe déjà.",
+  "Couldn't rename this capture.": "Impossible de renommer cette capture.",
+  "Renamed; the old file could not be removed.": "Renommage effectué, mais l’ancien fichier n’a pas pu être supprimé.",
+  "Renamed; disk synchronization failed.": "Renommage effectué, mais la synchronisation du disque a échoué.",
+  "Wait for GIF conversion to finish before renaming.": "Attendez la fin de la conversion GIF avant de renommer."
 }

@@ -726,5 +726,11 @@
   "Add a description…": "説明を追加…",
   "Place a number to add a description": "番号を配置して説明を追加",
   "Number size": "番号のサイズ",
-  "Drag the dots to move the number or description": "点をドラッグして番号や説明を移動"
+  "Drag the dots to move the number or description": "点をドラッグして番号や説明を移動",
+  "Use a valid file name.": "有効なファイル名を入力してください。",
+  "A file with that name already exists.": "同じ名前のファイルが既に存在します。",
+  "Couldn't rename this capture.": "このキャプチャの名前を変更できませんでした。",
+  "Renamed; the old file could not be removed.": "名前は変更されましたが、元のファイルを削除できませんでした。",
+  "Renamed; disk synchronization failed.": "名前は変更されましたが、ディスクの同期に失敗しました。",
+  "Wait for GIF conversion to finish before renaming.": "GIF 変換が完了してから名前を変更してください。"
 }

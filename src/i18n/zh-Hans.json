@@ -726,5 +726,11 @@
   "Add a description…": "添加说明文字…",
   "Place a number to add a description": "先放置序号，再添加说明文字",
   "Number size": "序号大小",
-  "Drag the dots to move the number or description": "拖动圆点可分别移动序号和说明"
+  "Drag the dots to move the number or description": "拖动圆点可分别移动序号和说明",
+  "Use a valid file name.": "请使用有效的文件名。",
+  "A file with that name already exists.": "已存在同名文件。",
+  "Couldn't rename this capture.": "无法重命名此素材。",
+  "Renamed; the old file could not be removed.": "已重命名，但旧文件未能移除。",
+  "Renamed; disk synchronization failed.": "已重命名，但磁盘同步失败。",
+  "Wait for GIF conversion to finish before renaming.": "请等待 GIF 转换结束后再重命名。"
 }

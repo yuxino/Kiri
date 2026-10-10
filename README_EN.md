@@ -49,6 +49,8 @@ Before annotating or recording, click the sliders button to edit the selection's
 
 Choose one of seven UI languages in **Settings → General → Language**. Your choice applies to every Kiri window and survives relaunches. On first launch, Kiri follows the system language.
 
+Renaming a library item also renames its saved file and keeps its file type. Use **Copy File** in the context menu to paste the file into a folder; **Copy** continues to copy image pixels for chats and editors.
+
 Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, MP4 audio recording, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
 
 [Setup & help](docs/usage.md) · [Video editing](docs/video-editing.md) · [Report a bug](https://github.com/yuxino/kiri/issues) · [Contributing](CONTRIBUTING.md)

@@ -382,7 +382,7 @@ pub struct VideoProjectSnapshot {
 
 /// Cheap metadata fingerprint: autosave never reads the multi-gigabyte video.
 /// Library migration preserves its modification timestamp after byte checks.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct VideoSourceIdentity {
     asset_id: uuid::Uuid,
@@ -394,6 +394,15 @@ struct VideoSourceIdentity {
     bytes: u64,
     modified_seconds: u64,
     modified_nanos: u32,
+}
+
+impl PartialEq for VideoSourceIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.asset_id == other.asset_id && self.created_at == other.created_at
+            && self.pixel_width == other.pixel_width && self.pixel_height == other.pixel_height
+            && self.duration == other.duration && self.bytes == other.bytes
+            && self.modified_seconds == other.modified_seconds && self.modified_nanos == other.modified_nanos
+    }
 }
 
 impl VideoSourceIdentity {
@@ -482,7 +491,12 @@ fn revision_for(
     digest.update(b"kiri-video-project-v1");
     digest.update(library_id.as_bytes());
     digest.update(generation.as_bytes());
-    digest.update(serde_json::to_vec(source).expect("finite asset metadata"));
+    // A file name is a location, not content identity. Keep the serialized
+    // field for existing projects, but pure renames do not invalidate drafts
+    // or autosave revisions in an already open editor.
+    let mut identity = source.clone();
+    identity.filename.clear();
+    digest.update(serde_json::to_vec(&identity).expect("finite asset metadata"));
     match bytes {
         StoredBytes::Absent => digest.update([0]),
         StoredBytes::Oversized(metadata) => {

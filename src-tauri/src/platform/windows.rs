@@ -75,10 +75,71 @@ fn find_main_window(pid: u32) -> Option<HWND> {
     search.found
 }
 
-pub fn reveal_path(path: &Path) {
-    let _ = std::process::Command::new("explorer")
-        .arg(format!("/select,{}", path.display()))
-        .spawn();
+pub fn reveal_path(path: &Path) -> Result<()> {
+    // Shell paths are data, not Explorer command-line arguments. A comma,
+    // space or non-ASCII character must not change the requested destination.
+    // Use a fresh STA: Tauri's worker pool may already have an MTA apartment.
+    let path = path.to_owned();
+    thread::Builder::new().name("kiri-reveal-file".into()).spawn(move || {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::{w, PCWSTR};
+        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+        use windows::Win32::UI::Shell::{ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, ShellExecuteW};
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let metadata = std::fs::metadata(&path)?;
+        let mut encoded: Vec<u16> = path.as_os_str().encode_wide().collect();
+        if !path.is_absolute() || encoded.contains(&0) { bail!("The capture path is not an absolute local path."); }
+        encoded.push(0);
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).ok()?; }
+        struct Apartment;
+        impl Drop for Apartment { fn drop(&mut self) { unsafe { CoUninitialize(); } } }
+        let _apartment = Apartment;
+        if metadata.is_dir() {
+            let result = unsafe { ShellExecuteW(None, w!("open"), PCWSTR(encoded.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+            if result.0 as isize <= 32 { bail!("The capture folder could not be opened."); }
+        } else {
+            let item = unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) };
+            if item.is_null() { bail!("The capture could not be located in its folder."); }
+            // With no child array the full item PIDL selects the file in its
+            // parent folder; directories above deliberately open themselves.
+            let result = unsafe { SHOpenFolderAndSelectItems(item, None, 0) };
+            unsafe { ILFree(Some(item)); }
+            result?;
+        }
+        Ok(())
+    })?.join().map_err(|_| anyhow!("The file manager request did not finish."))?
+}
+
+pub fn write_file_to_clipboard(path: &Path) -> Result<()> {
+    use windows::core::w;
+    use windows::Win32::Foundation::{GlobalFree, HANDLE};
+    use windows::Win32::System::DataExchange::{EmptyClipboard, RegisterClipboardFormatW, SetClipboardData};
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+    use windows::Win32::System::Ole::DROPEFFECT_COPY;
+    let mut clipboard = arboard::Clipboard::new()?;
+    // The Set builder holds one OpenClipboard lock until file_list completes.
+    // arboard's file_list does not clear old text or a previous Explorer cut
+    // offer. Replace both formats under that same lock and request COPY.
+    let offer = clipboard.set();
+    unsafe {
+        let format = RegisterClipboardFormatW(w!("Preferred DropEffect"));
+        if format == 0 { return Err(windows::core::Error::from_thread().into()); }
+        let memory = GlobalAlloc(GMEM_MOVEABLE, std::mem::size_of::<u32>())?;
+        let pointer = GlobalLock(memory);
+        if pointer.is_null() {
+            let error = windows::core::Error::from_thread();
+            let _ = GlobalFree(Some(memory));
+            return Err(error.into());
+        }
+        pointer.cast::<u32>().write(DROPEFFECT_COPY.0);
+        let _ = GlobalUnlock(memory);
+        let result = EmptyClipboard().and_then(|_| SetClipboardData(format, Some(HANDLE(memory.0))));
+        if let Err(error) = result {
+            let _ = GlobalFree(Some(memory));
+            return Err(error.into());
+        }
+    }
+    offer.file_list(&[path]).map_err(anyhow::Error::from)
 }
 
 pub fn frontmost_application() -> Option<(u32, Option<String>)> {

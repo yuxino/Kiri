@@ -726,5 +726,11 @@
   "Add a description…": "설명 추가…",
   "Place a number to add a description": "번호를 배치한 후 설명을 추가하세요",
   "Number size": "번호 크기",
-  "Drag the dots to move the number or description": "점을 드래그하여 번호나 설명을 이동하세요"
+  "Drag the dots to move the number or description": "점을 드래그하여 번호나 설명을 이동하세요",
+  "Use a valid file name.": "올바른 파일 이름을 입력하세요.",
+  "A file with that name already exists.": "같은 이름의 파일이 이미 있습니다.",
+  "Couldn't rename this capture.": "이 캡처의 이름을 바꿀 수 없습니다.",
+  "Renamed; the old file could not be removed.": "이름은 바뀌었지만 이전 파일을 삭제하지 못했습니다.",
+  "Renamed; disk synchronization failed.": "이름은 바뀌었지만 디스크 동기화에 실패했습니다.",
+  "Wait for GIF conversion to finish before renaming.": "GIF 변환이 끝난 뒤 이름을 바꾸세요."
 }

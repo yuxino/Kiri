@@ -534,9 +534,9 @@ export function LibraryWindow() {
     loaded && (libraryStatusError || libraryStatus?.availability === "unavailable");
   const libraryMigrating = loaded && libraryStatus?.availability === "migrating";
 
-  const copyCapture = async (id: string) => {
+  const copyCapture = async (id: string, file = false) => {
     try {
-      await api.copyAsset(id);
+      await (file ? api.copyAssetFile(id) : api.copyAsset(id));
     } catch {
       setError({ message: "Couldn't copy this capture.", recovery: null });
     }
@@ -726,6 +726,12 @@ export function LibraryWindow() {
           disabled={assetAvailability[asset.id] !== undefined && assetAvailability[asset.id] !== "ready"}
           onClick={run(() => void copyCapture(asset.id))}
         />
+        <MenuRow
+          icon="doc.on.doc"
+          label={t("Copy File")}
+          disabled={assetAvailability[asset.id] !== undefined && assetAvailability[asset.id] !== "ready"}
+          onClick={run(() => void copyCapture(asset.id, true))}
+        />
         {asset.kind === "image" && !showingTrash && <MenuRow icon="qrcode" label={t("Recognize QR Codes")} disabled={assetAvailability[asset.id] !== undefined && assetAvailability[asset.id] !== "ready"} onClick={run(() => void api.openEditor(asset.id, true).catch(() => setError({ message: t("QR recognition failed."), recovery: null })))} />}
         {asset.kind === "image" && (!showingTrash || asset.ocrText != null) && <MenuRow
           icon="text.viewfinder"
@@ -742,6 +748,7 @@ export function LibraryWindow() {
         <MenuRow
           icon="character.textbox"
           label={t("Rename")}
+          disabled={gifConversionIds.has(asset.id) || (assetAvailability[asset.id] !== undefined && assetAvailability[asset.id] !== "ready")}
           onClick={run(() => {
             window.dispatchEvent(new CustomEvent(`kiri-rename:${asset.id}`));
           }, false)}
@@ -768,7 +775,7 @@ export function LibraryWindow() {
           icon="folder"
           label={t("Show in Folder")}
           disabled={assetAvailability[asset.id] === "missing"}
-          onClick={run(() => void api.revealAsset(asset.id).catch(() => {}))}
+          onClick={run(() => void api.revealAsset(asset.id).catch(() => setError({ message: "Couldn't open folder", recovery: null })))}
         />
         {asset.gifEligible && (
           <MenuRow
@@ -1278,6 +1285,7 @@ export function LibraryWindow() {
                     }}
                     onRestoreMissing={() => restoreMissing(asset.id)}
                     onCopy={() => void copyCapture(asset.id)}
+                    onRenameError={(message) => setError({ message, recovery: null })}
                     onOpen={() =>
                       assetAvailability[asset.id] === undefined ||
                       assetAvailability[asset.id] === "ready"
@@ -1581,6 +1589,7 @@ function AssetCard(props: {
   onAvailability(availability: AssetAvailability): void;
   onRestoreMissing(): Promise<void>;
   onCopy(): void;
+  onRenameError(message: string): void;
 }) {
   const {
     asset,
@@ -1596,6 +1605,7 @@ function AssetCard(props: {
     onAvailability,
     onRestoreMissing,
     onCopy,
+    onRenameError,
   } = props;
   const fileSize = formatFileSize(asset.fileSize);
   const [hovered, setHovered] = useState(false);
@@ -1697,17 +1707,34 @@ function AssetCard(props: {
     openCard();
   };
   const [titleDraft, setTitleDraft] = useState(asset.title ?? "");
+  const titleFinished = useRef(false);
+  const renameBusy = useRef(false);
   const [addingTag, setAddingTag] = useState(false);
 
   // "Rename" menu item dispatches a custom event to enter edit mode.
   useEffect(() => {
     const handler = () => {
+      if (renameBusy.current) return;
+      titleFinished.current = false;
       setTitleDraft(asset.title ?? "");
       setEditingTitle(true);
     };
     window.addEventListener(`kiri-rename:${asset.id}`, handler);
     return () => window.removeEventListener(`kiri-rename:${asset.id}`, handler);
   }, [asset.id, asset.title]);
+
+  const finishTitle = () => {
+    if (titleFinished.current) return;
+    titleFinished.current = true;
+    renameBusy.current = true;
+    setEditingTitle(false);
+    void api.renameAsset(asset.id, titleDraft.trim()).catch((error: unknown) => {
+      const expected = ["Use a valid file name.", "A file with that name already exists.",
+        "Renamed; the old file could not be removed.", "Renamed; disk synchronization failed.",
+        "Wait for GIF conversion to finish before renaming."];
+      onRenameError(typeof error === "string" && expected.includes(error) ? error : "Couldn't rename this capture.");
+    }).finally(() => { renameBusy.current = false; });
+  };
 
   // "Add Tag" menu item opens the inline tag input.
   useEffect(() => {
@@ -1928,15 +1955,14 @@ function AssetCard(props: {
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             placeholder={t("Name")}
-            onBlur={() => {
-              void api.renameAsset(asset.id, titleDraft.trim()).catch(() => {});
-              setEditingTitle(false);
-            }}
+            onBlur={finishTitle}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === "Enter") {
-                void api.renameAsset(asset.id, titleDraft.trim()).catch(() => {});
-                setEditingTitle(false);
+                e.preventDefault();
+                finishTitle();
               } else if (e.key === "Escape") {
+                titleFinished.current = true;
                 setTitleDraft(asset.title ?? "");
                 setEditingTitle(false);
               }
@@ -1967,6 +1993,8 @@ function AssetCard(props: {
             }}
             onDoubleClick={(e) => {
               e.stopPropagation();
+              if (renameBusy.current || !contentAvailable) return;
+              titleFinished.current = false;
               setTitleDraft(asset.title ?? "");
               setEditingTitle(true);
             }}
