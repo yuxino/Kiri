@@ -707,5 +707,11 @@
   "Checking video… %d%": "Video wird geprüft… %d%",
   "GIF conversion cancelled": "GIF-Konvertierung abgebrochen",
   "Cancel all": "Alle abbrechen",
-  "Could not save the language preference.": "Die Spracheinstellung konnte nicht gespeichert werden."
+  "Could not save the language preference.": "Die Spracheinstellung konnte nicht gespeichert werden.",
+  "Coordinates": "Koordinaten",
+  "⌘C to copy color": "⌘C: Farbe kopieren",
+  "Ctrl+C to copy color": "Strg+C: Farbe kopieren",
+  "Color copied": "Farbe kopiert",
+  "Could not copy color": "Kopieren fehlgeschlagen",
+  "Color value": "Farbwert"
 }

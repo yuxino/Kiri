@@ -1,0 +1,68 @@
+.kiri-color-picker {
+  position: absolute;
+  z-index: 40;
+  width: 184px;
+  height: 276px;
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 8px;
+  background: var(--kiri-card);
+  color: var(--kiri-label);
+  font: 12px/1.4 var(--kiri-font-ui);
+}
+
+.kiri-color-picker-preview {
+  position: relative;
+  height: 182px;
+  overflow: hidden;
+  background: var(--kiri-group-fill);
+  border-bottom: 1px solid var(--kiri-surface-border);
+}
+
+.kiri-color-picker-preview canvas {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  top: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  image-rendering: pixelated;
+}
+
+.kiri-color-picker-crosshair {
+  position: absolute;
+  inset: 0;
+}
+
+.kiri-color-picker-crosshair::before,
+.kiri-color-picker-crosshair::after {
+  content: "";
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 0 1px #111;
+}
+
+.kiri-color-picker-crosshair::before { left: 50%; top: 0; width: 1px; height: 100%; }
+.kiri-color-picker-crosshair::after { top: 50%; left: 0; height: 1px; width: 100%; }
+.kiri-color-picker-pixel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border: 1px solid #fff;
+  outline: 1px solid #111;
+}
+
+.kiri-color-picker-values { padding: 9px 10px; }
+.kiri-color-picker-values > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.kiri-color-picker-values span { color: var(--kiri-secondary-label); }
+.kiri-color-picker-values output { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+.kiri-color-picker-values i { width: 10px; height: 10px; border: 1px solid #888; border-radius: 2px; }
+.kiri-color-picker-values p { margin: 6px 0 0; color: var(--kiri-secondary-label); font-size: 11px; }
+.kiri-color-picker-values p[data-failed] { color: var(--kiri-coral); }
