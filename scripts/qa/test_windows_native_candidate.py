@@ -85,6 +85,12 @@ class CandidateTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(RuntimeError):
                 self.validate([path])
 
+    def test_markdown_translation_changes_do_not_require_rebuilding(self):
+        self.validate(["README.md", "README_ZH.md", "README_JA.md", "docs/architecture.md"])
+        for path in ("docs/demos/flow.js", "public/icon.png", "README_ZH.md/escape", "vite.config.ts"):
+            with self.subTest(path=path), self.assertRaises(RuntimeError):
+                self.validate([path])
+
     def test_actual_checkout_is_anchored_to_immediate_sha(self):
         log = '2026-10-10T00:00:00Z [command]"C:\\Program Files\\Git\\bin\\git.exe" log -1 --format=%H\n2026-10-10T00:00:00Z ' + "a" * 40 + "\n"
         self.assertEqual(candidate.checkout_sha(log), "a" * 40)

@@ -29,6 +29,12 @@ NATIVE_STEPS = {
 REQUIRED_NATIVE = ("countdown-native.py", "shortcut-native.py", "windows-release-native.py")
 
 
+def allowed_change(path):
+    return (path.startswith(("scripts/qa/", ".github/workflows/"))
+            or (path.startswith("docs/") and path.endswith(".md"))
+            or bool(re.fullmatch(r"README(?:_[A-Za-z-]+)?\.md", path)))
+
+
 def require(condition, message):
     if not condition:
         raise RuntimeError(message)
@@ -70,7 +76,7 @@ def validate(run, jobs, run_id, changed_paths):
     require(set(REQUIRED_NATIVE) <= set(gates), "Candidate is missing existing native gates")
     require(all(steps[name] in {"success", "failure", "skipped"} for name in NATIVE_STEPS if name in steps),
             "Original native gates must have finished")
-    require(all(path.startswith(("scripts/qa/", ".github/workflows/", "docs/qa/")) for path in changed_paths),
+    require(all(allowed_change(path) for path in changed_paths),
             "Candidate application and packaging sources differ from the harness")
     return windows[0], gates
 
@@ -159,10 +165,17 @@ def main():
     require(len(installers) == 1 and len(binaries) == 1, "Expected one original installer and compiled executable")
     install = Path(os.environ["RUNNER_TEMP"]) / "kiri-installed-review"
     require(not install.exists(), "Candidate install destination must be fresh")
-    subprocess.run([str(installers[0]), "/S", f"/D={install}"], check=True, timeout=120)
+    subprocess.run(["pwsh", "-NoProfile", "-File", "scripts/qa/windows-install-candidate.ps1",
+                    "-Installer", str(installers[0]), "-InstallRoot", str(install)], check=True, timeout=120)
     installed = install / "kiri.exe"
     checksum = digest(binaries[0])
-    require(installed.is_file() and digest(installed) == checksum,
+    actual_checksum = digest(installed) if installed.is_file() else None
+    (evidence / "installer-check.json").write_text(json.dumps({
+        "source_sha": source_sha, "compiled_sha256": checksum,
+        "installed_exists": installed.is_file(), "installed_sha256": actual_checksum,
+        "installed_files": [str(path.relative_to(install)) for path in install.rglob("*")] if install.exists() else [],
+    }, indent=2), encoding="utf-8")
+    require(actual_checksum == checksum,
             "Installed executable differs from the original compiled candidate")
     app = Path("src-tauri/target/release/kiri.exe")
     app.parent.mkdir(parents=True, exist_ok=True)

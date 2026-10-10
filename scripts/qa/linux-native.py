@@ -458,7 +458,8 @@ def native_pin_acceptance():
                     (bounds := geometry(pin)) and abs(int(bounds["X"]) - int(before["X"])) >= 30
                     and abs(int(bounds["Y"]) - int(before["Y"])) >= 20 and bounds)
     size = (int(moved["WIDTH"]), int(moved["HEIGHT"]))
-    corner = (int(moved["X"]) + size[0] - 12, int(moved["Y"]) + size[1] - 12)
+    # Press the painted corner glyph (the original verified native hit point).
+    corner = (int(moved["X"]) + size[0] - 5, int(moved["Y"]) + size[1] - 5)
     # Unequal normalized pointer deltas must still preserve the image aspect.
     target = (corner[0] + round(size[0] * 0.1), corner[1] + round(size[1] * 0.2))
     command("xdotool", "mousemove", str(corner[0]), str(corner[1]))
