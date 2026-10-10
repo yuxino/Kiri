@@ -216,7 +216,7 @@ async def main():
                 await page.mouse.dblclick(*point(850, 470))
                 assert await page.locator('#editor').count() == 1
                 assert await page.evaluate('state.editorSaveCalls') == 0
-                await editor.get_by_role('button', name='Cancel', exact=True).click()
+                await editor.get_by_role('button', name='Cancel (Esc)', exact=True).click()
                 dialog = editor.get_by_role('dialog', name='Save changes before closing?', exact=True)
                 await dialog.wait_for()
                 await dialog.get_by_role('button', name='Keep editing', exact=True).click()
@@ -231,7 +231,7 @@ async def main():
                 assert await text.input_value() == 'edited saved text'
                 await text.press('Escape')
                 await text.wait_for(state='detached')
-                await editor.get_by_role('button', name='Cancel', exact=True).click()
+                await editor.get_by_role('button', name='Cancel (Esc)', exact=True).click()
                 await page.locator('#editor').wait_for(state='detached')
                 assert await page.evaluate('state.editorSaveCalls') == 1
                 assert await confirms() == 2

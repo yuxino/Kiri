@@ -159,9 +159,10 @@ async def main():
                                 await undo.click()
                                 await redo.click()
                                 if language == 'en' and width == 800 and scale == 1:
-                                    # Use the real toolbar scroll so both the retained crop and
-                                    # selected annotation tool are visible in the unedited image.
-                                    await f.get_by_title(strings['Crop (C)'], exact=True).evaluate('el => {el.parentElement.scrollLeft = 0;}')
+                                    # The wrapped toolbar keeps both crop and annotation actions
+                                    # visible without scrolling to find either control.
+                                    assert await f.get_by_title(strings['Crop (C)'], exact=True).is_visible()
+                                    assert await rectangle.is_visible()
                                     await page.screenshot(path=str(OUT / 'crop-annotate-after.png'))
                                 await f.get_by_title(strings['Crop (C)'], exact=True).click()
                                 await undo.click()
@@ -181,7 +182,7 @@ async def main():
                                 mark = outputs[-1]['document']['marks'][0]
                                 expected_mark = {'x':30, 'y':20, 'width':80, 'height':50}
                                 assert all(abs(mark['rect'][key] - value) < 0.0001 for key, value in expected_mark.items()), mark
-                                await f.get_by_role('button', name=strings['Cancel'], exact=True).click()
+                                await f.get_by_role('button', name=strings['Cancel (Esc)'], exact=True).click()
                                 dialog = f.get_by_role('dialog', name=strings['Save changes before closing?'], exact=True)
                                 await dialog.wait_for()
                                 if language == 'en' and width == 800 and scale == 1:

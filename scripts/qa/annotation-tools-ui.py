@@ -125,7 +125,7 @@ async def verify():
     report = {"scope": "Actual product windows with isolated IPC; no native or IME claim", "editor": [], "overlay": []}
     try:
         async with async_playwright() as runtime:
-            browser = await runtime.chromium.launch(headless=True)
+            browser = await runtime.chromium.launch(headless=True, executable_path=os.environ.get("CHROME_BIN", "/usr/bin/google-chrome"))
             page = await browser.new_page()
             await page.goto(URL)
             await page.locator("canvas").wait_for()
