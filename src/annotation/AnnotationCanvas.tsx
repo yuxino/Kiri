@@ -1665,8 +1665,8 @@ function TextEditor(props: {
       disabled={disabled} onPointerDown={event => {
         if (ref.current && isTextComposition({target: ref.current})) {event.preventDefault(); event.stopPropagation(); return;}
         onMoveCallout?.(event);
-      }} style={{position: "absolute", left: editing.rect.x + editing.rect.width - 8 * editing.uiScale,
-        top: editing.rect.y - 8 * editing.uiScale, width: 16 * editing.uiScale, height: 16 * editing.uiScale,
+      }} style={{position: "absolute", left: Math.max(0, Math.min(bounds.width - 16 * editing.uiScale, editing.rect.x + editing.rect.width - 8 * editing.uiScale)),
+        top: Math.max(0, Math.min(bounds.height - 16 * editing.uiScale, editing.rect.y - 8 * editing.uiScale)), width: 16 * editing.uiScale, height: 16 * editing.uiScale,
         border: `${2 * editing.uiScale}px solid white`, borderRadius: "50%", background: "#161616",
         padding: 0, cursor: "move", pointerEvents: "auto"}}/> : <div id={hintId} style={{
       position: "absolute",

@@ -53,7 +53,8 @@ function input(text = "") {
   const component = h.mount("TextEditor", props);
   let node = nodes(component.render()).find(node => node?.type === "textarea");
   return {textarea, writes, changes, commands, finishes: () => finishes,
-    render(text) {node = nodes(component.render({...props, editing: {...props.editing, text}})).find(node => node?.type === "textarea"); return node;},
+    render(text, patch = {}) {node = nodes(component.render({...props, editing: {...props.editing, text, ...patch}})).find(node => node?.type === "textarea"); return node;},
+    grip() {return nodes(component.render()).find(node => node?.type === "button");},
     key(options = {}) {
       const event = {key: "Enter", currentTarget: textarea, target: textarea,
         defaultPrevented: false, stopped: false,
@@ -79,6 +80,16 @@ test("delayed callout selection echoes preserve continuous input and the native 
   }
   assert.deepEqual(h.changes, ["a", "ab", "abc", "abcd", "abcde", "abcdef", "abcXYdef"]);
   assert.deepEqual(h.writes, [""]);
+});
+
+test("the inline grip stays inside display edges and ordinary input remains transparent over saved backgrounds", () => {
+  const h = input();
+  h.render("", {rect: {x: 480, y: 0, width: 160, height: 41}});
+  const grip = h.grip();
+  assert.equal(grip.props.style.left, 624);
+  assert.equal(grip.props.style.top, 0);
+  const text = h.render("saved", {callout: undefined, background: "dark"});
+  assert.equal(text.props.style.background, "transparent");
 });
 
 test("native Undo returning to the original prop cannot leave stale echoes or rewrite the input", () => {
