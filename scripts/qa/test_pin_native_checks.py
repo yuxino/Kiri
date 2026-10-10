@@ -2,8 +2,9 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 import tempfile
+import shutil
 
-from pin_native_checks import pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
+from pin_native_checks import borderless_geometry_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 from windows_qa_profile import isolated_app_directories, isolated_windows_profile
 
 
@@ -55,6 +56,12 @@ class NativePinChecks(unittest.TestCase):
             with self.subTest(after=after), self.assertRaises(RuntimeError):
                 proportional_resize_evidence((580, 235), after)
 
+    def test_actual_nonclient_geometry_detects_titlebar_and_border(self):
+        borderless_geometry_evidence((10, 20, 590, 255), (10, 20, 590, 255))
+        for client in ((10, 44, 590, 255), (18, 28, 582, 247)):
+            with self.subTest(client=client), self.assertRaises(RuntimeError):
+                borderless_geometry_evidence(client, (10, 20, 590, 255))
+
     def test_profile_isolation_refuses_non_ci_and_self_hosted_machines(self):
         for environment in ({}, {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "self-hosted"}):
             with self.subTest(environment=environment), patch.dict("os.environ", environment, clear=True):
@@ -98,6 +105,40 @@ class NativePinChecks(unittest.TestCase):
                     self.fail("Linked profile was accepted")
             self.assertEqual((prior / "prior.txt").read_text(), "prior QA data")
             self.assertEqual(list(backup.iterdir()), [])
+
+    def test_webview_sharing_lock_retry_still_restores_prior_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, backup = root / "original", root / "backup"
+            original.mkdir(); backup.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            actual_remove = shutil.rmtree
+            calls = []
+            def release_then_remove(path):
+                calls.append(path)
+                if len(calls) == 1:
+                    error = PermissionError("WebView cache handle pending release")
+                    error.winerror = 32
+                    raise error
+                actual_remove(path)
+            with patch("windows_qa_profile.shutil.rmtree", side_effect=release_then_remove), patch("windows_qa_profile.time.sleep"):
+                with isolated_app_directories((original,), backup):
+                    (original / "generated.txt").write_text("generated")
+            self.assertEqual(len(calls), 2)
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertFalse((original / "generated.txt").exists())
+
+    def test_nonsharing_cleanup_failure_preserves_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, backup = root / "original", root / "backup"
+            original.mkdir(); backup.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            with patch("windows_qa_profile.shutil.rmtree", side_effect=PermissionError("not a sharing lock")):
+                with self.assertRaisesRegex(RuntimeError, "Could not restore"):
+                    with isolated_app_directories((original,), backup):
+                        pass
+            self.assertEqual((backup / "original-0/prior.txt").read_text(), "prior QA data")
 
 
 if __name__ == "__main__":

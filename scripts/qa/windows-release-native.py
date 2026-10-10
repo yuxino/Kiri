@@ -12,7 +12,7 @@ import time
 
 from pywinauto import Desktop, keyboard, mouse
 from PIL import Image, ImageChops, ImageGrab, ImageStat
-from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
+from pin_native_checks import annotated_capture_evidence, borderless_geometry_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 from windows_qa_profile import isolated_windows_profile
 
 
@@ -128,6 +128,15 @@ def client_bounds(window):
     return origin.x, origin.y, origin.x + rect.right, origin.y + rect.bottom
 
 
+def outer_bounds(window):
+    user32 = ctypes.windll.user32
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    rect = wintypes.RECT()
+    if not user32.GetWindowRect(window.handle, ctypes.byref(rect)):
+        raise ctypes.WinError()
+    return rect.left, rect.top, rect.right, rect.bottom
+
+
 def drag_mouse(start, end, native=False):
     mouse.press(coords=start)
     time.sleep(0.3 if native else 0.15)
@@ -154,10 +163,11 @@ def direct_pin_acceptance(source, expected, region, user32):
     find("Pin Screenshot on Top").click_input()
     pin = wait_for("direct toolbar pin opens native reference", pinned_window)
     wait_for("capture owner is destroyed", lambda: not user32.IsWindow(owner_handle))
-    if user32.GetWindowLongW(pin.handle, -16) & 0x00C00000:
-        raise RuntimeError("Reference still has a native caption")
-    if not user32.GetWindowLongW(pin.handle, -20) & 0x00000008:
-        raise RuntimeError("Direct reference is not native topmost")
+    # Tao retains WS_CAPTION for top-level windows but removes the actual
+    # nonclient frame in WM_NCCALCSIZE. Style bits alone do not prove a titlebar.
+    frame = borderless_geometry_evidence(client_bounds(pin), outer_bounds(pin))
+    report["pin_native_frame"] = frame
+    wait_for("direct reference native topmost applied", lambda: user32.GetWindowLongW(pin.handle, -20) & 0x00000008)
     items = json.loads((library / "library.json").read_text())
     created = [item for item in items if item["id"] not in before_ids]
     if len(created) != 1 or created[0]["kind"] != "image":
@@ -189,8 +199,8 @@ def direct_pin_acceptance(source, expected, region, user32):
     moved = wait_for("dragging the reference image moves its native window", lambda:
                     (bounds := client_bounds(pin)) and abs(bounds[0] - before[0]) >= 30 and abs(bounds[1] - before[1]) >= 20 and bounds)
     before_size = (moved[2] - moved[0], moved[3] - moved[1])
-    corner = (moved[2] - 5, moved[3] - 5)
-    delta = (max(40, round(before_size[0] * 0.1)), max(25, round(before_size[1] * 0.1)))
+    corner = (moved[2] - 12, moved[3] - 12)
+    delta = (max(40, round(before_size[0] * 0.1)), max(25, round(before_size[1] * 0.2)))
     mouse.move(coords=corner)
     drag_mouse(corner, (corner[0] + delta[0], corner[1] + delta[1]))
     resized = wait_for("native reference grows after corner resize", lambda:
@@ -402,6 +412,11 @@ try:
             if sorted(path.name for path in portable.parent.iterdir()) != ["kiri.exe", "kiri.portable"]:
                 raise RuntimeError("Portable copy wrote unexpected files beside the executable")
             smoke(installed, "Check for Updates", "NSIS installation")
+            report["native_acceptance_success"] = True
+        except Exception as error:
+            # Keep the primary failure if later WebView cleanup also fails.
+            report["acceptance_error"] = str(error)
+            raise
         finally:
             stop()
             if native_log.is_file():

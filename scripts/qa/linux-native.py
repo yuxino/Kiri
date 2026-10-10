@@ -458,11 +458,20 @@ def native_pin_acceptance():
                     (bounds := geometry(pin)) and abs(int(bounds["X"]) - int(before["X"])) >= 30
                     and abs(int(bounds["Y"]) - int(before["Y"])) >= 20 and bounds)
     size = (int(moved["WIDTH"]), int(moved["HEIGHT"]))
-    corner = (int(moved["X"]) + size[0] - 5, int(moved["Y"]) + size[1] - 5)
-    drag_region((*corner, corner[0] + round(size[0] * 0.1), corner[1] + round(size[1] * 0.1)))
+    corner = (int(moved["X"]) + size[0] - 12, int(moved["Y"]) + size[1] - 12)
+    # Unequal normalized pointer deltas must still preserve the image aspect.
+    drag_region((*corner, corner[0] + round(size[0] * 0.1), corner[1] + round(size[1] * 0.2)))
     resized = wait_for("native X11 pin grows after corner drag", lambda:
                       (bounds := geometry(pin)) and int(bounds["WIDTH"]) >= size[0] + 20 and bounds)
     resize = proportional_resize_evidence(size, (int(resized["WIDTH"]), int(resized["HEIGHT"])))
+    report["pin_foreground_source_before"] = command("xprop", "-id", source, "_NET_WM_STATE").stdout
+    # EWMH puts focused fullscreen windows above the ABOVE layer. Test an
+    # ordinary managed foreground app without raising or repinning the pin.
+    fixture.request("windowed")
+    source_state = wait_for("source leaves the fullscreen stacking layer", lambda:
+                            (state := command("xprop", "-id", source, "_NET_WM_STATE").stdout)
+                            and "_NET_WM_STATE_FULLSCREEN" not in state and state)
+    report["pin_foreground_source_after"] = source_state
     command("xdotool", "windowactivate", "--sync", source)
     command("xdotool", "mousemove", "10", "790")
     def visible_image():
