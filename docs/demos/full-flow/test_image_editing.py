@@ -105,6 +105,66 @@ async def main():
     saved=(await page.evaluate('state.pendingAnnotation'))['documentJson']
     assert saved.find('line one')!=-1,saved
     assert [mark['text'] for mark in json.loads(saved)['marks'] if mark['kind']=='text']==[typed],saved
+    # Real key events reproduce the callout's delayed controlled-value echo.
+    f=await capture()
+    await f.get_by_role('button',name='Text tools',exact=True).click()
+    await f.get_by_text('Numbered callout',exact=True).click();await page.mouse.click(400,260)
+    description=f.get_by_role('textbox',name='Description (optional)',exact=True)
+    await description.evaluate("""el=>{
+     window.calloutChildMutations=0;
+     new MutationObserver(records=>window.calloutChildMutations+=records.length)
+      .observe(el,{childList:true,characterData:true,subtree:true});
+    }""")
+    await description.press_sequentially('abcdef',delay=40)
+    assert await description.input_value()=='abcdef','continuous input lost callout characters'
+    for _ in range(3):await description.press('ArrowLeft')
+    await description.press_sequentially('XY',delay=40)
+    assert await description.input_value()=='abcXYdef'
+    assert await description.evaluate('el=>el.selectionStart===5&&el.selectionEnd===5'),'callout echo moved the native caret'
+    await description.press(mod+'+z');assert await description.input_value()=='abcdef'
+    await description.press(mod+'+Shift+z');assert await description.input_value()=='abcXYdef'
+    await description.press('End');await description.press('Enter')
+    continuous='continuous typing abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz'
+    await description.press_sequentially(continuous,delay=10)
+    expected='abcXYdef\n'+continuous
+    assert await description.input_value()==expected
+    assert await page.locator('#overlay').count()==1,'description Enter completed the screenshot'
+    # Exercise Chromium's composition editor, not the operating system's IME.
+    cdp=await context.new_cdp_session(page)
+    await cdp.send('Input.imeSetComposition',{'text':'zhong','selectionStart':5,'selectionEnd':5})
+    assert await description.input_value()==expected+'zhong'
+    await cdp.send('Input.imeSetComposition',{'text':'中文','selectionStart':2,'selectionEnd':2})
+    await cdp.send('Input.insertText',{'text':'中文'});await cdp.detach()
+    expected+='中文'
+    assert await description.input_value()==expected
+    assert await description.evaluate('el=>window.calloutChildMutations')==0,'callout input rewrote native textarea DOM'
+    # Selection changes create a separate native editor; reselecting retains text.
+    await f.get_by_title('Numbered callout (N)',exact=True).click();await page.mouse.click(950,480)
+    await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='2'")
+    await description.press_sequentially('second description',delay=10)
+    await f.get_by_title('Select (V)',exact=True).click();await page.mouse.click(480,410)
+    await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
+    await page.screenshot(path=str(OUT/'callout-reselection.png'))
+    assert await description.input_value()==expected,{'stage':'reselection','actual':await description.input_value()}
+    await description.press('Meta+ArrowDown' if sys.platform=='darwin' else 'Control+End')
+    await description.press_sequentially('x');await description.press(mod+'+z')
+    assert await description.input_value()==expected,'fast native Undo did not return to the initial field value'
+    await description.press(mod+'+Shift+z');assert await description.input_value()==expected+'x'
+    await description.press(mod+'+z');assert await description.input_value()==expected
+    await description.press_sequentially(' edited',delay=10)
+    await f.get_by_title('Undo (⌘Z)',exact=True).click();await page.mouse.click(480,410)
+    await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
+    assert await description.input_value()==expected,'canvas Undo did not restore the callout field'
+    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click();await page.mouse.click(480,410)
+    await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
+    expected+=' edited'
+    assert await description.input_value()==expected,'canvas Redo did not restore the callout field'
+    await page.screenshot(path=str(OUT/'callout-input-after.png'))
+    await f.get_by_title('Done — Copy to clipboard · Return',exact=True).click()
+    await page.locator('#overlay').wait_for(state='detached')
+    callouts=[mark['text'] for mark in json.loads((await page.evaluate('state.pendingAnnotation'))['documentJson'])['marks'] if mark['kind']=='callout']
+    assert callouts==[expected,'second description'],callouts
+    (OUT/'callout-input-check.json').write_text(json.dumps({'native':False,'osIme':False,'browserComposition':'Chromium Input.imeSetComposition and Input.insertText','passed':['continuous English input','middle caret insertion','native undo/redo','description Enter adds newline','browser composition updates and commit','zero textarea DOM rewrites','second callout input','reselection and second edit','canvas undo/redo field sync','saved document matches typed descriptions'],'descriptions':callouts},ensure_ascii=False,indent=2)+'\n')
     # Seed one public image for saved-image editor tests.
     buffer=io.BytesIO();Image.new('RGB',(1000,600),'#707b8d').save(buffer,format='PNG');MEDIA['image-edit-fixture']=(buffer.getvalue(),'image/png')
     async def editor():
