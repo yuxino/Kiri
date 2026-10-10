@@ -154,6 +154,14 @@ mode, only the Select tool's unmarked canvas accepts this action; text keeps its
 double-click editing behavior. Both clicks must be eligible and use the same
 synchronous completion lock and confirmation pipeline as Return.
 
+Idle Screenshot hover samples a bounded 15×15 sRGB patch from the original
+decoded frozen image, before any overlay compositing. Actual image dimensions
+map logical pointer coordinates to display-local physical pixels. The passive
+loupe hides during gestures, annotation and other capture modes. Its Cmd/Ctrl+C
+action calls `copy_capture_color`, which validates the HEX value and active
+overlay owner, and keeps the session alive. OCR's `copy_text` still completes
+its session. See ADR 0082.
+
 On macOS, transient capture, countdown, recording-control, ripple, and
 completion windows explicitly join other applications' full-screen Spaces.
 A transparent, non-interactive native `NSPanel` parent supplies full-screen
