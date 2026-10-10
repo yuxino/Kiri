@@ -43,6 +43,8 @@
 2. Choose Screenshot, Record, or OCR.
 3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Choose **Pin** on the completion card to open a floating reference image.
 
+In Screenshot mode, hover to magnify the original pixels and see their coordinates and HEX color. Press `⌘C` on macOS or `Ctrl+C` to copy the color while keeping the selection. The loupe hides once annotation starts.
+
 Use the arrow beside Text to choose Label bubble (B). Click the image to type a note, then click its dot to switch the pointing side. Adjust the font size and dot color, or double-click the text to edit it again.
 
 Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.

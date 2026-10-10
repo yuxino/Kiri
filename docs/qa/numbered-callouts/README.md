@@ -59,9 +59,10 @@ choice may select a different valid Apple Development certificate; validity
 alone does not preserve privacy identity. The installer correctly rejects that
 mismatch; never bypass it or reset permissions for QA.
 
-The fixed-path app was installed and opened successfully with its original
-designated requirement. The pre-gesture-fix package's executable SHA-256 is
-`9251d2c328444f15680c697712cbd39aacf5e26e494abf64a77cd3d04c33526e`.
+The final fixed-path app was installed and opened successfully with its original
+designated requirement. Its executable SHA-256 is
+`a6fbf6f161fc5c7dfe59750497e4bae351c681e4b05382d9dcd02ec3a6637eef`,
+packaged from code at `f5e14e2577106cd1f956ee9981c79b1597a51450`.
 
 The native saved-image editor was tested using one generated 640×360 source:
 menu switching, dragged placement, Chinese multiline input, Escape blur,
@@ -69,11 +70,55 @@ live size, filled/outline styles, color, independent badge/label handles,
 save, reopen, selection and a second description edit all worked. Appearance
 defaults were restored after the test. Selection revealed that opening the
 inspector could change the pointer coordinate mapping mid-gesture; this was
-repaired and has an executable regression. A fixed-path retest of that final
-repair is pending.
+repaired and has an executable regression. In the final fixed-path retest,
+clicking a reopened badge opens its inspector without moving it or enabling
+Undo. Independent movement, changing the number to 3, editing its description,
+saving and reopening again all passed.
+
+The generated test asset was moved through the library UI into recoverable
+Trash; the filtered library then showed zero matching assets. Search was
+cleared and the shared installation released for combined native acceptance.
+No existing capture or Trash contents were removed.
 
 The native global capture overlay was observed, but reliable synthetic global
 shortcut routing was not established. Full capture-to-clipboard, original-app
 focus restoration, real IME composition and display-edge native checks remain
 for the coordinated integration acceptance. No Windows or Linux native
 acceptance is claimed by these renderer/editor checks.
+
+## CI candidate
+
+Code commit `f5e14e2577106cd1f956ee9981c79b1597a51450` passed the required
+[PR run](https://github.com/yuxino/Kiri/actions/runs/38023991683): frontend,
+renderer acceptance, macOS Rust, arm64/x64 macOS compile, Windows tests and
+Ubuntu tests. CI macOS Rust passes despite the local contrast-test failure
+recorded above.
+
+The separate [full run](https://github.com/yuxino/Kiri/actions/runs/38023998131)
+uses that same code commit and additionally builds installers, installs the
+Debian package, and runs isolated X11/Windows desktop checks. It completed
+successfully, including Windows installer/portable smoke checks and isolated
+GNOME Wayland portal checks at scales 1, 1.25, 1.5 and 2. These isolated
+checks do not establish physical hardware or mixed-display acceptance.
+
+## Integration with main
+
+2026-10-10: merged `origin/main` at `eb3a8c9`, including the screenshot hover
+color picker and Windows confirmation repair. Conflicts were limited to the
+ADR index and dictionary additions. Both features' strings remain present in
+all seven dictionaries with identical sets of 728 keys, and the index keeps
+ADR 0082 and ADR 0083. The shared keyboard handler and its executable test
+context retain both the color-copy boundary and the numbered-callout picker.
+The product design is unchanged.
+
+- `pnpm test:release-tools`: 354 passed.
+- `pnpm build`, `cargo check --manifest-path src-tauri/Cargo.toml`, and
+  `git diff --check`: passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-targets`: 333 passed,
+  one failed, one ignored on this Mac. The same native video annotation
+  contrast assertion described above still fails; no test was weakened or
+  ignored.
+
+No fixed-path app was installed or restarted for this branch synchronization;
+the shared installation remains owned by the coordinated integration check.
+Current-head CI is tracked on PR #125 before merge approval.

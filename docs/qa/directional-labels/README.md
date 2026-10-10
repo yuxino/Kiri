@@ -27,18 +27,29 @@ browser retesting also verified Space activation after this integration.
 
 ## Local checks and limits
 
-`pnpm build`, `pnpm test:release-tools` (356 tests), `cargo check`, and
-`git diff --check` passed. The complete macOS 27.0.1 Rust run had 331 passing tests,
+The branch incorporates numbered-callout merge `4225a50`, including main
+`eb3a8c9` (hover colors and Windows confirmation dispatch). Only the three
+README feature paragraphs required conflict resolution; both descriptions are
+retained. Label annotation source, rendering and styles match the previously
+validated implementation, and ADR 0084 remains intact.
+
+`pnpm build`, `pnpm test:release-tools` (362 tests), `cargo check`, and
+`git diff --check` passed after this integration. The complete macOS 27.0.1 Rust run had 334 passing tests,
 one ignored test and one failure in the pre-existing
 `native_annotations_follow_live_frames_and_independent_time_ranges` test at its
 post-annotation blue-channel pixel-difference assertion. The same assertion
 failed when that test was run alone. The new label serialization test passed.
 No native video-renderer or pixel-threshold change is part of this feature.
 
-A local app bundle was built before the final dependency merge, but packaging
-failed at updater signing because no updater private key was configured. That
-bundle is not the final candidate. The coordinating test slot builds and tests
-the integrated app at `/Applications/Kiri.app`; this task does not replace
-another chat's running app. Browser checks do not
-establish macOS WebKit IME, native focus/clipboard, Windows, or installed Ubuntu
-acceptance. Those results must be recorded before promoting the integrated app.
+The coordinating test slot reported native macOS acceptance for integrated
+candidate `09b62e7`, installed at `/Applications/Kiri.app` with the existing
+signing certificate. A generated image in the real editor covered Chinese
+multiline entry, actual mouse-dot switching while editing with textarea focus
+retained, committed-dot switching, undo/redo, and save/reopen preserving both
+text and direction. The saved label also rendered correctly in the borderless
+pin window while resizing proportionally from 1360×850 to 1160×726.
+
+This task does not replace that fixed-path application. The editor/pin results
+do not establish screenshot-overlay completion/clipboard/focus, physical IME
+composition, or installed Windows/Ubuntu label interaction. The coordinating
+test slot owns broader combined native acceptance and the merge decision.

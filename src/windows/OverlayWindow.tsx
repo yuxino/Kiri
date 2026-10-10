@@ -60,6 +60,7 @@ import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
 import { captureToolbarPosition } from "./toolbar-layout.js";
 import { CaptureSizeControls } from "./CaptureSizeControls";
 import { resizeCapturePixels } from "./capture-size.js";
+import { CaptureColorPicker, useCaptureColorPicker } from "./CaptureColorPicker";
 
 type Phase =
   | "mode-select"
@@ -249,6 +250,12 @@ export function OverlayWindow() {
   const bounds: Rect = context
     ? { x: 0, y: 0, width: context.displayWidth, height: context.displayHeight }
     : { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+
+  const colorPicker = useCaptureColorPicker(
+    !!context && mode === "screenshot" && (phase === "mode-select" || phase === "selecting") &&
+      !completing && !drag && !resizeHandle && !moveDrag && !modeSelectorDragging,
+    imageRef, bounds, api.copyCaptureColor,
+  );
 
   const modeSelectorPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (
@@ -574,6 +581,8 @@ export function OverlayWindow() {
       // behavior. Annotation shortcuts must not intercept this reading phase.
       if (phaseRef.current === "qr-result" || phaseRef.current === "ocr-result") return;
       if (e.defaultPrevented) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (colorPicker.onCopyKeyDown(e)) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -648,7 +657,7 @@ export function OverlayWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [complete, completionLock, recognizePreparedLocal, runOcr]);
+  }, [complete, completionLock, recognizePreparedLocal, runOcr, colorPicker.onCopyKeyDown]);
 
   const phaseRef = useRef<Phase>("mode-select");
   phaseRef.current = phase;
@@ -901,6 +910,10 @@ export function OverlayWindow() {
             : "default",
       }}
       onPointerDown={completing || phase === "annotating" ? undefined : onPointerDown}
+      onPointerDownCapture={colorPicker.clear}
+      onPointerMoveCapture={colorPicker.onPointerMove}
+      onPointerLeave={colorPicker.clear}
+      onFocusCapture={colorPicker.clear}
       onPointerMove={completing || phase === "annotating" ? undefined : onPointerMove}
       onPointerUp={completing || phase === "annotating" ? undefined : onPointerUp}
       onClick={(event) => {
@@ -944,6 +957,8 @@ export function OverlayWindow() {
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
         />
       )}
+
+      {colorPicker.sample && <CaptureColorPicker sample={colorPicker.sample} feedback={colorPicker.feedback} bounds={bounds} />}
 
       {/* Dim overlay */}
       {!activeDimRect && (

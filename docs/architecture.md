@@ -53,6 +53,15 @@ Each active screenshot has at most one pin window. It reads the saved flattened
 image through the existing local media route. Unpinning or closing that window
 does not change the library asset.
 
+Windows dispatches confirmation, resident feedback, and library-window
+presentation to one serial worker. WebView2 creation never blocks their IPC or
+native event callbacks, and repeated resident-window requests preserve order.
+Confirmation creation errors return to the caller. Permanent deletion and
+empty-trash filesystem work use blocking workers; empty-trash chooses its
+deleted IDs and invalidates their thumbnails under the same generation barrier
+and library lock. `scripts/qa/confirmation-native.py` exercises real Windows
+confirmation windows against generated assets in a temporary managed library.
+
 Linux does not show the floating `control-panel` or `ripple` during recording.
 The tray and explicit recording commands provide controls without relying on
 portal window exclusion. Linux video viewers expose playback, GIF conversion and basic normal-speed
@@ -145,6 +154,14 @@ mode, only the Select tool's unmarked canvas accepts this action; text keeps its
 double-click editing behavior. Both clicks must be eligible and use the same
 synchronous completion lock and confirmation pipeline as Return.
 
+Idle Screenshot hover samples a bounded 15×15 sRGB patch from the original
+decoded frozen image, before any overlay compositing. Actual image dimensions
+map logical pointer coordinates to display-local physical pixels. The passive
+loupe hides during gestures, annotation and other capture modes. Its Cmd/Ctrl+C
+action calls `copy_capture_color`, which validates the HEX value and active
+overlay owner, and keeps the session alive. OCR's `copy_text` still completes
+its session. See ADR 0082.
+
 On macOS, transient capture, countdown, recording-control, ripple, and
 completion windows explicitly join other applications' full-screen Spaces.
 A transparent, non-interactive native `NSPanel` parent supplies full-screen
@@ -208,7 +225,7 @@ one number, optional multiline description, badge center and label rectangle;
 its handles move the badge and label independently. Both parts translate when
 cropped and use the common preview/export renderer. Badge style and size join
 the local appearance preference; note content stays in the editable document.
-See ADR 0081.
+See ADR 0083.
 
 Screenshot label bubbles share the text mark and inline editor, with an optional
 `labelDirection` field. The text rect remains fixed when its dot is clicked;
