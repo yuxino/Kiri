@@ -120,6 +120,38 @@ async def overlay_cases(browser, report):
                 await context.close()
 
 
+async def existing_text_case(browser, report):
+    context = await browser.new_context(viewport={"width": 1200, "height": 720})
+    page = await context.new_page()
+    try:
+        await page.goto(f"{URL}?lang=en&seed")
+        canvas = page.locator("canvas")
+        await canvas.wait_for()
+        box = await canvas.bounding_box()
+        await page.mouse.dblclick(box["x"] + 390 * box["width"] / 960,
+                                 box["y"] + 201 * box["height"] / 600)
+        await page.wait_for_function("document.querySelector('textarea') !== null")
+        assert await page.evaluate("document.activeElement === document.querySelector('textarea')"), "Reopened text must own the next key"
+        # Use the keyboard without locator focus so a missing focus cannot be
+        # masked by the test framework's automatic textbox focusing.
+        await page.keyboard.press("ArrowRight")
+        await page.keyboard.type(" abcdef")
+        await page.keyboard.press("Shift+Enter")
+        await page.keyboard.type("second line")
+        expected = "Editable text abcdef\nsecond line"
+        assert await page.locator("textarea").input_value() == expected
+        assert await page.evaluate("__annotationToolsQa.exports.length") == 0
+        await page.keyboard.press("Enter")
+        await page.locator("textarea").wait_for(state="detached")
+        await page.get_by_role("button", name="Save As…", exact=True).click()
+        await page.wait_for_function("__annotationToolsQa.exports.length===1")
+        mark = await page.evaluate("__annotationToolsQa.document.marks.find(mark=>mark.id===2)")
+        assert mark["text"] == expected and mark["background"] == "transparent", mark
+        report["existingText"] = {"passed": True, "immediateTyping": True, "multiline": True}
+    finally:
+        await context.close()
+
+
 async def verify():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"scope": "Actual product windows with isolated IPC; no native or IME claim", "editor": [], "overlay": []}
@@ -136,6 +168,7 @@ async def verify():
             await page.close()
             await editor_cases(browser, report)
             await overlay_cases(browser, report)
+            await existing_text_case(browser, report)
             await browser.close()
             report["passed"] = True
     finally:

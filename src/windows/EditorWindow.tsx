@@ -499,8 +499,11 @@ export function EditorWindow(props: { id: string }) {
         </div>
       </div>
       {!readOnly && <div className="kiri-image-editor-properties" inert={qrActive}>
-        {tool === "crop" ? <div className="kiri-image-editor-crop-options"><strong>{t("Crop")}</strong>
-          {cropSelection && <button type="button" className="kiri-annotation-action" onClick={cancelCrop}>{t("Cancel crop")}</button>}</div> :
+        {(tool === "crop" || cropSelection) && <div className="kiri-image-editor-crop-options"><strong>{t("Crop")}</strong>
+          {cropSelection && <button type="button" className="kiri-annotation-action" disabled={qrActive || completing}
+            onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+            onClick={cancelCrop}>{t("Cancel crop")}</button>}</div>}
+        {tool !== "crop" &&
           <AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance} disabled={qrActive}
             nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
             onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}

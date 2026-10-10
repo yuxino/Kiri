@@ -1817,10 +1817,15 @@ function TextEditor(props: {
   const hintHeight = 32 * editing.uiScale;
   const hintTop = editing.rect.y + editing.rect.height + 4 * editing.uiScale;
 
-  // Callouts open on pointerup, after the canvas mouse focus action. Give
-  // their editor focus before another key can be routed as a tool shortcut.
+  // Callouts open on pointerup and saved text on double-click, after the
+  // canvas mouse focus action. Own the next key before the first frame;
+  // reopened text keeps the same initial selection as the RAF fallback.
   useLayoutEffect(() => {
     if (editing.callout || editing.watermark) ref.current?.focus();
+    else if (editing.index !== null) {
+      ref.current?.focus();
+      ref.current?.select();
+    }
   }, []);
 
   // Spec §6.6 resizeTextEditor: min 120×34, grows with text/font, clamped

@@ -1044,7 +1044,7 @@ button:active:not(:disabled) {
 .kiri-image-editor-properties::-webkit-scrollbar, .kiri-capture-tool-options::-webkit-scrollbar { width:6px; height:6px; }
 .kiri-image-editor-properties::-webkit-scrollbar-thumb, .kiri-capture-tool-options::-webkit-scrollbar-thumb { background:#777; border-radius:6px; }
 .kiri-image-editor-properties::-webkit-scrollbar-track, .kiri-capture-tool-options::-webkit-scrollbar-track { background:transparent; }
-.kiri-image-editor-crop-options { display:flex; align-items:center; gap:12px; padding:10px; color:#f7f7f4; font:500 11px var(--kiri-font-ui); }
+.kiri-image-editor-crop-options { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:6px 10px; background:#101010; color:#f7f7f4; font:500 11px var(--kiri-font-ui); }
 @media (max-width:740px) {
   .kiri-image-editor-toolbar { height:88px; flex-basis:88px; }
 }

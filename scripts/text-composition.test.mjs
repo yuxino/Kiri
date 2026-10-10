@@ -87,7 +87,7 @@ test("Return commits before finishing capture; a saved-image editor only commits
   assert.deepEqual(image.calls, ["commit"]);
 });
 
-function textFocusFrame(textarea) {
+function textFocusCallback(phase, textarea, editing = {}) {
   const filename = "AnnotationCanvas.tsx";
   const source = readFileSync(new URL(`../src/annotation/${filename}`, import.meta.url), "utf8");
   const tree = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -98,20 +98,52 @@ function textFocusFrame(textarea) {
   }
   findEditor(tree);
   assert.ok(editor);
-  function findFrame(node) {
-    if (ts.isCallExpression(node) && node.expression.getText(tree) === "requestAnimationFrame") {
-      assert.equal(callback, undefined, "initial editor focus frame is unambiguous");
+  function findCallback(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(tree) ===
+      (phase === "layout" ? "useLayoutEffect" : "requestAnimationFrame") &&
+      (phase !== "layout" || callback === undefined)) {
+      assert.equal(callback, undefined, "initial editor focus callback is unambiguous");
       callback = node.arguments[0].getText(tree);
     }
-    ts.forEachChild(node, findFrame);
+    ts.forEachChild(node, findCallback);
   }
-  findFrame(editor);
+  findCallback(editor);
   assert.ok(callback);
   const compiled = ts.transpileModule(`const run = ${callback};`, {
     compilerOptions: {target: ts.ScriptTarget.ES2022},
   }).outputText;
-  return new Function("ref", `${compiled}\nreturn run;`)({current: textarea});
+  return new Function("ref", "editing", `${compiled}\nreturn run;`)({current: textarea}, editing);
 }
+const textFocusFrame = textarea => textFocusCallback("frame", textarea);
+
+test("reopened text and labels own focus before the first frame and retain immediately typed input", () => {
+  for (const labelDirection of [undefined, "left"]) {
+    const textarea = nativeTextarea("saved text");
+    textFocusCallback("layout", textarea, {index: 0, labelDirection})();
+    assert.equal(textarea.ownerDocument.activeElement, textarea, "mounted input must own the next key before RAF");
+    assert.deepEqual([textarea.selectionStart, textarea.selectionEnd], [0, textarea.value.length]);
+    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+    textarea.type(" abcdef\nline two");
+    textFocusFrame(textarea)();
+    assert.equal(textarea.value, "saved text abcdef\nline two");
+    assert.equal(textarea.selectionStart, textarea.value.length);
+    assert.equal(textarea.selectionEnd, textarea.value.length);
+  }
+});
+
+test("synchronous callout and watermark focus keeps the caret; new text still uses its post-mouse frame", () => {
+  for (const editing of [{index: 0, callout: {}}, {index: 0, watermark: {}}]) {
+    const textarea = nativeTextarea("saved text");
+    textFocusCallback("layout", textarea, editing)();
+    assert.equal(textarea.ownerDocument.activeElement, textarea);
+    assert.deepEqual([textarea.selectionStart, textarea.selectionEnd], [textarea.value.length, textarea.value.length]);
+  }
+  const textarea = nativeTextarea();
+  textFocusCallback("layout", textarea, {index: null})();
+  assert.equal(textarea.ownerDocument.activeElement, null);
+  textFocusFrame(textarea)();
+  assert.equal(textarea.ownerDocument.activeElement, textarea);
+});
 
 function nativeTextarea(value = "") {
   const ownerDocument = {activeElement: null};

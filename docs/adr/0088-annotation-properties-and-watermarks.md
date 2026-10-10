@@ -20,6 +20,10 @@ saved-image canvas between clicks. Text should remain editable in place.
   width. Selecting, double-clicking, or typing must not move the canvas. The
   capture HUD measures its whole visible stack and constrains property scrolling
   while leaving completion controls reachable.
+- Keep a pending crop visible and cancellable while using annotation tools.
+  Cancelling it restores source coordinates without removing annotations or
+  moving the canvas. Existing text and labels take focus synchronously when
+  reopened, so immediate typing cannot activate canvas shortcuts.
 - Expose existing mosaic brush, rectangle and ellipse shapes, pixel and blur
   styles, and named strength levels. The brush preview follows diameter changes.
   Pixel blocks use a document-origin grid. Render weaker same-style masks first,

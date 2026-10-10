@@ -156,6 +156,38 @@ test("QR arrows follow centered aspect-fit CSS pixels across resize, independent
   h.component.unmount();
 });
 
+test("a pending crop stays cancellable while annotating without changing marks, tool or canvas coordinates", async () => {
+  const h = await loadedEditor();
+  const before = find(h.component.render(), "annotation-canvas").props;
+  tool(h.component.render(), "Crop (C)").props.onClick();
+  let tree = h.component.render();
+  const pendingCrop = {x: 30, y: 40, width: 350, height: 210};
+  find(tree, "crop-overlay").props.onChange(pendingCrop);
+  tool(h.component.render(), "Rectangle (R)").props.onClick();
+  tree = h.component.render();
+  const marks = [text, {kind: "rectangle", id: 2, rect: {x: 80, y: 60, width: 80, height: 50}, color: "white", width: 3}];
+  find(tree, "annotation-canvas").props.onDocumentChange(marks);
+  tree = h.component.render();
+  const cancel = button(tree, "Cancel crop");
+  assert.ok(cancel, "switching to a drawing tool must retain the pending crop action");
+  assert.equal(find(tree, "annotation-style-controls").props.tool, "rectangle");
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, before.viewSize);
+  assert.deepEqual(find(tree, "annotation-canvas").props.region, before.region);
+  let stopped = false;
+  cancel.props.onKeyDown({key: "Enter", stopPropagation() {stopped = true;}});
+  assert.equal(stopped, true, "Enter activates Cancel crop without also saving the image");
+  cancel.props.onClick();
+  tree = h.component.render();
+  assert.equal(find(tree, "crop-overlay"), undefined);
+  assert.equal(button(tree, "Cancel crop"), undefined);
+  assert.equal(find(tree, "annotation-canvas").props.tool, "rectangle");
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, before.viewSize);
+  assert.deepEqual(find(tree, "annotation-canvas").props.region, before.region);
+  assert.equal(find(tree, "image-close-guard").props.dirty, true, "annotations still require the close guard after removing only the crop");
+  assert.deepEqual(h.mutations, [], "cancelling crop must not export, undo annotations or close the editor");
+  h.component.unmount();
+});
+
 test("QR pauses background shortcuts synchronously and Escape restores crop, marks and an uncommitted text draft", async () => {
   const pending = deferred();
   const h = await loadedEditor({ scanQr: () => pending.promise });
