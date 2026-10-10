@@ -608,7 +608,8 @@ pub fn emit_notice_local(app: &AppHandle, title: String, symbol: String) {
 /// Opens a FULL-SCREEN destructive-confirmation overlay (borderless,
 /// transparent, always-on-top, covering the whole primary display). The
 /// ConfirmWindow frontend dims the screen and shows a centered card; on
-/// confirm it runs the requested action and closes itself. This makes
+/// confirm it runs the requested action and closes itself. Callers dispatch
+/// creation outside synchronous Windows IPC and native event callbacks. This makes
 /// irreversible operations (empty trash, permanent delete) unmistakable
 /// instead of a small in-window modal.
 pub fn show_confirm_dialog(
@@ -619,7 +620,7 @@ pub fn show_confirm_dialog(
     confirm_label: String,
     ids: Vec<String>,
     localize: bool,
-) {
+) -> Result<(), String> {
     let localize_query = if localize { "&localize=1" } else { "" };
     let label = "confirm";
     let window = match app.get_webview_window(label) {
@@ -662,14 +663,12 @@ pub fn show_confirm_dialog(
             .focused(true)
             .inner_size(win_w, win_h)
             .position(0.0, 0.0);
-            let window = match builder.build() {
-                Ok(window) => window,
-                Err(error) => {
-                    log::error!("[confirm] window creation failed: {error}");
-                    return;
-                }
-            };
-            window
+            let window = builder.build().map_err(|error| error.to_string())?;
+            // The initial URL already contains the request. Navigating again
+            // during startup can race the new WebView's first render.
+            window.show().map_err(|error| error.to_string())?;
+            window.set_focus().map_err(|error| error.to_string())?;
+            return Ok(());
         }
     };
     // If a confirm window already exists (e.g. re-triggered), reload it with
@@ -686,9 +685,10 @@ pub fn show_confirm_dialog(
         urlencode(&message),
         urlencode(&confirm_label),
     );
-    let _ = window.eval(format!("location.href = '{}'", url.replace('\'', "\\'")));
-    let _ = window.show();
-    let _ = window.set_focus();
+    window.eval(format!("location.href = '{}'", url.replace('\'', "\\'")))
+        .map_err(|error| error.to_string())?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
 }
 
 /// Shows the notice as a borderless always-on-top toast near the top-center of
@@ -714,13 +714,28 @@ fn linux_recording_hides_feedback(app: &AppHandle) -> bool {
 }
 
 fn show_completion_toast(app: &AppHandle, notice: &NoticeDto, monitor: Option<Monitor>) {
+    #[cfg(windows)]
+    {
+        let app = app.clone();
+        let notice = notice.clone();
+        if let Err(error) = crate::window_tasks::dispatch(move || {
+            show_completion_toast_inner(&app, &notice, monitor);
+        }) {
+            log::error!("[toast] could not schedule notice: {error}");
+        }
+    }
+    #[cfg(not(windows))]
+    show_completion_toast_inner(app, notice, monitor);
+}
+
+fn show_completion_toast_inner(app: &AppHandle, notice: &NoticeDto, monitor: Option<Monitor>) {
     #[cfg(target_os = "linux")]
     {
         if !gtk::is_initialized_main_thread() {
             let handle = app.clone();
             let notice = notice.clone();
             let _ =
-                app.run_on_main_thread(move || show_completion_toast(&handle, &notice, monitor));
+                app.run_on_main_thread(move || show_completion_toast_inner(&handle, &notice, monitor));
             return;
         }
         if linux_recording_hides_feedback(app) {
@@ -802,13 +817,32 @@ pub fn show_completion_preview(
     preview: &CompletionPreviewDto,
     monitor: Option<Monitor>,
 ) {
+    #[cfg(windows)]
+    {
+        let app = app.clone();
+        let preview = preview.clone();
+        if let Err(error) = crate::window_tasks::dispatch(move || {
+            show_completion_preview_inner(&app, &preview, monitor);
+        }) {
+            log::error!("[toast] could not schedule preview: {error}");
+        }
+    }
+    #[cfg(not(windows))]
+    show_completion_preview_inner(app, preview, monitor);
+}
+
+fn show_completion_preview_inner(
+    app: &AppHandle,
+    preview: &CompletionPreviewDto,
+    monitor: Option<Monitor>,
+) {
     #[cfg(target_os = "linux")]
     {
         if !gtk::is_initialized_main_thread() {
             let handle = app.clone();
             let preview = preview.clone();
             let _ =
-                app.run_on_main_thread(move || show_completion_preview(&handle, &preview, monitor));
+                app.run_on_main_thread(move || show_completion_preview_inner(&handle, &preview, monitor));
             return;
         }
         if linux_recording_hides_feedback(app) {

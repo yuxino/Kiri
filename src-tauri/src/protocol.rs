@@ -140,14 +140,23 @@ pub fn with_thumbnail_invalidations<T, E>(
     ids: &[uuid::Uuid],
     operation: impl FnOnce() -> Result<T, E>,
 ) -> Result<T, E> {
+    with_selected_thumbnail_invalidations(store, || (ids.to_vec(), operation()))
+}
+
+/// Select IDs while owning the generation barrier, so asynchronous empty-trash
+/// cleanup cannot delete one set of assets and invalidate an earlier snapshot.
+pub fn with_selected_thumbnail_invalidations<T, E>(
+    store: &ProtocolStore,
+    operation: impl FnOnce() -> (Vec<uuid::Uuid>, Result<T, E>),
+) -> Result<T, E> {
     // Use the same barrier as thumbnail generation. If an old preview is in
     // flight, wait for its insertion before replacing/deleting assets and
     // removing stale entries; if the mutation wins first, later generation
     // observes the new library state.
     let _generation = store.thumbnail_generation.lock().unwrap();
-    let result = operation();
+    let (ids, result) = operation();
     let mut thumbnails = store.thumbnails.lock().unwrap();
-    for id in ids {
+    for id in &ids {
         thumbnails.remove(&id.to_string());
     }
     result
@@ -1213,5 +1222,25 @@ mod tests {
             .unwrap()
             .get(&id.to_string())
             .is_none());
+    }
+
+    #[test]
+    fn deletion_selects_thumbnails_under_the_barrier_even_when_cleanup_fails() {
+        let store = ProtocolStore::new();
+        let deleted = uuid::Uuid::new_v4();
+        let retained = uuid::Uuid::new_v4();
+        {
+            let mut cache = store.thumbnails.lock().unwrap();
+            cache.insert(deleted.to_string(), vec![1]);
+            cache.insert(retained.to_string(), vec![2]);
+        }
+        let result = with_selected_thumbnail_invalidations(&store, || {
+            assert!(store.thumbnail_generation.try_lock().is_err());
+            (vec![deleted], Err::<(), _>("cleanup failed after index commit"))
+        });
+        assert_eq!(result, Err("cleanup failed after index commit"));
+        let mut cache = store.thumbnails.lock().unwrap();
+        assert_eq!(cache.get(&deleted.to_string()), None);
+        assert_eq!(cache.get(&retained.to_string()), Some(vec![2]));
     }
 }
