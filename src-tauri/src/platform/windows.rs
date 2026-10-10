@@ -445,7 +445,7 @@ fn select_in_explorer_view(
         // COM calls above can dispatch a cancellation or worker shutdown.
         // Check again before changing selection in the user's Explorer view.
         check_request()?;
-        let flags = (SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE | SVSI_FOCUSED).0;
+        let flags = SVSI_SELECT.0 | SVSI_DESELECTOTHERS.0 | SVSI_ENSUREVISIBLE.0 | SVSI_FOCUSED.0;
         unsafe { view.SelectItem(child.0, flags as u32) }?;
     }
     if unsafe { folder_view.GetSelectionState(child.0) }? & selected == 0 {
