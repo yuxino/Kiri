@@ -111,7 +111,7 @@ impl RevealQueue {
                 continue;
             }
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                reveal_path_in_apartment(&request.path)
+                reveal_path_in_apartment(&request.path, self, &request.cancelled)
             }))
             .unwrap_or_else(|_| Err(anyhow!("The file manager request did not finish.")));
             let _ = request.reply.send(result);
@@ -315,15 +315,40 @@ pub fn reveal_path(path: &Path) -> Result<()> {
     }
 }
 
-fn reveal_path_in_apartment(path: &Path) -> Result<()> {
+struct ShellItemIdList(*mut windows::Win32::UI::Shell::Common::ITEMIDLIST);
+
+impl ShellItemIdList {
+    fn new(pointer: *mut windows::Win32::UI::Shell::Common::ITEMIDLIST) -> Result<Self> {
+        if pointer.is_null() {
+            bail!("The capture could not be located in its folder.");
+        }
+        Ok(Self(pointer))
+    }
+}
+
+impl Drop for ShellItemIdList {
+    fn drop(&mut self) {
+        unsafe {
+            windows::Win32::System::Com::CoTaskMemFree(Some(
+                self.0.cast::<std::ffi::c_void>().cast_const(),
+            ));
+        }
+    }
+}
+
+fn reveal_path_in_apartment(
+    path: &Path,
+    queue: &RevealQueue,
+    cancelled: &AtomicBool,
+) -> Result<()> {
     use windows::core::{w, PCWSTR};
     use windows::Win32::UI::Shell::{
-        Common::ITEMIDLIST, ILClone, ILCreateFromPathW, ILFindLastID, ILFree, ILRemoveLastID,
-        SHOpenFolderAndSelectItems, ShellExecuteW,
+        ILClone, ILCreateFromPathW, ILFindLastID, ILRemoveLastID, SHOpenFolderAndSelectItems,
+        ShellExecuteW,
     };
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let metadata = std::fs::metadata(&path)?;
-    let encoded = shell_encoded_path(&path)?;
+    let metadata = std::fs::metadata(path)?;
+    let encoded = shell_encoded_path(path)?;
     if metadata.is_dir() {
         let result = unsafe {
             ShellExecuteW(
@@ -339,35 +364,248 @@ fn reveal_path_in_apartment(path: &Path) -> Result<()> {
             bail!("The capture folder could not be opened.");
         }
     } else {
-        let item = unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) };
-        if item.is_null() {
-            bail!("The capture could not be located in its folder.");
-        }
-        struct OwnedItemIdList(*mut ITEMIDLIST);
-        impl Drop for OwnedItemIdList {
-            fn drop(&mut self) {
-                unsafe {
-                    ILFree(Some(self.0));
-                }
-            }
-        }
-        let item = OwnedItemIdList(item);
-        let parent = unsafe { ILClone(item.0) };
-        if parent.is_null() {
-            bail!("The capture folder could not be located.");
-        }
-        let parent = OwnedItemIdList(parent);
-        // Pass the containing folder and one relative child. Keep both
-        // owning PIDLs alive throughout the call; the child only borrows
-        // the final item ID inside the full path.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let item = ShellItemIdList::new(unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) })?;
+        let parent = ShellItemIdList::new(unsafe { ILClone(item.0) })?;
+        // Pass the containing folder and one relative child. The child borrows
+        // the full path PIDL only during this native open/select request.
         let child = unsafe { ILFindLastID(item.0) };
         if child.is_null() || !unsafe { ILRemoveLastID(Some(parent.0)) }.as_bool() {
             bail!("The capture folder could not be located.");
         }
         let children = [child.cast_const()];
         unsafe { SHOpenFolderAndSelectItems(parent.0, Some(&children), 0) }?;
+        // A successful open/select request is not the selection postcondition:
+        // the first navigation can leave the correct Explorer folder unselected.
+        // Confirm the actual view and use its own relative child to select it.
+        confirm_explorer_selection(path, &parent, &item, queue, cancelled, deadline)?;
     }
     Ok(())
+}
+
+fn canonical_shell_items_equal(
+    folder: &windows::Win32::UI::Shell::IShellFolder,
+    left: &ShellItemIdList,
+    right: &ShellItemIdList,
+) -> Result<bool> {
+    use windows::Win32::UI::Shell::SHCIDS_CANONICALONLY;
+    let comparison =
+        unsafe { folder.CompareIDs(LPARAM(SHCIDS_CANONICALONLY as isize), left.0, right.0) };
+    comparison.ok()?;
+    // CompareIDs returns the signed comparison in the successful HRESULT's
+    // low word. Succeeded alone is not equality; PIDL bytes are not identity.
+    Ok(comparison.0 as i16 == 0)
+}
+
+fn select_in_explorer_view(
+    dispatch: &windows::Win32::System::Com::IDispatch,
+    desktop: &windows::Win32::UI::Shell::IShellFolder,
+    parent: &ShellItemIdList,
+    item: &ShellItemIdList,
+    filename: &[u16],
+    check_request: &impl Fn() -> Result<()>,
+) -> Result<bool> {
+    use windows::core::{IUnknown, Interface, PCWSTR};
+    use windows::Win32::System::Com::{IBindCtx, IServiceProvider};
+    use windows::Win32::UI::Shell::{
+        IFolderView2, IPersistFolder2, IShellBrowser, IShellFolder, SHGetIDListFromObject,
+        SID_STopLevelBrowser, SVSI_DESELECTOTHERS, SVSI_ENSUREVISIBLE, SVSI_FOCUSED, SVSI_SELECT,
+    };
+    let services: IServiceProvider = dispatch.cast()?;
+    let browser: IShellBrowser = unsafe { services.QueryService(&SID_STopLevelBrowser) }?;
+    let view = unsafe { browser.QueryActiveShellView() }?;
+    let folder_view: IFolderView2 = view.cast()?;
+    let persisted: IPersistFolder2 = unsafe { folder_view.GetFolder() }?;
+    let actual_pointer = unsafe { persisted.GetCurFolder() }?;
+    if actual_pointer.is_null() {
+        return Ok(false);
+    }
+    let actual = ShellItemIdList::new(actual_pointer)?;
+    if !canonical_shell_items_equal(desktop, &actual, parent)? {
+        log::debug!("Explorer candidate is not at the reveal folder");
+        return Ok(false);
+    }
+    let folder: IShellFolder = unsafe { folder_view.GetFolder() }?;
+    let mut child = std::ptr::null_mut();
+    unsafe {
+        folder.ParseDisplayName(
+            HWND::default(),
+            None::<&IBindCtx>,
+            PCWSTR(filename.as_ptr()),
+            None,
+            &mut child,
+            std::ptr::null_mut(),
+        )
+    }?;
+    let child = ShellItemIdList::new(child)?;
+    let selected = SVSI_SELECT.0 as u32;
+    let already_single = unsafe { folder_view.GetSelectionState(child.0) }? & selected != 0
+        && unsafe { folder_view.GetSelection(false)?.GetCount() }? == 1;
+    if !already_single {
+        // COM calls above can dispatch a cancellation or worker shutdown.
+        // Check again before changing selection in the user's Explorer view.
+        check_request()?;
+        let flags = (SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE | SVSI_FOCUSED).0;
+        unsafe { view.SelectItem(child.0, flags as u32) }?;
+    }
+    if unsafe { folder_view.GetSelectionState(child.0) }? & selected == 0 {
+        log::debug!("Explorer view has not selected the requested item");
+        return Ok(false);
+    }
+    // The user may have navigated during cross-process COM calls. A retained
+    // old view is not proof of the browser's current active folder/selection.
+    let active = unsafe { browser.QueryActiveShellView() }?;
+    if active.cast::<IUnknown>()? != view.cast::<IUnknown>()? {
+        return Ok(false);
+    }
+    let current: IFolderView2 = active.cast()?;
+    let persisted: IPersistFolder2 = unsafe { current.GetFolder() }?;
+    let current_pointer = unsafe { persisted.GetCurFolder() }?;
+    if current_pointer.is_null() {
+        return Ok(false);
+    }
+    let actual = ShellItemIdList::new(current_pointer)?;
+    if !canonical_shell_items_equal(desktop, &actual, parent)? {
+        return Ok(false);
+    }
+    if unsafe { current.GetSelectionState(child.0) }? & selected == 0 {
+        return Ok(false);
+    }
+    let selection = unsafe { current.GetSelection(false) }?;
+    if unsafe { selection.GetCount() }? != 1 {
+        log::debug!("Explorer view does not have exactly one selected item");
+        return Ok(false);
+    }
+    let selected_item = unsafe { selection.GetItemAt(0) }?;
+    let selected_id = ShellItemIdList::new(unsafe { SHGetIDListFromObject(&selected_item) }?)?;
+    if !canonical_shell_items_equal(desktop, &selected_id, item)? {
+        log::debug!("Explorer selected item does not match the reveal target");
+        return Ok(false);
+    }
+    // Recheck after obtaining the selected-item snapshot as well: those COM
+    // calls can navigate the browser and leave a previously active view alive.
+    let latest = unsafe { browser.QueryActiveShellView() }?;
+    if latest.cast::<IUnknown>()? != view.cast::<IUnknown>()? {
+        log::debug!("Explorer active view changed while confirming selection");
+        return Ok(false);
+    }
+    let latest: IFolderView2 = latest.cast()?;
+    let persisted: IPersistFolder2 = unsafe { latest.GetFolder() }?;
+    let latest_pointer = unsafe { persisted.GetCurFolder() }?;
+    if latest_pointer.is_null() {
+        return Ok(false);
+    }
+    let latest = ShellItemIdList::new(latest_pointer)?;
+    let same_folder = canonical_shell_items_equal(desktop, &latest, parent)?;
+    check_request()?;
+    if same_folder {
+        log::debug!("Explorer confirmed the requested single selection in its active folder");
+    }
+    Ok(same_folder)
+}
+
+fn confirm_explorer_selection(
+    path: &Path,
+    parent: &ShellItemIdList,
+    item: &ShellItemIdList,
+    queue: &RevealQueue,
+    cancelled: &AtomicBool,
+    deadline: std::time::Instant,
+) -> Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::IUnknown;
+    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
+    use windows::Win32::System::Variant::VARIANT;
+    use windows::Win32::UI::Shell::{IShellWindows, SHGetDesktopFolder, ShellWindows};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        MsgWaitForMultipleObjectsEx, PostQuitMessage, MWMO_INPUTAVAILABLE, PM_REMOVE, QS_ALLINPUT,
+    };
+    let shell: IShellWindows =
+        unsafe { CoCreateInstance(&ShellWindows, None::<&IUnknown>, CLSCTX_ALL) }?;
+    let desktop = unsafe { SHGetDesktopFolder() }?;
+    let mut filename: Vec<u16> = path
+        .file_name()
+        .ok_or_else(|| anyhow!("The capture could not be located in its folder."))?
+        .encode_wide()
+        .collect();
+    filename.push(0);
+    let check_request = || {
+        if cancelled.load(Ordering::Acquire) || queue.stopped.load(Ordering::Acquire) {
+            bail!("The file manager request did not finish.");
+        }
+        if std::time::Instant::now() >= deadline {
+            bail!("The capture could not be located in its folder.");
+        }
+        Ok(())
+    };
+    loop {
+        check_request()?;
+        let count = unsafe { shell.Count() }?;
+        for index in 0..count {
+            if cancelled.load(Ordering::Acquire) || queue.stopped.load(Ordering::Acquire) {
+                bail!("The file manager request did not finish.");
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            let Ok(dispatch) = (unsafe { shell.Item(&VARIANT::from(index)) }) else {
+                continue;
+            };
+            match select_in_explorer_view(
+                &dispatch,
+                &desktop,
+                parent,
+                item,
+                &filename,
+                &check_request,
+            ) {
+                Ok(true) => {
+                    if cancelled.load(Ordering::Acquire) || queue.stopped.load(Ordering::Acquire) {
+                        bail!("The file manager request did not finish.");
+                    }
+                    if std::time::Instant::now() < deadline {
+                        return Ok(());
+                    }
+                    break;
+                }
+                Ok(false) => {}
+                Err(error) => log::debug!("Explorer view is not ready for selection: {error}"),
+            }
+        }
+        // Observe actual view state as messages arrive, with a bounded poll
+        // cadence for Explorer state changes that have no local notification.
+        // No delay is taken as evidence that navigation or selection completed.
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        let wait_ms = remaining.as_millis().min(25) as u32;
+        let wait =
+            unsafe { MsgWaitForMultipleObjectsEx(None, wait_ms, QS_ALLINPUT, MWMO_INPUTAVAILABLE) };
+        if wait == windows::Win32::Foundation::WAIT_FAILED {
+            return Err(windows::core::Error::from_thread().into());
+        }
+        let mut message = MSG::default();
+        // Limit each drain so sustained window traffic cannot starve the
+        // selection predicate or its deadline. Reentrant requests stay queued.
+        for _ in 0..64 {
+            if !unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool() {
+                break;
+            }
+            if message.message == WM_QUIT {
+                queue.stop();
+                unsafe { PostQuitMessage(message.wParam.0 as i32) };
+                bail!("The file manager request did not finish.");
+            }
+            unsafe {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            if cancelled.load(Ordering::Acquire) || queue.stopped.load(Ordering::Acquire) {
+                bail!("The file manager request did not finish.");
+            }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+        }
+    }
 }
 
 fn shell_encoded_path(path: &Path) -> Result<Vec<u16>> {
