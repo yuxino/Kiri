@@ -4,4 +4,5 @@ export function captureToolbarPosition(
   bounds: Rect,
   size: { width: number; height: number },
   sizeControlsOpen?: boolean,
+  modeSelector?: Rect | null,
 ): { left: number; top: number };

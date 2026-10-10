@@ -170,6 +170,7 @@ export function OverlayWindow() {
   });
   const [modeSelectorPosition, setModeSelectorPosition] = useState<Point | null>(null);
   const [modeSelectorDragging, setModeSelectorDragging] = useState(false);
+  const [modeSelectorBounds, setModeSelectorBounds] = useState<Rect | null>(null);
   const canvasRef = useRef<AnnotationCanvasHandle>(null);
   const selectionPointerStartRef = useRef<Point | null>(null);
   const selectionClickMovedRef = useRef(false);
@@ -256,6 +257,21 @@ export function OverlayWindow() {
       !completing && !drag && !resizeHandle && !moveDrag && !modeSelectorDragging,
     imageRef, bounds, api.copyCaptureColor,
   );
+
+  useLayoutEffect(() => {
+    const selector = modeSelectorRef.current;
+    if (!selector) { setModeSelectorBounds(null); return; }
+    const measure = () => {
+      const rect = selector.getBoundingClientRect();
+      setModeSelectorBounds(previous => previous && previous.x === rect.left && previous.y === rect.top &&
+        previous.width === rect.width && previous.height === rect.height ? previous :
+        { x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(selector);
+    return () => observer.disconnect();
+  }, [modeSelectorPosition, bounds.width, bounds.height, phase]);
 
   const modeSelectorPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (
@@ -1137,11 +1153,12 @@ export function OverlayWindow() {
             style={
               modeSelectorPosition
                 ? {
+                    zIndex: 8,
                     left: modeSelectorPosition.x,
                     top: modeSelectorPosition.y,
                     transform: "none",
                   }
-                : undefined
+                : { zIndex: 8 }
             }
             onPointerDown={modeSelectorPointerDown}
             onPointerMove={modeSelectorPointerMove}
@@ -1278,6 +1295,7 @@ export function OverlayWindow() {
         <Toolbar
           selection={selection}
           bounds={bounds}
+          modeSelectorBounds={modeSelectorBounds}
           tool={tool}
           setTool={(next) => {
             // Spec §6.6: switching tools commits any in-flight text edit
@@ -1911,6 +1929,7 @@ function ToggleRow(props: {
 interface ToolbarProps {
   selection: Rect;
   bounds: Rect;
+  modeSelectorBounds?: Rect | null;
   tool: Tool;
   setTool(tool: Tool): void;
   appearance: AppearanceSettings;
@@ -1958,6 +1977,7 @@ const toolbarRowStyle: React.CSSProperties = {
   justifyContent: "center",
   gap: 3,
   padding: "6px 8px",
+  pointerEvents: "auto",
 };
 
 export function Toolbar(props: ToolbarProps) {
@@ -2001,22 +2021,27 @@ export function Toolbar(props: ToolbarProps) {
 
   const barRef = useRef<HTMLDivElement>(null);
   const [barSize, setBarSize] = useState({ width: 420, height: 48 });
-  // Narrow viewports wrap controls; measure both dimensions after each reflow.
-  useLayoutEffect(() => {
+  // Measure each committed row change before paint, and observe later reflows
+  // (font loading, translations and viewport wrapping) as well.
+  const measureBar = () => {
     const el = barRef.current;
     if (!el) return;
-    const measure = () => setBarSize((previous) => {
+    setBarSize((previous) => {
       const width = el.offsetWidth;
       const height = el.offsetHeight;
       return width === previous.width && height === previous.height
         ? previous : { width, height };
     });
-    measure();
-    const observer = new ResizeObserver(measure);
+  };
+  useLayoutEffect(measureBar);
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(measureBar);
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const { left, top } = captureToolbarPosition(selection, bounds, barSize, canSetSize && sizeControlsOpen);
+  const { left, top } = captureToolbarPosition(selection, bounds, barSize, canSetSize && sizeControlsOpen, props.modeSelectorBounds);
 
   const sep = <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.14)", margin: "0 3px", flexShrink: 0 }} />;
 
@@ -2038,6 +2063,8 @@ export function Toolbar(props: ToolbarProps) {
           boxSizing: "border-box",
           alignItems: "center",
           gap: 6,
+          zIndex: 8,
+          pointerEvents: "none",
           boxShadow: "none",
           opacity: disabled ? 0.62 : 1,
           transition: "opacity 0.12s ease-out",
@@ -2067,8 +2094,12 @@ export function Toolbar(props: ToolbarProps) {
           <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin} />
           <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone} />
         </div>
-        {detailsOpen && props.showLabelControls && !canSetSize && props.labelControls}
-        {detailsOpen && props.showCalloutControls && !canSetSize && props.calloutControls}
+        {detailsOpen && props.showLabelControls && !canSetSize && (
+          <div style={{ width: "max-content", maxWidth: "100%", pointerEvents: "auto" }}>{props.labelControls}</div>
+        )}
+        {detailsOpen && props.showCalloutControls && !canSetSize && (
+          <div style={{ width: "max-content", maxWidth: "100%", pointerEvents: "auto" }}>{props.calloutControls}</div>
+        )}
         {detailsOpen && !canSetSize && !props.showCalloutControls && !props.showLabelControls && (
           <div className="kiri-hud" style={toolbarRowStyle}>
             {/* Context row */}
