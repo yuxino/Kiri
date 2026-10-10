@@ -251,6 +251,19 @@ the first drag. During typing, the transparent frame's border and padding move
 the description; text selection keeps native behavior. The V1 document fields
 and crop/export boundary remain unchanged. See ADRs 0083, 0085 and 0089.
 
+With any active tool, a genuinely blank-canvas gesture while editing ordinary
+text, a label, or a numbered description commits that input and clears selection.
+The gesture is consumed through pointer release and click handling; only a later
+gesture uses the current tool. When Text, Numbered callout, Label bubble, Rectangle,
+Line, or Arrow is active with an existing selection, blank canvas first clears
+that selection before another gesture creates a mark. Pen and mosaic do not
+consume each new stroke merely because the previous stroke was selected. Hits
+on existing objects or handles retain first-drag behavior, and double-click
+editing, native composition, and text history keep their current routes. Tools
+remain active without an automatic switch to Select. This policy applies to
+capture and saved-image editing; the video editor keeps its creation-then-Select
+policy. See [ADR 0092](adr/0092-finish-text-edit-before-placement.md).
+
 Screenshot label bubbles share the text mark and inline editor, with an optional
 `labelDirection` field. Clicking its dot keeps that pointing location fixed and
 moves the bubble to its other side. Shared document geometry drives canvas/export,
@@ -278,9 +291,15 @@ Cropping translates a tiled anchor without changing its phase, including when
 the anchor leaves the canvas. JavaScript and Rust bound visible tile density and
 text length before accepting an edit. The existing flat-image fallback protects
 older applications from silently rewriting unsupported content. New watermarks
-are tiled; the tool and edit button reuse the selected or last existing watermark
-and keep a live draft focused. Older single watermarks retain their stored layout
-until their text or styling is changed. See ADRs 0088 and 0090.
+are tiled; the tool and edit button reuse existing watermarks and keep a live
+draft focused. During input, a hit on blank canvas or the current watermark’s
+primary anchor commits and closes its editor without reopening it. Tiled copies
+count as blank canvas; hitting another watermark’s primary anchor still switches
+directly to that object’s editor. A subsequent blank-canvas edit reuses the just
+edited watermark by stable ID, with a surviving watermark as fallback if that
+object was deleted. Repeated toolbar or inspector edit actions preserve the live
+native draft. Older single watermarks retain their stored layout until their
+text or styling is changed. See ADRs 0088, 0090 and 0092.
 
 ## Managed library flow
 

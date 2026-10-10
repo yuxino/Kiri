@@ -189,12 +189,16 @@ for (const tool of ["text", "label"]) {
     });
   }
 
-  test(`${tool} tool creates on blank canvas and moves the newly committed text without replacing the old selection`, async () => {
+  test(`${tool} tool deselects before blank placement and moves the new text without replacing the old selection`, async () => {
     let finishes = 0;
     const h = annotation(documentWith([text]), {tool, selectedMarkId: text.id, onFinishOnBlankDoubleClick: () => finishes++});
     h.pointer("onPointerDown", 360, 180, {detail: 0});
     h.pointer("onPointerUp", 360, 180, {detail: 0});
     h.mouse("onDoubleClick", 360, 180, 2);
+    assert.equal(nodes(h.component.render()).some(node => node?.type?.name === "TextEditor"), false);
+    assert.deepEqual(h.changes, [], "deselecting does not insert an undo step");
+    h.pointer("onPointerDown", 360, 180, {detail: 0});
+    h.pointer("onPointerUp", 360, 180, {detail: 0});
     let editor = nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
     assert.equal(editor.props.editing.index, null);
     assert.equal(editor.props.editing.labelDirection, tool === "label" ? appearance.labelDirection : undefined);
@@ -308,10 +312,231 @@ function annotation(initialDocument, options = {}) {
 }
 
 const documentWith = marks => ({schemaVersion: 1, canvas: {width: 640, height: 360}, sourcePixels: {width: 640, height: 360}, marks});
+const inlineEditor = h => nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
+const blankPress = h => {
+  h.pointer("onPointerDown", 550, 310, {detail: 0});
+  h.pointer("onPointerUp", 550, 310, {detail: 0});
+  h.mouse("onClick", 550, 310, 1);
+};
+
+for (const tool of ["text", "label"]) {
+  test(`${tool} finishes an inline note on the first blank press and creates only on the next`, async () => {
+    const selected = [], h = annotation(documentWith([]), {tool, onSelectionChange: id => selected.push(id)});
+    h.pointer("onPointerDown", 80, 100); h.pointer("onPointerUp", 80, 100);
+    inlineEditor(h).props.onTextChange("中文 abcdef\nsecond line"); h.component.render();
+    blankPress(h);
+    assert.equal(inlineEditor(h), undefined, "finishing cannot leave a fresh empty native input");
+    assert.equal(selected.at(-1), null);
+    assert.equal(h.changes.length, 1);
+    assert.equal(h.changes[0].length, 1);
+    assert.equal(h.changes[0][0].text, "中文 abcdef\nsecond line");
+    const first = h.changes[0][0];
+    blankPress(h);
+    assert.ok(inlineEditor(h), "the same active tool is ready on the next press");
+    assert.notEqual(inlineEditor(h).props.editing.id, first.id);
+    assert.equal(h.changes.length, 1, "an empty new input does not create history");
+    inlineEditor(h).props.onTextChange("another note"); h.component.render();
+    blankPress(h);
+    assert.equal(inlineEditor(h), undefined);
+    const saved = (await h.ref.current.exportResult()).document;
+    assert.equal(saved.marks.length, 2); assert.deepEqual(saved.marks[0], first);
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [first]);
+    h.ref.current.redo(); h.component.render(); assert.deepEqual(h.changes.at(-1), saved.marks);
+    assert.deepEqual((await annotation(saved).ref.current.exportResult()).document.marks, saved.marks);
+  });
+
+  test(`${tool} consumes finishing an empty draft without creating a ghost or undo entry`, () => {
+    const h = annotation(documentWith([]), {tool});
+    blankPress(h); assert.ok(inlineEditor(h));
+    blankPress(h); assert.equal(inlineEditor(h), undefined);
+    assert.deepEqual(h.changes, []); assert.deepEqual(h.frames.at(-1).marks, []);
+    assert.equal(h.frames.at(-1).options.draft, null);
+    blankPress(h); assert.ok(inlineEditor(h));
+  });
+}
+
+test("numbered descriptions finish before the next badge and preserve the existing note", async () => {
+  const h = annotation(documentWith([]), {tool: "callout", calloutNumber: 1});
+  h.pointer("onPointerDown", 80, 100); h.pointer("onPointerUp", 80, 100);
+  inlineEditor(h).props.onTextChange("第一条 abcdef"); h.component.render();
+  blankPress(h);
+  assert.equal(inlineEditor(h), undefined);
+  assert.equal(h.changes.at(-1).length, 1); assert.equal(h.changes.at(-1)[0].text, "第一条 abcdef");
+  const first = h.changes.at(-1)[0], count = h.changes.length;
+  h.component.render({...h.props, calloutNumber: 2});
+  blankPress(h);
+  assert.equal(h.changes.length, count + 1);
+  assert.equal(h.changes.at(-1).length, 2);
+  assert.equal(inlineEditor(h).props.editing.callout.number, 2);
+  inlineEditor(h).props.onTextChange("second note"); h.component.render();
+  blankPress(h);
+  const saved = (await h.ref.current.exportResult()).document;
+  assert.deepEqual(saved.marks[0], first); assert.equal(saved.marks[1].text, "second note");
+  assert.deepEqual((await annotation(saved).ref.current.exportResult()).document.marks, saved.marks);
+});
+
+for (const tool of ["select", "pen", "rectangle", "line", "arrow", "text", "label", "callout", "mosaic", "watermark"]) {
+  test(`${tool} cannot reuse a canvas gesture that finishes a pending text edit`, () => {
+    const h = annotation(documentWith([text]), {tool, selectedMarkId: text.id});
+    h.ref.current.editSelectedText(); h.component.render();
+    inlineEditor(h).props.onTextChange("updated 中文"); h.component.render();
+    h.pointer("onPointerDown", 550, 310);
+    h.pointer("onPointerMove", 580, 330);
+    h.pointer("onPointerUp", 580, 330);
+    assert.equal(inlineEditor(h), undefined);
+    assert.equal(h.changes.length, 1);
+    assert.equal(h.changes[0].length, 1); assert.equal(h.changes[0][0].text, "updated 中文");
+    assert.equal(h.frames.at(-1).options.draft, null);
+  });
+}
+
+for (const tool of ["rectangle", "line", "arrow"]) {
+  const mark = tool === "rectangle" ? rectangle : {kind: tool, id: 2, start: {x: 100, y: 100}, end: {x: 200, y: 180}, color: "white", width: 3};
+  test(`${tool} clears selection on the first blank gesture and draws on the next`, async () => {
+    const selected = [], h = annotation(documentWith([mark]), {tool, selectedMarkId: mark.id, onSelectionChange: id => selected.push(id)});
+    for (let n = 0; n < 2; n++) {
+      h.pointer("onPointerDown", 380, 210);
+      h.pointer("onPointerMove", 460, 260);
+      h.pointer("onPointerUp", 460, 260);
+      if (n === 0) {
+        assert.deepEqual(h.changes, []); assert.equal(selected.at(-1), null);
+        assert.deepEqual(h.frames.at(-1).marks, [mark]);
+      }
+    }
+    assert.equal(h.changes.length, 1); assert.equal(h.changes[0].length, 2);
+    assert.deepEqual(h.changes[0][0], mark);
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [mark]);
+    h.ref.current.redo(); h.component.render();
+    assert.equal((await h.ref.current.exportResult()).document.marks.length, 2);
+  });
+  for (const selected of [false, true]) {
+    test(`${tool} moves its ${selected ? "selected" : "unselected"} object on the first body drag`, () => {
+      const h = annotation(documentWith([mark]), {tool, selectedMarkId: selected ? mark.id : null});
+      h.pointer("onPointerDown", 150, 140);
+      h.pointer("onPointerMove", 180, 160);
+      h.pointer("onPointerUp", 180, 160);
+      assert.equal(h.changes.length, 1);
+      assert.deepEqual(h.changes[0], [model.translateMark(mark, {x: 30, y: 20}, {x: 0, y: 0, width: 640, height: 360})]);
+    });
+  }
+}
+
+for (const [tool, mosaicShape] of [["pen", "brush"], ["mosaic", "brush"], ["mosaic", "rectangle"], ["mosaic", "ellipse"]]) {
+  test(`${tool} ${mosaicShape} keeps consecutive strokes without swallowing a selected mark's next gesture`, () => {
+    const h = annotation(documentWith([]), {tool, mosaicShape});
+    for (const x of [80, 300]) {
+      h.pointer("onPointerDown", x, 80); h.pointer("onPointerMove", x + 50, 120); h.pointer("onPointerUp", x + 50, 120);
+    }
+    assert.equal(h.changes.length, 2); assert.equal(h.changes[1].length, 2);
+    assert.ok(h.changes[1].every(mark => mark.kind === tool));
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), h.changes[0]);
+  });
+}
+
+test("finishing inline editing does not consume a first body drag on another existing text", () => {
+  const other = {...text, id: 11, rect: {...text.rect, x: 320, y: 190}};
+  const h = annotation(documentWith([text, other]), {tool: "text", selectedMarkId: text.id});
+  h.ref.current.editSelectedText(); h.component.render();
+  inlineEditor(h).props.onTextChange("updated note"); h.component.render();
+  h.pointer("onPointerDown", 400, 215); h.pointer("onPointerMove", 420, 230); h.pointer("onPointerUp", 420, 230);
+  assert.equal(inlineEditor(h), undefined); assert.equal(h.changes.length, 2);
+  assert.equal(h.changes.at(-1)[0].text, "updated note");
+  assert.deepEqual(h.changes.at(-1)[1], model.translateMark(other, {x: 20, y: 15}, {x: 0, y: 0, width: 640, height: 360}));
+});
+
+test("an arrow body drag ignores a nearby selected text handle from another tool", () => {
+  const arrow = {kind: "arrow", id: 12, start: {x: 200, y: 88}, end: {x: 300, y: 88}, color: "white", width: 3};
+  const h = annotation(documentWith([text, arrow]), {tool: "arrow", selectedMarkId: text.id});
+  h.pointer("onPointerDown", 227.5, 88); h.pointer("onPointerMove", 257.5, 108); h.pointer("onPointerUp", 257.5, 108);
+  assert.equal(h.changes.length, 1); assert.deepEqual(h.changes[0][0], text);
+  assert.deepEqual(h.changes[0][1], model.translateMark(arrow, {x: 30, y: 20}, {x: 0, y: 0, width: 640, height: 360}));
+});
+
+test("a composing native textarea retains its candidate and draft on a canvas press", () => {
+  const h = annotation(documentWith([text]), {tool: "text", selectedMarkId: text.id});
+  h.ref.current.editSelectedText(); h.component.render();
+  const nativeInput = {}; h.live.ownerDocument = {activeElement: nativeInput};
+  composition.setTextComposition(nativeInput, true);
+  let prevented = 0;
+  h.pointer("onPointerDown", 550, 310, {preventDefault() {prevented++;}});
+  h.pointer("onPointerUp", 550, 310);
+  assert.equal(prevented, 1); assert.equal(inlineEditor(h).props.editing.id, text.id);
+  assert.deepEqual(h.changes, []);
+  composition.setTextComposition(nativeInput, false);
+  inlineEditor(h).props.onTextChange("中文确认"); h.component.render();
+  blankPress(h); assert.equal(inlineEditor(h), undefined); assert.equal(h.changes[0][0].text, "中文确认");
+});
+
+test("finishing and deselecting cannot trigger capture's blank double-click completion", () => {
+  let finishes = 0;
+  const h = annotation(documentWith([text]), {tool: "select", selectedMarkId: text.id, onFinishOnBlankDoubleClick: () => finishes++});
+  blankPress(h);
+  h.pointer("onPointerDown", 550, 310); h.pointer("onPointerUp", 550, 310);
+  h.mouse("onClick", 550, 310, 2); h.mouse("onDoubleClick", 550, 310, 2);
+  assert.equal(finishes, 0); assert.deepEqual(h.changes, []);
+  h.ref.current.editSelectedText(); h.component.render();
+  // Re-select explicitly to model a saved object's second edit.
+  h.pointer("onPointerDown", 100, 60); h.pointer("onPointerUp", 100, 60);
+  h.ref.current.editSelectedText(); h.component.render();
+  blankPress(h);
+  h.mouse("onClick", 550, 310, 2); h.mouse("onDoubleClick", 550, 310, 2);
+  assert.equal(finishes, 0); assert.equal(inlineEditor(h), undefined);
+});
+
+test("double clicking the actual off-center arrow endpoint never completes the capture", () => {
+  let finishes = 0;
+  const arrow = {kind: "arrow", id: 12, start: {x: 100, y: 100}, end: {x: 200, y: 180}, color: "white", width: 3};
+  const h = annotation(documentWith([arrow]), {tool: "select", selectedMarkId: arrow.id, onFinishOnBlankDoubleClick: () => finishes++});
+  for (const detail of [1, 2]) {
+    h.pointer("onPointerDown", 100, 110, {detail: 0}); h.pointer("onPointerUp", 100, 110, {detail: 0});
+    h.mouse("onClick", 100, 110, detail);
+  }
+  h.mouse("onDoubleClick", 100, 110, 2);
+  assert.equal(finishes, 0); assert.deepEqual(h.changes, []);
+});
+
+test("a video creation callback can select the track without leaving a ghost text draft", () => {
+  let created = 0;
+  const h = annotation(documentWith([]), {tool: "text", commitTextOnToolChange: false, onMarkCreated: () => created++});
+  blankPress(h); inlineEditor(h).props.onTextChange("video note"); h.component.render();
+  blankPress(h);
+  h.component.render({...h.props, tool: "select", selectedMarkId: h.changes[0][0].id});
+  assert.equal(created, 1); assert.equal(inlineEditor(h), undefined);
+  assert.equal(h.changes.length, 1); assert.equal(h.changes[0].length, 1);
+});
 
 const watermark = {kind: "watermark", id: 93, text: "中文 sample", rect: {x: 100, y: 100, width: 100, height: 80},
   color: "black", fontSize: 28, opacity: .2, rotation: -30, mode: "tiled", spacing: 80};
 const watermarkEditor = h => nodes(h.component.render()).find(node => node?.props?.editing?.watermark);
+
+test("canvas completion closes watermark input and the next press reuses that same stable object", async () => {
+  const last = {...watermark, id: 94, text: "other watermark", rect: {...watermark.rect, x: 340}};
+  const h = annotation(documentWith([watermark, last]), {tool: "watermark", selectedMarkId: watermark.id});
+  h.ref.current.editWatermark(); h.component.render();
+  watermarkEditor(h).props.onTextChange("中文 watermark updated"); h.component.render();
+  blankPress(h);
+  assert.equal(watermarkEditor(h), undefined);
+  assert.equal(h.changes.length, 1); assert.equal(h.changes[0].length, 2);
+  assert.deepEqual(h.changes[0][1], last);
+  blankPress(h);
+  assert.equal(watermarkEditor(h).props.editing.id, watermark.id);
+  assert.equal(watermarkEditor(h).props.editing.text, "中文 watermark updated");
+  assert.equal(h.changes.length, 1);
+  blankPress(h); assert.equal(watermarkEditor(h), undefined);
+  assert.equal((await h.ref.current.exportResult()).document.marks.length, 2);
+});
+
+test("a deleted watermark's remembered id falls back to an existing mark after indices shift", () => {
+  const last = {...watermark, id: 94, text: "retained watermark", rect: {...watermark.rect, x: 340}};
+  const h = annotation(documentWith([watermark, last]), {tool: "watermark", selectedMarkId: watermark.id});
+  h.ref.current.editWatermark(); h.component.render();
+  watermarkEditor(h).props.onTextChange(""); h.component.render();
+  blankPress(h);
+  assert.equal(watermarkEditor(h), undefined); assert.deepEqual(h.changes.at(-1), [last]);
+  blankPress(h);
+  assert.equal(watermarkEditor(h).props.editing.id, last.id);
+  assert.equal(watermarkEditor(h).props.editing.text, last.text);
+});
 
 test("the watermark entry opens native inline input, previews all styling and commits one editable mark", async () => {
   const selections = [];
@@ -417,12 +642,11 @@ test("repeated watermark actions retain the same native draft and explicitly sel
   watermarkEditor(h).props.onTextChange("selected 中文 watermark"); h.component.render();
   for (let i = 0; i < 3; i++) {
     h.ref.current.editWatermark(); h.component.render();
-    h.pointer("onPointerDown", 560, 300); h.pointer("onPointerUp", 560, 300);
     assert.equal(watermarkEditor(h).props.editing.id, watermark.id);
     assert.equal(watermarkEditor(h).props.editing.text, "selected 中文 watermark");
     assert.deepEqual(h.changes, [], "repeated entries neither commit the draft nor add empty marks");
   }
-  assert.equal(focused, 6, "the already-mounted native input regains focus without remounting");
+  assert.equal(focused, 3, "the already-mounted native input regains focus without remounting");
   const saved = await h.ref.current.exportResult();
   assert.equal(saved.document.marks.length, 2);
   assert.equal(saved.document.marks[0].text, "selected 中文 watermark");
@@ -434,7 +658,6 @@ test("repeated watermark actions retain the same native draft and explicitly sel
   const id = watermarkEditor(empty).props.editing.id;
   for (let i = 0; i < 3; i++) {
     empty.ref.current.editWatermark(); empty.component.render();
-    empty.pointer("onPointerDown", 520, 280); empty.pointer("onPointerUp", 520, 280);
     assert.equal(watermarkEditor(empty).props.editing.id, id);
     assert.equal(watermarkEditor(empty).props.editing.watermark.mode, "tiled");
   }
