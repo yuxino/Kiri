@@ -8,6 +8,25 @@ import {
   testAsset,
 } from "./helpers/library-render-harness.mjs";
 
+test("a failed confirmation window shows an error without dispatching deletion", async () => {
+  const opened = deferred();
+  let deleted = false;
+  const harness = createLibraryHarness({
+    showConfirmDialog: () => opened.promise,
+    emptyTrash: async () => { deleted = true; },
+  });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(3);
+  library.render(); await settleRequests();
+  nodes(library.render()).find(node => node?.type === "button" && node.props.title === "Empty Trash").props.onClick();
+  opened.reject(new Error("WebView creation failed"));
+  await settleRequests();
+  assert.ok(nodes(library.render()).includes("Couldn't complete this action"));
+  assert.equal(deleted, false);
+  library.unmount();
+});
+
 import {
   getAvailableShortcutLabel,
   getLibraryBandRect,

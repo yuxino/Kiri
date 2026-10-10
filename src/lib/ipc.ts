@@ -343,6 +343,7 @@ export const api = {
     });
   },
   copyText: (text: string) => invoke<void>("copy_text", { text }),
+  copyCaptureColor: (hex: string) => invoke<void>("copy_capture_color", { hex }),
   getOcrProviderSettings: () =>
     invoke<OcrProviderSettingsDto>("get_ocr_provider_settings"),
   saveOcrProviderProfile: (request: SaveOcrProviderProfileRequest) =>

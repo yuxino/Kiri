@@ -707,5 +707,11 @@
   "Checking video… %d%": "동영상 확인 중… %d%",
   "GIF conversion cancelled": "GIF 변환 취소됨",
   "Cancel all": "모두 취소",
-  "Could not save the language preference.": "언어 설정을 저장하지 못했습니다."
+  "Could not save the language preference.": "언어 설정을 저장하지 못했습니다.",
+  "Coordinates": "좌표",
+  "⌘C to copy color": "⌘C로 색상 복사",
+  "Ctrl+C to copy color": "Ctrl+C로 색상 복사",
+  "Color copied": "색상을 복사했습니다",
+  "Could not copy color": "색상을 복사하지 못했습니다",
+  "Color value": "색상 값"
 }

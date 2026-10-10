@@ -24,6 +24,11 @@ on:
         required: false
         default: ''
         type: string
+      windows_color_candidate_run_id:
+        description: 'Completed Windows package dispatch to recheck with unchanged application sources'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -73,6 +78,7 @@ jobs:
           python3 scripts/qa/test_ci_plan.py
           python3 scripts/qa/test_linux_package_provenance.py
           python3 scripts/qa/test_windows_package_provenance.py
+          python3 scripts/qa/test_windows_capture_color_candidate.py
           python3 scripts/qa/test_linux_audio_tone.py
           python3 scripts/qa/test_pin_native_checks.py
           python3 scripts/qa/test_windows_native_candidate.py
@@ -530,6 +536,10 @@ jobs:
         if: needs.plan.outputs.package_windows == 'true'
         timeout-minutes: 3
         run: python scripts/qa/shortcut-native.py
+      - name: Verify destructive confirmation windows on the actual desktop
+        if: needs.plan.outputs.package_windows == 'true'
+        timeout-minutes: 3
+        run: python scripts/qa/confirmation-native.py
       - name: Install and smoke-test both Windows packages
         if: needs.plan.outputs.package_windows == 'true'
         shell: pwsh
@@ -543,6 +553,26 @@ jobs:
           $env:KIRI_QA_PORTABLE_EXE = Join-Path $env:RUNNER_TEMP 'kiri-portable-verify/kiri.exe'
           $env:KIRI_QA_INSTALLED_EXE = Join-Path $install 'kiri.exe'
           python scripts/qa/windows-release-native.py
+      - name: Verify hover colors and native clipboard on the installed Windows app
+        if: needs.plan.outputs.package_windows == 'true'
+        timeout-minutes: 4
+        env:
+          KIRI_COLOR_QA_EXE: ${{ runner.temp }}/kiri-installed-review/kiri.exe
+        run: python scripts/qa/windows-capture-color-native.py
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
+          name: windows-capture-color-review
+          path: windows-capture-color-review/
+          retention-days: 5
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
+          name: windows-capture-color-candidate
+          path: ${{ runner.temp }}/kiri-installed-review/kiri.exe
+          retention-days: 5
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
         with:
@@ -555,6 +585,13 @@ jobs:
         with:
           name: shortcut-native-review
           path: shortcut-native-review/
+          retention-days: 5
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
+          name: confirmation-native-review
+          path: confirmation-native-review/
           retention-days: 5
           if-no-files-found: warn
       - uses: actions/upload-artifact@v7
@@ -629,9 +666,42 @@ jobs:
           retention-days: 5
           if-no-files-found: error
 
+  windows-color-recheck:
+    name: Recheck native Windows colors with the identical installed executable
+    needs: plan
+    if: inputs.windows_color_candidate_run_id != ''
+    runs-on: windows-2025
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KIRI_COLOR_CANDIDATE_RUN: ${{ inputs.windows_color_candidate_run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify unchanged application sources and candidate executable provenance
+        run: python scripts/qa/windows-capture-color-candidate.py --run "$env:KIRI_COLOR_CANDIDATE_RUN"
+      - run: python -m pip install pywinauto==0.6.9 Pillow==11.3.0
+      - name: Verify native hover colors, clipboard, selection and focus
+        timeout-minutes: 4
+        run: python scripts/qa/windows-capture-color-native.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-capture-color-review
+          path: windows-capture-color-review/
+          retention-days: 5
+          if-no-files-found: warn
+
   quality:
     name: CI quality gate
-    needs: [plan, fast-checks, countdown-ui, test-rust, build-linux, build-windows, build-macos, test-linux-wayland, recheck-linux-x11, windows-native-recheck]
+    needs: [plan, fast-checks, countdown-ui, test-rust, build-linux, build-windows, build-macos, test-linux-wayland, recheck-linux-x11, windows-native-recheck, windows-color-recheck]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -645,3 +715,8 @@ jobs:
         env:
           KIRI_WINDOWS_RECHECK_RESULT: ${{ needs.windows-native-recheck.result }}
         run: test "$KIRI_WINDOWS_RECHECK_RESULT" = success
+      - name: Require requested Windows color recheck to pass
+        if: inputs.windows_color_candidate_run_id != ''
+        env:
+          KIRI_COLOR_RECHECK_RESULT: ${{ needs.windows-color-recheck.result }}
+        run: test "$KIRI_COLOR_RECHECK_RESULT" = success
