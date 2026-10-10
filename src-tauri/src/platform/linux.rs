@@ -167,7 +167,7 @@ where
         return action();
     }
     if !gtk::is_initialized() {
-        return Err(anyhow!("The desktop main loop is not available."));
+        return Err(anyhow!("The desktop clipboard is not available."));
     }
 
     let pending = Arc::new(Mutex::new(Some(action)));
@@ -185,7 +185,7 @@ where
             // Do not leave an unstarted action queued to replace newer state if
             // the main loop is stopping or cannot service the request.
             pending.lock().unwrap().take();
-            Err(anyhow!("The desktop main loop did not respond."))
+            Err(anyhow!("The desktop clipboard did not respond."))
         }
     }
 }

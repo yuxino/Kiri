@@ -43,8 +43,10 @@ also asks for a borderless reference image.
   cannot resize the axes independently; the grip requests sizes programmatically.
   GTK requires a resizable Linux window for programmatic sizing, so its native
   window receives fixed-aspect geometry hints before it is shown. X11 window
-  managers enforce these hints; Wayland compositor support is not guaranteed
-  and requires separate native acceptance.
+  managers can enforce these hints. GTK 3's Wayland backend forwards minimum
+  and maximum sizes but does not forward aspect constraints to the compositor;
+  its web grip still requests proportional sizes, while compositor-controlled
+  resizing remains a limitation requiring separate native acceptance.
 
 ## Consequences
 
