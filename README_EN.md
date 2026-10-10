@@ -43,6 +43,8 @@
 2. Choose Screenshot, Record, or OCR.
 3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Choose **Pin** on the completion card to open a floating reference image.
 
+In Screenshot mode, hover to magnify the original pixels and see their coordinates and HEX color. Press `⌘C` on macOS or `Ctrl+C` to copy the color while keeping the selection. The loupe hides once annotation starts.
+
 Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
 
 Choose one of seven UI languages in **Settings → General → Language**. Your choice applies to every Kiri window and survives relaunches. On first launch, Kiri follows the system language.

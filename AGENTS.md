@@ -33,7 +33,9 @@ Linux. Preserve these decisions:
   stays local; multiple codes keep their clickable image positions. Copy, open,
   and save are explicit actions after viewing content (ADR 0061).
 - Window hover shows exactly one restrained monochrome outline without handles,
-  dimensions, stacked borders, or a following tooltip. A click selects that
+  dimensions, or stacked borders. Screenshot mode also offers a monochrome
+  pixel/color loupe on idle hover (ADR 0082); dragging and annotation hide it.
+  A click selects that
   window; a drag creates a custom region. Both selections remain movable and
   resizable with eight handles. Linux X11 supplies window bounds; Wayland uses
   region drag and currently rejects multiple connected displays before capture.

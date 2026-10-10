@@ -123,6 +123,7 @@ function windowHandler(filename, name) {
   const calls = [];
   const action = name => () => calls.push(name);
   const context = { isTextComposition, completionLock: { locked: false },
+    colorPicker: { onCopyKeyDown: () => false },
     qrRequestRef: { current: null }, readOnlyRef: { current: false }, closeQr: action("closeQr"),
     phaseRef: { current: "annotating" }, tool: "select",
     canvasRef: { current: { cancelTextEditing: () => false,

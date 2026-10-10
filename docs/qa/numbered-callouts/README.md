@@ -96,6 +96,29 @@ recorded above.
 
 The separate [full run](https://github.com/yuxino/Kiri/actions/runs/38023998131)
 uses that same code commit and additionally builds installers, installs the
-Debian package, and runs isolated X11/Windows desktop checks. It is still
-running at the time of this record. Those isolated checks do not establish
-hardware, mixed-scale, or real GNOME Wayland acceptance.
+Debian package, and runs isolated X11/Windows desktop checks. It completed
+successfully, including Windows installer/portable smoke checks and isolated
+GNOME Wayland portal checks at scales 1, 1.25, 1.5 and 2. These isolated
+checks do not establish physical hardware or mixed-display acceptance.
+
+## Integration with main
+
+2026-10-10: merged `origin/main` at `eb3a8c9`, including the screenshot hover
+color picker and Windows confirmation repair. Conflicts were limited to the
+ADR index and dictionary additions. Both features' strings remain present in
+all seven dictionaries with identical sets of 728 keys, and the index keeps
+ADR 0082 and ADR 0083. The shared keyboard handler and its executable test
+context retain both the color-copy boundary and the numbered-callout picker.
+The product design is unchanged.
+
+- `pnpm test:release-tools`: 354 passed.
+- `pnpm build`, `cargo check --manifest-path src-tauri/Cargo.toml`, and
+  `git diff --check`: passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-targets`: 333 passed,
+  one failed, one ignored on this Mac. The same native video annotation
+  contrast assertion described above still fails; no test was weakened or
+  ignored.
+
+No fixed-path app was installed or restarted for this branch synchronization;
+the shared installation remains owned by the coordinated integration check.
+Current-head CI is tracked on PR #125 before merge approval.
