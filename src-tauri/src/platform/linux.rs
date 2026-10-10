@@ -49,7 +49,11 @@ pub fn show_pinned_screenshot(window: &tauri::WebviewWindow, width: f64, height:
         native.set_geometry_hints(
             None::<&gtk::Widget>,
             Some(&geometry),
-            gtk::gdk::WindowHints::MIN_SIZE | gtk::gdk::WindowHints::ASPECT,
+            // Without an explicit zero base GTK uses the minimum as the base;
+            // X11 then applies the aspect to (size - base), distorting the image.
+            gtk::gdk::WindowHints::MIN_SIZE
+                | gtk::gdk::WindowHints::BASE_SIZE
+                | gtk::gdk::WindowHints::ASPECT,
         );
         native.show_all();
         native.present();
