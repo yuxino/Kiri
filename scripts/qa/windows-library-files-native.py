@@ -254,8 +254,16 @@ def explorer_for(folder, selected=None):
 
 def explorer_evidence(window):
     items = window.Document.SelectedItems()
-    return {"location_url": str(window.LocationURL), "folder": str(window.Document.Folder.Self.Path),
-            "selected_items": [str(items.Item(i).Path) for i in range(items.Count)]}
+    value = {"location_url": str(window.LocationURL), "folder": str(window.Document.Folder.Self.Path),
+             "selected_items": [str(items.Item(i).Path) for i in range(items.Count)]}
+    # Diagnostic-only branch: observe actual navigation/readiness state without
+    # selecting anything through the test driver.
+    for name in ("Busy", "ReadyState"):
+        try:
+            value[name] = getattr(window, name)
+        except Exception as error:
+            value[name + "_error"] = str(error)
+    return value
 
 
 def close_own_explorers():
@@ -372,6 +380,26 @@ def verify_folder_and_rename(assets):
             report.setdefault("reveal_errors", []).append({
                 "kind": asset["kind"], "error": str(error), "explorers": explorers})
             snapshot(f"reveal-{asset['kind']}-failure")
+            if asset["kind"] == "image":
+                # Preserve the mandatory first-call failure above. This separate
+                # observation reuses the same installed product and real UI action
+                # after Assets is already open; it cannot turn acceptance green.
+                phase("Diagnostic: repeat the same PNG Show in Folder with Assets already open")
+                attempt = {"kind": asset["kind"], "diagnostic_only": True,
+                           "expected_file": str(path), "native_action": "Show in Folder"}
+                began = time.monotonic()
+                try:
+                    action(title, "Show in Folder")
+                    attempt["explorer"] = explorer_evidence(explorer_for(root / "Assets", path))
+                    attempt["selected"] = True
+                    snapshot("reveal-image-warm-repeat")
+                except Exception as repeat_error:
+                    attempt["selected"] = False
+                    attempt["error"] = str(repeat_error)
+                    attempt["explorers"] = [explorer_evidence(value) for value, location in explorer_windows()]
+                    snapshot("reveal-image-warm-repeat-failure")
+                attempt["elapsed_seconds"] = time.monotonic() - began
+                report.setdefault("warm_repeat_diagnostics", []).append(attempt)
     snapshot("renamed-files-and-selected-item")
     report["checks"].append("All three file types rename the real file while preserving bytes, ID and extension")
     if not report.get("reveal_errors"):
