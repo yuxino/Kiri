@@ -39,9 +39,14 @@ also asks for a borderless reference image.
 - A lower-right grip resizes proportionally through serialized native size
   updates. This works around the unsupported native resize-dragging API on macOS
   without expanding window permissions. It uses the window's actual scale factor.
-  Native user resizing is disabled so the operating system cannot intercept
-  the corner and resize its axes independently; the grip still requests native
-  sizes programmatically.
+  macOS and Windows disable native user resizing so their corner hit-testing
+  cannot resize the axes independently; the grip requests sizes programmatically.
+  GTK requires a resizable Linux window for programmatic sizing, so its native
+  window receives fixed-aspect geometry hints before it is shown. X11 window
+  managers can enforce these hints. GTK 3's Wayland backend forwards minimum
+  and maximum sizes but does not forward aspect constraints to the compositor;
+  its web grip still requests proportional sizes, while compositor-controlled
+  resizing remains a limitation requiring separate native acceptance.
 
 ## Consequences
 

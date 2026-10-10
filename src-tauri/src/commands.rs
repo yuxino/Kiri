@@ -570,20 +570,30 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
         if let Some(window) = app.get_webview_window(&label) {
             restore_pinned_window(&window)?; return Ok(());
         }
-        WebviewWindowBuilder::new(&app, label,
+        let builder = WebviewWindowBuilder::new(&app, label,
             WebviewUrl::App(format!("index.html?window=pin&id={asset_id}").into()))
             .title("Pinned Screenshot — Kiri")
             .inner_size(width, height)
             .min_inner_size(80.0, 60.0)
-            // Native border hit-testing can intercept the web grip and resize
-            // each axis independently. Only the proportional web gesture may
-            // resize references; programmatic set_size remains available.
-            .resizable(false)
+            // GTK needs resizable windows for both native and programmatic
+            // sizing; Linux installs fixed-aspect geometry hints before mapping.
+            // Other platforms keep native edges from bypassing the web grip.
+            .resizable(cfg!(target_os = "linux"))
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .always_on_top(true)
-            .build().map_err(|error| format!("Pinned screenshot could not be opened: {error}"))?;
+            .always_on_top(true);
+        #[cfg(target_os = "linux")]
+        let builder = builder.visible(false);
+        let window = builder.build()
+            .map_err(|error| format!("Pinned screenshot could not be opened: {error}"))?;
+        #[cfg(target_os = "linux")]
+        if let Err(error) = platform::linux::show_pinned_screenshot(&window, width, height) {
+            let _ = window.close();
+            return Err(format!("Pinned screenshot could not be opened: {error}"));
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = window;
         log::info!("[pin] screenshot opened asset_id={asset_id}");
         Ok(())
     }).await.map_err(|error| format!("Pinned screenshot window stopped: {error}"))?
