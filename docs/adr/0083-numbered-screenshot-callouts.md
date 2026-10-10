@@ -1,4 +1,4 @@
-# ADR 0081: Editable numbered screenshot callouts
+# ADR 0083: Editable numbered screenshot callouts
 
 - Status: Accepted
 - Date: 2026-10-10

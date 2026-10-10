@@ -6,11 +6,14 @@
 This feature adds editable numbered circles with optional description labels,
 sharing the Text toolbar slot in the capture overlay and saved-image editor.
 
-- `pnpm test:release-tools`: 345 passed. The new canvas/project tests cover
+- `pnpm test:release-tools`: 348 passed. The new canvas/project tests cover
   click/drag placement, independent handles, bounded geometry, automatic
   numbering, description edit history, undo/redo, crop, strict document
   validation, preview/export layout and Retina scaling. Empty live drags show
-  a label guide; empty saved notes export only their circle.
+  a label guide; empty saved notes export only their circle. Picker Enter/Space
+  activate their native buttons without reaching capture completion. Selecting
+  a callout retains the gesture's original coordinate mapping when the
+  inspector changes the stage size.
 - `pnpm build`, `cargo check --manifest-path src-tauri/Cargo.toml`, and
   `git diff --check`: passed. Cargo check reports four existing warnings.
 - `cargo test --manifest-path src-tauri/Cargo.toml` on this Mac: 330 passed,
@@ -56,6 +59,21 @@ choice may select a different valid Apple Development certificate; validity
 alone does not preserve privacy identity. The installer correctly rejects that
 mismatch; never bypass it or reset permissions for QA.
 
-Fixed-path installation and native capture/editor acceptance are pending while
-another Kiri task uses the shared installation. No Windows or Linux native
-acceptance is claimed by the renderer checks above.
+The fixed-path app was installed and opened successfully with its original
+designated requirement. The pre-gesture-fix package's executable SHA-256 is
+`9251d2c328444f15680c697712cbd39aacf5e26e494abf64a77cd3d04c33526e`.
+
+The native saved-image editor was tested using one generated 640×360 source:
+menu switching, dragged placement, Chinese multiline input, Escape blur,
+live size, filled/outline styles, color, independent badge/label handles,
+save, reopen, selection and a second description edit all worked. Appearance
+defaults were restored after the test. Selection revealed that opening the
+inspector could change the pointer coordinate mapping mid-gesture; this was
+repaired and has an executable regression. A fixed-path retest of that final
+repair is pending.
+
+The native global capture overlay was observed, but reliable synthetic global
+shortcut routing was not established. Full capture-to-clipboard, original-app
+focus restoration, real IME composition and display-edge native checks remain
+for the coordinated integration acceptance. No Windows or Linux native
+acceptance is claimed by these renderer/editor checks.

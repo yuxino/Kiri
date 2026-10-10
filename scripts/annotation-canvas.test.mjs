@@ -26,7 +26,7 @@ function annotation(initialDocument, options = {}) {
   const exports = [], frames = [], creations = [], ref = {current: null}, changes = [];
   function canvas() {
     const value = {width: 640, height: 360, drawCalls: [],
-      getBoundingClientRect: () => ({left: 0, top: 0, width: initialDocument.canvas.width, height: initialDocument.canvas.height}),
+      getBoundingClientRect: () => options.boundingRect?.() ?? ({left: 0, top: 0, width: initialDocument.canvas.width, height: initialDocument.canvas.height}),
       setPointerCapture() {}, releasePointerCapture() {},
       toBlob(callback) { callback(new Blob([new Uint8Array([1, 2, 3])], {type: "image/png"})); },
     };
@@ -120,6 +120,24 @@ test("number and description handles move independently, stay in bounds, and und
   assert.deepEqual(movedLabel.labelRect, {...mark.labelRect, x: 240, y: 90});
   h.ref.current.undo(); h.component.render();
   assert.deepEqual(h.changes.at(-1), [mark]);
+});
+
+test("opening the callout inspector during selection cannot move a mark or distort a drag", () => {
+  const mark = {kind: "callout", id: 1, center: {x: 80, y: 80}, number: 1, text: "説明",
+    labelRect: {x: 200, y: 60, width: 100, height: 40}, size: 36, fontSize: 18, color: "cherry", style: "filled"};
+  let rect = {left: 0, top: 0, width: 640, height: 360};
+  const h = annotation(documentWith([mark]), {boundingRect: () => rect});
+  h.pointer("onPointerDown", 80, 80);
+  rect = {left: 80, top: 100, width: 480, height: 270};
+  h.pointer("onPointerMove", 80, 80); h.pointer("onPointerUp", 80, 80);
+  assert.deepEqual(h.changes, [], "a stationary click stays a selection, with no undo entry");
+  assert.deepEqual(h.frames.at(-1).marks, [mark]);
+  rect = {left: 0, top: 0, width: 640, height: 360};
+  h.pointer("onPointerDown", 80, 80);
+  rect = {left: 80, top: 100, width: 480, height: 270};
+  h.pointer("onPointerMove", 100, 90); h.pointer("onPointerUp", 100, 90);
+  assert.deepEqual(h.changes.at(-1)[0].center, {x: 100, y: 90});
+  assert.deepEqual(h.changes.at(-1)[0].labelRect, {...mark.labelRect, x: 220, y: 70});
 });
 
 test("keyboard-style live font changes update the selected mark and commit one undoable edit", () => {
