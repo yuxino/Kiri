@@ -3,8 +3,12 @@
 ## Candidate and checks
 
 2026-10-10, based on `f9db76c6df8ce688e196809b30ce43d74d7722bb`.
-This feature adds editable numbered circles with optional description labels,
-sharing the Text toolbar slot in the capture overlay and saved-image editor.
+This feature adds editable numbered circles with optional description labels.
+The original candidate shared the Text toolbar slot. Current capture and
+saved-image toolbars expose Text (T), Numbered callout (N), and Label bubble (B)
+as separate buttons ([ADR 0091](../../adr/0091-direct-text-annotation-toolbar.md)).
+The dated checks below retain evidence from that original candidate; they do not
+establish acceptance of the later toolbar change.
 
 - `pnpm test:release-tools`: 348 passed. The new canvas/project tests cover
   click/drag placement, independent handles, bounded geometry, automatic
@@ -23,11 +27,13 @@ sharing the Text toolbar slot in the capture overlay and saved-image editor.
   `video_export.rs` (difference must exceed 80). That file is unchanged by
   this feature. This is not a fully passing Rust suite.
 
-## Isolated renderer acceptance
+## Isolated renderer acceptance (original candidate)
 
 The QA harness uses generated source pixels and the actual annotation canvas,
-capture Toolbar, TextToolPicker and CalloutControls. It does not request native
-capture permissions or access a user library.
+capture Toolbar and CalloutControls. Current toolbar acceptance selects the
+three independent Text, Numbered callout, and Label bubble buttons directly.
+The original candidate below exercised their shared picker. Neither harness
+requests native capture permissions or accesses a user library.
 
 Verified through browser pointer/keyboard input:
 

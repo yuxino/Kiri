@@ -16,7 +16,6 @@ import {
 } from "../annotation/model";
 import { useAnnotationAppearance } from "../annotation/useAnnotationAppearance";
 import {AnnotationStyleControls} from "../annotation/AnnotationStyleControls";
-import {TextToolPicker} from "../annotation/TextToolPicker";
 import {nextCalloutNumber} from "../annotation/model";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { CropOverlay } from "../annotation/CropOverlay";
@@ -42,6 +41,8 @@ const TOOLS: { tool: EditorTool; icon: IconName; title: string }[] = [
   { tool: "line", icon: "line.diagonal", title: "Line (L)" },
   { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
   { tool: "text", icon: "textformat", title: "Text (T)" },
+  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)" },
+  { tool: "label", icon: "tag", title: "Label bubble (B)" },
   { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)" },
   { tool: "watermark", icon: "watermark", title: "Watermark (W)" },
 ];
@@ -479,9 +480,11 @@ export function EditorWindow(props: { id: string }) {
           <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>
             {TOOLS.slice(2, 6).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
-          <div className="kiri-annotation-tool-group"><TextToolPicker tool={tool} onSelect={selectTool}/></div>
           <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(7).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+            {TOOLS.slice(6, 9).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+          </div>
+          <div className="kiri-annotation-tool-group">
+            {TOOLS.slice(9).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
           <div className="kiri-annotation-tool-group">
             <EditorToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={tool === "crop" ? cropUndo.length === 0 : !canUndo}
@@ -638,6 +641,9 @@ function EditorToolButton(props: {
       title={props.title}
       aria-label={props.title}
       aria-pressed={props.active}
+      onKeyDown={event => {
+        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+      }}
       onClick={props.onClick}
       disabled={props.disabled}
     >

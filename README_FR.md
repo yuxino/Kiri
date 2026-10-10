@@ -15,6 +15,7 @@ Kiri est une application de capture et d’enregistrement d’écran pour macOS,
 ## Fonctions
 
 - Capturez une fenêtre ou une zone, recadrez-la, ajoutez des dessins, du texte ou une mosaïque, et épinglez les captures comme références flottantes.
+- Texte (T), Note numérotée (N) et Bulle de texte (B) ont chacun leur bouton dans les barres d’outils de capture et d’édition d’image. Choisissez la note numérotée, cliquez pour la placer et saisissez sa description directement sur l’image ; Retour ajoute une ligne. Déplacez séparément le numéro et le cadre transparent de la description, et réglez la taille, la couleur et le style plein ou contour.
 - Copiez le texte avec la reconnaissance locale et lisez les codes QR des images.
 - Enregistrez un MP4 avec le son du système et le microphone en option, ou créez un GIF sans son. La conversion des vidéos enregistrées en GIF vérifie d’abord le décodage et peut être annulée pendant la vérification ou la conversion. macOS affiche la progression par image et conserve les détails des erreurs.
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.

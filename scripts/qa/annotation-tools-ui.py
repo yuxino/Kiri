@@ -23,17 +23,18 @@ async def rect(page, selector):
 
 
 async def assert_actions(page):
-    """Tool/action row never paints outside its fixed layout box."""
+    """Wrapped tool/action rows stay inside the toolbar and remain reachable."""
     result = await page.evaluate("""() => {
       const bar=document.querySelector('.kiri-image-editor-toolbar');
       const r=bar.getBoundingClientRect();
       return [...bar.querySelectorAll('button')].map(b=>{
         const q=b.getBoundingClientRect();return {title:b.title||b.textContent,
           visible:q.width>0&&q.height>0,inside:q.left>=-1&&q.right<=innerWidth+1&&
-            q.top>=r.top-1&&q.bottom<=r.bottom+1};
+            q.top>=r.top-1&&q.bottom<=r.bottom+1,
+          hit:b.disabled||document.elementFromPoint(q.x+q.width/2,q.y+q.height/2)?.closest('button')===b};
       });
     }""")
-    assert all(row["visible"] and row["inside"] for row in result), result
+    assert all(row["visible"] and row["inside"] and row["hit"] for row in result), result
 
 
 async def assert_properties(page):
@@ -54,7 +55,7 @@ async def assert_properties(page):
 async def editor_cases(browser, report):
     for language in LANGUAGES:
         dictionary = json.loads((ROOT / "src/i18n" / f"{language}.json").read_text())
-        for width in [320, 560, 1200]:
+        for width in [320, 480, 560, 741, 1200]:
             context = await browser.new_context(viewport={"width": width, "height": 720})
             page = await context.new_page()
             errors = []
@@ -194,8 +195,7 @@ async def callout_pointer_case(browser, report):
         await page.goto(f"{URL}?lang=en")
         canvas = page.locator("canvas")
         await canvas.wait_for()
-        await page.get_by_role("button", name="Text tools", exact=True).click()
-        await page.get_by_role("menuitemradio").filter(has_text="Numbered callout").click()
+        await page.get_by_role("button", name="Numbered callout (N)", exact=True).click()
         box = await canvas.bounding_box()
         await page.mouse.click(box["x"] + box["width"] * .3, box["y"] + box["height"] * .45)
         editor = page.locator("textarea")
@@ -277,8 +277,7 @@ async def anchored_label_case(browser, report):
     try:
         await page.goto(f"{URL}?lang=en")
         await page.locator("canvas").wait_for()
-        await page.get_by_role("button", name="Text tools", exact=True).click()
-        await page.get_by_role("menuitemradio").filter(has_text="Label bubble").click()
+        await page.get_by_role("button", name="Label bubble (B)", exact=True).click()
         box = await page.locator("canvas").bounding_box()
         await page.mouse.click(box["x"] + box["width"] * .6, box["y"] + box["height"] * .3)
         await page.locator("textarea").wait_for()

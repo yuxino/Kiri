@@ -245,33 +245,22 @@ for (const [file, name, ordinaryKey, expected] of [
 });
 
 for (const eventKey of ["Enter", " "]) test(`text tool buttons activate with ${JSON.stringify(eventKey)} without completing capture`, () => {
-  const source = 'import React from "react";\n' + readFileSync(new URL("../src/annotation/TextToolPicker.tsx", import.meta.url), "utf8");
-  const selected = [];
-  const anchor = {getBoundingClientRect: () => ({left: 20, top: 20, bottom: 48}), focus() {}};
-  const h = createLibraryHarness({}, source, {
-    modules: {"./callout-controls.css": {}},
-    attachRef(node) {if (node.props?.className === "kiri-text-tool-toggle") node.props.ref.current = anchor;},
-  });
-  h.window.innerWidth = 800; h.window.innerHeight = 600;
-  const picker = h.mount("TextToolPicker", {tool: "select", onSelect: value => selected.push(value)});
-  const overlay = windowHandler("OverlayWindow.tsx", "onKeyDown");
-  const activate = button => {
-    const event = key({key: eventKey});
-    button.props.onKeyDown(event);
-    if (!event.stopped) overlay.run(event);
-    assert.equal(event.defaultPrevented, false, "native button activation remains available");
-    button.props.onClick();
-  };
-  let tree = picker.render();
-  activate(nodes(tree).find(node => node?.props?.className === "kiri-text-tool-main"));
-  assert.deepEqual(selected, ["text"]);
-  tree = picker.render();
-  activate(nodes(tree).find(node => node?.props?.className === "kiri-text-tool-toggle"));
-  tree = picker.render();
-  assert.ok(nodes(tree).some(node => node?.props?.role === "menu"));
-  const option = nodes(tree).find(node => node?.props?.role === "menuitemradio" && nodes(node).includes("Numbered callout"));
-  option.props.onClick();
-  assert.deepEqual(selected, ["text", "callout"]);
-  assert.deepEqual(overlay.calls, [], "tool activation never reaches confirmCapture");
-  picker.unmount();
+  for (const [file, component] of [["OverlayWindow.tsx", "ToolButton"], ["EditorWindow.tsx", "EditorToolButton"]]) {
+    const source = readFileSync(new URL(`../src/windows/${file}`, import.meta.url), "utf8");
+    const h = createLibraryHarness({}, 'import React from "react";\nimport {KiriIcon} from "../components/KiriIcons";\n' + 'export ' + source.slice(source.indexOf(`function ${component}(`)));
+    const selected = [];
+    const overlay = windowHandler("OverlayWindow.tsx", "onKeyDown");
+    for (const [tool, icon, title] of [["text", "textformat", "Text (T)"], ["callout", "number.circle", "Numbered callout (N)"], ["label", "tag", "Label bubble (B)"]]) {
+      const button = h.mount(component, {icon, title, active: false, onClick: () => selected.push(tool)});
+      const node = nodes(button.render()).find(node => node?.type === "button");
+      const event = key({key: eventKey});
+      node.props.onKeyDown(event);
+      if (!event.stopped) overlay.run(event);
+      assert.equal(event.defaultPrevented, false, "native button activation remains available");
+      node.props.onClick();
+      button.unmount();
+    }
+    assert.deepEqual(selected, ["text", "callout", "label"]);
+    assert.deepEqual(overlay.calls, [], "tool activation never reaches confirmCapture");
+  }
 });

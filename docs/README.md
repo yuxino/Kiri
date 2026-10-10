@@ -185,3 +185,4 @@ development.
 - [ADR 0088: Annotation properties and local text watermarks](adr/0088-annotation-properties-and-watermarks.md)
 - [ADR 0089: Anchored labels and direct callout dragging](adr/0089-anchored-labels-and-direct-callout-drag.md)
 - [ADR 0090: Reliable annotation re-editing and tiled watermarks](adr/0090-annotation-reediting-and-tiled-watermarks.md)
+- [ADR 0091: Direct text annotation toolbar buttons](adr/0091-direct-text-annotation-toolbar.md)

@@ -107,8 +107,7 @@ async def main():
     assert [mark['text'] for mark in json.loads(saved)['marks'] if mark['kind']=='text']==[typed],saved
     # Real key events reproduce the callout's delayed controlled-value echo.
     f=await capture()
-    await f.get_by_role('button',name='Text tools',exact=True).click()
-    await f.get_by_text('Numbered callout',exact=True).click();await page.mouse.click(400,260)
+    await f.get_by_role('button',name='Numbered callout (N)',exact=True).click();await page.mouse.click(400,260)
     description=f.get_by_role('textbox',name='Description (optional)',exact=True)
     await description.evaluate("""el=>{
      window.calloutChildMutations=0;
