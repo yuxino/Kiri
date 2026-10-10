@@ -21,6 +21,7 @@ import traceback
 from PIL import Image, ImageChops, ImageGrab, ImageStat
 from linux_desktop_fixture import DesktopFixture, RECORDING_REGION
 from linux_audio_tone import inspect_tone
+from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, proportional_resize_evidence
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -379,6 +380,82 @@ def wait_for_feedback_to_close():
                 return False
         return True
     wait_for("completion feedback dismissed", closed, timeout=12)
+
+
+def pin_window():
+    result = command("xdotool", "search", "--all", "--onlyvisible", "--pid", str(process.pid),
+                     "--name", "^Pinned Screenshot", check=False)
+    pins = result.stdout.split() if result.returncode == 0 else []
+    if len(pins) > 1:
+        raise RuntimeError("One native capture opened duplicate pin windows")
+    return pins[0] if pins else None
+
+
+def native_pin_acceptance():
+    wait_for_feedback_to_close()
+    fixture.request("show")
+    source = command("xdotool", "search", "--onlyvisible", "--name",
+                     "^Kiri Linux QA public pattern$").stdout.split()[-1]
+    command("xdotool", "windowactivate", "--sync", source)
+    pause(0.3)
+    expected = screenshot("direct-pin-source.png").crop((220, 240, 900, 620))
+    before_ids = {item["id"] for item in assets()}
+    app_log = Path(logs[-1].name)
+    log_offset = app_log.stat().st_size
+    open_capture()
+    drag_region((220, 240, 900, 620))
+    click_control("Rectangle (R)")
+    drag_region((410, 430, 590, 530))
+    click_control("Pin Screenshot on Top")
+    pin = wait_for("direct toolbar pin appears", pin_window)
+    if overlay() is not None:
+        raise RuntimeError("Native pin mapped before the capture overlay disappeared")
+    created = [item for item in assets() if item["id"] not in before_ids]
+    if len(created) != 1 or created[0]["kind"] != "image":
+        raise RuntimeError("Direct pin must save exactly one screenshot")
+    copied = Image.open(io.BytesIO(command("xclip", "-selection", "clipboard", "-t", "image/png", "-o", binary=True).stdout))
+    captured, pixels = annotated_capture_evidence(library, created[0], expected, copied)
+    captured.save(output / "direct-pin-annotated.png")
+    trace = wait_for("native pin lifecycle log", lambda:
+                    (text := app_log.read_bytes()[log_offset:].decode("utf-8", errors="replace"))
+                    and f"[pin] screenshot opened asset_id={created[0]['id']}" in text and text)
+    (output / "direct-pin-lifecycle.log").write_text(trace)
+    lifecycle = pin_lifecycle_evidence(trace, created[0]["id"])
+    if "_NET_WM_STATE_ABOVE" not in command("xprop", "-id", pin, "_NET_WM_STATE").stdout:
+        raise RuntimeError("X11 reference did not request native above stacking")
+    command("xdotool", "windowactivate", "--sync", pin)
+    before = geometry(pin)
+    start = (int(before["X"]) + int(before["WIDTH"]) // 2, int(before["Y"]) + int(before["HEIGHT"]) // 2)
+    drag_region((*start, start[0] + 70, start[1] + 40))
+    moved = wait_for("image drag moves the X11 pin", lambda:
+                    (bounds := geometry(pin)) and abs(int(bounds["X"]) - int(before["X"])) >= 30
+                    and abs(int(bounds["Y"]) - int(before["Y"])) >= 20 and bounds)
+    size = (int(moved["WIDTH"]), int(moved["HEIGHT"]))
+    corner = (int(moved["X"]) + size[0] - 5, int(moved["Y"]) + size[1] - 5)
+    drag_region((*corner, corner[0] + round(size[0] * 0.1), corner[1] + round(size[1] * 0.1)))
+    resized = wait_for("native X11 pin grows after corner drag", lambda:
+                      (bounds := geometry(pin)) and int(bounds["WIDTH"]) >= size[0] + 20 and bounds)
+    resize = proportional_resize_evidence(size, (int(resized["WIDTH"]), int(resized["HEIGHT"])))
+    command("xdotool", "windowactivate", "--sync", source)
+    command("xdotool", "mousemove", "10", "790")
+    def visible_image():
+        bounds = geometry(pin)
+        x, y, width, height = (int(bounds[key]) for key in ("X", "Y", "WIDTH", "HEIGHT"))
+        actual = ImageGrab.grab().convert("RGB").crop((x, y, x + width, y + height))
+        reference = captured.resize(actual.size, Image.Resampling.LANCZOS)
+        error = sum(ImageStat.Stat(ImageChops.difference(actual, reference)).mean) / 3
+        return {"mean_pixel_error": error} if error <= 3 else None
+    visible = wait_for("annotated X11 pin above another foreground app", visible_image)
+    screenshot("direct-pin-moved-resized.png")
+    command("xdotool", "windowactivate", "--sync", pin)
+    command("xdotool", "mousemove", str(int(resized["X"]) + 30), str(int(resized["Y"]) + 30))
+    wait_for_control("Unpin")
+    click_control("Close")
+    wait_for("hover Close destroys the X11 pin", lambda: pin_window() is None)
+    report["direct_pin"] = {**lifecycle, **pixels, "native_above": True, "image_drag_moves_window": True,
+                            "resize": resize, "visible_mean_pixel_error": visible["mean_pixel_error"],
+                            "hover_close_destroys_window": True}
+    report["checks"].append("actual annotated toolbar pin appears after overlay destruction; native X11 above stacking, image drag, proportional resize and hover Close work")
 
 
 def draw_recording_pattern(stage):
@@ -940,6 +1017,7 @@ try:
     if assets() != before_countdown or recording_files(".kiri-media-*.mp4") != staged_before:
         raise RuntimeError("Cancelled countdown started recording or imported an asset")
     report["checks"].append("visible countdown takes native keyboard focus; Escape cancels without a later recorder or saved asset")
+    native_pin_acceptance()
     report["success"] = True
 except Exception as error:
     report["error"] = str(error)
