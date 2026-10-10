@@ -5,7 +5,7 @@ import {t} from "../i18n";
 import type {Tool} from "./model";
 import "./callout-controls.css";
 
-/** Text and numbered notes share one slot, keeping both capture toolbars compact. */
+/** Text, numbered notes and label bubbles share one compact toolbar slot. */
 export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(tool: "text" | "callout" | "label"): void}) {
   const [choice, setChoice] = useState<"text" | "callout" | "label">(tool === "callout" || tool === "label" ? tool : "text");
   const [open, setOpen] = useState(false);
@@ -36,10 +36,10 @@ export function TextToolPicker({tool, onSelect}: {tool: Tool | "crop"; onSelect(
     <button type="button" className="kiri-text-tool-main" aria-pressed={active}
       title={t(choice === "text" ? "Text (T)" : choice === "label" ? "Label bubble (B)" : "Numbered callout (N)")}
       aria-label={t(choice === "text" ? "Text (T)" : choice === "label" ? "Label bubble (B)" : "Numbered callout (N)")}
-      onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()}
+      onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
       onClick={() => onSelect(choice)}><KiriIcon name={choice === "text" ? "textformat" : choice === "label" ? "tag" : "number.circle"} size={16}/></button>
     <button ref={anchor} type="button" className="kiri-text-tool-toggle" aria-label={t("Text tools")}
-      aria-haspopup="menu" aria-expanded={open} onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()} onClick={() => setOpen(value => !value)}>
+      aria-haspopup="menu" aria-expanded={open} onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}} onClick={() => setOpen(value => !value)}>
       <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
     </button>
     {open && createPortal(<div ref={menu} role="menu" className="kiri-text-tool-menu kiri-dark" style={position}

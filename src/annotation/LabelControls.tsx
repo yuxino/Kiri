@@ -16,7 +16,7 @@ export function LabelControls({selected, appearance, onChange, onFinish}: {
         {(["left","right"] as const).map(value => <button key={value} type="button" className="kiri-label-direction"
           aria-pressed={direction===value} title={t(value==="left"?"Point label left":"Point label right")}
           aria-label={t(value==="left"?"Point label left":"Point label right")}
-          onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()}
+          onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")event.stopPropagation();}}
           onClick={()=>onChange({labelDirection:value})}>
           <svg width="36" height="18" viewBox="0 0 36 18" aria-hidden="true" style={{transform:value==="right"?"scaleX(-1)":undefined}}>
             <circle cx="4" cy="9" r="2" fill="currentColor"/>
@@ -34,7 +34,7 @@ export function LabelControls({selected, appearance, onChange, onFinish}: {
     <div className="kiri-label-colors">
       {COLOR_PRESETS.map(value=><button key={value} type="button" className="kiri-label-swatch"
         title={t(COLOR_LABELS[value])} aria-label={t(COLOR_LABELS[value])} aria-pressed={color===value}
-        onKeyDown={event=>event.stopPropagation()} onKeyUp={event=>event.stopPropagation()}
+        onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")event.stopPropagation();}}
         onClick={()=>onChange({colorPreset:value})} style={{background:COLOR_HEX[value]}}/>)}
       <span>{t("Click the dot to switch sides.")}</span>
     </div>

@@ -6,6 +6,10 @@ menu and label controls. It does not call native capture or touch a user library
 
 ## Covered
 
+The feature includes the numbered-callout gesture fix from `f5e14e2`. Selecting
+a label while its inspector changes the stage mid-click does not move it;
+browser retesting also verified Space activation after this integration.
+
 - Text menu contains ordinary text, numbered callouts and label bubbles.
 - Chinese multiline typing, flipping while the textarea owns focus, and Return
   commit preserve text and geometry.
@@ -23,7 +27,7 @@ menu and label controls. It does not call native capture or touch a user library
 
 ## Local checks and limits
 
-`pnpm build`, `pnpm test:release-tools` (352 tests), `cargo check`, and
+`pnpm build`, `pnpm test:release-tools` (356 tests), `cargo check`, and
 `git diff --check` passed. The complete macOS 27.0.1 Rust run had 331 passing tests,
 one ignored test and one failure in the pre-existing
 `native_annotations_follow_live_frames_and_independent_time_ranges` test at its

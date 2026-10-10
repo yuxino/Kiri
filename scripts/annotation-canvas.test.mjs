@@ -32,7 +32,7 @@ function dotButton(h) {
 test("clicking a label dot flips once without moving text, starts no drag, and survives undo/reopen", async()=>{
   const h=annotation(documentWith([label]),{selectedMarkId:label.id});
   let stopped=0, prevented=0;
-  const event={stopPropagation(){stopped++;},preventDefault(){prevented++;}};
+  const event={key:"Enter",stopPropagation(){stopped++;},preventDefault(){prevented++;}};
   const button=dotButton(h);
   button.props.onPointerDown(event); button.props.onKeyDown(event); button.props.onKeyUp(event);
   assert.equal(stopped,3); assert.equal(prevented,1);
@@ -64,7 +64,7 @@ function annotation(initialDocument, options = {}) {
   const exports = [], frames = [], creations = [], ref = {current: null}, changes = [];
   function canvas() {
     const value = {width: 640, height: 360, drawCalls: [],
-      getBoundingClientRect: () => ({left: 0, top: 0, width: initialDocument.canvas.width, height: initialDocument.canvas.height}),
+      getBoundingClientRect: () => options.boundingRect?.() ?? ({left: 0, top: 0, width: initialDocument.canvas.width, height: initialDocument.canvas.height}),
       setPointerCapture() {}, releasePointerCapture() {},
       toBlob(callback) { callback(new Blob([new Uint8Array([1, 2, 3])], {type: "image/png"})); },
     };
@@ -158,6 +158,24 @@ test("number and description handles move independently, stay in bounds, and und
   assert.deepEqual(movedLabel.labelRect, {...mark.labelRect, x: 240, y: 90});
   h.ref.current.undo(); h.component.render();
   assert.deepEqual(h.changes.at(-1), [mark]);
+});
+
+test("opening the callout inspector during selection cannot move a mark or distort a drag", () => {
+  const mark = {kind: "callout", id: 1, center: {x: 80, y: 80}, number: 1, text: "説明",
+    labelRect: {x: 200, y: 60, width: 100, height: 40}, size: 36, fontSize: 18, color: "cherry", style: "filled"};
+  let rect = {left: 0, top: 0, width: 640, height: 360};
+  const h = annotation(documentWith([mark]), {boundingRect: () => rect});
+  h.pointer("onPointerDown", 80, 80);
+  rect = {left: 80, top: 100, width: 480, height: 270};
+  h.pointer("onPointerMove", 80, 80); h.pointer("onPointerUp", 80, 80);
+  assert.deepEqual(h.changes, [], "a stationary click stays a selection, with no undo entry");
+  assert.deepEqual(h.frames.at(-1).marks, [mark]);
+  rect = {left: 0, top: 0, width: 640, height: 360};
+  h.pointer("onPointerDown", 80, 80);
+  rect = {left: 80, top: 100, width: 480, height: 270};
+  h.pointer("onPointerMove", 100, 90); h.pointer("onPointerUp", 100, 90);
+  assert.deepEqual(h.changes.at(-1)[0].center, {x: 100, y: 90});
+  assert.deepEqual(h.changes.at(-1)[0].labelRect, {...mark.labelRect, x: 220, y: 70});
 });
 
 test("keyboard-style live font changes update the selected mark and commit one undoable edit", () => {
@@ -427,4 +445,16 @@ test("a newly drawn rectangle moves immediately and can be reopened without a gh
   assert.equal(reopened.frames.at(-1).marks[0].rect.x,140);
   assert.equal(reopened.frames.at(-1).options.draft,null);
   h.component.unmount();reopened.component.unmount();
+});
+
+test("selecting a label stays stationary when its inspector changes the stage mid-click",()=>{
+  const h=annotation(documentWith([label]));
+  h.pointer("onPointerDown",200,120);
+  h.live.getBoundingClientRect=()=>({left:20,top:30,width:512,height:288});
+  h.pointer("onPointerUp",200,120);
+  assert.equal(h.changes.length,0);
+  assert.deepEqual(h.frames.at(-1).marks,[label]);
+  const button=dotButton(h);
+  button.props.onClick({stopPropagation(){}});h.component.render();
+  assert.deepEqual(h.changes.at(-1),[{...label,labelDirection:"right"}]);
 });
