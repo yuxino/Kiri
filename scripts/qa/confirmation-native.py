@@ -62,9 +62,9 @@ def wait_for(predicate, description):
     raise RuntimeError("Timed out waiting for " + description)
 
 
-def cancel_dialog(mode, label):
-    cancel = find("Cancel")
-    window = cancel.top_level_parent()
+def cancel_dialog(mode, label, window):
+    # The library batch bar also has Cancel; target the confirmed dialog.
+    cancel = find("Cancel", owner=window)
     handle = window.handle
     window.capture_as_image().save(output / f"{label}.png")
     if ctypes.windll.user32.IsHungAppWindow(handle):
@@ -103,8 +103,8 @@ try:
     index_bytes = (root / "library.json").read_bytes()
     for index, mode in enumerate(["Escape", "Cancel"] * 3):
         find("Empty Trash").click_input()
-        find("Empty Trash\\?")
-        cancel_dialog(mode, f"empty-trash-{index}")
+        dialog = find("Empty Trash\\?").top_level_parent()
+        cancel_dialog(mode, f"empty-trash-{index}", dialog)
         if (root / "library.json").read_bytes() != index_bytes:
             raise RuntimeError("Cancellation changed the library index")
         if any(not (root / "Assets" / asset["filename"]).is_file() for asset in assets):
@@ -113,21 +113,23 @@ try:
 
     find("Discard 1", predicate=lambda c: c.rectangle().height() > 150).click_input(button="right")
     find("Delete Permanently").click_input()
-    find("Delete this capture permanently\\?")
-    cancel_dialog("Cancel", "single-delete")
+    dialog = find("Delete this capture permanently\\?").top_level_parent()
+    cancel_dialog("Cancel", "single-delete", dialog)
     report["checks"].append("single permanent-delete confirmation opens and cancels")
 
     cards = [find(f"Discard {index}", predicate=lambda c: c.rectangle().height() > 150).rectangle() for index in range(1, 4)]
+    end = (max(c.right for c in cards) + 8, max(c.bottom for c in cards) + 8)
     mouse.press(coords=(min(c.left for c in cards) - 8, min(c.top for c in cards) - 8))
-    mouse.move(coords=(max(c.right for c in cards) + 8, max(c.bottom for c in cards) + 8))
-    mouse.release()
+    mouse.move(coords=end)
+    # pywinauto otherwise moves to (0, 0) before releasing, undoing the band.
+    mouse.release(coords=end)
     find(r"Delete Permanently \(3\)").click_input()
-    find("Delete these captures permanently\\?")
-    cancel_dialog("Escape", "batch-delete")
+    dialog = find("Delete these captures permanently\\?").top_level_parent()
+    cancel_dialog("Escape", "batch-delete", dialog)
     report["checks"].append("batch permanent-delete confirmation opens and cancels")
 
     find("Empty Trash").click_input()
-    dialog = find("Cancel").top_level_parent()
+    dialog = find("Empty Trash\\?").top_level_parent()
     find("Empty Trash", owner=dialog).click_input()
     wait_for(lambda: len(json.loads((root / "library.json").read_text())) == 1, "durable deletion")
     wait_for(lambda: all(not (root / "Assets" / asset["filename"]).exists() for asset in assets[1:]), "trash file cleanup")
