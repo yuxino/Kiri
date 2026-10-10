@@ -237,7 +237,7 @@ one number, optional multiline description, badge center and label rectangle;
 its handles move the badge and label independently. Both parts translate when
 cropped and use the common preview/export renderer. Badge style and size join
 the local appearance preference; note content stays in the editable document.
-See ADR 0081.
+See ADR 0083.
 
 Screenshot label bubbles share the text mark and inline editor, with an optional
 `labelDirection` field. The text rect remains fixed when its dot is clicked;

@@ -96,6 +96,56 @@ recorded above.
 
 The separate [full run](https://github.com/yuxino/Kiri/actions/runs/38023998131)
 uses that same code commit and additionally builds installers, installs the
-Debian package, and runs isolated X11/Windows desktop checks. It is still
-running at the time of this record. Those isolated checks do not establish
-hardware, mixed-scale, or real GNOME Wayland acceptance.
+Debian package, and runs isolated X11/Windows desktop checks. It completed
+successfully, including Windows installer/portable smoke checks and isolated
+GNOME Wayland portal checks at scales 1, 1.25, 1.5 and 2. These isolated
+checks do not establish physical hardware or mixed-display acceptance.
+
+## Integration with main
+
+2026-10-10: merged `origin/main` at `eb3a8c9`, including the screenshot hover
+color picker and Windows confirmation repair. Conflicts were limited to the
+ADR index and dictionary additions. Both features' strings remain present in
+all seven dictionaries with identical sets of 728 keys, and the index keeps
+ADR 0082 and ADR 0083. The shared keyboard handler and its executable test
+context retain both the color-copy boundary and the numbered-callout picker.
+The product design is unchanged.
+
+- `pnpm test:release-tools`: 354 passed.
+- `pnpm build`, `cargo check --manifest-path src-tauri/Cargo.toml`, and
+  `git diff --check`: passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-targets`: 333 passed,
+  one failed, one ignored on this Mac. The same native video annotation
+  contrast assertion described above still fails; no test was weakened or
+  ignored.
+
+No fixed-path app was installed or restarted for this branch synchronization;
+the shared installation remains owned by the coordinated integration check.
+Current-head CI is tracked on PR #125 before merge approval.
+
+## Initial text-focus timing
+
+The combined renderer [run](https://github.com/yuxino/Kiri/actions/runs/38031534672)
+at `d43f249` failed the saved-text assertion after a new capture. Its frontend
+and renderer scripts were unchanged from the preceding passing `e2b037a` run;
+the failed artifact did not record the textarea's value or saved document.
+
+A controlled replay of that artifact delayed the actual initial focus frame
+until after the first keyboard character. The callback selected the new `l`,
+so subsequent input produced `ine one\nline two`. The saved document matched
+the incorrect textarea value exactly. This reproduces a product input race
+with the same assertion failure; it does not require a late IPC response.
+
+The initial focus callback now preserves an editor that has already gained
+focus. Two executable callback regressions cover early typing, an existing
+caret and normal selection of untouched saved text. The renderer check keeps
+its saved-text assertion and also checks the complete two-line value before
+Enter and its exact equality with the exported text.
+
+On this feature branch, the same delayed-frame replay retained
+`line one\nline two` in both the editor and exported document. The entire
+image-editing renderer sequence then passed, including undo/redo, both Escape
+steps, close protection and Save As. All 356 frontend checks, build, Cargo
+check and diff checks passed. The local Rust result remained 333 passed,
+one failed at the previously recorded contrast assertion, and one ignored.
+No fixed-path native app was installed or restarted for this repair.

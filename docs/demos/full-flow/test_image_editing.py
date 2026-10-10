@@ -99,8 +99,12 @@ async def main():
     f=await capture();await f.get_by_title('Text (T)',exact=True).click();await page.mouse.click(620,310)
     textarea=f.get_by_role('textbox',name='Text content',exact=True)
     await textarea.press_sequentially('line one',delay=10);await textarea.press('Shift+Enter');await textarea.press_sequentially('line two',delay=10)
+    typed=await textarea.input_value()
+    assert typed=='line one\nline two',{'stage':'before Enter','actualText':typed}
     await textarea.press('Enter');await page.locator('#overlay').wait_for(state='detached')
-    assert (await page.evaluate('state.pendingAnnotation'))['documentJson'].find('line one')!=-1
+    saved=(await page.evaluate('state.pendingAnnotation'))['documentJson']
+    assert saved.find('line one')!=-1,saved
+    assert [mark['text'] for mark in json.loads(saved)['marks'] if mark['kind']=='text']==[typed],saved
     # Seed one public image for saved-image editor tests.
     buffer=io.BytesIO();Image.new('RGB',(1000,600),'#707b8d').save(buffer,format='PNG');MEDIA['image-edit-fixture']=(buffer.getvalue(),'image/png')
     async def editor():
