@@ -540,6 +540,19 @@ jobs:
           $env:KIRI_QA_PORTABLE_EXE = Join-Path $env:RUNNER_TEMP 'kiri-portable-verify/kiri.exe'
           $env:KIRI_QA_INSTALLED_EXE = Join-Path $install 'kiri.exe'
           python scripts/qa/windows-release-native.py
+      - name: Verify hover colors and native clipboard on the installed Windows app
+        if: needs.plan.outputs.package_windows == 'true'
+        timeout-minutes: 4
+        env:
+          KIRI_COLOR_QA_EXE: ${{ runner.temp }}/kiri-installed-review/kiri.exe
+        run: python scripts/qa/windows-capture-color-native.py
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
+          name: windows-capture-color-review
+          path: windows-capture-color-review/
+          retention-days: 5
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
         with:
