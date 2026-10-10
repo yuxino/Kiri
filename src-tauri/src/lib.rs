@@ -36,6 +36,7 @@ mod portal_shortcuts;
 mod state;
 mod thumbnail;
 mod updates;
+mod window_tasks;
 
 use tauri::{Emitter, Manager};
 
@@ -346,6 +347,22 @@ pub fn run() {
 }
 
 fn show_library_window(app: &tauri::AppHandle, reason: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        // Tray/single-instance callbacks must return before WebView2 creation.
+        let app = app.clone();
+        let reason = reason.to_string();
+        crate::window_tasks::dispatch(move || {
+            if let Err(error) = show_library_window_inner(&app, &reason) {
+                log::error!("[window] library open failed: {error}");
+            }
+        })
+    }
+    #[cfg(not(windows))]
+    show_library_window_inner(app, reason)
+}
+
+fn show_library_window_inner(app: &tauri::AppHandle, reason: &str) -> Result<(), String> {
     let window = match app.get_webview_window("library") {
         Some(window) => window,
         None => {

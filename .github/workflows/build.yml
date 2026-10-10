@@ -523,6 +523,10 @@ jobs:
         if: needs.plan.outputs.package_windows == 'true'
         timeout-minutes: 3
         run: python scripts/qa/shortcut-native.py
+      - name: Verify destructive confirmation windows on the actual desktop
+        if: needs.plan.outputs.package_windows == 'true'
+        timeout-minutes: 3
+        run: python scripts/qa/confirmation-native.py
       - name: Install and smoke-test both Windows packages
         if: needs.plan.outputs.package_windows == 'true'
         shell: pwsh
@@ -548,6 +552,13 @@ jobs:
         with:
           name: shortcut-native-review
           path: shortcut-native-review/
+          retention-days: 5
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
+          name: confirmation-native-review
+          path: confirmation-native-review/
           retention-days: 5
           if-no-files-found: warn
       - uses: actions/upload-artifact@v7
