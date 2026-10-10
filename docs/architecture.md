@@ -65,6 +65,15 @@ deleted IDs and invalidates their thumbnails under the same generation barrier
 and library lock. `scripts/qa/confirmation-native.py` exercises real Windows
 confirmation windows against generated assets in a temporary managed library.
 
+Windows dispatches confirmation, resident feedback, and library-window
+presentation to one serial worker. WebView2 creation never blocks their IPC or
+native event callbacks, and repeated resident-window requests preserve order.
+Confirmation creation errors return to the caller. Permanent deletion and
+empty-trash filesystem work use blocking workers; empty-trash chooses its
+deleted IDs and invalidates their thumbnails under the same generation barrier
+and library lock. `scripts/qa/confirmation-native.py` exercises real Windows
+confirmation windows against generated assets in a temporary managed library.
+
 Linux does not show the floating `control-panel` or `ripple` during recording.
 The tray and explicit recording commands provide controls without relying on
 portal window exclusion. Linux video viewers expose playback, GIF conversion and basic normal-speed
