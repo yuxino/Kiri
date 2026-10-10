@@ -590,7 +590,7 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
         #[cfg(target_os = "linux")]
         if let Err(error) = platform::linux::show_pinned_screenshot(&window, width, height) {
             let _ = window.close();
-            return Err(format!("Pinned screenshot could not be opened: {error}"));
+            return Err(format!("Pinned screenshot could not be opened: {error:#}"));
         }
         #[cfg(not(target_os = "linux"))]
         let _ = window;
