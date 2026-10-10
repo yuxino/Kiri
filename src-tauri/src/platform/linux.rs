@@ -33,6 +33,31 @@ pub fn is_wayland_session() -> bool {
             .is_ok_and(|session| session.eq_ignore_ascii_case("wayland"))
 }
 
+/// GTK's non-resizable windows also constrain programmatic resize requests.
+/// Keep native resizing enabled and give the window manager the same fixed
+/// aspect as the web grip, before the reference is mapped for the first time.
+pub fn show_pinned_screenshot(window: &tauri::WebviewWindow, width: f64, height: f64) -> Result<()> {
+    let window = window.clone();
+    on_gtk_main_thread(move || {
+        let native = window
+            .gtk_window()
+            .context("Could not access the pinned screenshot window.")?;
+        let aspect = width / height;
+        let geometry = gtk::gdk::Geometry::new(
+            80, 60, 0, 0, 0, 0, 0, 0, aspect, aspect, gtk::gdk::Gravity::NorthWest,
+        );
+        native.set_geometry_hints(
+            None::<&gtk::Widget>,
+            Some(&geometry),
+            gtk::gdk::WindowHints::MIN_SIZE | gtk::gdk::WindowHints::ASPECT,
+        );
+        native.show_all();
+        native.present();
+        native.display().sync();
+        Ok(())
+    })
+}
+
 /// Present the capture overlay only after its borderless native window has
 /// been configured. Capture creation runs on GTK's main thread.
 pub fn show_capture_overlay(window: &tauri::WebviewWindow, frame: Rect) -> Result<()> {
@@ -130,7 +155,7 @@ pub fn show_recording_countdown(window: &tauri::WebviewWindow) -> Result<()> {
     Ok(())
 }
 
-/// Clipboard commands may run in an IPC worker as well as on the GTK thread.
+/// Desktop commands may run in an IPC worker as well as on the GTK thread.
 /// Never move GTK objects between threads or acquire the main context on a
 /// worker: an unowned main context can otherwise run an invocation there.
 fn on_gtk_main_thread<T, F>(action: F) -> Result<T>
@@ -142,7 +167,7 @@ where
         return action();
     }
     if !gtk::is_initialized() {
-        return Err(anyhow!("The desktop clipboard is not available."));
+        return Err(anyhow!("The desktop main loop is not available."));
     }
 
     let pending = Arc::new(Mutex::new(Some(action)));
@@ -157,10 +182,10 @@ where
     match receiver.recv_timeout(Duration::from_secs(5)) {
         Ok(result) => result,
         Err(_) => {
-            // Do not leave an unstarted write queued to replace newer data if
+            // Do not leave an unstarted action queued to replace newer state if
             // the main loop is stopping or cannot service the request.
             pending.lock().unwrap().take();
-            Err(anyhow!("The desktop clipboard did not respond."))
+            Err(anyhow!("The desktop main loop did not respond."))
         }
     }
 }
