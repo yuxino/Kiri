@@ -21,7 +21,7 @@ import traceback
 from PIL import Image, ImageChops, ImageGrab, ImageStat
 from linux_desktop_fixture import DesktopFixture, RECORDING_REGION
 from linux_audio_tone import inspect_tone
-from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, proportional_resize_evidence
+from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -418,7 +418,7 @@ def native_pin_acceptance():
     captured.save(output / "direct-pin-annotated.png")
     trace = wait_for("native pin lifecycle log", lambda:
                     (text := app_log.read_bytes()[log_offset:].decode("utf-8", errors="replace"))
-                    and f"[pin] screenshot opened asset_id={created[0]['id']}" in text and text)
+                    and pin_open_log_marker(created[0]["id"]) in text and text)
     (output / "direct-pin-lifecycle.log").write_text(trace)
     lifecycle = pin_lifecycle_evidence(trace, created[0]["id"])
     if "_NET_WM_STATE_ABOVE" not in command("xprop", "-id", pin, "_NET_WM_STATE").stdout:

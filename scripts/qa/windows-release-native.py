@@ -12,7 +12,7 @@ import time
 
 from pywinauto import Desktop, keyboard, mouse
 from PIL import Image, ImageChops, ImageGrab, ImageStat
-from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, proportional_resize_evidence
+from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 from windows_qa_profile import isolated_windows_profile
 
 
@@ -164,7 +164,7 @@ def direct_pin_acceptance(source, expected, region, user32):
     captured.save(output / "direct-pin-annotated.png")
     trace = wait_for("direct pin lifecycle log", lambda:
                     (text := native_log.read_bytes()[log_offset:].decode("utf-8", errors="replace"))
-                    and f"[pin] screenshot opened asset_id={created[0]['id']}" in text and text)
+                    and pin_open_log_marker(created[0]["id"]) in text and text)
     (output / "direct-pin-lifecycle.log").write_text(trace)
     lifecycle = pin_lifecycle_evidence(trace, created[0]["id"])
 
