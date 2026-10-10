@@ -319,6 +319,7 @@ def verify_folder_and_rename(assets):
     if normalized(window.Document.Folder.Self.Path) != normalized(root):
         raise RuntimeError("Open Folder opened a parent rather than the current library")
     snapshot("current-library-folder")
+    report["checks"].append("Open Folder opens the current canonicalized custom library root")
     focus_library()
     find("Library", kinds=("Button",), scope=library_window).click_input()
     find("Search captures", kinds=("Edit",), scope=library_window)
@@ -343,14 +344,22 @@ def verify_folder_and_rename(assets):
         if (old_path.exists() or not path.is_file() or digest(path) != original_hash
                 or path.suffix != extension or renamed["id"] != before["id"]):
             raise RuntimeError("Rename changed bytes/ID/extension or retained only a display title")
-        action(title, "Show in Folder")
-        window = explorer_for(root / "Assets", path)
-        report.setdefault("renames", []).append({"kind": asset["kind"], "asset_id": renamed["id"],
+        evidence = {"kind": asset["kind"], "asset_id": renamed["id"],
             "old_filename": before["filename"], "new_filename": renamed["filename"],
-            "sha256": original_hash, "explorer": explorer_evidence(window)})
+            "sha256": original_hash}
+        report.setdefault("renames", []).append(evidence)
         asset.update(renamed)
+        try:
+            action(title, "Show in Folder")
+            window = explorer_for(root / "Assets", path)
+            evidence["explorer"] = explorer_evidence(window)
+        except Exception as error:
+            report.setdefault("reveal_errors", []).append({"kind": asset["kind"], "error": str(error)})
+            snapshot(f"reveal-{asset['kind']}-failure")
     snapshot("renamed-files-and-selected-item")
-    report["checks"].append("Open Folder opens current custom root; all three file types rename bytes/ID/extension and Explorer selects actual renamed files")
+    report["checks"].append("All three file types rename the real file while preserving bytes, ID and extension")
+    if not report.get("reveal_errors"):
+        report["checks"].append("Explorer selects each actual renamed file in the current Assets folder")
 
 
 def verify_copy(assets, seed_file):
@@ -529,6 +538,8 @@ try:
                     raise RuntimeError("Restart changed the renamed files or persisted library metadata")
                 report["checks"].append("Restart preserves all renamed IDs, file names, hashes and current library root")
                 verify_current_root_capture()
+                if report.get("reveal_errors"):
+                    raise RuntimeError("Native selected-file reveal failed: " + json.dumps(report["reveal_errors"], ensure_ascii=False))
                 report["native_acceptance_success"] = True
             except Exception as error:
                 report["acceptance_error"] = str(error)
