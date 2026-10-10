@@ -729,8 +729,6 @@
   "Drag the dots to move the number or description": "Punkte ziehen, um Nummer oder Beschreibung zu verschieben",
   "Label bubble": "Beschriftungsblase",
   "Label bubble (B)": "Beschriftungsblase (B)",
-  "Label direction": "Richtung der Beschriftung",
   "Point label left": "Beschriftung nach links richten",
-  "Point label right": "Beschriftung nach rechts richten",
-  "Click the dot to switch sides.": "Auf den Punkt klicken, um die Seite zu wechseln."
+  "Point label right": "Beschriftung nach rechts richten"
 }

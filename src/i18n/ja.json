@@ -729,8 +729,6 @@
   "Drag the dots to move the number or description": "点をドラッグして番号や説明を移動",
   "Label bubble": "ラベル吹き出し",
   "Label bubble (B)": "ラベル吹き出し (B)",
-  "Label direction": "吹き出しの向き",
   "Point label left": "吹き出しを左向きにする",
-  "Point label right": "吹き出しを右向きにする",
-  "Click the dot to switch sides.": "点をクリックして左右を切り替えます。"
+  "Point label right": "吹き出しを右向きにする"
 }

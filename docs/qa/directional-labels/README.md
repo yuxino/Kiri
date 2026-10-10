@@ -17,9 +17,11 @@ browser retesting also verified Space activation after this integration.
   undo and redo restore its direction. The dot does not start a canvas gesture.
 - The real PNG export retains the neutral body, white text, tip and colored dot
   without selection handles. [Clean export](label-export.png).
-- Fresh checks against the real Toolbar and Canvas after Pin integration keep
-  all seven languages' Pin button, wrapped toolbar, direction controls, font
-  slider, color swatches and hint inside a 480×640 browser viewport at 2x.
+- Fresh checks against the real Toolbar and Canvas after simplifying the label
+  inspector keep all seven languages' Pin button, wrapped toolbar, font slider
+  and color swatches inside a 480×640 browser viewport at 2x. The 260-pixel
+  inspector has nine controls (font and eight colors), with no duplicate
+  direction buttons or explanatory footer.
   Every language also passes actual dot clicks during editing with focus/text/
   geometry preserved, committed switching and toolbar undo/redo. Measurements
   are in [label-layout-results.json](label-layout-results.json). Screenshots:
@@ -41,11 +43,14 @@ browser retesting also verified Space activation after this integration.
 ## Local checks and limits
 
 The branch incorporates main `f640c48` (numbered callouts), including Pin at
-`1c7357c`, hover colors and Windows confirmation dispatch. The fresh browser
-checks use renderer source tree `da7311168e3846c3b85f412ac592ebbda8316ce2` and
+`1c7357c`, hover colors and Windows confirmation dispatch. The first Pin browser
+checks used renderer source tree `da7311168e3846c3b85f412ac592ebbda8316ce2` and
 harness blob `9e0fb3889806750ca2c0dd7450e41030b6920624`, from numbered base
 `feef86c` plus the label feature. Main's squash tree was verified identical to
-that base, so adopting main preserves the exact tested sources. All seven language
+that base, so adopting main preserved the exact tested sources. The latest
+inspector screenshots and measurements use renderer tree
+`68de77629214afbab3d24973f72fd77540f2a464`, including the description input repair
+and the requested removal of direction buttons and helper text. All seven language
 key sets and the paired READMEs retain the three features; ADR 0084 remains
 intact. Label geometry, rendering and styles match the previously validated
 implementation.
@@ -80,13 +85,16 @@ problem. Its minimal native-editor repair from `f045e3f` (PR #127) is now includ
 here. The combined `src` and `src-tauri` trees were verified identical to the
 coordinator's `7ef78b9` candidate; the new renderer tree is
 `629b46592bb8df62cbcd9d90e4f4b84610e4951a`. Label TextEditor, geometry and
-rendering are unchanged. The coordinating slot owns native input acceptance
-before merging; isolated composition checks do not replace that acceptance.
+rendering are unchanged. The user subsequently confirmed normal input after
+physically typing Chinese candidates and English in the coordinator's signed
+repair candidate. This is coordinated native acceptance; isolated composition
+checks cannot replace OS input-method acceptance by themselves. Subsequent
+inspector simplification does not change the textarea or composition handling.
 
 `pnpm build`, `pnpm test:release-tools` (373 tests) and the separate frontend
 TypeScript check including the isolated QA harness passed after the description
-repair. `cargo check` and `git diff --check` passed for the integration; the
-description repair leaves native sources unchanged. The complete macOS 27.0.1 Rust run had 334 passing tests,
+repair and inspector simplification. `cargo check` and `git diff --check` passed
+for the integration; both changes leave native sources unchanged. The complete macOS 27.0.1 Rust run had 334 passing tests,
 one ignored test and one failure in the pre-existing
 `native_annotations_follow_live_frames_and_independent_time_ranges` test at its
 post-annotation blue-channel pixel-difference assertion. The same assertion

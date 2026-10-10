@@ -1,10 +1,10 @@
 {
   "source": {
-    "numberedBase": "feef86ca03ebaf86809b20bdba672488f2752b59",
-    "srcTree": "da7311168e3846c3b85f412ac592ebbda8316ce2",
+    "baseCommit": "b39b65d87450379046be6bcf1be5ee60af9c58e4",
+    "srcTree": "68de77629214afbab3d24973f72fd77540f2a464",
     "harnessBlob": "9e0fb3889806750ca2c0dd7450e41030b6920624"
   },
-  "generatedAt": "2026-10-10T08:02:29.685Z",
+  "generatedAt": "2026-10-10T08:49:20.678Z",
   "results": [
     {
       "lang": "en",
@@ -32,15 +32,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619322836.5928,
+        "id": 1791622120080.4956,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -54,13 +54,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     },
     {
       "lang": "zh-Hans",
@@ -88,15 +91,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619326986.6396,
+        "id": 1791622127597.9429,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -110,13 +113,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     },
     {
       "lang": "zh-Hant",
@@ -144,15 +150,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619330861.733,
+        "id": 1791622133354.8047,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -166,13 +172,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     },
     {
       "lang": "ja",
@@ -200,15 +209,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619334861.7144,
+        "id": 1791622139225.575,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -222,13 +231,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     },
     {
       "lang": "de",
@@ -256,15 +268,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619338853.4397,
+        "id": 1791622146887.3416,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -278,13 +290,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     },
     {
       "lang": "ko",
@@ -312,15 +327,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619343095.1453,
+        "id": 1791622151208.9077,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -334,13 +349,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     },
     {
       "lang": "fr",
@@ -368,15 +386,15 @@
           "height": 81
         },
         {
-          "x": 75,
+          "x": 110,
           "y": 364,
-          "width": 330,
-          "height": 107.3984375
+          "width": 260,
+          "height": 73
         }
       ],
       "allWithinViewport": true,
       "mark": {
-        "id": 1791619346978.729,
+        "id": 1791622157873.247,
         "kind": "text",
         "text": "点击圆点切换方向\n说明文字保持原位",
         "rect": {
@@ -390,13 +408,16 @@
         "fontSize": 18,
         "labelDirection": "left"
       },
-      "controlCount": 29,
+      "controlCount": 25,
       "controlBounds": {
         "left": 48.5,
         "top": 155.6875,
         "right": 431.5,
-        "bottom": 460.3984375
-      }
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
     }
   ]
 }

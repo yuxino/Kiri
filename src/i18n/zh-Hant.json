@@ -729,8 +729,6 @@
   "Drag the dots to move the number or description": "拖曳圓點可分別移動序號和說明",
   "Label bubble": "標籤氣泡",
   "Label bubble (B)": "標籤氣泡 (B)",
-  "Label direction": "氣泡方向",
   "Point label left": "氣泡指向左側",
-  "Point label right": "氣泡指向右側",
-  "Click the dot to switch sides.": "點擊圓點切換左右方向。"
+  "Point label right": "氣泡指向右側"
 }

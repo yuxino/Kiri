@@ -729,8 +729,6 @@
   "Drag the dots to move the number or description": "Faites glisser les points pour déplacer le numéro ou la description",
   "Label bubble": "Bulle de texte",
   "Label bubble (B)": "Bulle de texte (B)",
-  "Label direction": "Direction de la bulle",
   "Point label left": "Orienter la bulle à gauche",
-  "Point label right": "Orienter la bulle à droite",
-  "Click the dot to switch sides.": "Cliquez sur le point pour changer de côté."
+  "Point label right": "Orienter la bulle à droite"
 }

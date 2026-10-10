@@ -21,8 +21,10 @@ without moving its text or adding another permanent toolbar slot.
   undoable edit; flips during typing remain in that text edit.
 - The dot is a real button with a readable action name, hover/focus feedback and
   Enter/Space activation. Pointer events do not start a move or finish capture.
-- Provide font, dot-color and direction controls. The existing eight handles
-  resize a label; body dragging moves it, and double-clicking edits its text.
+- Provide font and dot-color controls in the inspector; the dot itself changes
+  direction, without duplicate direction buttons or explanatory text. The
+  existing eight handles resize a label; body dragging moves it, and
+  double-clicking edits its text.
 - Persist labels as text marks with an optional `labelDirection: left | right`.
   Omitted fields retain ordinary text behavior. Both native and frontend parsers
   reject invalid values and preserve the existing bounds and revision protection.
