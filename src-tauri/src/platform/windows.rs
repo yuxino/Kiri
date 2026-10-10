@@ -75,84 +75,299 @@ fn find_main_window(pid: u32) -> Option<HWND> {
     search.found
 }
 
-pub fn reveal_path(path: &Path) -> Result<()> {
-    // Shell paths are data, not Explorer command-line arguments. A comma,
-    // space or non-ASCII character must not change the requested destination.
-    // Use a fresh STA: Tauri's worker pool may already have an MTA apartment.
-    let path = path.to_owned();
-    thread::Builder::new()
-        .name("kiri-reveal-file".into())
-        .spawn(move || {
-            use windows::core::{w, PCWSTR};
-            use windows::Win32::System::Com::{
-                CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+const WM_SHELL_REVEAL: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 0x41;
+const SHELL_SUBCLASS_ID: usize = 1;
+
+struct RevealRequest {
+    path: std::path::PathBuf,
+    reply: mpsc::Sender<Result<()>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct RevealQueue {
+    requests: Mutex<std::collections::VecDeque<RevealRequest>>,
+    processing: AtomicBool,
+    stopped: AtomicBool,
+}
+
+impl RevealQueue {
+    fn process(&self) {
+        // Shell calls can pump COM messages and reenter the window procedure.
+        // Keep one FIFO processor, without holding the queue lock in Shell.
+        if self.processing.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        loop {
+            let request = self
+                .requests
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .pop_front();
+            let Some(request) = request else {
+                break;
             };
-            use windows::Win32::UI::Shell::{
-                Common::ITEMIDLIST, ILClone, ILCreateFromPathW, ILFindLastID, ILFree,
-                ILRemoveLastID, SHOpenFolderAndSelectItems, ShellExecuteW,
-            };
-            use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-            let metadata = std::fs::metadata(&path)?;
-            let encoded = shell_encoded_path(&path)?;
-            unsafe {
-                CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).ok()?;
+            if request.cancelled.load(Ordering::Acquire) {
+                continue;
             }
-            struct Apartment;
-            impl Drop for Apartment {
-                fn drop(&mut self) {
-                    unsafe {
-                        CoUninitialize();
-                    }
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                reveal_path_in_apartment(&request.path)
+            }))
+            .unwrap_or_else(|_| Err(anyhow!("The file manager request did not finish.")));
+            let _ = request.reply.send(result);
+        }
+        self.processing.store(false, Ordering::Release);
+    }
+
+    fn stop(&self) {
+        let mut requests = self
+            .requests
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        self.stopped.store(true, Ordering::Release);
+        for request in requests.drain(..) {
+            let _ = request
+                .reply
+                .send(Err(anyhow!("The file manager request did not finish.")));
+        }
+    }
+}
+
+unsafe extern "system" fn reveal_window_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    data: usize,
+) -> LRESULT {
+    use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass};
+    use windows::Win32::UI::WindowsAndMessaging::{PostQuitMessage, WM_NCDESTROY};
+    let queue = unsafe { &*(data as *const RevealQueue) };
+    if message == WM_SHELL_REVEAL {
+        queue.process();
+        return LRESULT(0);
+    }
+    if message == WM_NCDESTROY {
+        queue.stop();
+        unsafe {
+            let _ = RemoveWindowSubclass(hwnd, Some(reveal_window_proc), SHELL_SUBCLASS_ID);
+            PostQuitMessage(0);
+        }
+    }
+    unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+}
+
+struct RevealWorker {
+    hwnd: isize,
+    queue: Arc<RevealQueue>,
+}
+
+impl RevealWorker {
+    fn start() -> Result<Self> {
+        use windows::core::{w, PCWSTR};
+        use windows::Win32::System::Com::{
+            CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+        };
+        use windows::Win32::UI::Shell::{RemoveWindowSubclass, SetWindowSubclass};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE,
+        };
+        let queue = Arc::new(RevealQueue::default());
+        let thread_queue = queue.clone();
+        let (ready, startup) = mpsc::sync_channel(1);
+        thread::Builder::new()
+            .name("kiri-shell-sta".into())
+            .spawn(move || {
+                if let Err(error) = unsafe {
+                    CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).ok()
+                } {
+                    let _ = ready.send(Err(error.to_string()));
+                    return;
                 }
-            }
-            let _apartment = Apartment;
-            if metadata.is_dir() {
-                let result = unsafe {
-                    ShellExecuteW(
-                        None,
-                        w!("open"),
-                        PCWSTR(encoded.as_ptr()),
-                        PCWSTR::null(),
-                        PCWSTR::null(),
-                        SW_SHOWNORMAL,
-                    )
-                };
-                if result.0 as isize <= 32 {
-                    bail!("The capture folder could not be opened.");
-                }
-            } else {
-                let item = unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) };
-                if item.is_null() {
-                    bail!("The capture could not be located in its folder.");
-                }
-                struct OwnedItemIdList(*mut ITEMIDLIST);
-                impl Drop for OwnedItemIdList {
+                struct Apartment;
+                impl Drop for Apartment {
                     fn drop(&mut self) {
                         unsafe {
-                            ILFree(Some(self.0));
+                            CoUninitialize();
                         }
                     }
                 }
-                let item = OwnedItemIdList(item);
-                let parent = unsafe { ILClone(item.0) };
-                if parent.is_null() {
-                    bail!("The capture folder could not be located.");
+                let _apartment = Apartment;
+                let window = unsafe {
+                    CreateWindowExW(
+                        WINDOW_EX_STYLE(0),
+                        w!("STATIC"),
+                        PCWSTR::null(),
+                        WINDOW_STYLE(0),
+                        0,
+                        0,
+                        0,
+                        0,
+                        Some(HWND_MESSAGE),
+                        None,
+                        None,
+                        None,
+                    )
+                };
+                let hwnd = match window {
+                    Ok(hwnd) => hwnd,
+                    Err(error) => {
+                        let _ = ready.send(Err(error.to_string()));
+                        return;
+                    }
+                };
+                // A window message survives COM/modal pumps, unlike a bare thread
+                // message. Subclass the built-in hidden control on its own STA.
+                if !unsafe {
+                    SetWindowSubclass(
+                        hwnd,
+                        Some(reveal_window_proc),
+                        SHELL_SUBCLASS_ID,
+                        Arc::as_ptr(&thread_queue) as usize,
+                    )
                 }
-                let parent = OwnedItemIdList(parent);
-                // Pass an explicit containing-folder PIDL and one relative
-                // child. The documented cidl=0/full-item shortcut opened the
-                // folder without selecting the file in installed Windows QA.
-                let child = unsafe { ILFindLastID(item.0) };
-                if child.is_null() || !unsafe { ILRemoveLastID(Some(parent.0)) }.as_bool() {
-                    bail!("The capture folder could not be located.");
+                .as_bool()
+                {
+                    let _ = ready.send(Err("The file manager request did not finish.".to_string()));
+                    unsafe {
+                        let _ = DestroyWindow(hwnd);
+                    }
+                    return;
                 }
-                let children = [child.cast_const()];
-                unsafe { SHOpenFolderAndSelectItems(parent.0, Some(&children), 0) }?;
+                if ready.send(Ok(hwnd.0 as isize)).is_ok() {
+                    let mut message = MSG::default();
+                    loop {
+                        let status = unsafe { GetMessageW(&mut message, None, 0, 0) }.0;
+                        if status <= 0 {
+                            if status < 0 {
+                                log::warn!(
+                                    "Shell message pump failed: {}",
+                                    windows::core::Error::from_thread()
+                                );
+                            }
+                            break;
+                        }
+                        unsafe {
+                            let _ = TranslateMessage(&message);
+                            DispatchMessageW(&message);
+                        }
+                    }
+                }
+                thread_queue.stop();
+                unsafe {
+                    let _ = RemoveWindowSubclass(hwnd, Some(reveal_window_proc), SHELL_SUBCLASS_ID);
+                    let _ = DestroyWindow(hwnd);
+                }
+            })?;
+        let hwnd = startup
+            .recv()
+            .map_err(|_| anyhow!("The file manager request did not finish."))?
+            .map_err(|error| anyhow!(error))?;
+        Ok(Self { hwnd, queue })
+    }
+
+    fn reveal(&self, path: &Path) -> Result<()> {
+        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+        let (reply, result) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        {
+            let mut requests = self
+                .queue
+                .requests
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if self.queue.stopped.load(Ordering::Acquire) {
+                bail!("The file manager request did not finish.");
             }
-            Ok(())
-        })?
-        .join()
-        .map_err(|_| anyhow!("The file manager request did not finish."))?
+            requests.push_back(RevealRequest {
+                path: path.to_owned(),
+                reply,
+                cancelled: cancelled.clone(),
+            });
+        }
+        if let Err(error) = unsafe {
+            PostMessageW(
+                Some(HWND(self.hwnd as *mut _)),
+                WM_SHELL_REVEAL,
+                WPARAM(0),
+                LPARAM(0),
+            )
+        } {
+            cancelled.store(true, Ordering::Release);
+            return Err(error.into());
+        }
+        result
+            .recv()
+            .map_err(|_| anyhow!("The file manager request did not finish."))?
+    }
+}
+
+pub fn reveal_path(path: &Path) -> Result<()> {
+    // Shell requests may finish activation after the API returns. Keep one
+    // STA alive with a native message pump instead of immediately shutting
+    // down each request's apartment. Tauri's worker pool may already be MTA.
+    static WORKER: std::sync::OnceLock<std::result::Result<RevealWorker, String>> =
+        std::sync::OnceLock::new();
+    match WORKER.get_or_init(|| RevealWorker::start().map_err(|error| error.to_string())) {
+        Ok(worker) => worker.reveal(path),
+        Err(error) => Err(anyhow!(error.clone())),
+    }
+}
+
+fn reveal_path_in_apartment(path: &Path) -> Result<()> {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::UI::Shell::{
+        Common::ITEMIDLIST, ILClone, ILCreateFromPathW, ILFindLastID, ILFree, ILRemoveLastID,
+        SHOpenFolderAndSelectItems, ShellExecuteW,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let metadata = std::fs::metadata(&path)?;
+    let encoded = shell_encoded_path(&path)?;
+    if metadata.is_dir() {
+        let result = unsafe {
+            ShellExecuteW(
+                None,
+                w!("open"),
+                PCWSTR(encoded.as_ptr()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if result.0 as isize <= 32 {
+            bail!("The capture folder could not be opened.");
+        }
+    } else {
+        let item = unsafe { ILCreateFromPathW(PCWSTR(encoded.as_ptr())) };
+        if item.is_null() {
+            bail!("The capture could not be located in its folder.");
+        }
+        struct OwnedItemIdList(*mut ITEMIDLIST);
+        impl Drop for OwnedItemIdList {
+            fn drop(&mut self) {
+                unsafe {
+                    ILFree(Some(self.0));
+                }
+            }
+        }
+        let item = OwnedItemIdList(item);
+        let parent = unsafe { ILClone(item.0) };
+        if parent.is_null() {
+            bail!("The capture folder could not be located.");
+        }
+        let parent = OwnedItemIdList(parent);
+        // Pass the containing folder and one relative child. Keep both
+        // owning PIDLs alive throughout the call; the child only borrows
+        // the final item ID inside the full path.
+        let child = unsafe { ILFindLastID(item.0) };
+        if child.is_null() || !unsafe { ILRemoveLastID(Some(parent.0)) }.as_bool() {
+            bail!("The capture folder could not be located.");
+        }
+        let children = [child.cast_const()];
+        unsafe { SHOpenFolderAndSelectItems(parent.0, Some(&children), 0) }?;
+    }
+    Ok(())
 }
 
 fn shell_encoded_path(path: &Path) -> Result<Vec<u16>> {

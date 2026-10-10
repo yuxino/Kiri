@@ -363,7 +363,14 @@ def verify_folder_and_rename(assets):
             window = explorer_for(root / "Assets", path)
             evidence["explorer"] = explorer_evidence(window)
         except Exception as error:
-            report.setdefault("reveal_errors", []).append({"kind": asset["kind"], "error": str(error)})
+            explorers = []
+            for explorer, location in explorer_windows():
+                try:
+                    explorers.append(explorer_evidence(explorer))
+                except Exception as probe_error:
+                    explorers.append({"folder": str(location), "error": str(probe_error)})
+            report.setdefault("reveal_errors", []).append({
+                "kind": asset["kind"], "error": str(error), "explorers": explorers})
             snapshot(f"reveal-{asset['kind']}-failure")
     snapshot("renamed-files-and-selected-item")
     report["checks"].append("All three file types rename the real file while preserving bytes, ID and extension")
