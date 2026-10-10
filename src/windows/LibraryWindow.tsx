@@ -621,6 +621,12 @@ export function LibraryWindow() {
     });
   }, []);
 
+  const showConfirmDialog = useCallback((...args: Parameters<typeof api.showConfirmDialog>) => {
+    void api.showConfirmDialog(...args).catch(() => {
+      setError({ message: "Couldn't complete this action", recovery: null });
+    });
+  }, []);
+
   const restoreMissing = useCallback(async (id: string) => {
     setError(null);
     try {
@@ -787,7 +793,7 @@ export function LibraryWindow() {
               label={t("Remove Record")}
               destructive
               onClick={run(() =>
-                void api.showConfirmDialog(
+                showConfirmDialog(
                   `removeMissing:${asset.id}`,
                   "Remove this record?",
                   "",
@@ -812,7 +818,7 @@ export function LibraryWindow() {
               label={t("Delete Permanently")}
               destructive
               onClick={run(() =>
-                void api.showConfirmDialog(
+                showConfirmDialog(
                   `delete:${asset.id}`,
                   "Delete this capture permanently?",
                   "This cannot be undone.",
@@ -840,6 +846,7 @@ export function LibraryWindow() {
       menuStyle,
       restoreMissing,
       run,
+      showConfirmDialog,
       showingTrash,
       startGifConversion,
     ],
@@ -1027,7 +1034,7 @@ export function LibraryWindow() {
                 className="kiri-button kiri-button--destructive"
                 title={t("Empty Trash")}
                 onClick={() =>
-                  void api.showConfirmDialog(
+                  showConfirmDialog(
                     "emptyTrash",
                     "Empty Trash?",
                     "All captures in Trash will be permanently deleted. This cannot be undone.",
@@ -1112,7 +1119,7 @@ export function LibraryWindow() {
             clearSelection();
           }}
           onDelete={() =>
-            void api.showConfirmDialog(
+            showConfirmDialog(
               "batchDelete",
               "Delete these captures permanently?",
               "This cannot be undone.",

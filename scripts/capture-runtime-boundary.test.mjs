@@ -77,3 +77,22 @@ test("capture confirmation finalizes only after its owner IPC returns", () => {
     "the successful confirmation path must close before leaving its try block",
   );
 });
+
+test("Windows resident WebViews are dispatched outside IPC and event callbacks", () => {
+  const commands = readFileSync(join(rustRoot, "commands.rs"), "utf8");
+  const state = readFileSync(join(rustRoot, "state.rs"), "utf8");
+  const app = readFileSync(join(rustRoot, "lib.rs"), "utf8");
+  const confirmation = commands.match(/pub async fn show_confirm_dialog\([\s\S]*?(?=\n#\[tauri::command\])/)[0];
+  assert.match(confirmation, /#\[cfg\(windows\)\][\s\S]*window_tasks::dispatch/);
+  assert.match(confirmation, /receiver\s*\.await/);
+  assert.doesNotMatch(confirmation, /WebviewWindowBuilder/);
+  for (const [source, name] of [[app, "show_library_window"], [state, "show_completion_toast"], [state, "show_completion_preview"]]) {
+    const wrapper = source.slice(source.indexOf(`fn ${name}(`), source.indexOf(`fn ${name}_inner(`));
+    assert.match(wrapper, /#\[cfg\(windows\)\][\s\S]*window_tasks::dispatch/, name);
+    assert.doesNotMatch(wrapper, /WebviewWindowBuilder/, name);
+  }
+  for (const name of ["empty_trash", "permanently_delete", "batch_permanently_delete"]) {
+    const wrapper = commands.slice(commands.indexOf(`pub async fn ${name}(`), commands.indexOf(`fn ${name}_inner(`));
+    assert.match(wrapper, /spawn_blocking/, `${name} must not wait for thumbnail or disk work on the UI thread`);
+  }
+});

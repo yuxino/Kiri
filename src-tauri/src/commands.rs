@@ -288,7 +288,13 @@ fn complete_library_deletion(
 }
 
 #[tauri::command]
-pub fn permanently_delete(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn permanently_delete(app: AppHandle, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || permanently_delete_inner(app, id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn permanently_delete_inner(app: AppHandle, id: String) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let state = app.state::<AppState>();
     let store = app.state::<crate::protocol::ProtocolStore>();
@@ -304,24 +310,32 @@ pub fn permanently_delete(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn empty_trash(app: AppHandle) -> Result<(), String> {
+pub async fn empty_trash(app: AppHandle) -> Result<(), String> {
+    // Thumbnail generation and filesystem cleanup can both wait. Keep those
+    // waits off the UI thread so confirmation and native events stay live.
+    tauri::async_runtime::spawn_blocking(move || empty_trash_inner(app))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn empty_trash_inner(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let removed_ids = {
-        let mut context = state.library.lock().unwrap();
-        context
-            .library()
-            .map_err(|error| error.to_string())?
-            .all_assets(true)
-            .into_iter()
-            .map(|asset| asset.id)
-            .collect::<Vec<_>>()
-    };
     let store = app.state::<crate::protocol::ProtocolStore>();
     let result: Result<(), LibraryLocationError> =
-        crate::protocol::with_thumbnail_invalidations(&store, &removed_ids, || {
+        crate::protocol::with_selected_thumbnail_invalidations(&store, || {
             let mut context = state.library.lock().unwrap();
-            context.library_mut()?.empty_trash()?;
-            Ok(())
+            let mut removed_ids = Vec::new();
+            let result = (|| {
+                let library = context.library_mut()?;
+                removed_ids = library
+                    .all_assets(true)
+                    .into_iter()
+                    .map(|asset| asset.id)
+                    .collect();
+                library.empty_trash()?;
+                Ok(())
+            })();
+            (removed_ids, result)
         });
     complete_library_deletion(result, || emit_library_changed(&app))?;
     emit_notice_local(&app, "Trash Emptied".into(), "trash.slash".into());
@@ -368,7 +382,13 @@ pub fn batch_restore(app: AppHandle, ids: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn batch_permanently_delete(app: AppHandle, ids: Vec<String>) -> Result<(), String> {
+pub async fn batch_permanently_delete(app: AppHandle, ids: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || batch_permanently_delete_inner(app, ids))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn batch_permanently_delete_inner(app: AppHandle, ids: Vec<String>) -> Result<(), String> {
     let parsed = parse_ids(&ids)?;
     let state = app.state::<AppState>();
     let store = app.state::<crate::protocol::ProtocolStore>();
@@ -5432,7 +5452,7 @@ fn sanitize_frontend_log(message: String) -> String {
 }
 
 #[tauri::command]
-pub fn show_confirm_dialog(
+pub async fn show_confirm_dialog(
     app: AppHandle,
     kind: String,
     title: String,
@@ -5440,16 +5460,41 @@ pub fn show_confirm_dialog(
     confirmLabel: String,
     ids: Option<Vec<String>>,
     localize: Option<bool>,
-) {
-    crate::state::show_confirm_dialog(
-        &app,
-        kind,
-        title,
-        message,
-        confirmLabel,
-        ids.unwrap_or_default(),
-        localize.unwrap_or(false),
-    );
+) -> Result<(), String> {
+    let handle = app.clone();
+    let task = move || {
+        crate::state::show_confirm_dialog(
+            &handle,
+            kind,
+            title,
+            message,
+            confirmLabel,
+            ids.unwrap_or_default(),
+            localize.unwrap_or(false),
+        )
+    };
+    #[cfg(windows)]
+    {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        crate::window_tasks::dispatch(move || {
+            let _ = sender.send(task());
+        })?;
+        receiver
+            .await
+            .map_err(|_| "The confirmation window task stopped.".to_string())?
+    }
+    #[cfg(target_os = "linux")]
+    {
+        tauri::async_runtime::spawn_blocking(move || linux_run_on_main(&app, task))
+            .await
+            .map_err(|error| error.to_string())?
+    }
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(task)
+            .await
+            .map_err(|error| error.to_string())?
+    }
 }
 
 #[tauri::command]
