@@ -425,8 +425,33 @@ def native_pin_acceptance():
         raise RuntimeError("X11 reference did not request native above stacking")
     command("xdotool", "windowactivate", "--sync", pin)
     before = geometry(pin)
+    command("xdotool", "mousemove", str(int(before["X"]) + 30), str(int(before["Y"]) + 30))
+    # Native mapping precedes WebKit navigation/React handlers. Require a
+    # painted hover action before attempting the one real image drag.
+    wait_for_control("Unpin")
+    def initial_image_painted():
+        x, y, width, height = (int(before[key]) for key in ("X", "Y", "WIDTH", "HEIGHT"))
+        actual = ImageGrab.grab().convert("RGB").crop((x, y, x + width, y + height))
+        expected_image = captured.resize(actual.size, Image.Resampling.LANCZOS)
+        error = sum(ImageStat.Stat(ImageChops.difference(actual, expected_image)).mean) / 3
+        return {"mean_pixel_error": error} if error <= 3 else None
+    report["pin_ready"] = wait_for("actual annotated pin image painted before drag", initial_image_painted)
+    screenshot("direct-pin-ready-for-drag.png")
     start = (int(before["X"]) + int(before["WIDTH"]) // 2, int(before["Y"]) + int(before["HEIGHT"]) // 2)
-    drag_region((*start, start[0] + 70, start[1] + 40))
+    drag_evidence = {"before": before, "start": list(start), "target": [start[0] + 70, start[1] + 40], "samples": []}
+    report["pin_drag"] = drag_evidence
+    command("xdotool", "mousemove", str(start[0]), str(start[1]), "mousedown", "1")
+    try:
+        pause(0.3)
+        # The GTK move request crosses IPC before the WM grabs the pointer.
+        # Use continuous physical motion, rather than one instantaneous jump.
+        for step in range(1, 9):
+            command("xdotool", "mousemove", str(start[0] + round(70 * step / 8)),
+                    str(start[1] + round(40 * step / 8)))
+            pause(0.1)
+            drag_evidence["samples"].append(geometry(pin))
+    finally:
+        command("xdotool", "mouseup", "1")
     moved = wait_for("image drag moves the X11 pin", lambda:
                     (bounds := geometry(pin)) and abs(int(bounds["X"]) - int(before["X"])) >= 30
                     and abs(int(bounds["Y"]) - int(before["Y"])) >= 20 and bounds)
