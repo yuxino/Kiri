@@ -21,6 +21,8 @@ Kiri est une application de capture et d’enregistrement d’écran pour macOS,
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.
 - Recherchez, étiquetez, ajoutez aux favoris et exportez vos captures locales. Récupérez les suppressions accidentelles dans la corbeille.
 
+Pendant la saisie de texte, d’une description numérotée ou d’une légende, un premier geste sur une zone vide termine l’édition et retire la sélection ; le suivant utilise l’outil actif. Avec les outils de texte ou de forme, une sélection existante est aussi retirée avant qu’un autre geste crée une annotation. L’outil reste sélectionné. Le stylo et la mosaïque permettent de continuer à dessiner. Cliquer sur l’image pendant la saisie d’un filigrane termine celle-ci ; une nouvelle édition reprend le même filigrane.
+
 Sélectionnez une annotation existante pour modifier son style. La mosaïque propose le dessin libre, le rectangle et l’ellipse, avec pixellisation ou flou et intensité réglable. Filigrane (W) permet de saisir un motif répété directement sur l’image et de régler l’opacité, l’angle et l’espacement. Sélectionnez à nouveau l’outil pour modifier le texte existant, même après enregistrement.
 
 ## Premiers pas

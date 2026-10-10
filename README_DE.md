@@ -21,6 +21,8 @@ Kiri ist eine Screenshot- und Bildschirmaufnahme-App für macOS, Windows und Lin
 - Clips eines Videos kürzen und umordnen, dann eine neue MP4-Datei exportieren.
 - Lokale Aufnahmen suchen, mit Tags versehen, favorisieren und exportieren. Versehentlich gelöschte Inhalte lassen sich aus dem Papierkorb wiederherstellen.
 
+Während der Eingabe von Text, einer nummerierten Beschreibung oder einer Beschriftung beendet die erste Geste auf freier Fläche die Bearbeitung und hebt die Auswahl auf; erst die nächste verwendet das aktuelle Werkzeug. Bei Text- und Formwerkzeugen wird eine bestehende Auswahl ebenfalls zuerst aufgehoben, bevor eine neue Anmerkung entsteht. Das Werkzeug bleibt ausgewählt. Stift und Mosaik zeichnen weiter kontinuierlich. Ein Klick auf die Bildfläche beendet die Wasserzeicheneingabe; beim erneuten Bearbeiten wird dasselbe Wasserzeichen verwendet.
+
 Wählen Sie eine vorhandene Anmerkung aus, um ihren Stil zu ändern. Mosaik bietet Freihand, Rechteck und Ellipse sowie Pixel- und Unschärfeeffekte mit einstellbarer Stärke. Mit Wasserzeichen (W) schreiben Sie ein wiederholtes Muster direkt ins Bild und passen Deckkraft, Winkel und Abstand an. Wählen Sie das Werkzeug erneut, um vorhandenen Text weiterzubearbeiten, auch nach dem Speichern.
 
 ## Erste Schritte

@@ -247,6 +247,16 @@ type Interaction =
 
 type CanvasFrame = {left: number; top: number; width: number; height: number};
 
+function selectionHandleAt(mark: AnnotationMark, point: Point, scale: number): string | null {
+  if (mark.kind === "callout") return calloutHandleAt(mark, point, 9 * scale);
+  if (mark.kind === "line" || mark.kind === "arrow") {
+    if (Math.hypot(point.x - mark.start.x, point.y - mark.start.y) <= 10 * scale) return "start";
+    if (Math.hypot(point.x - mark.end.x, point.y - mark.end.y) <= 10 * scale) return "end";
+    return null;
+  }
+  return hitTestHandle(point, selectionBounds(mark), 9 * scale);
+}
+
 const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
   function AnnotationCanvas(
     {
@@ -314,10 +324,11 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const [editing, setEditing] = useState<EditingState | null>(null);
     const interactionRef = useRef<Interaction>({ kind: "none" });
     const gestureRectRef = useRef<CanvasFrame | null>(null);
-    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false,
+    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false, consumed: false,
       editingCalloutId: null as number | null });
     const calloutClickRef = useRef<{id: number; frame: CanvasFrame} | null>(null);
     const blankDoubleClickRef = useRef(false);
+    const watermarkEditIdRef = useRef<number | null>(null);
     const appearanceRef = useRef(appearance);
     appearanceRef.current = appearance;
     const toolRef = useRef(tool);
@@ -737,8 +748,12 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       if (index === null) {
         const selected = selectedIndexRef.current;
         if (selected !== null && history.elements[selected]?.kind === "watermark") index = selected;
-        else for (let i = history.elements.length - 1; i >= 0; i--) {
-          if (history.elements[i].kind === "watermark") { index = i; break; }
+        else {
+          const previousIndex = history.elements.findIndex(mark => mark.kind === "watermark" && mark.id === watermarkEditIdRef.current);
+          if (previousIndex !== -1) index = previousIndex;
+          else for (let i = history.elements.length - 1; i >= 0; i--) {
+            if (history.elements[i].kind === "watermark") { index = i; break; }
+          }
         }
       }
       const previous = index === null ? null : history.elements[index];
@@ -754,6 +769,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         color: ap.watermarkColor, fontSize: ap.watermarkFontSize, opacity: ap.watermarkOpacity / 100,
         rotation: ap.watermarkRotation, mode: "tiled", spacing: ap.watermarkSpacing};
       if (!validateMarks([...history.elements.filter((_, i) => i !== index), mark])) return;
+      watermarkEditIdRef.current = mark.id;
       const frameWidth = Math.min(documentSize.width, mark.rect.width + 2 * insets.x);
       const frameHeight = Math.min(documentSize.height, mark.rect.height + 2 * insets.y);
       const next: EditingState = {id: mark.id, index, watermark: mark, watermarkOriginal: mark,
@@ -942,7 +958,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if (interactionsDisabled()) return;
         if(e.button!==0)return;
         canvasClickRef.current = {
-          start: { x: e.clientX, y: e.clientY }, moved: false, wasEditing: editingRef.current !== null,
+          start: { x: e.clientX, y: e.clientY }, moved: false, wasEditing: editingRef.current !== null, consumed: false,
           editingCalloutId: editingRef.current?.callout ? editingRef.current.id : null,
         };
         if (canvasClickRef.current.editingCalloutId !== calloutClickRef.current?.id) calloutClickRef.current = null;
@@ -958,33 +974,56 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         });
         const t = toolRef.current;
         const ap = appearanceRef.current;
-
-        if (t === "watermark") {
-          const hit = markIndexAt(history.elements, p, hitTestScale);
-          const watermarkIndex = hit !== null && history.elements[hit].kind === "watermark" ? hit : null;
-          if (editingRef.current?.watermark && (watermarkIndex === null || watermarkIndex === editingRef.current.index)) {
-            startWatermark(watermarkIndex, p);
-            return;
-          }
-          const watermarkId = watermarkIndex === null ? null : history.elements[watermarkIndex].id;
-          if (editingRef.current) commitText();
-          if (editingRef.current) return; // A rejected edit must remain visible.
-          const index = watermarkId === null ? null : history.elements.findIndex(mark => mark.id === watermarkId);
-          startWatermark(index === -1 ? null : index, p);
+        const pendingEdit = editingRef.current;
+        const finishGesture = () => {
+          canvasClickRef.current.consumed = true;
+          blankDoubleClickRef.current = false;
+          interactionRef.current = {kind: "none"};
+          setDraft(null);
+          setSelectCursor("default");
+        };
+        // A canvas press must not confirm/discard a live system IME candidate.
+        if (pendingEdit && isTextComposition({target: canvas.ownerDocument?.activeElement})) {
+          e.preventDefault();
+          finishGesture();
           return;
         }
-
+        if (pendingEdit) commitText();
         if (editingRef.current) {
-          commitText();
+          // Validation may reject a watermark edit; retain its native input.
+          e.preventDefault();
+          finishGesture();
+          return;
         }
-
         const current = history.elements;
-        const selectedLine = selectedIndex === null ? null : current[selectedIndex];
+        // Committing may append/remove a mark or update its measured bounds.
+        // Use the synchronous selection, rather than this render's old index.
+        const selected = selectedIndexRef.current;
+        const selectedLine = selected === null ? null : current[selected];
+        const hit = markIndexAt(current, p, hitTestScale);
         const textTool = t === "text" || t === "label";
-        const textHit = textTool ? markIndexAt(current, p, hitTestScale) : null;
+        const selectedMatchesTool = t === "select" ||
+          (textTool ? selectedLine?.kind === "text" : selectedLine?.kind === t);
+        const selectedHandle = selectedLine ? selectionHandleAt(selectedLine, p, hitTestScale.radial) : null;
+        const blank = hit === null && !(selectedMatchesTool && selectedHandle !== null);
+        const continuousTool = t === "pen" || t === "mosaic";
+        const finishWatermark = pendingEdit?.watermark &&
+          (hit === null || current[hit].id === pendingEdit.id);
+        if (finishWatermark || (blank && (pendingEdit || (selected !== null && !continuousTool)))) {
+          // Finish/deselect first, place on the next gesture. Keeping the tool
+          // active must not turn the same press into an unwanted new mark.
+          finishGesture();
+          selectMark(null);
+          return;
+        }
+        if (t === "watermark") {
+          startWatermark(hit !== null && current[hit].kind === "watermark" ? hit : null, p);
+          return;
+        }
+        const textHit = textTool ? hit : null;
         const editingExistingText = textTool && (
           (textHit !== null && current[textHit].kind === "text") ||
-          (selectedLine?.kind === "text" && hitTestHandle(p, selectionBounds(selectedLine), 9 * hitTestScale.radial) !== null)
+          (selectedLine?.kind === "text" && selectedHandle !== null)
         );
         if (textTool && !editingExistingText) {
           const width = Math.max(1, Math.min(180*hitTestScale.radial, documentSize.width));
@@ -1017,45 +1056,17 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           return;
         }
 
-        const editingSelectedLine =
-          (t === "line" || t === "arrow") &&
-          selectedLine?.kind === t &&
-          (Math.hypot(p.x - selectedLine.start.x, p.y - selectedLine.start.y) <= 10 * hitTestScale.radial ||
-            Math.hypot(p.x - selectedLine.end.x, p.y - selectedLine.end.y) <= 10 * hitTestScale.radial ||
-            markIndexAt(current, p, hitTestScale) === selectedIndex);
-        const calloutHit = t === "callout" ? markIndexAt(current, p, hitTestScale) : null;
+        const editingExistingShape = ["rectangle", "line", "arrow"].includes(t) &&
+          ((hit !== null && current[hit].kind === t) ||
+            (selectedLine?.kind === t && selectedHandle !== null));
+        const calloutHit = t === "callout" ? hit : null;
         const editingCallout = (calloutHit !== null && current[calloutHit].kind === "callout") ||
-          (t === "callout" && selectedLine?.kind === "callout" && calloutHandleAt(selectedLine, p, 9 * hitTestScale.radial) !== null);
-        if (t === "select" || editingSelectedLine || editingCallout || editingExistingText) {
-          let handleInteraction: string | null = null;
-          const selectedMark = selectedIndex === null || (textTool && selectedLine?.kind !== "text") ? null : current[selectedIndex];
-          if (selectedMark?.kind === "callout") {
-            handleInteraction = calloutHandleAt(selectedMark, p, 9 * hitTestScale.radial);
-          } else if (selectedMark && !["line","arrow"].includes(selectedMark.kind)) {
-            handleInteraction = hitTestHandle(
-              p,
-              selectionBounds(selectedMark),
-              9 * hitTestScale.radial,
-            );
-          } else if (selectedMark) {
-            const mark = selectedMark;
-            if (mark && (mark.kind === "line" || mark.kind === "arrow")) {
-              if (
-                Math.hypot(p.x - mark.start.x, p.y - mark.start.y) <=
-                10 * hitTestScale.radial
-              ) {
-                handleInteraction = "start";
-              } else if (
-                Math.hypot(p.x - mark.end.x, p.y - mark.end.y) <=
-                10 * hitTestScale.radial
-              ) {
-                handleInteraction = "end";
-              }
-            }
-          }
+          (t === "callout" && selectedLine?.kind === "callout" && selectedHandle !== null);
+        if (t === "select" || editingExistingShape || editingCallout || editingExistingText) {
+          let handleInteraction = selectedMatchesTool ? selectedHandle : null;
           const index = handleInteraction
-            ? selectedIndex
-            : markIndexAt(current, p, hitTestScale);
+            ? selected
+            : hit;
           if (index === null || index === undefined) {
             selectMark(null);
             interactionRef.current = { kind: "none" };
@@ -1119,7 +1130,6 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         toPoint,
         documentSize.height,
         documentSize.width,
-        selectedIndex,
         redraw,
         commitText,
         history,
@@ -1795,9 +1805,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             const point = toPoint(event.nativeEvent);
             const selected = selectedIndexRef.current === null ? null : history.elements[selectedIndexRef.current];
             const eligible = !interactionsDisabled() && toolRef.current === "select" &&
-              !editingRef.current && !canvasClickRef.current.wasEditing && !canvasClickRef.current.moved &&
+              !editingRef.current && !canvasClickRef.current.wasEditing && !canvasClickRef.current.consumed && !canvasClickRef.current.moved &&
               markIndexAt(history.elements, point, hitTestScale) === null &&
-              !(selected && hitTestHandle(point, selectionBounds(selected), 10 * hitTestScale.radial));
+              !(selected && selectionHandleAt(selected, point, hitTestScale.radial));
             blankDoubleClickRef.current = event.detail === 1
               ? eligible : blankDoubleClickRef.current && eligible;
           }}
@@ -1891,7 +1901,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
                 canvas.setPointerCapture(event.pointerId);
                 const frame = gestureRectRef.current;
                 const start = viewPointToDocument({x: firstPoint.x - frame.left, y: firstPoint.y - frame.top}, frame, documentSize);
-                canvasClickRef.current = {start: firstPoint, moved: true, wasEditing: true, editingCalloutId: editingRef.current.id};
+                canvasClickRef.current = {start: firstPoint, moved: true, wasEditing: true, consumed: false, editingCalloutId: editingRef.current.id};
                 commitText();
                 interactionRef.current = {kind: "resize", index, original: history.elements[index], handle: "label", start};
                 onPointerMove(event);

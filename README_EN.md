@@ -53,6 +53,8 @@ Choose one of seven UI languages in **Settings → General → Language**. Your 
 
 Renaming a library item also renames its saved file and keeps its file type. Use **Copy File** in the context menu to paste the file into a folder; **Copy** continues to copy image pixels for chats and editors.
 
+While entering text, a numbered description, or a label, the first action on empty canvas finishes editing and clears selection; the next uses the current tool. Text and shape tools also clear an existing selection before placing another mark. The tool stays selected, and Pen and mosaic support continuous strokes. Clicking the canvas ends watermark input; editing again reuses the same watermark.
+
 Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type a tiled pattern directly on the image and adjust opacity, angle, and spacing. Select the tool again to continue editing existing content, including after saving.
 
 Captures stay local. Remote OCR is optional and asks before each upload. Linux setup, MP4 audio recording, Wayland shortcuts, and platform limits are covered in the [Linux guide](docs/linux.md).
