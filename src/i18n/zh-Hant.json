@@ -724,7 +724,10 @@
   "Outline": "空心",
   "Description (optional)": "說明文字（選填）",
   "Add a description…": "新增說明文字…",
-  "Place a number to add a description": "先放置序號，再新增說明文字",
   "Number size": "序號大小",
-  "Drag the dots to move the number or description": "拖曳圓點可分別移動序號和說明"
+  "Label bubble": "標籤氣泡",
+  "Label bubble (B)": "標籤氣泡 (B)",
+  "Point label left": "氣泡指向左側",
+  "Point label right": "氣泡指向右側",
+  "Move description": "移動說明"
 }

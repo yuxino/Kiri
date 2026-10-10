@@ -45,6 +45,7 @@ function editor(options = {}) {
         onEditorRecognizeQr: async callback => { listener = callback; if (options.listenerReady) await options.listenerReady; return () => { if (listener === callback) listener = null; }; } },
       "../annotation/model": { COLOR_HEX: { white: "#fff" }, COLOR_LABELS: { white: "White" }, COLOR_PRESETS: ["white"],
         nextCalloutNumber: marks => Math.min(999, marks.reduce((next,mark) => mark.kind === "callout" ? Math.max(next,mark.number+1) : next,1)) },
+      "../annotation/LabelControls": {LabelControls: props => ({type:"label-controls",props})},
       "../annotation/CalloutControls": {CalloutControls: "callout-controls"},
       "../annotation/TextToolPicker": {TextToolPicker: "text-tool-picker"},
       "../annotation/text-composition.js": textComposition,

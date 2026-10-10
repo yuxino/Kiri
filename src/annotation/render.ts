@@ -8,7 +8,7 @@ import type {
   MosaicShape,
   TextBackgroundStyle,
 } from "./model";
-import { COLOR_HEX, MOSAIC_VIEW_BLOCK_SIZE, arrowHeadPoints, calloutConnectorEnd, selectionBounds } from "./model";
+import { COLOR_HEX, MOSAIC_VIEW_BLOCK_SIZE, arrowHeadPoints, calloutConnectorEnd, selectionBounds, labelGeometry } from "./model";
 import type { Point, Rect } from "./geom";
 import { inset, intersection, maxX, maxY, minX, minY, standardized } from "./geom";
 import { layoutTextLines, textLineRuns } from "./text-layout.js";
@@ -123,7 +123,7 @@ function strokePolyline(ctx: CanvasRenderingContext2D, points: Point[]) {
 }
 
 /** Draws one mark into the given context (already in the right space). */
-export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRenderingContext2D) {
+export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRenderingContext2D, editing = false) {
   switch (mark.kind) {
     case "callout": {
       // Lay out the whole object in document space, preserving preview/export parity.
@@ -137,7 +137,7 @@ export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRend
       ctx.lineCap = "round";
       // A live drag shows where the optional label will appear; empty saved
       // notes still export only their number.
-      if (mark.text.trim() || (mark.id < 0 && !r.exporting)) {
+      if (mark.text.trim() || editing || (mark.id < 0 && !r.exporting)) {
         const end = calloutConnectorEnd(mark);
         const distance = Math.hypot(end.x - mark.center.x, end.y - mark.center.y);
         if (distance > radius) {
@@ -149,14 +149,14 @@ export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRend
         }
         const rect = mark.labelRect;
         const pad = Math.max(4, mark.fontSize * .5);
-        roundRectPath(ctx, rect.x, rect.y, rect.width, rect.height, Math.min(8, mark.fontSize * .35));
-        ctx.fillStyle = mark.color === "white" ? "rgba(20,20,20,0.96)" : "rgba(255,255,255,0.96)";
-        ctx.fill();
-        ctx.stroke();
-        if (mark.text.trim()) {
+        if (!editing) {
+          roundRectPath(ctx, rect.x, rect.y, rect.width, rect.height, Math.min(8, mark.fontSize * .35));
+          ctx.stroke();
+        }
+        if (mark.text.trim() && !editing) {
           ctx.font = textFont(mark.fontSize);
           ctx.textBaseline = "top";
-          ctx.fillStyle = mark.color === "white" ? "#FFFFFF" : "#141414";
+          ctx.fillStyle = color;
           wrapText(ctx, mark.text, rect.x + pad, rect.y + pad, Math.max(1, rect.width - pad * 2), mark.fontSize);
         }
       }
@@ -242,6 +242,29 @@ export function drawMark(mark: AnnotationMark, r: RenderContext, ctx: CanvasRend
     case "text": {
       const rect = standardized(mark.rect);
       const scale = geometryScale(r);
+      if (mark.labelDirection) {
+        const {body, dot, radius, tail} = labelGeometry(rect, mark.fontSize, mark.labelDirection);
+        ctx.save();
+        ctx.scale(scale.x, scale.y);
+        ctx.fillStyle = "#303136";
+        roundRectPath(ctx, body.x, body.y, body.width, body.height, mark.fontSize * .45);
+        ctx.fill();
+        const edge = mark.labelDirection === "left" ? body.x : maxX(body);
+        const sign = mark.labelDirection === "left" ? -1 : 1;
+        ctx.beginPath();
+        ctx.moveTo(edge - sign, dot.y - tail);
+        ctx.lineTo(edge + sign * tail, dot.y);
+        ctx.lineTo(edge - sign, dot.y + tail);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = colorValue(mark.color);
+        ctx.beginPath(); ctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fafafa";
+        ctx.font = textFont(mark.fontSize);
+        ctx.textBaseline = "top";
+        wrapText(ctx, mark.text, rect.x, rect.y, rect.width, mark.fontSize);
+        ctx.restore();
+        break;
+      }
       const outputRect = scaleRectForRender(rect, scale);
       const p = { x: minX(outputRect), y: minY(outputRect) };
       const background = backgroundValue(mark.background);
@@ -491,7 +514,10 @@ export function renderAll(
   for (const mark of others) {
     if (options.editingIndex !== null && options.editingIndex !== undefined) {
       const editingMark = marks[options.editingIndex];
-      if (editingMark && mark.id === editingMark.id) continue;
+      if (editingMark && mark.id === editingMark.id) {
+        if (mark.kind === "callout") drawMark(mark, r, ctx, true);
+        continue;
+      }
     }
     drawMark(mark, r, ctx);
   }

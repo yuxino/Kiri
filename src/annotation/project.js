@@ -168,7 +168,7 @@ function parseMark(value, index, ids, totals) {
     case "text": {
       exactKeys(
         mark,
-        ["kind", "id", "text", "rect", "color", "background", "fontSize"],
+        ["kind", "id", "text", "rect", "color", "background", "fontSize", ...(Object.hasOwn(mark,"labelDirection")?["labelDirection"]:[])],
         path,
       );
       if (typeof mark.text !== "string") invalid(`${path}.text`, "must be a string");
@@ -187,6 +187,7 @@ function parseMark(value, index, ids, totals) {
         color: parseColor(mark.color, `${path}.color`),
         background: enumValue(mark.background, TEXT_BACKGROUNDS, `${path}.background`),
         fontSize: parseWidth(mark.fontSize, `${path}.fontSize`),
+        ...(Object.hasOwn(mark,"labelDirection")?{labelDirection:enumValue(mark.labelDirection,new Set(["left","right"]),`${path}.labelDirection`)}:{}),
       };
     }
     case "callout": {

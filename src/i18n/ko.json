@@ -724,7 +724,10 @@
   "Outline": "윤곽선",
   "Description (optional)": "설명 (선택 사항)",
   "Add a description…": "설명 추가…",
-  "Place a number to add a description": "번호를 배치한 후 설명을 추가하세요",
   "Number size": "번호 크기",
-  "Drag the dots to move the number or description": "점을 드래그하여 번호나 설명을 이동하세요"
+  "Label bubble": "라벨 말풍선",
+  "Label bubble (B)": "라벨 말풍선 (B)",
+  "Point label left": "말풍선을 왼쪽으로 향하기",
+  "Point label right": "말풍선을 오른쪽으로 향하기",
+  "Move description": "설명 이동"
 }

@@ -582,10 +582,10 @@ test("numbered notes validate, crop, and preserve independent editable geometry"
   }
 });
 
-test("numbered note export uses identical label layout at Retina scale and contrasts light colors", async () => {
+test("numbered note export uses transparent labels at Retina scale and contrasts light badge digits", async () => {
   const {drawMark} = await loadAnnotationRender();
   const calls = [];
-  const ctx = {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},arcTo(){},arc(){},stroke(){},fill(){},
+  const ctx = {save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},arcTo(){},arc(){},stroke(){},fill(){calls.push(["fill", this.fillStyle]);},
     scale: (...args) => calls.push(["scale", ...args]),
     measureText: text => ({width: text.length * 9}),
     fillText(text, x, y) {calls.push(["text", text, x, y, this.fillStyle]);}};
@@ -594,6 +594,10 @@ test("numbered note export uses identical label layout at Retina scale and contr
   assert.deepEqual(calls.at(-1).slice(0, 4), ["text", "123", 60, 80.9]);
   assert.equal(calls.at(-1)[4], "#141414");
   assert.ok(calls.some(call => call[0] === "text" && call[1] === "第一步"));
+  assert.equal(calls.filter(call => call[0] === "fill").length, 1, "only the badge fills pixels behind text");
+  calls.length = 0;
+  drawMark(numberedNote, {exporting: false, scaleX: 1, scaleY: 1}, ctx, true);
+  assert.equal(calls.filter(call => call[0] === "text").length, 1, "inline editing leaves badge digits but never duplicates the textarea text");
 });
 
 test("empty callout drags preview their label position without exporting an empty box", async () => {
@@ -606,4 +610,36 @@ test("empty callout drags preview their label position without exporting an empt
   leaders = 0;
   drawMark({...numberedNote, text: ""}, {exporting: true, scaleX: 1, scaleY: 1}, ctx);
   assert.equal(leaders, 0);
+});
+
+for (const direction of ["left","right"]) {
+  test(`label ${direction} persists and crop retains a visible dot when the text is outside`,async()=>{
+    const {labelGeometry,markIndexAt,translateMark}=await loadAnnotationModel();
+    const {cropAnnotationDocument}=await import("../src/annotation/crop.js");
+    const label={...ALL_MARKS[4],rect:{x:160,y:100,width:100,height:45},color:"cherry",labelDirection:direction};
+    const doc=parseAnnotationDocument(documentWith([label]));
+    assert.deepEqual(doc.marks,[label]);
+    assert.throws(()=>parseAnnotationDocument(documentWith([{...label,labelDirection:"top"}])),/labelDirection/);
+    const geometry=labelGeometry(label.rect,label.fontSize,direction);
+    assert.equal(markIndexAt([label],geometry.dot),0);
+    const moved=translateMark(label,{x:-1000,y:-1000},{x:0,y:0,width:640,height:360});
+    for(const side of ["left","right"]){
+      const b=labelGeometry(moved.rect,moved.fontSize,side).bounds;
+      assert.ok(b.x>=-1e-8&&b.y>=-1e-8);
+    }
+    const crop=cropAnnotationDocument(doc,{x:geometry.dot.x-5,y:geometry.dot.y-5,width:10,height:10});
+    assert.equal(crop.document.marks.length,1);
+    assert.equal(crop.document.marks[0].labelDirection,direction);
+  });
+}
+
+test("label export scales its complete geometry and keeps neutral body and readable text",async()=>{
+  const {drawMark}=await loadAnnotationRender();
+  const label={...ALL_MARKS[4],labelDirection:"left",color:"black"};
+  const fills=[],scales=[];
+  const ctx={save(){},restore(){},scale:(...args)=>scales.push(args),beginPath(){},moveTo(){},lineTo(){},quadraticCurveTo(){},arcTo(){},closePath(){},arc(){},
+    fill(){fills.push(this.fillStyle);},fillText(){fills.push(this.fillStyle);},measureText:value=>({width:value.length*8})};
+  drawMark(label,{exporting:true,scaleX:2,scaleY:3},ctx);
+  assert.deepEqual(scales,[[2,3]]);
+  assert.ok(fills.includes("#303136"));assert.ok(fills.includes("#fafafa"));assert.ok(fills.includes("#141414"));
 });

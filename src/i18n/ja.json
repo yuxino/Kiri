@@ -724,7 +724,10 @@
   "Outline": "輪郭",
   "Description (optional)": "説明（任意）",
   "Add a description…": "説明を追加…",
-  "Place a number to add a description": "番号を配置して説明を追加",
   "Number size": "番号のサイズ",
-  "Drag the dots to move the number or description": "点をドラッグして番号や説明を移動"
+  "Label bubble": "ラベル吹き出し",
+  "Label bubble (B)": "ラベル吹き出し (B)",
+  "Point label left": "吹き出しを左向きにする",
+  "Point label right": "吹き出しを右向きにする",
+  "Move description": "説明を移動"
 }

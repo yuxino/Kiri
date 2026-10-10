@@ -102,6 +102,25 @@ body,
   color: #ffffff;
 }
 
+.kiri-label-dot { display:grid; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; cursor:pointer; }
+.kiri-label-dot span { display:block; border-radius:50%; pointer-events:none; }
+.kiri-label-dot:hover:not(:disabled) { background:rgba(255,255,255,.24); box-shadow:0 0 0 1px rgba(0,0,0,.35); }
+.kiri-label-dot:focus-visible { outline:2px solid #fff; box-shadow:0 0 0 3px #333; }
+.kiri-label-dot:disabled { opacity:.5; cursor:default; }
+.kiri-label-controls { width:260px; max-width:100%; box-sizing:border-box; padding:10px 12px; display:flex; flex-direction:column; gap:10px; font-size:11px; }
+.kiri-label-swatch:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.kiri-label-size { display:flex; align-items:center; gap:8px; min-width:0; }
+.kiri-label-size input { flex:1; min-width:60px; width:60px; }
+.kiri-label-size output { min-width:20px; text-align:right; font-variant-numeric:tabular-nums; }
+.kiri-label-colors { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.kiri-label-swatch { width:19px; height:19px; padding:0; border:2px solid #171717; outline:1px solid #666; border-radius:50%; cursor:pointer; }
+.kiri-label-swatch[aria-pressed=true] { outline-color:#fff; }
+.kiri-label-swatch:hover { opacity:.7; }
+.kiri-label-text-editor:focus { outline:none; box-shadow:none; }
+.kiri-callout-move-grip:hover:not(:disabled) { box-shadow:0 0 0 2px rgba(255,255,255,.65); }
+.kiri-callout-move-grip:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.kiri-callout-move-grip:disabled { opacity:.5; cursor:default; }
+
 .kiri-primary-button {
   font: 600 12.5px var(--kiri-font-ui);
   color: var(--kiri-on-accent);
@@ -839,9 +858,14 @@ button:active:not(:disabled) {
   top: 44px; /* below the macOS menu bar + notch safe area */
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
   gap: 2px;
   padding: 4px;
   align-items: center;
+  justify-content: center;
   cursor: grab;
   touch-action: none;
   will-change: left, top;
@@ -861,6 +885,7 @@ button:active:not(:disabled) {
 
 .kiri-mode-btn {
   display: flex;
+  flex-shrink: 0;
   flex-direction: row;
   align-items: center;
   justify-content: center;
@@ -873,6 +898,7 @@ button:active:not(:disabled) {
   background: transparent;
   color: rgba(255, 255, 255, 0.66);
   font: 650 11.5px var(--kiri-font-ui);
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 0.14s ease-out,
@@ -880,6 +906,11 @@ button:active:not(:disabled) {
     color 0.14s ease-out,
     transform 0.14s ease-out,
     opacity 0.14s ease-out;
+}
+
+.kiri-mode-btn span {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .kiri-mode-btn:hover:not([data-active]):not(:active) {

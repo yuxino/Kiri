@@ -15,7 +15,7 @@ import {
   standardized,
 } from "./geom";
 
-export type Tool = "select" | "pen" | "rectangle" | "line" | "arrow" | "text" | "callout" | "mosaic";
+export type Tool = "select" | "pen" | "rectangle" | "line" | "arrow" | "text" | "label" | "callout" | "mosaic";
 
 export type ColorPreset =
   | "violet"
@@ -61,6 +61,7 @@ export const COLOR_LABELS: Record<ColorPreset, string> = {
 };
 
 export type TextBackgroundStyle = "transparent" | "dark";
+export type LabelDirection = "left" | "right";
 export type CalloutStyle = "filled" | "outline";
 export interface CalloutMark {
   kind: "callout";
@@ -98,6 +99,8 @@ export type AnnotationMark =
       color: ColorPreset;
       background: TextBackgroundStyle;
       fontSize: number;
+      /** Omitted for ordinary text. The rect always describes the text content. */
+      labelDirection?: LabelDirection;
     }
   | {
       kind: "mosaic";
@@ -125,6 +128,7 @@ export interface AnnotationDocumentV1 {
 export interface AppearanceSettings {
   colorPreset: ColorPreset;
   textBackgroundStyle: TextBackgroundStyle;
+  labelDirection: LabelDirection;
   mosaicIntensity: MosaicIntensity;
   mosaicStyle: MosaicStyle;
   penWidth: number;
@@ -138,6 +142,7 @@ export interface AppearanceSettings {
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   colorPreset: "cherry",
   textBackgroundStyle: "transparent",
+  labelDirection: "left",
   mosaicIntensity: "standard",
   mosaicStyle: "pixel",
   penWidth: 3,
@@ -151,6 +156,29 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
 /** Rejects whitespace-only edits without normalizing meaningful user text. */
 export function annotationTextForCommit(text: string): string | null {
   return text.trim() ? text : null;
+}
+
+/** One geometry shared by the canvas, inline editor, hit testing and dot button. */
+export function labelGeometry(rect: Rect, fontSize: number, direction: LabelDirection) {
+  const content = standardized(rect);
+  const padX = fontSize * .65, padY = fontSize * .4;
+  const tail = fontSize * .5, gap = fontSize * .4, radius = fontSize * .22;
+  const body = {x: content.x - padX, y: content.y - padY,
+    width: content.width + padX * 2, height: content.height + padY * 2};
+  const edge = direction === "left" ? body.x : maxX(body);
+  const sign = direction === "left" ? -1 : 1;
+  const dot = {x: edge + sign * (tail + gap + radius), y: body.y + body.height / 2};
+  const bounds = {x: direction === "left" ? dot.x - radius : body.x, y: body.y,
+    width: body.width + tail + gap + radius * 2, height: body.height};
+  return {body, dot, radius, tail, bounds, padX, padY};
+}
+
+/** Reserve either pointing side so flipping never moves the text or clips the dot. */
+export function labelMovementBounds(mark: Extract<AnnotationMark, {kind: "text"}>): Rect {
+  if (!mark.labelDirection) return standardized(mark.rect);
+  const left = labelGeometry(mark.rect, mark.fontSize, "left").bounds;
+  const right = labelGeometry(mark.rect, mark.fontSize, "right").bounds;
+  return {x: left.x, y: left.y, width: maxX(right) - left.x, height: left.height};
 }
 
 interface HistoryStep {
@@ -307,7 +335,7 @@ function hitTestMark(
         Math.max(7 * scale.radial, mark.width / 2 + 4 * scale.radial)
       );
     case "text": {
-      const r = standardized(mark.rect);
+      const r = selectionBounds(mark);
       return containsPadded(r, p, 7 * scale.x, 6 * scale.y);
     }
     case "callout": {
@@ -385,7 +413,7 @@ export function translateMark(mark: AnnotationMark, by: Point, bounds: Rect): An
       };
     }
     case "text": {
-      const b = standardized(mark.rect);
+      const b = labelMovementBounds(mark);
       const tx = clampTranslation(by.x, minX(b), maxX(b), minX(bounds), maxX(bounds));
       const ty = clampTranslation(by.y, minY(b), maxY(b), minY(bounds), maxY(bounds));
       return { ...mark, rect: { ...mark.rect, x: mark.rect.x + tx, y: mark.rect.y + ty } };
@@ -456,7 +484,10 @@ export function resizeAnnotationMark(mark: AnnotationMark, handle: string, point
     const roomY = top ? anchorY-bounds.y : bottom ? maxY(bounds)-anchorY : 2*Math.min(anchorY-bounds.y,maxY(bounds)-anchorY);
     factor = Math.max(.01,Math.min(factor,roomX/before.width,roomY/before.height));
     const width=before.width*factor,height=before.height*factor;
-    return {...mark,fontSize:mark.fontSize*factor,rect:{x:left?anchorX-width:right?anchorX:anchorX-width/2,y:top?anchorY-height:bottom?anchorY:anchorY-height/2,width,height}};
+    const x=left?anchorX-width:right?anchorX:anchorX-width/2, y=top?anchorY-height:bottom?anchorY:anchorY-height/2;
+    return {...mark,fontSize:mark.fontSize*factor,rect:{
+      x:x+(mark.rect.x-before.x)*factor,y:y+(mark.rect.y-before.y)*factor,
+      width:mark.rect.width*factor,height:mark.rect.height*factor}};
   }
   if (mark.kind === "mosaic" && mark.shape && mark.shape !== "brush") {
     return {...mark,points:[{x:next.x,y:next.y},{x:maxX(next),y:maxY(next)}]};
@@ -496,6 +527,7 @@ export function applyAnnotationAppearance(mark: AnnotationMark, patch: Partial<A
   if(mark.kind === "text"){
     const fontSize=patch.textFontSize??mark.fontSize,scale=fontSize/mark.fontSize;
     return {...mark,color,fontSize,background:patch.textBackgroundStyle??mark.background,
+      ...(mark.labelDirection ? {labelDirection:patch.labelDirection??mark.labelDirection} : {}),
       rect:{...mark.rect,width:mark.rect.width*scale,height:mark.rect.height*scale}};
   }
   return {...mark,color,width:(mark.kind==="pen"?patch.penWidth:patch.shapeWidth)??mark.width};
@@ -574,7 +606,7 @@ export function selectionBounds(mark: AnnotationMark): Rect {
       return { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
     }
     case "text":
-      return standardized(mark.rect);
+      return mark.labelDirection ? labelGeometry(mark.rect, mark.fontSize, mark.labelDirection).bounds : standardized(mark.rect);
     case "mosaic": {
       const b = pointBounds(mark.points);
       if (mark.shape && mark.shape !== "brush") return b;

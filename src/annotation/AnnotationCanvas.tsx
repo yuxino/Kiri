@@ -6,6 +6,7 @@ import React, {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   useId,
   useMemo,
@@ -13,7 +14,7 @@ import React, {
   useState,
 } from "react";
 import type { Point, Rect } from "./geom";
-import { handleTextEditorKey, setTextComposition } from "./text-composition.js";
+import { handleTextEditorKey, isTextComposition, setTextComposition } from "./text-composition.js";
 import type { ColorPreset } from "./model";
 import { clampPoint, hitTestHandle } from "./geom";
 import {
@@ -26,12 +27,14 @@ import {
   dragAnnotationHandle,
   markIndexAt,
   selectionBounds,
+  labelGeometry,
   translateMark,
   type AnnotationMark,
   type CalloutMark,
   type AnnotationDocumentV1,
   type AppearanceSettings,
   type TextBackgroundStyle,
+  type LabelDirection,
   type Tool,
   type MosaicShape,
 } from "./model";
@@ -140,6 +143,45 @@ interface EditingState {
   color: ColorPreset;
   background: TextBackgroundStyle;
   fontSize: number;
+  labelDirection?: LabelDirection;
+  callout?: CalloutMark;
+}
+
+function editingCalloutMark(editing: EditingState): CalloutMark {
+  return {...editing.callout!, text: editing.text, labelRect: editing.rect,
+    color: editing.color, fontSize: editing.fontSize};
+}
+
+function separateCalloutLabel(mark: CalloutMark, bounds: {width: number; height: number}, gap: number): CalloutMark {
+  const rect = mark.labelRect, radius = mark.size / 2;
+  const nearestX = Math.max(rect.x, Math.min(rect.x + rect.width, mark.center.x));
+  const nearestY = Math.max(rect.y, Math.min(rect.y + rect.height, mark.center.y));
+  if (Math.hypot(mark.center.x - nearestX, mark.center.y - nearestY) >= radius + gap) return mark;
+  const candidates = [
+    {x: mark.center.x + radius + gap, y: rect.y},
+    {x: mark.center.x - radius - gap - rect.width, y: rect.y},
+    {x: rect.x, y: mark.center.y + radius + gap},
+    {x: rect.x, y: mark.center.y - radius - gap - rect.height},
+  ].filter(point => point.x >= 0 && point.y >= 0 && point.x + rect.width <= bounds.width && point.y + rect.height <= bounds.height)
+    .sort((a, b) => Math.hypot(a.x - rect.x, a.y - rect.y) - Math.hypot(b.x - rect.x, b.y - rect.y));
+  return candidates.length ? {...mark, labelRect: {...rect, ...candidates[0]}} : mark;
+}
+
+function resizeCalloutLabel(mark: CalloutMark, previous: CalloutMark,
+  bounds: {width: number; height: number}, gap: number): CalloutMark {
+  const rect = mark.labelRect, before = previous.labelRect;
+  if (before.width === rect.width && before.height === rect.height && previous.size === mark.size) return mark;
+  const radius = previous.size / 2;
+  // A note on the left or above grows away from its badge. Clamping a wider
+  // frame at a display edge must not push it back over the number.
+  const x = before.x + before.width <= previous.center.x - radius
+    ? before.x + before.width - rect.width : rect.x;
+  const y = before.y + before.height <= previous.center.y - radius
+    ? before.y + before.height - rect.height : rect.y;
+  return separateCalloutLabel({...mark, labelRect: {...rect,
+    x: Math.max(0, Math.min(x, bounds.width - rect.width)),
+    y: Math.max(0, Math.min(y, bounds.height - rect.height)),
+  }}, bounds, gap);
 }
 
 type Interaction =
@@ -148,6 +190,8 @@ type Interaction =
   | { kind: "move"; index: number; original: AnnotationMark; start: Point }
   | { kind: "resize"; index: number; original: AnnotationMark; handle: string; start: Point }
   | { kind: "endpoint"; index: number; original: AnnotationMark; isStart: boolean; start: Point };
+
+type CanvasFrame = {left: number; top: number; width: number; height: number};
 
 const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
   function AnnotationCanvas(
@@ -214,8 +258,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const [selectCursor, setSelectCursor] = useState<string>("default");
     const [editing, setEditing] = useState<EditingState | null>(null);
     const interactionRef = useRef<Interaction>({ kind: "none" });
-    const gestureRectRef = useRef<{left: number; top: number; width: number; height: number} | null>(null);
-    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false });
+    const gestureRectRef = useRef<CanvasFrame | null>(null);
+    const canvasClickRef = useRef({ start: { x: 0, y: 0 }, moved: false, wasEditing: false,
+      editingCalloutId: null as number | null });
+    const calloutClickRef = useRef<{id: number; frame: CanvasFrame} | null>(null);
     const blankDoubleClickRef = useRef(false);
     const appearanceRef = useRef(appearance);
     appearanceRef.current = appearance;
@@ -309,18 +355,20 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
 
     useEffect(()=>{
       const selected=selectedIndex===null?null:marks[selectedIndex]??null;
-      const mark:AnnotationMark|null=editing?{kind:"text",id:editing.index===null?-1:marks[editing.index]?.id??-1,
-        text:editing.text,rect:editing.rect,color:editing.color,background:editing.background,fontSize:editing.fontSize}:selected;
+      const mark:AnnotationMark|null=editing?.callout?editingCalloutMark(editing):editing?{kind:"text",id:editing.index===null?-1:marks[editing.index]?.id??-1,
+        text:editing.text,rect:editing.rect,color:editing.color,background:editing.background,fontSize:editing.fontSize,
+        ...(editing.labelDirection?{labelDirection:editing.labelDirection}:{})}:selected;
       onSelectionInfo?.(mark,!!editing);
     },[marks,selectedIndex,editing,onSelectionInfo]);
 
     useEffect(()=>{
       const text=editing?annotationTextForCommit(editing.text):null;
       const insets=textEditorInsets(editing?.uiScale);
-      const mark:AnnotationMark|null=editing&&text!==null?{kind:"text",id:editing.id,text,
+      const mark:AnnotationMark|null=editing?.callout?editingCalloutMark(editing):editing&&text!==null?{kind:"text",id:editing.id,text,
         rect:{x:editing.rect.x+insets.x,y:editing.rect.y+insets.y,
           width:Math.max(1,editing.rect.width-2*insets.x),height:Math.max(1,editing.rect.height-2*insets.y)},
-        color:editing.color,background:editing.background,fontSize:editing.fontSize}:null;
+        color:editing.color,background:editing.background,fontSize:editing.fontSize,
+        ...(editing.labelDirection?{labelDirection:editing.labelDirection}:{})}:null;
       onTextDraftChange?.(mark,editing?.index!=null?marks[editing.index]?.id??null:null,!!editing);
     },[editing,marks,onTextDraftChange]);
 
@@ -342,19 +390,19 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
 
     const updateEditingRect = useCallback((rect: Rect) => {
       const current = editingRef.current;
-      if (
-        !current ||
-        (current.rect.x === rect.x &&
-          current.rect.y === rect.y &&
-          current.rect.width === rect.width &&
-          current.rect.height === rect.height)
-      ) {
-        return;
+      if (!current) return;
+      let nextRect = rect;
+      if (current.callout) {
+        const note = editingCalloutMark(current);
+        nextRect = resizeCalloutLabel({...note, labelRect: rect}, note,
+          documentSize, 32 * current.uiScale).labelRect;
       }
-      const next = { ...current, rect };
+      if (current.rect.x === nextRect.x && current.rect.y === nextRect.y &&
+        current.rect.width === nextRect.width && current.rect.height === nextRect.height) return;
+      const next = { ...current, rect: nextRect };
       editingRef.current = next;
       setEditing(next);
-    }, []);
+    }, [documentSize.width, documentSize.height]);
 
     const redraw = useCallback(() => {
       const canvas = canvasRef.current;
@@ -387,14 +435,15 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       // Moving/resizing an existing mark replaces it in place for this frame.
       // Preserve stacking and move the handles too, without touching history.
       const replacementIndex = draft ? marks.findIndex(mark => mark.id === draft.id) : -1;
-      const previewMarks = replacementIndex < 0 ? marks : marks.map((mark, index) =>
+      let previewMarks = replacementIndex < 0 ? marks : marks.map((mark, index) =>
         index === replacementIndex ? draft! : mark);
+      if (editing?.callout) previewMarks = previewMarks.map((mark, index) => index === editing.index ? editingCalloutMark(editing) : mark);
       const drawingDraft = replacementIndex < 0 ? draft : null;
       renderAll(context, previewMarks, {
         draft: drawingDraft,
         brushCursor,
         brushDiameter: appearanceRef.current.mosaicBrushDiameter,
-        selectedIndex: editing ? null : selectedIndex,
+        selectedIndex: editing && !editing.callout ? null : selectedIndex,
         editingIndex: editing ? editing.index : null,
         chromeOnly: !!onLiveMarks,
       });
@@ -445,6 +494,19 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       // Keep Clear enabled while an inline edit exists, then publish its
       // removal even when a new empty text box produces no history entry.
       publishHistory();
+      if (current.callout && current.index !== null) {
+        const mark = editingCalloutMark(current);
+        const previous = history.elements[current.index];
+        if (previous?.kind === "callout" && previous.text === mark.text && previous.color === mark.color &&
+          previous.fontSize === mark.fontSize && previous.number === mark.number && previous.size === mark.size && previous.style === mark.style) {
+          mark.labelRect = {...previous.labelRect, x: mark.labelRect.x, y: mark.labelRect.y};
+        }
+        if (JSON.stringify(previous) !== JSON.stringify(mark)) {
+          history.replace(current.index, mark); syncMarks();
+        }
+        selectMark(current.index);
+        return;
+      }
       const text = annotationTextForCommit(current.text);
       const frame = current.rect;
       const insets = textEditorInsets(current.uiScale);
@@ -474,6 +536,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         color: current.color,
         background: current.background,
         fontSize: current.fontSize,
+        ...(current.labelDirection?{labelDirection:current.labelDirection}:{}),
       };
       if (current.index !== null) {
         const unchanged =
@@ -485,7 +548,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               previous.rect.height === newMark.rect.height &&
               previous.color === newMark.color &&
               previous.background === newMark.background &&
-              previous.fontSize === newMark.fontSize
+              previous.fontSize === newMark.fontSize && previous.labelDirection === newMark.labelDirection
             : false;
         if (!unchanged) {
           history.replace(current.index, newMark);
@@ -509,10 +572,11 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const height=Math.max(1,Math.min(mark.rect.height+2*insets.y,documentSize.height));
       const next:EditingState={id:mark.id,index,text:mark.text,uiScale,rect:{x:Math.min(Math.max(0,mark.rect.x-insets.x),Math.max(0,documentSize.width-width)),
         y:Math.min(Math.max(0,mark.rect.y-insets.y),Math.max(0,documentSize.height-height)),width,height},
-        maxWidth:Math.max(width,documentSize.width-Math.max(0,mark.rect.x-insets.x)),color:mark.color,background:mark.background,fontSize:mark.fontSize};
+        maxWidth:Math.max(width,documentSize.width-Math.max(0,mark.rect.x-insets.x)),color:mark.color,background:mark.background,fontSize:mark.fontSize,labelDirection:mark.labelDirection};
       editingRef.current=next;setEditing(next);selectMark(index);publishHistory();
     },[history,documentSize.width,documentSize.height,selectMark,publishHistory,hitTestScale.radial]);
 
+    const fitLabelRef = useRef<(mark:AnnotationMark)=>AnnotationMark>(mark=>mark);
     const styleAdjustment=useRef<{index:number;original:AnnotationMark}|null>(null);
     const fitCallout = useCallback((mark: CalloutMark): CalloutMark => {
       const context = canvasRef.current?.getContext("2d");
@@ -542,13 +606,24 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const size = Math.min(ap.calloutSize, documentSize.width, documentSize.height);
       const dragged = Math.hypot(end.x - start.x, end.y - start.y) >= 12 * hitTestScale.radial;
       const width = Math.min(160, documentSize.width), height = Math.min(ap.textFontSize * 2.25, documentSize.height);
-      const right = dragged ? end.x >= start.x : start.x + size + 24 + width <= documentSize.width;
-      const anchor = dragged ? end : {x: start.x + (right ? 1 : -1) * (size / 2 + 24), y: start.y};
-      return fitCallout({kind: "callout", id, number: calloutNumberRef.current, text: "", center: start,
+      const gap = 32 * hitTestScale.radial;
+      const right = dragged ? end.x >= start.x : start.x + size / 2 + gap + width <= documentSize.width;
+      const anchor = dragged ? end : {x: start.x + (right ? 1 : -1) * (size / 2 + gap), y: start.y};
+      return separateCalloutLabel(fitCallout({kind: "callout", id, number: calloutNumberRef.current, text: "", center: start,
         labelRect: {x: Math.max(0, Math.min(documentSize.width - width, right ? anchor.x : anchor.x - width)),
           y: Math.max(0, Math.min(documentSize.height - height, anchor.y - height / 2)), width, height},
-        color: ap.colorPreset, size, fontSize: ap.textFontSize, style: ap.calloutStyle});
+        color: ap.colorPreset, size, fontSize: ap.textFontSize, style: ap.calloutStyle}), documentSize, gap);
     }, [documentSize.width, documentSize.height, hitTestScale.radial, fitCallout]);
+    const editCallout = useCallback((index: number) => {
+      const mark = history.elements[index]; if (!mark || mark.kind !== "callout") return;
+      // Opening a saved note preserves the user's placement. Only creation
+      // and automatic size changes need an initial spacing correction.
+      const note = mark;
+      const next: EditingState = {id: note.id, index, callout: note, text: note.text, rect: note.labelRect,
+        maxWidth: Math.min(280, documentSize.width), uiScale: hitTestScale.radial,
+        color: note.color, background: "transparent", fontSize: note.fontSize};
+      editingRef.current = next; setEditing(next); selectMark(index); publishHistory();
+    }, [history, documentSize.width, documentSize.height, hitTestScale.radial, selectMark, publishHistory]);
     const finishAppearanceAdjustment=useCallback(()=>{
       const adjustment=styleAdjustment.current;styleAdjustment.current=null;if(!adjustment)return;
       if(JSON.stringify(history.elements[adjustment.index])!==JSON.stringify(adjustment.original)){
@@ -559,30 +634,59 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       if(interactionsDisabled())return;
       const editing=editingRef.current;
       if(editing){
-        const next={...editing,color:patch.colorPreset??editing.color,background:patch.textBackgroundStyle??editing.background,fontSize:patch.textFontSize??editing.fontSize};
+        const next={...editing,color:patch.colorPreset??editing.color,background:patch.textBackgroundStyle??editing.background,fontSize:patch.textFontSize??editing.fontSize,
+          ...(editing.labelDirection?{labelDirection:patch.labelDirection??editing.labelDirection}: {})};
         editingRef.current=next;setEditing(next);return;
       }
       const index=selectedIndexRef.current;if(index===null)return;
       const mark=history.elements[index];if(!mark)return;
       styleAdjustment.current??={index,original:mark};
       const updated=applyAnnotationAppearance(mark,patch);
-      const next=updated.kind === "callout" ? fitCallout(updated) : updated;
+      const next=updated.kind === "callout" && mark.kind === "callout"
+        ? resizeCalloutLabel(fitCallout(updated), mark, documentSize, 32 * hitTestScale.radial)
+        : updated.kind === "text" && updated.labelDirection ? fitLabelRef.current(updated) : updated;
       const elements=history.elements.slice();elements[index]=next;history.overwrite(elements);setMarks(elements);
       if(!transient)finishAppearanceAdjustment();
-    },[history,interactionsDisabled,finishAppearanceAdjustment,fitCallout]);
+    },[history,interactionsDisabled,finishAppearanceAdjustment,fitCallout,documentSize.width,documentSize.height,hitTestScale.radial]);
 
     const updateSelectedCallout = useCallback((patch: Partial<Omit<CalloutMark, "kind" | "id">>, transient = false) => {
       if (interactionsDisabled()) return;
+      const editing = editingRef.current;
+      if (editing?.callout) {
+        const previous = editingCalloutMark(editing);
+        const mark = resizeCalloutLabel(fitCallout({...previous, ...patch}), previous,
+          documentSize, 32 * editing.uiScale);
+        const next = {...editing, callout: mark, text: mark.text, rect: mark.labelRect, color: mark.color, fontSize: mark.fontSize};
+        editingRef.current = next; setEditing(next); return;
+      }
       const index = selectedIndexRef.current;
       const mark = index === null ? null : history.elements[index];
       if (index === null || !mark || mark.kind !== "callout") return;
       styleAdjustment.current ??= {index, original: mark};
-      const next = fitCallout({...mark, ...patch});
+      const next = resizeCalloutLabel(fitCallout({...mark, ...patch}), mark,
+        documentSize, 32 * hitTestScale.radial);
       const elements = history.elements.slice(); elements[index] = next;
       history.overwrite(elements); setMarks(elements);
       documentChangeRef.current?.(elements);
       if (!transient) finishAppearanceAdjustment();
-    }, [history, interactionsDisabled, fitCallout, finishAppearanceAdjustment]);
+    }, [history, interactionsDisabled, fitCallout, finishAppearanceAdjustment,
+      documentSize.width, documentSize.height, hitTestScale.radial]);
+
+    const toggleLabel = useCallback((id: number) => {
+      if (interactionsDisabled() || interactionRef.current.kind !== "none") return;
+      blankDoubleClickRef.current = false;
+      const current = editingRef.current;
+      if (current?.id === id && current.labelDirection) {
+        const next: EditingState = {...current, labelDirection:current.labelDirection === "left" ? "right" : "left"};
+        editingRef.current = next; setEditing(next); return;
+      }
+      commitText(); finishAppearanceAdjustment();
+      const index = history.elements.findIndex(mark => mark.id === id);
+      const mark = history.elements[index];
+      if (!mark || mark.kind !== "text" || !mark.labelDirection) return;
+      history.replace(index, {...mark, labelDirection:mark.labelDirection === "left" ? "right" : "left"});
+      selectMark(index); syncMarks();
+    }, [history, interactionsDisabled, commitText, finishAppearanceAdjustment, selectMark, syncMarks]);
 
     const cancelInteraction=useCallback(()=>{
       if(editingRef.current){editingRef.current=null;setEditing(null);publishHistory();return true;}
@@ -610,7 +714,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if(e.button!==0)return;
         canvasClickRef.current = {
           start: { x: e.clientX, y: e.clientY }, moved: false, wasEditing: editingRef.current !== null,
+          editingCalloutId: editingRef.current?.callout ? editingRef.current.id : null,
         };
+        if (canvasClickRef.current.editingCalloutId !== calloutClickRef.current?.id) calloutClickRef.current = null;
         finishAppearanceAdjustment();
         const canvas = canvasRef.current!;
         gestureRectRef.current = canvas.getBoundingClientRect();
@@ -628,7 +734,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           commitText();
         }
 
-        if (t === "text") {
+        if (t === "text" || t === "label") {
           const hit=markIndexAt(history.elements,p,hitTestScale);
           if(hit!==null&&history.elements[hit].kind==="text"){editText(hit);return;}
           const width = Math.max(1, Math.min(180*hitTestScale.radial, documentSize.width));
@@ -651,7 +757,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             maxWidth: Math.max(width,documentSize.width-frame.x),
             color: ap.colorPreset,
             background: ap.textBackgroundStyle,
-            fontSize: ap.textFontSize,
+            fontSize: t === "label" ? Math.min(ap.textFontSize, documentSize.width / 8, documentSize.height / 3) : ap.textFontSize,
+            ...(t === "label" ? {labelDirection: ap.labelDirection} : {}),
           };
           editingRef.current = nextEditing;
           setEditing(nextEditing);
@@ -775,6 +882,24 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const fitTextBounds = useCallback((mark: AnnotationMark, handle?: string,
       original: AnnotationMark = mark): AnnotationMark => {
       if (mark.kind !== "text") return mark;
+      if (mark.labelDirection) {
+        const context = canvasRef.current?.getContext("2d");
+        if (!context) return mark;
+        context.save();
+        let fontSize = mark.fontSize, width = mark.rect.width, height = mark.rect.height;
+        for (let attempt = 0; attempt < 32; attempt++) {
+          const horizontal = fontSize * 1.99;
+          width = Math.max(.1, Math.min(width, documentSize.width - horizontal * 2));
+          context.font = textFont(fontSize);
+          height = Math.max(.1, Math.ceil(layoutTextLines(mark.text, width, text => context.measureText(text).width).length * fontSize * 1.25));
+          if (height + fontSize * .8 <= documentSize.height && horizontal * 2 + width <= documentSize.width) break;
+          fontSize *= .8; width *= .8;
+        }
+        context.restore();
+        const xMargin = fontSize * 1.99, yMargin = fontSize * .4;
+        return {...mark, fontSize, rect:{x:Math.max(xMargin, Math.min(mark.rect.x, documentSize.width - xMargin - width)),
+          y:Math.max(yMargin, Math.min(mark.rect.y, documentSize.height - yMargin - height)), width, height}};
+      }
       const context = canvasRef.current?.getContext("2d");
       if (!context) return mark;
       const measureHeight = (width: number, fontSize: number) => {
@@ -815,7 +940,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         y: top ? anchorY - height : bottom ? anchorY : anchorY - height / 2,
         width, height,
       }};
-    }, [documentSize.height]);
+    }, [documentSize.height, documentSize.width]);
+
+    fitLabelRef.current = fitTextBounds;
 
     const onPointerMove = useCallback(
       (e: React.PointerEvent) => {
@@ -976,6 +1103,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           const ap = appearanceRef.current;
           if (t === "callout") {
             appendMark(createCallout(interaction.start, p, Date.now() + Math.random()));
+            editCallout(history.elements.length - 1);
           } else if (t === "pen") {
             const points = interaction.points;
             const last = points[points.length - 1];
@@ -1058,6 +1186,13 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             syncMarks();
           }
           setDraft(null);
+          if (preview?.kind === "callout" && !changed) {
+            if (toolRef.current === "select" && gestureRectRef.current) {
+              const {left, top, width, height} = gestureRectRef.current;
+              calloutClickRef.current = {id: preview.id, frame: {left, top, width, height}};
+            }
+            editCallout(interaction.index);
+          }
         }
         redraw();
       },
@@ -1067,7 +1202,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         documentSize.width,
         redraw,
         syncMarks,
-        history,appendMark,fitTextBounds,createCallout,
+        history,appendMark,fitTextBounds,createCallout,editCallout,
       ],
     );
 
@@ -1336,7 +1471,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           if (interactionsDisabled() || !editingRef.current) return false;
           return cancelInteraction();
         },
-        editSelectedText:()=>{if(!interactionsDisabled()&&selectedIndexRef.current!==null)editText(selectedIndexRef.current);},
+        editSelectedText:()=>{if(!interactionsDisabled()&&selectedIndexRef.current!==null){
+          if(history.elements[selectedIndexRef.current]?.kind==="callout")editCallout(selectedIndexRef.current);else editText(selectedIndexRef.current);
+        }},
         clearSelection:()=>{if(!interactionsDisabled()){finishAppearanceAdjustment();selectMark(null);}},
         cancelInteraction,
         updateSelectionAppearance,
@@ -1353,9 +1490,11 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         setTextFontSizeLive: (value: number) => setFontLiveRef.current(value),
         endTextFontSizeAdjustment: () => endFontAdjustRef.current(),
       }),
-      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
+      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,editCallout,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
     );
 
+    const dotMarks = draft && marks.some(mark => mark.id === draft.id)
+      ? marks.map(mark => mark.id === draft.id ? draft : mark) : marks;
     return (
       <div
         className="annotation-canvas-root"
@@ -1402,16 +1541,54 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           }}
           onDoubleClick={(event) => {
             if (interactionsDisabled() || toolRef.current !== "select" || editingRef.current) return;
-            const index = markIndexAt(history.elements, toPoint(event.nativeEvent), hitTestScale);
+            // The inspector may shrink the stage on the first click and hide
+            // again on the second. Resolve the second click in its own frame,
+            // rather than the layout React rendered after that click ended.
+            const frame = gestureRectRef.current ?? canvasRef.current!.getBoundingClientRect();
+            const pointInFrame = (rect: CanvasFrame) => viewPointToDocument(
+              {x: event.clientX - rect.left, y: event.clientY - rect.top}, rect, documentSize);
+            const index = markIndexAt(history.elements, pointInFrame(frame),
+              documentUnitsPerViewPixel(frame, documentSize));
             if (index !== null && history.elements[index].kind === "text") {
               editText(index);
-            } else if (index === null && blankDoubleClickRef.current) {
-              onFinishOnBlankDoubleClick?.();
+            } else if (index === null) {
+              const first = calloutClickRef.current;
+              calloutClickRef.current = null;
+              const reflowed = first && (["left", "top", "width", "height"] as const).some(
+                key => Math.abs(frame[key] - first.frame[key]) > .5);
+              if (first && reflowed && !canvasClickRef.current.moved &&
+                canvasClickRef.current.editingCalloutId === first.id) {
+                const previousIndex = markIndexAt(history.elements, pointInFrame(first.frame),
+                  documentUnitsPerViewPixel(first.frame, documentSize));
+                if (previousIndex !== null && history.elements[previousIndex].kind === "callout" &&
+                  history.elements[previousIndex].id === first.id) {
+                  editCallout(previousIndex);
+                  return;
+                }
+              }
+              // Plain text/labels retain their existing live-layout editing
+              // path when selection closes the inspector between clicks.
+              // An actual second-click hit above always takes precedence.
+              const liveIndex = markIndexAt(history.elements, toPoint(event.nativeEvent), hitTestScale);
+              if (liveIndex !== null && history.elements[liveIndex].kind === "text") {
+                editText(liveIndex);
+                return;
+              }
+              if (blankDoubleClickRef.current) onFinishOnBlankDoubleClick?.();
             }
           }}
-          onPointerCancel={()=>{interactionRef.current={kind:"none"};setDraft(null);setSelectCursor("default");}}
+          onPointerCancel={()=>{interactionRef.current={kind:"none"};calloutClickRef.current=null;setDraft(null);setSelectCursor("default");}}
           onPointerLeave={()=>setBrushCursor(null)}
         />
+        {dotMarks.map((mark, index) => {
+          if (mark.kind !== "text" || !mark.labelDirection || editing?.id === mark.id) return null;
+          const {dot, radius} = labelGeometry(mark.rect, mark.fontSize, mark.labelDirection);
+          if (markIndexAt(dotMarks.slice(index + 1), dot, hitTestScale) !== null) return null;
+          return <LabelDot key={mark.id} x={dot.x * viewScaleX} y={dot.y * viewScaleY}
+            radius={radius * Math.min(viewScaleX, viewScaleY)} color={COLOR_HEX[mark.color]}
+            direction={mark.labelDirection} disabled={interactionDisabled}
+            onToggle={() => toggleLabel(mark.id)}/>;
+        })}
         {editing && (
           <div
             style={{
@@ -1430,10 +1607,22 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               editing={editing}
               bounds={documentSize}
               disabled={interactionDisabled}
+              onToggleDirection={() => toggleLabel(editing.id)}
               onTextChange={updateEditingText}
               onRectChange={updateEditingRect}
               onCommit={commitText}
-              onFinish={onFinishAfterTextCommit}
+              onFinish={editing.callout ? undefined : onFinishAfterTextCommit}
+              onMoveCallout={event => {
+                if (interactionsDisabled() || !editingRef.current?.callout) return;
+                event.preventDefault(); event.stopPropagation();
+                const index = editingRef.current.index!;
+                const canvas = canvasRef.current!;
+                gestureRectRef.current = canvas.getBoundingClientRect();
+                canvas.setPointerCapture(event.pointerId);
+                const start = toPoint(event);
+                commitText();
+                interactionRef.current = {kind: "resize", index, original: history.elements[index], handle: "label", start};
+              }}
               onUndo={() => undoRef.current()}
               onRedo={() => redoRef.current()}
               onCancel={textEscapeCancelsEdit?()=>{cancelInteraction();}:onCancel}
@@ -1450,6 +1639,7 @@ function TextEditor(props: {
   editing: EditingState;
   bounds: { width: number; height: number };
   disabled: boolean;
+  onToggleDirection(): void;
   onTextChange(text: string): void;
   onRectChange(rect: Rect): void;
   onCommit(): void;
@@ -1458,12 +1648,14 @@ function TextEditor(props: {
   onRedo(): void;
   onCancel(): void;
   nativeUndo?: boolean;
+  onMoveCallout?(event: React.PointerEvent): void;
 }) {
   const {
     editing,
     bounds,
     disabled,
     onTextChange,
+    onToggleDirection,
     onRectChange,
     onCommit,
     onFinish,
@@ -1471,20 +1663,28 @@ function TextEditor(props: {
     onRedo,
     onCancel,
     nativeUndo,
+    onMoveCallout,
   } = props;
   const ref = useRef<HTMLTextAreaElement>(null);
   const initialText = useRef(editing.text);
   const attachTextarea = useCallback((element: HTMLTextAreaElement | null) => {
-    ref.current = element;
+    if (!element && ref.current) setTextComposition(ref.current, false);
     // Let the native editor own the live value/undo stack. A controlled React
     // textarea also rewrites defaultValue (light-DOM children) on each input;
     // WebKit treats those script mutations as non-user edits. Initialize once
     // per annotation, then observe input without writing it back into the DOM.
-    if (element) element.value = initialText.current;
+    if (element && element !== ref.current) element.value = initialText.current;
+    ref.current = element;
   }, []);
   const hintId = useId();
   const hintHeight = 32 * editing.uiScale;
   const hintTop = editing.rect.y + editing.rect.height + 4 * editing.uiScale;
+
+  // Callouts open on pointerup, after the canvas mouse focus action. Give
+  // their editor focus before another key can be routed as a tool shortcut.
+  useLayoutEffect(() => {
+    if (editing.callout) ref.current?.focus();
+  }, []);
 
   // Spec §6.6 resizeTextEditor: min 120×34, grows with text/font, clamped
   // to the right/bottom edges of the region.
@@ -1501,7 +1701,7 @@ function TextEditor(props: {
     });
     return () => cancelAnimationFrame(frame);
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const font = textFont(editing.fontSize);
@@ -1509,22 +1709,37 @@ function TextEditor(props: {
     const ctx = canvas.getContext("2d")!;
     ctx.font = font;
     const text = editing.text || t("Type something…");
+    if (editing.callout) {
+      if (editing.text === editing.callout.text && editing.fontSize === editing.callout.fontSize) return;
+      const pad = Math.max(4, editing.fontSize * .5);
+      const width = editing.text ? Math.min(bounds.width, Math.max(Math.min(72, bounds.width),
+        Math.min(280, Math.ceil(Math.max(...editing.text.split("\n").map(line => ctx.measureText(line).width))) + pad * 2))) : editing.rect.width;
+      const height = Math.min(bounds.height, Math.max(editing.fontSize * 2.25,
+        layoutTextLines(editing.text, Math.max(1, width - pad * 2), value => ctx.measureText(value).width).length * editing.fontSize * 1.25 + pad * 2));
+      onRectChange({...editing.rect, width, height,
+        x: Math.max(0, Math.min(editing.rect.x, bounds.width - width)),
+        y: Math.max(0, Math.min(editing.rect.y, bounds.height - height))});
+      return;
+    }
     // Width follows the longest line (measureText on the whole string with
     // newlines yields a wrong width).
-    onRectChange(
-      fitTextEditorFrame({
+    const insets = textEditorInsets(editing.uiScale);
+    const marginX = editing.labelDirection ? Math.max(0, editing.fontSize * 1.99 - insets.x) : 0;
+    const marginY = editing.labelDirection ? Math.max(0, editing.fontSize * .4 - insets.y) : 0;
+    const frame = fitTextEditorFrame({
         text,
         fontSize: editing.fontSize,
-        x: editing.rect.x,
-        y: editing.rect.y,
-        maxWidth: editing.maxWidth,
+        x: editing.rect.x - marginX,
+        y: editing.rect.y - marginY,
+        maxWidth: Math.min(editing.maxWidth, bounds.width - 2 * marginX),
         uiScale: editing.uiScale,
-        boundsWidth: bounds.width,
-        boundsHeight: bounds.height,
+        boundsWidth: bounds.width - 2 * marginX,
+        boundsHeight: bounds.height - 2 * marginY,
         measureText: (value) => ctx.measureText(value).width,
-      }),
-    );
+      });
+    onRectChange({...frame, x:frame.x+marginX, y:frame.y+marginY});
   }, [
+    editing.labelDirection,
     bounds.height,
     bounds.width,
     editing.fontSize,
@@ -1535,14 +1750,29 @@ function TextEditor(props: {
     onRectChange,
   ]);
 
+  const insets = textEditorInsets(editing.uiScale);
+  const label = editing.labelDirection ? labelGeometry({x:editing.rect.x+insets.x, y:editing.rect.y+insets.y,
+    width:Math.max(1,editing.rect.width-insets.x*2),height:Math.max(1,editing.rect.height-insets.y*2)}, editing.fontSize, editing.labelDirection) : null;
+  const edge = label ? editing.labelDirection === "left" ? label.body.x : label.body.x+label.body.width : 0;
+  const sign = editing.labelDirection === "left" ? -1 : 1;
   return (
     <>
+    {label && <>
+      <svg aria-hidden="true" width={bounds.width} height={bounds.height} style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+        <rect {...label.body} rx={editing.fontSize*.45} fill="#303136"/>
+        <path d={`M${edge-sign} ${label.dot.y-label.tail} L${edge+sign*label.tail} ${label.dot.y} L${edge-sign} ${label.dot.y+label.tail} Z`} fill="#303136"/>
+      </svg>
+      <LabelDot x={label.dot.x} y={label.dot.y} radius={label.radius} color={COLOR_HEX[editing.color]}
+        direction={editing.labelDirection!} disabled={disabled} onToggle={onToggleDirection}/>
+    </>}
     <textarea
       ref={attachTextarea}
-      aria-label={t("Text content")}
-      aria-describedby={hintId}
+      className={editing.callout ? "kiri-callout-editor" : label ? "kiri-label-text-editor" : undefined}
+      aria-label={t(editing.callout ? "Description (optional)" : "Text content")}
+      aria-describedby={editing.callout ? undefined : hintId}
+      maxLength={editing.callout ? 1000 : undefined}
       disabled={disabled}
-      placeholder={t("Type something…")}
+      placeholder={t(editing.callout ? "Add a description…" : "Type something…")}
       spellCheck={false}
       autoCorrect="off"
       autoCapitalize="off"
@@ -1553,7 +1783,7 @@ function TextEditor(props: {
       onKeyDown={(e) => {
         handleTextEditorKey(e, { cancel: onCancel, commit: onCommit,
           undo: onUndo, redo: onRedo, finish: onFinish,
-          nativeHistory: (command) => e.currentTarget.ownerDocument.execCommand(command),
+          nativeHistory: (command) => e.currentTarget.ownerDocument.execCommand(command), multiline: !!editing.callout,
         }, nativeUndo);
       }}
       style={{
@@ -1563,11 +1793,11 @@ function TextEditor(props: {
         width: editing.rect.width,
         height: editing.rect.height,
         boxSizing: "border-box",
-        padding: `${5*editing.uiScale}px ${8*editing.uiScale}px`,
+        padding: editing.callout ? Math.max(0, Math.max(4, editing.fontSize * .5) - editing.uiScale) : `${5*editing.uiScale}px ${8*editing.uiScale}px`,
         font: textFont(editing.fontSize),
-        color: COLOR_HEX[editing.color],
-        background: editing.background === "dark" ? "rgba(0,0,0,0.72)" : "transparent",
-        border: `${editing.uiScale}px solid ${COLOR_HEX[editing.color]}cc`,
+        color: label ? "#fafafa" : COLOR_HEX[editing.color],
+        background: "transparent",
+        border: `${editing.uiScale}px solid ${label ? "#ffffff55" : COLOR_HEX[editing.color]+"cc"}`,
         borderRadius: 7,
         resize: "none",
         overflow: "hidden",
@@ -1578,7 +1808,17 @@ function TextEditor(props: {
         pointerEvents: "auto",
       }}
     />
-    <div id={hintId} style={{
+    {editing.callout ? <button type="button" className="kiri-callout-move-grip" aria-label={t("Move description")} title={t("Move description")}
+      onKeyDown={event => event.stopPropagation()}
+      disabled={disabled} onPointerDown={event => {
+        if (ref.current && isTextComposition({target: ref.current})) {event.preventDefault(); event.stopPropagation(); return;}
+        onMoveCallout?.(event);
+      }} style={{position: "absolute",
+        left: Math.max(0, Math.min(bounds.width - 16 * editing.uiScale, editing.rect.x + editing.rect.width - 8 * editing.uiScale)),
+        top: Math.max(0, Math.min(bounds.height - 16 * editing.uiScale, editing.rect.y - 8 * editing.uiScale)),
+        width: 16 * editing.uiScale, height: 16 * editing.uiScale,
+        border: `${2 * editing.uiScale}px solid white`, borderRadius: "50%", background: "#161616",
+        padding: 0, cursor: "move", pointerEvents: "auto"}}/> : <div id={hintId} style={{
       position: "absolute",
       left: Math.min(editing.rect.x, Math.max(0, bounds.width - 280 * editing.uiScale)),
       top: hintTop + hintHeight <= bounds.height ? hintTop : Math.max(0, editing.rect.y - hintHeight - 4 * editing.uiScale),
@@ -1590,9 +1830,26 @@ function TextEditor(props: {
       color: "#eee",
       font: `${10 * editing.uiScale}px/${13 * editing.uiScale}px var(--kiri-font-ui)`,
       pointerEvents: "none",
-    }}>{t("Shift + Enter: new line · Enter: done · Esc: cancel edit")}</div>
+    }}>{t("Shift + Enter: new line · Enter: done · Esc: cancel edit")}</div>}
     </>
   );
 }
 
 export default AnnotationCanvas;
+
+
+function LabelDot({x, y, radius, color, direction, disabled, onToggle}: {
+  x:number; y:number; radius:number; color:string; direction:LabelDirection; disabled:boolean; onToggle():void;
+}) {
+  const size = Math.max(radius * 2 + 10, 22);
+  const title = t(direction === "left" ? "Point label right" : "Point label left");
+  return <button type="button" className="kiri-label-dot" title={title} aria-label={title} disabled={disabled}
+    onPointerDown={event => {event.stopPropagation(); event.preventDefault();}}
+    onClick={event => {event.stopPropagation(); onToggle();}}
+    onDoubleClick={event => {event.stopPropagation(); event.preventDefault();}}
+    onKeyDown={event => {if(event.key==="Enter"||event.key===" ")event.stopPropagation();}}
+    onKeyUp={event => {if(event.key==="Enter"||event.key===" ")event.stopPropagation();}}
+    style={{position:"absolute",left:x-size/2,top:y-size/2,width:size,height:size,pointerEvents:"auto"}}>
+    <span style={{width:radius*2,height:radius*2,background:color}}/>
+  </button>;
+}

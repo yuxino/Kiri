@@ -1,3 +1,4 @@
+import {LabelControls, type LabelMark} from "../annotation/LabelControls";
 // EditorWindow — annotation editor for saved captures
 // Dark screenshot editor with one compact toolbar and an aspect-fit canvas.
 
@@ -58,9 +59,10 @@ export function EditorWindow(props: { id: string }) {
   const [document, setDocument] = useState<AnnotationDocumentV1 | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 560 });
   const [tool, setTool] = useState<EditorTool>("select");
+  const [selectedLabel, setSelectedLabel] = useState<LabelMark|null>(null);
   const [selectedCallout, setSelectedCallout] = useState<CalloutMark | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
-  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedCallout(mark?.kind === "callout" ? mark : null), []);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => {setSelectedCallout(mark?.kind === "callout" ? mark : null); setSelectedLabel(mark?.kind === "text" && mark.labelDirection ? mark : null);}, []);
   const [cropSelection, setCropSelection] = useState<Rect | null>(null);
   const [cropUndo, setCropUndo] = useState<Rect[]>([]);
   const [cropRedo, setCropRedo] = useState<Rect[]>([]);
@@ -351,6 +353,7 @@ export function EditorWindow(props: { id: string }) {
           l: "line",
           a: "arrow",
           t: "text",
+          b: "label",
           n: "callout",
           m: "mosaic",
         };
@@ -521,7 +524,7 @@ export function EditorWindow(props: { id: string }) {
             {t("Cancel crop")}
           </button>
         )}
-        {tool !== "crop" && tool !== "select" && tool !== "callout" && <>
+        {tool !== "crop" && tool !== "select" && tool !== "label" && tool !== "callout" && <>
           <div style={{ width: 1, height: 26, background: "#383838", margin: "0 4px" }} />
           {tool === "text" ? (
           <EditorSegments
@@ -663,6 +666,10 @@ export function EditorWindow(props: { id: string }) {
         </div>
       </div>
 
+      {!readOnly && !qrActive && (tool === "label" || (tool === "select" && selectedLabel)) &&
+        <div className="kiri-editor-callout-row"><LabelControls selected={selectedLabel} appearance={appearance}
+          onChange={(patch,transient)=>{setAppearance({...appearance,...patch});canvasRef.current?.updateSelectionAppearance(patch,transient);}}
+          onFinish={()=>canvasRef.current?.finishAppearanceAdjustment()}/></div>}
       {!readOnly && !qrActive && (tool === "callout" || (tool === "select" && selectedCallout !== null)) &&
         <div className="kiri-editor-callout-row"><CalloutControls selected={selectedCallout} nextNumber={calloutNumber} appearance={appearance}
           onNextNumber={setCalloutNumber} onAppearance={patch => setAppearance({...appearance, ...patch})}

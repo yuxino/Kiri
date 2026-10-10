@@ -83,6 +83,13 @@ function markBounds(mark) {
         Math.max(mark.width * 4, 12) + mark.width / 2,
       );
     case "text":
+      if (mark.labelDirection) {
+        // Includes the body padding, tail, gap and dot (model.labelGeometry).
+        const side = mark.fontSize * 1.34;
+        return {x:mark.rect.x-mark.fontSize*.65-(mark.labelDirection==="left"?side:0),
+          y:mark.rect.y-mark.fontSize*.4, width:mark.rect.width+mark.fontSize*1.3+side,
+          height:mark.rect.height+mark.fontSize*.8};
+      }
       return mark.background === "dark"
         ? { x: mark.rect.x - 5, y: mark.rect.y - 3,
             width: mark.rect.width + 10, height: mark.rect.height + 6 }
