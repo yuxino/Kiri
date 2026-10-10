@@ -300,7 +300,7 @@ def seed_clipboard(seed_file):
 def verify_folder_and_rename(assets):
     phase("Open Folder on extended-length custom library root")
     focus_library()
-    find("Settings", kinds=("Button",), scope=library_window).invoke()
+    find("Settings", kinds=("Button",), scope=library_window).click_input()
     find("Open Folder", kinds=("Button",), scope=library_window, scroll=True).click_input()
     window = explorer_for(root)
     report["open_folder"] = explorer_evidence(window)
@@ -308,7 +308,7 @@ def verify_folder_and_rename(assets):
         raise RuntimeError("Open Folder opened a parent rather than the current library")
     snapshot("current-library-folder")
     focus_library()
-    find("Library", kinds=("Button",), scope=library_window).invoke()
+    find("Library", kinds=("Button",), scope=library_window).click_input()
     find("Search captures", kinds=("Edit",), scope=library_window)
     for asset in assets:
         phase(f"Rename and Show in Folder: {asset['kind']}")
