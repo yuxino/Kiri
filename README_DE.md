@@ -15,6 +15,7 @@ Kiri ist eine Screenshot- und Bildschirmaufnahme-App für macOS, Windows und Lin
 ## Funktionen
 
 - Fenster oder Bereiche erfassen, zuschneiden, zeichnen, Text oder Mosaik hinzufügen und Screenshots als schwebende Referenz anheften.
+- Text (T), Nummerierte Notiz (N) und Beschriftungsblase (B) haben eigene Schaltflächen in den Werkzeugleisten für Screenshots und Bildbearbeitung. Wählen Sie die nummerierte Notiz, klicken Sie zum Platzieren und geben Sie die Beschreibung direkt im Bild ein; Return fügt eine Zeile hinzu. Zahl und transparenter Beschreibungsrahmen lassen sich getrennt ziehen; Größe, Farbe und gefüllter Stil oder Kontur sind einstellbar.
 - Text mit lokalem OCR kopieren und QR-Codes aus Bildern lesen.
 - MP4 mit optionalem Systemton und Mikrofon aufnehmen oder ein GIF ohne Ton erstellen. Bei der GIF-Konvertierung gespeicherter Videos wird zuerst die Dekodierung geprüft. Prüfung und Konvertierung lassen sich abbrechen. macOS zeigt den Fortschritt pro Bild und hält Fehlerdetails sichtbar.
 - Clips eines Videos kürzen und umordnen, dann eine neue MP4-Datei exportieren.

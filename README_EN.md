@@ -31,7 +31,7 @@
 ## Features
 
 - Capture a window or region, crop it, add drawings, text or mosaic, and pin screenshots as floating references.
-- Choose Numbered callout from the Text tool's arrow menu. Click to place a number and type its description directly on the image; Return adds a line. Drag the number and transparent description separately, and adjust size, color, and filled or outline style.
+- Text (T), Numbered callout (N), and Label bubble (B) each have their own button in the screenshot and image-editor toolbars. Choose Numbered callout, click to place a number, and type its description directly on the image; Return adds a line. Drag the number and transparent description separately, and adjust size, color, and filled or outline style.
 - Copy text with local OCR and read QR codes from images.
 - Record MP4 with optional system audio and microphone, or make a silent GIF. Converting saved videos to GIF checks decoding first and can be cancelled before saving; macOS shows frame progress and keeps failure details visible.
 - Trim and reorder clips from one video, then export a new MP4.
@@ -45,7 +45,7 @@
 
 In Screenshot mode, hover to magnify the original pixels and see their coordinates and HEX color. Press `⌘C` on macOS or `Ctrl+C` to copy the color while keeping the selection. The loupe hides once annotation starts.
 
-Use the arrow beside Text to choose Label bubble (B). Click the image to type a note, then click its dot to move the bubble to the other side of that same point. Adjust the font size and dot color, or double-click the text to edit it again.
+Click the Label bubble (B) toolbar button. Click the image to type a note, then click its dot to move the bubble to the other side of that same point. Adjust the font size and dot color, or double-click the text to edit it again.
 
 Before annotating or recording, click the sliders button to edit the selection's width and height in pixels directly beside its edges.
 

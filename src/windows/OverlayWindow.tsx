@@ -42,7 +42,6 @@ import {
 } from "../annotation/model";
 import { useAnnotationAppearance } from "../annotation/useAnnotationAppearance";
 import {AnnotationStyleControls} from "../annotation/AnnotationStyleControls";
-import {TextToolPicker} from "../annotation/TextToolPicker";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
@@ -564,7 +563,7 @@ export function OverlayWindow() {
       if (e.key !== "Escape") return;
       if (isTextComposition(e)) return;
       if (e.target instanceof Element && e.target.closest(".kiri-capture-dimension-input")) return;
-      if (e.target instanceof Element && e.target.closest(".kiri-callout-description textarea, .kiri-text-tool-menu")) return;
+      if (e.target instanceof Element && e.target.closest(".kiri-callout-description textarea")) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (completionLock.locked) return;
@@ -1951,6 +1950,8 @@ const TOOLS: { tool: Tool; icon: IconName; title: string }[] = [
   { tool: "line", icon: "line.diagonal", title: "Line (L)" },
   { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
   { tool: "text", icon: "textformat", title: "Text (T)" },
+  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)" },
+  { tool: "label", icon: "tag", title: "Label bubble (B)" },
   { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)" },
   { tool: "watermark", icon: "watermark", title: "Watermark (W)" },
 ];
@@ -2003,9 +2004,8 @@ export function Toolbar(props: ToolbarProps) {
   const {left, top} = captureToolbarPosition(selection, bounds, {width: barSize.width, height: Math.min(barSize.height, maxHeight)},
     canSetSize && sizeControlsOpen, props.modeSelectorBounds);
   const options = props.styleControls ?? (props.showLabelControls ? props.labelControls : props.showCalloutControls ? props.calloutControls : null);
-  const button = ({tool: value, icon, title}: typeof TOOLS[number]) => value === "text"
-    ? <TextToolPicker key={value} tool={tool} onSelect={setTool}/>
-    : <ToolButton key={value} icon={icon} title={t(title)} active={tool === value} disabled={disabled} onClick={() => setTool(value)}/>;
+  const button = ({tool: value, icon, title}: typeof TOOLS[number]) =>
+    <ToolButton key={value} icon={icon} title={t(title)} active={tool === value} disabled={disabled} onClick={() => setTool(value)}/>;
 
   return (
     <>
@@ -2038,8 +2038,8 @@ export function Toolbar(props: ToolbarProps) {
             {button(TOOLS[0])}
           </div>
           <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>{TOOLS.slice(1, 5).map(button)}</div>
-          <div className="kiri-annotation-tool-group">{button(TOOLS[5])}</div>
-          <div className="kiri-annotation-tool-group">{TOOLS.slice(6).map(button)}</div>
+          <div className="kiri-annotation-tool-group">{TOOLS.slice(5, 8).map(button)}</div>
+          <div className="kiri-annotation-tool-group">{TOOLS.slice(8).map(button)}</div>
           <div className="kiri-annotation-tool-group">
             <ToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={!canUndo} onClick={onUndo}/>
             <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo}/>

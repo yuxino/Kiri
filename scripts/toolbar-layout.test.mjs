@@ -116,8 +116,8 @@ test("full-display and corner selections keep two and three rows clear of a move
 
 test("only visible HUD rows receive pointer input, with measurement updated when settings grow", () => {
   const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
-  // Compile the real tool definitions and both toolbar rows. TextToolPicker's
-  // own menu is covered separately; no empty TOOLS shortcut hides wrap groups.
+  // Compile the real tool definitions and both toolbar rows, including all
+  // three direct text tools; no empty TOOLS shortcut hides wrap groups.
   const toolbar = source.slice(source.indexOf("const TOOLS:"));
   const css = readFileSync(new URL("../src/styles/design-system.css", import.meta.url), "utf8");
   const optionsCss = css.match(/\.kiri-capture-tool-options\s*\{([^}]+)\}/)?.[1];
@@ -129,7 +129,6 @@ test("only visible HUD rows receive pointer input, with measurement updated when
   const measured = { get offsetWidth() { return 550; }, get offsetHeight() { return height; } };
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-    const TextToolPicker=()=>null;
     const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}`, {
     attachRef(node) {
       if (node.props.className === "kiri-capture-toolbar") node.props.ref.current = measured;

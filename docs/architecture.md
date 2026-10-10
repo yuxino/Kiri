@@ -231,7 +231,10 @@ Changes are debounced as field-level patches, merged under the native preference
 lock, and broadcast to open windows. The active tool, selection, crop,
 and document content are never persisted as appearance preferences.
 
-Text and numbered callouts share a compact toolbar picker. A callout persists
+Text (T), Numbered callout (N), and Label bubble (B) each have a direct button
+in the capture and saved-image toolbars. Their annotation groups wrap at narrow
+widths while keeping every tool reachable; keyboard shortcuts remain unchanged.
+See [ADR 0091](adr/0091-direct-text-annotation-toolbar.md). A callout persists
 one number, optional multiline description, badge center and label rectangle;
 its handles move the badge and label independently. Both parts translate when
 cropped and use the common preview/export renderer. Badge style and size join

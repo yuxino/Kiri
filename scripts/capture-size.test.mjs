@@ -57,7 +57,6 @@ test("the existing screenshot sliders toggle edge fields without completing capt
   const toolbar = overlay.slice(overlay.indexOf("const TOOLS:"));
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-    const TextToolPicker=()=>null;
     const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}`);
   let toggles = 0, captures = 0;
   const props = { selection:{x:100,y:100,width:140,height:160}, bounds:{x:0,y:0,width:1000,height:700},

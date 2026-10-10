@@ -51,7 +51,6 @@ function editor(options = {}) {
       "../annotation/LabelControls": {LabelControls: props => ({type:"label-controls",props})},
       "../annotation/CalloutControls": {CalloutControls: "callout-controls"},
       "../annotation/AnnotationStyleControls": {AnnotationStyleControls: "annotation-style-controls"},
-      "../annotation/TextToolPicker": {TextToolPicker: "text-tool-picker"},
       "../annotation/text-composition.js": textComposition,
       "../annotation/useAnnotationAppearance": { useAnnotationAppearance: () => [{ color: "white", penWidth: 3, shapeWidth: 2, textFontSize: 18, textBackgroundStyle: "transparent", mosaicBrushDiameter: 24, mosaicStyle: "pixel", mosaicIntensity: "standard" }, () => {}] },
       "../annotation/AnnotationCanvas": { __esModule: true, default: "annotation-canvas" },
