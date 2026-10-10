@@ -39,6 +39,14 @@ def proportional_resize_evidence(before, after):
     return {"before": list(before), "after": list(after), "relative_aspect_error": relative_error}
 
 
+def borderless_geometry_evidence(client, outer):
+    if len(client) != 4 or len(outer) != 4 or client[2] <= client[0] or client[3] <= client[1]:
+        raise RuntimeError("Pin must have positive native client dimensions")
+    if any(abs(a - b) > 1 for a, b in zip(client, outer)):
+        raise RuntimeError(f"Pin has a nonclient frame: client={client}, window={outer}")
+    return {"client": list(client), "window": list(outer), "native_nonclient_frame": False}
+
+
 def annotated_capture_evidence(library, asset, source, copied):
     from PIL import Image, ImageChops, ImageStat
 

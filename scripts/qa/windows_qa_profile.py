@@ -7,7 +7,22 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+import time
 import uuid
+
+
+def remove_generated_directory(path):
+    deadline = time.monotonic() + 20
+    while True:
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError as error:
+            # taskkill /T has stopped this run's app. WebView2 can still be
+            # releasing its cache handles; retry only sharing/lock violations.
+            if getattr(error, "winerror", None) not in (32, 33) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.2)
 
 
 @contextmanager
@@ -30,7 +45,7 @@ def isolated_app_directories(paths, backup_root):
         for path, backup in reversed(active):
             try:
                 if path.exists():
-                    shutil.rmtree(path)
+                    remove_generated_directory(path)
                 if backup is not None:
                     shutil.move(str(backup), str(path))
             except Exception as error:
