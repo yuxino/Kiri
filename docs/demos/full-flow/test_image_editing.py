@@ -123,11 +123,11 @@ async def main():
     assert await description.evaluate('el=>el.selectionStart===5&&el.selectionEnd===5'),'callout echo moved the native caret'
     await description.press(mod+'+z');assert await description.input_value()=='abcdef'
     await description.press(mod+'+Shift+z');assert await description.input_value()=='abcXYdef'
-    await description.press('End');await description.press('Enter')
+    await description.press('Meta+ArrowDown' if sys.platform=='darwin' else 'Control+End');await description.press('Enter')
     continuous='continuous typing abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz'
     await description.press_sequentially(continuous,delay=10)
     expected='abcXYdef\n'+continuous
-    assert await description.input_value()==expected
+    assert await description.input_value()==expected,{'stage':'multiline callout typing','actual':await description.input_value(),'expected':expected}
     assert await page.locator('#overlay').count()==1,'description Enter completed the screenshot'
     # Exercise Chromium's composition editor, not the operating system's IME.
     cdp=await context.new_cdp_session(page)

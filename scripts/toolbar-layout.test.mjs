@@ -68,6 +68,19 @@ test("a mode selector only reserves its actual area, leaving clear room above a 
   assert.ok(!overlaps(position, size, mode));
 });
 
+test("a wrapped mode selector reserves both rows without trapping a compact toolbar", () => {
+  const bounds = { x: 0, y: 0, width: 320, height: 480 };
+  const selection = { x: 20, y: 130, width: 280, height: 330 };
+  const mode = { x: 8, y: 44, width: 304, height: 80 };
+  for (const height of [81, 160, 210]) {
+    const size = { width: 304, height };
+    const position = captureToolbarPosition(selection, bounds, size, false, mode);
+    assert.ok(position.left >= 8 && position.left + size.width <= 312);
+    assert.ok(position.top >= 8 && position.top + size.height <= 472);
+    assert.ok(!overlaps(position, size, mode), "the selector's second row must also stay clear");
+  }
+});
+
 test("narrow full-height selections use free side space before covering the canvas", () => {
   const selection = { x: 80, y: 0, width: 130, height: 800 };
   const size = { width: 550, height: 140 };

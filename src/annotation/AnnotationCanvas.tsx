@@ -6,6 +6,7 @@ import React, {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   useId,
   useMemo,
@@ -1653,7 +1654,7 @@ function TextEditor(props: {
     });
     return () => cancelAnimationFrame(frame);
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const font = textFont(editing.fontSize);
@@ -1665,7 +1666,7 @@ function TextEditor(props: {
       if (editing.text === editing.callout.text && editing.fontSize === editing.callout.fontSize) return;
       const pad = Math.max(4, editing.fontSize * .5);
       const width = editing.text ? Math.min(bounds.width, Math.max(Math.min(72, bounds.width),
-        Math.min(280, Math.max(...editing.text.split("\n").map(line => ctx.measureText(line).width)) + pad * 2))) : editing.rect.width;
+        Math.min(280, Math.ceil(Math.max(...editing.text.split("\n").map(line => ctx.measureText(line).width))) + pad * 2))) : editing.rect.width;
       const height = Math.min(bounds.height, Math.max(editing.fontSize * 2.25,
         layoutTextLines(editing.text, Math.max(1, width - pad * 2), value => ctx.measureText(value).width).length * editing.fontSize * 1.25 + pad * 2));
       onRectChange({...editing.rect, width, height,
@@ -1745,7 +1746,7 @@ function TextEditor(props: {
         width: editing.rect.width,
         height: editing.rect.height,
         boxSizing: "border-box",
-        padding: editing.callout ? Math.max(4, editing.fontSize * .5) : `${5*editing.uiScale}px ${8*editing.uiScale}px`,
+        padding: editing.callout ? Math.max(0, Math.max(4, editing.fontSize * .5) - editing.uiScale) : `${5*editing.uiScale}px ${8*editing.uiScale}px`,
         font: textFont(editing.fontSize),
         color: label ? "#fafafa" : COLOR_HEX[editing.color],
         background: "transparent",

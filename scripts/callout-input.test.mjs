@@ -10,7 +10,7 @@ const canvasSource = readFileSync(new URL("../src/annotation/AnnotationCanvas.ts
 const tree = ts.createSourceFile("AnnotationCanvas.tsx", canvasSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const editor = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TextEditor");
 assert.ok(editor);
-const source = `import React, {useRef, useCallback, useEffect, useId} from "react";
+const source = `import React, {useRef, useCallback, useEffect, useLayoutEffect, useId} from "react";
 import {t} from "../i18n";
 import {COLOR_HEX} from "./model";
 import {textFont} from "./render";
@@ -90,6 +90,13 @@ test("the inline grip stays inside display edges and ordinary input remains tran
   assert.equal(grip.props.style.top, 0);
   const text = h.render("saved", {callout: undefined, background: "dark"});
   assert.equal(text.props.style.background, "transparent");
+});
+
+test("callout padding includes its border without narrowing the rendered text area", () => {
+  const h = input();
+  const node = h.render("saved");
+  assert.equal(node.props.style.padding, 8);
+  assert.equal(2 * (node.props.style.padding + 1), 18);
 });
 
 test("native Undo returning to the original prop cannot leave stale echoes or rewrite the input", () => {

@@ -858,9 +858,14 @@ button:active:not(:disabled) {
   top: 44px; /* below the macOS menu bar + notch safe area */
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
   gap: 2px;
   padding: 4px;
   align-items: center;
+  justify-content: center;
   cursor: grab;
   touch-action: none;
   will-change: left, top;
@@ -880,6 +885,7 @@ button:active:not(:disabled) {
 
 .kiri-mode-btn {
   display: flex;
+  flex-shrink: 0;
   flex-direction: row;
   align-items: center;
   justify-content: center;
@@ -892,6 +898,7 @@ button:active:not(:disabled) {
   background: transparent;
   color: rgba(255, 255, 255, 0.66);
   font: 650 11.5px var(--kiri-font-ui);
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 0.14s ease-out,
@@ -899,6 +906,11 @@ button:active:not(:disabled) {
     color 0.14s ease-out,
     transform 0.14s ease-out,
     opacity 0.14s ease-out;
+}
+
+.kiri-mode-btn span {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .kiri-mode-btn:hover:not([data-active]):not(:active) {
