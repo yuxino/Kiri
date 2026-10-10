@@ -211,7 +211,16 @@ def card(title):
 
 def action(title, label):
     card(title).click_input(button="right")
-    find(label, kinds=("MenuItem", "Button"), scope=library_window).click_input()
+    # A card's Copy button remains visible to UIA underneath the popup. Click
+    # the actual menu item, rather than its occluded same-name card action.
+    item = find(label, kinds=("MenuItem",), scope=library_window)
+    bounds = item.rectangle()
+    targets = report.setdefault("action_targets", [])
+    targets.append({"title": title, "label": label, "type": item.element_info.control_type,
+                    "bounds": [bounds.left, bounds.top, bounds.right, bounds.bottom]})
+    if label in ("Copy", "Copy File"):
+        snapshot(f"copy-menu-{len(targets)}")
+    item.click_input()
 
 
 def explorer_windows():
