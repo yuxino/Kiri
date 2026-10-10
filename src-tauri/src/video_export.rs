@@ -1721,13 +1721,16 @@ mod tests {
                     } else {
                         0
                     };
+                    // Four-pixel bars avoid H.264 chroma-sampling noise at 64x48:
+                    // saturated blue two-pixel bars produced only 74 levels of
+                    // contrast after encoding, despite the timed mosaic ending.
                     // Keep high-frequency stripes inside the mosaic region only. The
                     // transparency/orientation probes use the flat right half: otherwise
                     // repeated H.264 chroma subsampling creates red in bright green stripes,
                     // confounding an alpha-compositing assertion with codec reconstruction.
                     frame[(y * 64 + x) * 4 + channel] = if x >= 32 {
                         180
-                    } else if x % 4 < 2 {
+                    } else if x % 8 < 4 {
                         255
                     } else {
                         90
@@ -1791,11 +1794,11 @@ mod tests {
             )
             .unwrap();
             let before = frame_at(&output, 0.2);
-            assert!(before.get_pixel(8, 24)[0].abs_diff(before.get_pixel(10, 24)[0]) > 80);
+            assert!(before.get_pixel(9, 24)[0].abs_diff(before.get_pixel(13, 24)[0]) > 80);
             let first = frame_at(&output, 0.7);
             assert!(first.get_pixel(8, 24)[0] > 70 && first.get_pixel(8, 24)[1] < 45);
             assert!(
-                first.get_pixel(8, 24)[0].abs_diff(first.get_pixel(10, 24)[0]) < 35,
+                first.get_pixel(9, 24)[0].abs_diff(first.get_pixel(13, 24)[0]) < 35,
                 "{kind:?} must alter the live source texture"
             );
             let second = frame_at(&output, 1.2);
@@ -1840,7 +1843,7 @@ mod tests {
                 "{kind:?} transparent region must match source across all channels: actual={transparent:?}, control={control:?}, opaque={yellow:?}"
             );
             let after = frame_at(&output, 2.7);
-            assert!(after.get_pixel(8, 24)[2].abs_diff(after.get_pixel(10, 24)[2]) > 80);
+            assert!(after.get_pixel(9, 24)[2].abs_diff(after.get_pixel(13, 24)[2]) > 80);
             assert!(
                 after.get_pixel(48, 4)[0] < 45,
                 "overlay must end independently"

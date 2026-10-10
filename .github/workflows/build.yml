@@ -534,6 +534,7 @@ jobs:
           $installerProcess = Start-Process $installers[0].FullName -ArgumentList @('/S', "/D=$install") -PassThru -Wait
           if ($installerProcess.ExitCode -ne 0) { throw "NSIS installation failed: $($installerProcess.ExitCode)" }
           if (-not (Test-Path (Join-Path $install 'kiri.exe'))) { throw "Installed executable is missing" }
+          "KIRI_QA_INSTALLED_EXE=$(Join-Path $install 'kiri.exe')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Package and verify portable Windows build
         if: needs.plan.outputs.package_windows == 'true'
         shell: pwsh

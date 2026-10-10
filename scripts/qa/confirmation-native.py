@@ -5,6 +5,7 @@ profile's location/language settings are restored after the process exits.
 """
 
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,20 @@ config = Path(os.environ["APPDATA"]) / "io.yuxino.kiri"
 config.mkdir(parents=True, exist_ok=True)
 settings = [config / name for name in ("library-location.json", "language.json")]
 original = {path: path.read_bytes() if path.exists() else None for path in settings}
+
+
+def confirmation_executable():
+    installed = os.environ.get("KIRI_QA_INSTALLED_EXE")
+    executable = Path(installed if installed is not None else "src-tauri/target/release/kiri.exe").resolve()
+    if not executable.is_file():
+        raise RuntimeError(f"Confirmation QA executable is missing: {executable}")
+    source_sha = (os.environ.get("KIRI_LIBRARY_FILES_CANDIDATE_SHA")
+                  or os.environ.get("KIRI_COLOR_CANDIDATE_SHA") or os.environ.get("GITHUB_SHA"))
+    if not source_sha or not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+        raise RuntimeError("Confirmation QA requires the source commit SHA")
+    return {"executable": str(executable), "executable_kind": "installed" if installed is not None else "compiled",
+            "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+            "source_sha": source_sha, "harness_sha": os.environ.get("GITHUB_SHA")}
 
 
 def process_status():
@@ -121,6 +136,8 @@ def cancel_dialog(mode, label, window):
 
 
 try:
+    phase("verify confirmation executable")
+    report.update(confirmation_executable())
     phase("prepare disposable fixtures")
     temporary = tempfile.TemporaryDirectory(prefix="kiri-confirmation-", dir=os.environ["RUNNER_TEMP"])
     root = Path(temporary.name)
@@ -140,7 +157,7 @@ try:
     settings[0].write_text(json.dumps({**identity, "root": str(root)}), encoding="utf-8")
     settings[1].write_text(json.dumps("en"), encoding="utf-8")
     phase("launch Kiri")
-    process = subprocess.Popen([str(Path("src-tauri/target/release/kiri.exe").resolve())])
+    process = subprocess.Popen([report["executable"]])
     phase("find library window through Trash navigation")
     library = find("Trash", timeout=35).top_level_parent()
     phase("focus library")

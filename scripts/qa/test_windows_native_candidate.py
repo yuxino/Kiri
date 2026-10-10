@@ -1,10 +1,15 @@
 """Native retry cannot waive failed gates, change app bytes or accept another origin."""
 
+import ast
 import copy
+import hashlib
 import importlib.util
+import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("windows-native-candidate.py"))
@@ -163,6 +168,69 @@ class ArchiveTests(unittest.TestCase):
         compiled.write_bytes(compiled.read_bytes() * 2)
         with self.assertRaisesRegex(RuntimeError, "exactly one"):
             candidate.executable_identities(compiled, payload, installed)
+
+
+class ConfirmationExecutableTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Execute the actual path/identity function without importing Windows
+        # UI dependencies or launching an application.
+        path = Path(__file__).with_name("confirmation-native.py")
+        source = ast.parse(path.read_text(), filename=str(path))
+        function = next(node for node in source.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "confirmation_executable")
+        namespace = {"Path": Path, "os": os, "re": re, "hashlib": hashlib}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), namespace)
+        cls.identity = staticmethod(namespace["confirmation_executable"])
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.compiled = self.root / "src-tauri/target/release/kiri.exe"
+        self.compiled.parent.mkdir(parents=True)
+        self.compiled.write_bytes(b"compiled portable payload")
+        self.installed = self.root / "Program Files/Kiri 测试/kiri.exe"
+        self.installed.parent.mkdir(parents=True)
+        self.installed.write_bytes(b"NSIS installed payload")
+        previous = Path.cwd()
+        self.addCleanup(os.chdir, previous)
+        os.chdir(self.root)
+
+    def result(self, **env):
+        with patch.dict(os.environ, {"GITHUB_SHA": "a" * 40, **env}, clear=True):
+            return self.identity()
+
+    def test_confirmation_uses_installed_payload_and_records_its_actual_identity(self):
+        result = self.result(KIRI_QA_INSTALLED_EXE=str(self.installed))
+        self.assertEqual(result["executable"], str(self.installed.resolve()))
+        self.assertEqual(result["executable_kind"], "installed")
+        self.assertEqual(result["executable_sha256"], hashlib.sha256(self.installed.read_bytes()).hexdigest())
+        self.assertNotEqual(result["executable_sha256"], hashlib.sha256(self.compiled.read_bytes()).hexdigest())
+        self.assertEqual(result["source_sha"], "a" * 40)
+
+    def test_confirmation_keeps_compiled_fallback_when_no_installed_path_is_requested(self):
+        result = self.result()
+        self.assertEqual(result["executable"], str(self.compiled.resolve()))
+        self.assertEqual(result["executable_kind"], "compiled")
+        self.assertEqual(result["executable_sha256"], hashlib.sha256(self.compiled.read_bytes()).hexdigest())
+
+    def test_replay_records_candidate_source_separately_from_harness(self):
+        for field in ("KIRI_LIBRARY_FILES_CANDIDATE_SHA", "KIRI_COLOR_CANDIDATE_SHA"):
+            with self.subTest(field=field):
+                result = self.result(KIRI_QA_INSTALLED_EXE=str(self.installed), **{field: "b" * 40})
+                self.assertEqual(result["source_sha"], "b" * 40)
+                self.assertEqual(result["harness_sha"], "a" * 40)
+
+    def test_bad_explicit_installed_path_cannot_silently_use_compiled_binary(self):
+        for path in (str(self.root / "missing.exe"), str(self.installed.parent), ""):
+            with self.subTest(path=path), self.assertRaisesRegex(RuntimeError, "executable is missing"):
+                self.result(KIRI_QA_INSTALLED_EXE=path)
+
+    def test_confirmation_identity_requires_a_complete_source_sha(self):
+        for sha in ("", "short", "not-a-commit"):
+            with self.subTest(sha=sha), self.assertRaisesRegex(RuntimeError, "source commit SHA"):
+                self.result(GITHUB_SHA=sha)
 
 
 if __name__ == "__main__":
