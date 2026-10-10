@@ -180,3 +180,4 @@ development.
 - [ADR 0083: Editable numbered screenshot callouts](adr/0083-numbered-screenshot-callouts.md)
 - [ADR 0084: Directional label bubbles](adr/0084-directional-label-bubbles.md)
 - [ADR 0085: Edit numbered callout descriptions on the canvas](adr/0085-inline-callout-text-editing.md)
+- [ADR 0087: Keep capture controls clear of the mode selector](adr/0087-capture-hud-layout.md)

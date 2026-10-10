@@ -57,7 +57,7 @@ import { KiriIcon, type IconName } from "../components/KiriIcons";
 import { QrOverlay } from "../qr/QrOverlay";
 import { RemoteOcrConsent } from "../ocr/RemoteOcrConsent";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
-import { captureToolbarPosition } from "./toolbar-layout.js";
+import { capturePanelLayout, captureToolbarPosition } from "./toolbar-layout.js";
 import { CaptureSizeControls } from "./CaptureSizeControls";
 import { resizeCapturePixels } from "./capture-size.js";
 import { CaptureColorPicker, useCaptureColorPicker } from "./CaptureColorPicker";
@@ -1247,6 +1247,7 @@ export function OverlayWindow() {
           failed={ocrFailed}
           anchor={selection ?? { x: 0, y: 0, width: bounds.width, height: 0 }}
           bounds={bounds}
+          modeSelectorBounds={modeSelectorBounds}
           onCopy={() => {
             void api.copyText(ocrText).catch(() => {});
           }}
@@ -1258,6 +1259,7 @@ export function OverlayWindow() {
           prepared={preparedOcr}
           anchor={selection ?? { x: 0, y: 0, width: bounds.width, height: 0 }}
           bounds={bounds}
+          modeSelectorBounds={modeSelectorBounds}
           failed={remoteOcrFailed}
           onCancel={cancel}
           onUseLocal={() => void recognizePreparedLocal()}
@@ -1270,6 +1272,7 @@ export function OverlayWindow() {
         <RecordOptionsPanel
           anchor={selection}
           bounds={bounds}
+          modeSelectorBounds={modeSelectorBounds}
           options={recordOptions}
           micSupported={micSupported && platformCaps.microphone}
           systemAudioSupported={platformCaps.systemAudio}
@@ -1485,42 +1488,50 @@ function OcrPanel(props: {
   failed: boolean;
   anchor: Rect;
   bounds: Rect;
+  modeSelectorBounds?: Rect | null;
   onCopy(): void;
   onClose(): void;
 }) {
-  const { text, failed, anchor, bounds, onCopy, onClose } = props;
-  // Bubble hugs the recognized region: below it, flipping above when the
-  // bottom overflows, then pinned inside the screen. The little tail points
-  // at the region (top-right when below, bottom-right when above).
-  const PANEL_W = 368;
-  const PANEL_H = 276;
-  const margin = 8;
-  const maxTop = Math.max(margin, bounds.height - PANEL_H - margin);
-  const below = anchor.y + anchor.height + 10;
-  const above = anchor.y - PANEL_H - 10;
-  const belowFits = below + PANEL_H + margin <= bounds.height;
-  const top = Math.min(Math.max(margin, belowFits ? below : above), maxTop);
-  const centerX = anchor.x + anchor.width / 2 - PANEL_W / 2;
-  const left = Math.min(
-    Math.max(margin, centerX),
-    Math.max(margin, bounds.width - PANEL_W - margin),
-  );
-  const tailAbove = !belowFits;
-  // Tail tip x follows the region's center, clamped away from the rounded
-  // corners so the bubble still reads cleanly near a display edge.
-  const tipX = Math.min(
-    Math.max(28, anchor.x + anchor.width / 2 - left),
-    PANEL_W - 28,
+  const { text, failed, anchor, bounds, modeSelectorBounds, onCopy, onClose } = props;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const measurePanel = () => {
+    const element = panelRef.current;
+    if (!element) return;
+    const content = textRef.current;
+    const hiddenContent = content ? Math.max(0, content.scrollHeight - content.clientHeight) : 0;
+    // Text has its own 150px reading viewport; only panel-induced clipping
+    // should make the panel taller, not a long recognized document.
+    const height = Math.ceil(element.getBoundingClientRect().height + Math.min(hiddenContent,
+      Math.max(0, 150 - (content?.clientHeight ?? 0))));
+    setMeasuredHeight(current => current === height ? current : height);
+  };
+  useLayoutEffect(measurePanel);
+  useLayoutEffect(() => {
+    const element = panelRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(measurePanel);
+    observer.observe(element);
+    if (textRef.current) observer.observe(textRef.current);
+    return () => observer.disconnect();
+  }, []);
+  const { left, top, width: panelWidth, maxHeight } = capturePanelLayout(
+    anchor, bounds, { width: 368, height: measuredHeight }, modeSelectorBounds,
   );
   return (
     <div
+      ref={panelRef}
       className="kiri-hud"
       onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
         left,
         top,
-        width: PANEL_W,
+        width: panelWidth,
+        maxHeight,
+        overflow: "hidden",
+        zIndex: 8,
         padding: 14,
         boxSizing: "border-box",
         borderRadius: 16,
@@ -1530,24 +1541,10 @@ function OcrPanel(props: {
         boxShadow: "0 16px 42px rgba(0,0,0,0.22)",
       }}
     >
-      {!failed && text.trim() && <div role="status" style={{ fontSize: 11, color: "var(--kiri-secondary-label)" }}>
+      {!failed && text.trim() && <div role="status" style={{ flexShrink: 0, fontSize: 11, color: "var(--kiri-secondary-label)" }}>
         {t(props.saved ? "Saved to Text History" : "History wasn't saved. Copy the text before closing.")}
       </div>}
-      {/* Tail pointing at the recognized region. */}
-      <div
-        style={{
-          position: "absolute",
-          [tailAbove ? "bottom" : "top"]: -5,
-          left: tipX - 6,
-          width: 12,
-          height: 12,
-          background: "rgba(8, 8, 8, 0.96)",
-          transform: "rotate(45deg)",
-          borderRadius: 2,
-          zIndex: 0,
-        }}
-      />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ display: "flex", flexShrink: 0, justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             style={{
@@ -1581,6 +1578,7 @@ function OcrPanel(props: {
         </button>
       </div>
       <div
+        ref={textRef}
         role="region"
         aria-label={t("Recognized Text")}
         tabIndex={0}
@@ -1589,7 +1587,8 @@ function OcrPanel(props: {
           color: "#0a0a0a",
           borderRadius: 11,
           padding: "12px 14px",
-          minHeight: 96,
+          minHeight: Math.min(96, Math.max(0, maxHeight - 160)),
+          flex: "1 1 auto",
           maxHeight: 150,
           boxSizing: "border-box",
           overflow: "auto",
@@ -1610,6 +1609,7 @@ function OcrPanel(props: {
         disabled={!text}
         style={{
           minHeight: 38,
+          flexShrink: 0,
           borderRadius: 10,
           alignSelf: "flex-end",
           minWidth: 112,
@@ -1630,6 +1630,7 @@ function OcrPanel(props: {
 export function RecordOptionsPanel(props: {
   anchor: Rect;
   bounds: Rect;
+  modeSelectorBounds?: Rect | null;
   options: RecordingOptions;
   micSupported: boolean;
   systemAudioSupported: boolean;
@@ -1644,6 +1645,7 @@ export function RecordOptionsPanel(props: {
   const {
     anchor,
     bounds,
+    modeSelectorBounds,
     options,
     micSupported,
     systemAudioSupported,
@@ -1656,19 +1658,24 @@ export function RecordOptionsPanel(props: {
     onCancel,
   } = props;
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState(0);
+  const measurePanel = () => {
+    const element = panelRef.current;
+    if (!element) return;
+    const scroll = scrollRef.current;
+    const hiddenContent = scroll ? Math.max(0, scroll.scrollHeight - scroll.clientHeight) : 0;
+    const height = Math.ceil(element.getBoundingClientRect().height + hiddenContent);
+    setMeasuredHeight(current => current === height ? current : height);
+  };
+  useLayoutEffect(measurePanel);
   useLayoutEffect(() => {
     const element = panelRef.current;
     if (!element) return;
-    const measure = () => {
-      const height = Math.ceil(element.getBoundingClientRect().height);
-      setMeasuredHeight((current) => current === height ? current : height);
-    };
-    // Measure before the first paint, then follow wrapping, locale changes,
-    // microphone status, and format changes without estimating row heights.
-    measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(measurePanel);
     observer.observe(element);
+    const content = scrollRef.current?.firstElementChild;
+    if (content) observer.observe(content);
     return () => observer.disconnect();
   }, []);
   const gifOutput = options.outputFormat === "gif";
@@ -1684,30 +1691,8 @@ export function RecordOptionsPanel(props: {
     if (key === "showsCursor" && !next.showsCursor) next.highlightsClicks = false;
     onChange(next);
   };
-  // Keep the existing below/above placement preference, using the rendered
-  // height: platform notices and translated labels can add wrapped lines.
-  const margin = 8;
-  const panelWidth = Math.min(360, Math.max(0, bounds.width - margin * 2));
-  const maxHeight = Math.max(0, bounds.height - margin * 2);
-  const panelHeight = Math.min(measuredHeight, maxHeight);
-  const maxTop = Math.max(margin, bounds.height - panelHeight - margin);
-  const centeredTop = Math.max(margin, Math.min(maxTop, bounds.height / 2 - panelHeight / 2 + 30));
-  // Keep a small preference for hugging the selection when it's small, so
-  // the panel feels attached; fall back to the centered position for big
-  // selections.
-  const below = anchor.y + anchor.height + 10;
-  const above = anchor.y - panelHeight - 10 - (sizeControlsOpen ? 38 : 0);
-  let top: number;
-  if (anchor.height > bounds.height - 240 || anchor.width > bounds.width - 240) {
-    top = centeredTop;
-  } else {
-    const preferred = below + panelHeight + margin > bounds.height ? above : below;
-    top = Math.min(Math.max(margin, preferred), maxTop);
-  }
-  const centerX = anchor.x + anchor.width / 2 - panelWidth / 2;
-  const left = Math.min(
-    Math.max(margin, centerX),
-    Math.max(margin, bounds.width - panelWidth - margin),
+  const { left, top, width: panelWidth, maxHeight } = capturePanelLayout(
+    anchor, bounds, { width: 360, height: measuredHeight }, modeSelectorBounds, sizeControlsOpen,
   );
   return (
     <div
@@ -1718,6 +1703,7 @@ export function RecordOptionsPanel(props: {
         position: "absolute",
         left,
         top,
+        zIndex: 8,
         padding: 14,
         width: panelWidth,
         maxHeight,
@@ -1730,7 +1716,7 @@ export function RecordOptionsPanel(props: {
         boxShadow: "0 16px 42px rgba(0,0,0,0.22)",
       }}
     >
-      <div style={{ minHeight: 0, flex: "1 1 auto", overflowY: "auto", overflowX: "hidden" }}>
+      <div ref={scrollRef} style={{ minHeight: 0, flex: "1 1 auto", overflowY: "auto", overflowX: "hidden" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span

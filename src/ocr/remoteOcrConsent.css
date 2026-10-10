@@ -11,24 +11,6 @@
   box-shadow: none;
 }
 
-.kiri-remote-consent__tail {
-  position: absolute;
-  top: -6px;
-  left: calc(50% - 7px);
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  background: rgba(8, 8, 8, 0.96);
-  transform: rotate(45deg);
-  box-shadow: none;
-}
-
-.kiri-remote-consent__tail[data-above] {
-  top: auto;
-  bottom: -6px;
-  box-shadow: none;
-}
-
 .kiri-remote-consent__header {
   display: flex;
   align-items: flex-start;

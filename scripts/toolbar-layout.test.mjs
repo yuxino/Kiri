@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { captureToolbarPosition } from "../src/windows/toolbar-layout.js";
+import { capturePanelLayout, captureToolbarPosition } from "../src/windows/toolbar-layout.js";
 import { createLibraryHarness, nodes } from "./helpers/library-render-harness.mjs";
 
 const overlaps = (position, size, rect) => position.left < rect.x + rect.width &&
@@ -157,5 +157,116 @@ test("only visible HUD rows receive pointer input, with measurement updated when
   assert.ok(root.props.style.top >= props.selection.y + 10);
   assert.ok(root.props.style.top + height <= props.selection.y + props.selection.height - 10);
   assert.ok(!nodes(tree).some(node => node?.props?.children?.includes("callout-controls")), "changing to a label must remove stale callout settings");
+  component.unmount();
+});
+
+test("the installed X11 recording region keeps MP4 and its footer clear of the Screenshot mode button", () => {
+  const selection = { x: 300, y: 10, width: 680, height: 380 };
+  const bounds = { x: 0, y: 0, width: 1280, height: 800 };
+  const mode = { x: 492, y: 44, width: 296, height: 44 };
+  const natural = { width: 360, height: 460 };
+  const layout = capturePanelLayout(selection, bounds, natural, mode);
+  assert.equal(layout.top, 400);
+  assert.equal(layout.maxHeight, 392);
+  assert.ok(!overlaps(layout, { width: layout.width, height: layout.maxHeight }, mode));
+  assert.ok(layout.top + layout.maxHeight <= 792, "scrolling content must leave Start/Cancel on screen");
+  const mp4 = { left: layout.left + 18, top: layout.top + 56 };
+  assert.ok(!overlaps(mp4, { width: 158, height: 32 }, mode), "MP4 must not click the Screenshot selector");
+});
+
+test("scrollable Record and OCR panels stay clear of wrapped and dragged modes at every edge", () => {
+  for (const [width, height] of [[320, 480], [480, 640], [1280, 800]]) {
+    const bounds = { x: 0, y: 0, width, height };
+    const modeWidth = Math.min(304, width - 16), modeHeight = width === 320 ? 80 : 44;
+    for (const mode of [
+      { x: (width - modeWidth) / 2, y: 44, width: modeWidth, height: modeHeight },
+      { x: 8, y: height / 2 - modeHeight / 2, width: modeWidth, height: modeHeight },
+      { x: width - modeWidth - 8, y: height - modeHeight - 8, width: modeWidth, height: modeHeight },
+    ]) for (const selection of [bounds,
+      { x: 0, y: 0, width: 100, height: 120 },
+      { x: width - 100, y: height - 120, width: 100, height: 120 },
+    ]) for (const natural of [{ width: 360, height: 460 }, { width: 368, height: 204 }, { width: 440, height: 740 }]) {
+      const p = capturePanelLayout(selection, bounds, natural, mode);
+      const size = { width: p.width, height: Math.min(natural.height, p.maxHeight) };
+      assert.ok(p.left >= 8 && p.left + size.width <= width - 8);
+      assert.ok(p.top >= 8 && p.top + size.height <= height - 8);
+      assert.ok(!overlaps(p, size, mode), JSON.stringify({ bounds, mode, selection, natural, p }));
+      assert.ok(p.maxHeight >= 160, "constrained content must still leave a usable reading area and actions");
+    }
+  }
+});
+
+test("panel placement measures hidden recording content while keeping the footer outside its scroll area", () => {
+  const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
+  const panel = source.slice(source.indexOf("export function RecordOptionsPanel("), source.indexOf("interface ToolbarProps"));
+  let naturalHeight = 460, style;
+  const measured = { getBoundingClientRect() { return { height: Math.min(naturalHeight, style.maxHeight) }; } };
+  const scroll = { get scrollHeight() { return naturalHeight - 76; },
+    get clientHeight() { return Math.max(0, Math.min(naturalHeight, style.maxHeight) - 76); }, firstElementChild: {} };
+  const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
+    import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
+    const ToolButton=()=>null, captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()};
+    ${panel}`, {
+    attachRef(node) {
+      if (node.props.ref && node.props.className === "kiri-hud") { style = node.props.style; node.props.ref.current = measured; }
+      if (node.props.ref && node.props.style?.overflowY === "auto") node.props.ref.current = scroll;
+    },
+    globals: { ResizeObserver: class { observe() {} disconnect() {} } },
+  });
+  const props = { anchor: { x: 300, y: 10, width: 680, height: 380 }, bounds: { x: 0, y: 0, width: 1280, height: 800 },
+    modeSelectorBounds: { x: 492, y: 44, width: 296, height: 44 }, options: { outputFormat: "mp4" }, sizeControlsOpen: false };
+  const component = harness.mount("RecordOptionsPanel", props);
+  let tree = component.render();
+  let root = nodes(tree).find(node => node?.props?.className === "kiri-hud");
+  assert.equal(root.props.style.top, 400);
+  assert.equal(root.props.style.maxHeight, 392);
+  naturalHeight = 740;
+  tree = component.render({ ...props, bounds: { x: 0, y: 0, width: 320, height: 480 },
+    anchor: { x: 0, y: 0, width: 320, height: 480 }, modeSelectorBounds: { x: 8, y: 44, width: 304, height: 80 } });
+  root = nodes(tree).find(node => node?.props?.className === "kiri-hud");
+  assert.equal(root.props.style.width, 304);
+  assert.ok(root.props.style.top >= 134);
+  assert.ok(root.props.style.top + root.props.style.maxHeight <= 472);
+  const footer = nodes(tree).find(node => node?.props?.style?.flexShrink === 0 && node.props.style.display === "flex");
+  assert.ok(footer, "Start/Cancel must remain in the fixed footer");
+  assert.ok(!nodes(footer).some(node => node?.props?.ref?.current === scroll));
+  component.unmount();
+});
+
+test("remote OCR measures wrapped content without hiding the mode selector or sending on layout changes", () => {
+  const source = readFileSync(new URL("../src/ocr/RemoteOcrConsent.tsx", import.meta.url), "utf8");
+  const panel = source.slice(source.indexOf("export function RemoteOcrConsent("));
+  let naturalHeight = 600, style, sends = 0, local = 0;
+  const measured = { children: [], getBoundingClientRect() { return { height: Math.min(naturalHeight, style.maxHeight) }; },
+    get scrollHeight() { return naturalHeight - 2; }, get clientHeight() { return Math.min(naturalHeight, style.maxHeight) - 2; } };
+  const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
+    import {t,fmt} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
+    const useDialogFocusTrap=()=>useRef(null), ocrProviderLabel=value=>value,
+      captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${panel}`, {
+    attachRef(node) {
+      if (node.props.ref && node.props.className === "kiri-hud kiri-remote-consent") { style=node.props.style; node.props.ref.current=measured; }
+    },
+    globals: { ResizeObserver: class { observe() {} disconnect() {} } },
+  });
+  const props = { anchor: { x: 0, y: 0, width: 320, height: 480 }, bounds: { x: 0, y: 0, width: 320, height: 480 },
+    modeSelectorBounds: { x: 8, y: 44, width: 304, height: 80 },
+    prepared: { profile: { name: "A long profile", provider: "openai", origin: "https://fixture.invalid", model: "OCR" },
+      imageWidth: 320, imageHeight: 480, byteLength: 2048 }, failed: false,
+    onSend: () => sends++, onUseLocal: () => local++, onCancel() {} };
+  const component = harness.mount("RemoteOcrConsent", props);
+  let tree = component.render();
+  let root = nodes(tree).find(node => node?.props?.role === "dialog");
+  assert.equal(root.props.style.width, 304);
+  assert.ok(root.props.style.top >= 134 && root.props.style.top + root.props.style.maxHeight <= 472);
+  naturalHeight = 740;
+  const mode = { x: 8, y: 200, width: 304, height: 80 };
+  tree = component.render({ ...props, failed: true, modeSelectorBounds: mode });
+  root = nodes(tree).find(node => node?.props?.role === "dialog");
+  assert.ok(!overlaps(root.props.style, { width: 304, height: root.props.style.maxHeight }, mode));
+  assert.equal(sends, 0);
+  assert.equal(local, 0);
+  const send = nodes(tree).find(node => node?.props?.className?.includes("kiri-remote-consent__send"));
+  send.props.onClick();
+  assert.equal(sends, 1, "remote OCR remains an explicit button action");
   component.unmount();
 });

@@ -61,3 +61,47 @@ export function captureToolbarPosition(selection, bounds, size, sizeControlsOpen
   ];
   return fallback.find(clearMode) ?? fallback[0];
 }
+
+/** Scrollable panels keep their actions visible in the space left by both HUDs. */
+export function capturePanelLayout(selection, bounds, size, modeSelector = null, sizeControlsOpen = false) {
+  const margin = 8;
+  const gap = 10;
+  const screen = { x: bounds.x + margin, y: bounds.y + margin,
+    width: Math.max(0, bounds.width - margin * 2), height: Math.max(0, bounds.height - margin * 2) };
+  const width = Math.min(size.width, screen.width);
+  const intersect = (a, b) => {
+    const x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
+    return { x, y, width: Math.max(0, Math.min(a.x + a.width, b.x + b.width) - x),
+      height: Math.max(0, Math.min(a.y + a.height, b.y + b.height) - y) };
+  };
+  let free = [screen];
+  if (modeSelector) {
+    const obstacle = { x: modeSelector.x - gap, y: modeSelector.y - gap,
+      width: modeSelector.width + gap * 2, height: modeSelector.height + gap * 2 };
+    free = [
+      { ...screen, width: Math.max(0, obstacle.x - screen.x) },
+      { ...screen, x: obstacle.x + obstacle.width,
+        width: Math.max(0, screen.x + screen.width - obstacle.x - obstacle.width) },
+      { ...screen, height: Math.max(0, obstacle.y - screen.y) },
+      { ...screen, y: obstacle.y + obstacle.height,
+        height: Math.max(0, screen.y + screen.height - obstacle.y - obstacle.height) },
+    ].map(rect => intersect(rect, screen));
+  }
+  const below = selection.y + selection.height + gap;
+  const above = selection.y - gap - (sizeControlsOpen ? 38 : 0);
+  const outside = [
+    { ...screen, y: below, height: Math.max(0, screen.y + screen.height - below) },
+    { ...screen, height: Math.max(0, above - screen.y) },
+    { ...screen, x: selection.x + selection.width + gap,
+      width: Math.max(0, screen.x + screen.width - selection.x - selection.width - gap) },
+    { ...screen, width: Math.max(0, selection.x - gap - screen.x) },
+  ].flatMap(rect => free.map(space => intersect(rect, space)))
+    .filter(rect => rect.width >= width && rect.height >= Math.min(size.height || 160, 160));
+  // Prefer scrolling next to the selection to covering its border with a tall
+  // panel. Full-display selections instead use the largest mode-free space.
+  const available = outside.length ? outside : free.filter(rect => rect.width >= width);
+  const maxHeight = Math.max(0, ...available.map(rect => rect.height));
+  const height = Math.min(size.height, maxHeight);
+  return { ...captureToolbarPosition(selection, bounds, { width, height }, sizeControlsOpen, modeSelector),
+    width, maxHeight };
+}

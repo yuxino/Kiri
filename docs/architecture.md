@@ -184,6 +184,13 @@ primary display.
 
 ## Screenshot editing flow
 
+Capture HUD placement uses measured panel and mode-selector bounds. The
+screenshot toolbar's visible rows receive pointer input while empty layout
+space remains usable by the canvas. Recording and OCR panels avoid the movable
+mode selector and stay inside the display; recording options scroll separately
+from the fixed Start/Cancel footer. Layout changes never initiate remote OCR.
+See [ADR 0087](adr/0087-capture-hud-layout.md).
+
 The flattened PNG remains the shareable asset. A marked screenshot also owns a
 versioned document in `Annotations/<uuid>.json` and an immutable clean source in
 `Annotations/<uuid>.source.png`. Legacy and unannotated images have no project
