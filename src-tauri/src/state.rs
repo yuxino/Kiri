@@ -181,6 +181,7 @@ pub struct PendingCaptureCompletion {
     pub session: CaptureSession,
     pub preview: CompletionPreviewDto,
     pub monitor: Option<Monitor>,
+    pub pin_on_top: bool,
 }
 
 #[derive(Debug, Clone)]

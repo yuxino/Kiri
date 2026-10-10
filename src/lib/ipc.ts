@@ -327,6 +327,7 @@ export const api = {
       selection: { x: number; y: number; width: number; height: number };
       document: AnnotationDocumentV1;
     },
+    pinOnTop = false,
   ) => {
     const token = await invoke<string>("prepare_capture_annotation", {
       request: {
@@ -335,7 +336,10 @@ export const api = {
       },
     });
     return invoke<void>("confirm_capture", png, {
-      headers: { "x-kiri-annotation-token": token },
+      headers: {
+        "x-kiri-annotation-token": token,
+        "x-kiri-pin-on-top": String(pinOnTop),
+      },
     });
   },
   copyText: (text: string) => invoke<void>("copy_text", { text }),
