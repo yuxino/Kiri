@@ -200,6 +200,39 @@ test("double clicking another mark after reflow edits that mark without restorin
   assert.deepEqual(h.changes, []);
 });
 
+for (const mark of [
+  {...text, id: 83, text: "plain text", rect: {x: 200, y: 60, width: 100, height: 40}},
+  {...text, id: 84, text: "direction label", labelDirection: "left", rect: {x: 200, y: 60, width: 100, height: 40}},
+]) {
+  test(`${mark.labelDirection ? "direction label" : "plain text"} first double click retains live-frame editing after inspector reflow`, async () => {
+    let frame = initialFrame;
+    const selections = [];
+    const h = annotation(documentWith([mark]), {boundingRect: () => frame,
+      onSelectionInfo: selected => selections.push(selected?.id ?? null)});
+    const resize = next => {
+      frame = next;
+      h.component.render({...h.props, viewSize: {width: next.width, height: next.height}});
+    };
+    h.pointer("onPointerDown", 250, 80, {detail: 0});
+    assert.equal(selections.at(-1), mark.id);
+    resize(inspectorFrame);
+    h.pointer("onPointerUp", 250, 80, {detail: 0});
+    h.mouse("onClick", 250, 80, 1);
+    h.pointer("onPointerDown", 250, 80, {detail: 0});
+    assert.equal(selections.at(-1), null, "the second click misses the mark in the inspector frame");
+    resize(initialFrame);
+    h.pointer("onPointerUp", 250, 80, {detail: 0});
+    h.mouse("onClick", 250, 80, 2);
+    h.mouse("onDoubleClick", 250, 80, 2);
+    const editor = nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
+    assert.equal(editor?.props.editing.id, mark.id);
+    assert.equal(editor.props.editing.callout, undefined);
+    assert.equal(editor.props.editing.labelDirection, mark.labelDirection);
+    assert.deepEqual(h.changes, []);
+    assert.deepEqual((await h.ref.current.exportResult()).document.marks, [mark]);
+  });
+}
+
 test("a dragged second click never restores the previous callout after stage reflow", () => {
   const h = reflowClick();
   h.pointer("onPointerDown", 250, 80, {detail: 0});

@@ -1566,6 +1566,14 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
                   return;
                 }
               }
+              // Plain text/labels retain their existing live-layout editing
+              // path when selection closes the inspector between clicks.
+              // An actual second-click hit above always takes precedence.
+              const liveIndex = markIndexAt(history.elements, toPoint(event.nativeEvent), hitTestScale);
+              if (liveIndex !== null && history.elements[liveIndex].kind === "text") {
+                editText(liveIndex);
+                return;
+              }
               if (blankDoubleClickRef.current) onFinishOnBlankDoubleClick?.();
             }
           }}
