@@ -1,0 +1,61 @@
+{
+  "source": {
+    "numberedBase": "feef86ca03ebaf86809b20bdba672488f2752b59",
+    "srcTree": "da7311168e3846c3b85f412ac592ebbda8316ce2",
+    "harnessBlob": "9e0fb3889806750ca2c0dd7450e41030b6920624"
+  },
+  "initialReopenFocus": false,
+  "reopenedEdit": {
+    "before": {
+      "text": "点击圆点切换方向\n说明文字保持原位",
+      "focus": true,
+      "rect": {
+        "x": 240,
+        "y": 145.5,
+        "width": 119.9970703125,
+        "height": 42.3720703125
+      }
+    },
+    "after": {
+      "text": "点击圆点切换方向\n说明文字保持原位",
+      "focus": true,
+      "rect": {
+        "x": 240,
+        "y": 145.5,
+        "width": 119.9970703125,
+        "height": 42.3720703125
+      }
+    }
+  },
+  "enterAndSpaceFlipOnce": true,
+  "activationBubbles": 0,
+  "exportedBytes": 18095,
+  "document": {
+    "schemaVersion": 1,
+    "canvas": {
+      "width": 640,
+      "height": 360
+    },
+    "sourcePixels": {
+      "width": 640,
+      "height": 360
+    },
+    "marks": [
+      {
+        "kind": "text",
+        "id": 1791619346978.729,
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "right"
+      }
+    ]
+  }
+}

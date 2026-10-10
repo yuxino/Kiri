@@ -1,0 +1,423 @@
+{
+  "source": {
+    "baseCommit": "b39b65d87450379046be6bcf1be5ee60af9c58e4",
+    "srcTree": "68de77629214afbab3d24973f72fd77540f2a464",
+    "harnessBlob": "9e0fb3889806750ca2c0dd7450e41030b6920624"
+  },
+  "generatedAt": "2026-10-10T08:49:20.678Z",
+  "results": [
+    {
+      "lang": "en",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "Pin Screenshot on Top",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622120080.4956,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    },
+    {
+      "lang": "zh-Hans",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "置顶截图",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622127597.9429,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    },
+    {
+      "lang": "zh-Hant",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "置頂截圖",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622133354.8047,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    },
+    {
+      "lang": "ja",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "スクリーンショットを最前面に固定",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622139225.575,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    },
+    {
+      "lang": "de",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "Screenshot im Vordergrund anheften",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622146887.3416,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    },
+    {
+      "lang": "ko",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "스크린샷을 항상 위에 고정",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622151208.9077,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    },
+    {
+      "lang": "fr",
+      "editingDotPreservesFocusAndRect": true,
+      "committedFlipPreservesRect": true,
+      "undoRedo": true,
+      "viewport": {
+        "width": 480,
+        "height": 640,
+        "dpr": 2
+      },
+      "pinPresent": true,
+      "pinLabel": "Épingler la capture au premier plan",
+      "pinRect": {
+        "x": 246.5,
+        "y": 319,
+        "width": 32,
+        "height": 32
+      },
+      "huds": [
+        {
+          "x": 32,
+          "y": 277,
+          "width": 416,
+          "height": 81
+        },
+        {
+          "x": 110,
+          "y": 364,
+          "width": 260,
+          "height": 73
+        }
+      ],
+      "allWithinViewport": true,
+      "mark": {
+        "id": 1791622157873.247,
+        "kind": "text",
+        "text": "点击圆点切换方向\n说明文字保持原位",
+        "rect": {
+          "x": 333.3333333333333,
+          "y": 188.88888888888889,
+          "width": 151.11111111111111,
+          "height": 45
+        },
+        "color": "cherry",
+        "background": "transparent",
+        "fontSize": 18,
+        "labelDirection": "left"
+      },
+      "controlCount": 25,
+      "controlBounds": {
+        "left": 48.5,
+        "top": 155.6875,
+        "right": 431.5,
+        "bottom": 426
+      },
+      "directionButtonsRemoved": true,
+      "helperTextRemoved": true,
+      "inspectorControlCount": 9
+    }
+  ]
+}

@@ -22,11 +22,7 @@
 .kiri-callout-style-button:hover { background:#333; color:#fff; }
 .kiri-callout-style-preview { width:18px; height:18px; box-sizing:border-box; border:1.5px solid currentColor; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:600; }
 .kiri-callout-style-preview--filled { color:#171717; background:#eee; border-color:#eee; }
-.kiri-callout-description { display:flex; flex-direction:column; gap:5px; color:#bbb; }
-.kiri-callout-description textarea { resize:vertical; min-height:46px; max-height:120px; width:100%; padding:7px 9px; box-sizing:border-box; border:1px solid #444; border-radius:5px; color:#fff; background:#101010; font:inherit; font-size:12px; line-height:1.5; }
-.kiri-callout-description textarea::placeholder { color:#777; }
-.kiri-callout-description textarea:disabled { opacity:.6; resize:none; }
-.kiri-callout-controls input:focus-visible, .kiri-callout-controls textarea:focus-visible, .kiri-callout-controls button:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+.kiri-callout-controls input:focus-visible, .kiri-callout-controls button:focus-visible { outline:2px solid #fff; outline-offset:2px; }
 .kiri-callout-slider { display:flex; flex:1; align-items:center; gap:8px; min-width:150px; }
 .kiri-callout-slider input { flex:1; min-width:50px; width:70px; }
 .kiri-callout-slider output { width:24px; text-align:right; font-variant-numeric:tabular-nums; }
@@ -37,5 +33,4 @@
   --swatch: #fff;
 }
 .kiri-callout-swatch:hover { border-color:#fff; }
-.kiri-callout-colors span { flex-basis:100%; color:#999; font-size:10px; line-height:1.4; }
 .kiri-editor-callout-row { display:flex; justify-content:center; max-height:38vh; overflow:auto; flex-shrink:0; background:#101010; border-bottom:1px solid #383838; padding:8px 10px; }

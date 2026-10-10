@@ -76,6 +76,14 @@ pub enum TextBackground {
     Dark,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LabelDirection {
+    #[default]
+    Left,
+    Right,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MosaicIntensity {
@@ -114,6 +122,7 @@ pub enum CalloutStyle {
 pub struct AnnotationAppearance {
     pub color_preset: AnnotationColor,
     pub text_background_style: TextBackground,
+    pub label_direction: LabelDirection,
     pub mosaic_intensity: MosaicIntensity,
     pub mosaic_style: MosaicStyle,
     pub pen_width: u16,
@@ -129,6 +138,7 @@ impl Default for AnnotationAppearance {
         Self {
             color_preset: AnnotationColor::Cherry,
             text_background_style: TextBackground::Transparent,
+            label_direction: LabelDirection::Left,
             mosaic_intensity: MosaicIntensity::Standard,
             mosaic_style: MosaicStyle::Pixel,
             pen_width: 3,
@@ -159,6 +169,7 @@ impl AnnotationAppearance {
 pub struct AnnotationAppearancePatch {
     pub color_preset: Option<AnnotationColor>,
     pub text_background_style: Option<TextBackground>,
+    pub label_direction: Option<LabelDirection>,
     pub mosaic_intensity: Option<MosaicIntensity>,
     pub mosaic_style: Option<MosaicStyle>,
     pub pen_width: Option<u16>,
@@ -173,6 +184,7 @@ impl AnnotationAppearancePatch {
     pub fn apply(self, mut saved: AnnotationAppearance) -> AnnotationAppearance {
         if let Some(value) = self.color_preset { saved.color_preset = value; }
         if let Some(value) = self.text_background_style { saved.text_background_style = value; }
+        if let Some(value) = self.label_direction { saved.label_direction = value; }
         if let Some(value) = self.mosaic_intensity { saved.mosaic_intensity = value; }
         if let Some(value) = self.mosaic_style { saved.mosaic_style = value; }
         if let Some(value) = self.pen_width { saved.pen_width = value; }
@@ -237,6 +249,8 @@ pub enum AnnotationMark {
         color: AnnotationColor,
         background: TextBackground,
         font_size: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label_direction: Option<LabelDirection>,
     },
     Mosaic {
         id: f64,
@@ -554,6 +568,21 @@ mod tests {
         assert_eq!(saved.callout_size, 72);
         assert_eq!(saved.callout_style, CalloutStyle::Outline);
         assert_eq!(saved.text_font_size, 24);
+    }
+
+    #[test]
+    fn label_direction_roundtrips_without_changing_legacy_text_or_preferences() {
+        let mark = r#"{"kind":"text","id":1,"text":"Label","rect":{"x":30,"y":30,"width":40,"height":20},"color":"cherry","background":"transparent","fontSize":18,"labelDirection":"right"}"#;
+        let document = AnnotationDocument::from_json(&document_json(mark)).unwrap();
+        let encoded = String::from_utf8(document.to_json().unwrap()).unwrap();
+        assert!(encoded.contains(r#""labelDirection":"right""#));
+        assert!(AnnotationDocument::from_json(&document_json(&mark.replace("right", "up"))).is_err());
+        let legacy = mark.replace(r#","labelDirection":"right""#, "");
+        assert!(AnnotationDocument::from_json(&document_json(&legacy)).is_ok());
+        let old: AnnotationAppearance = serde_json::from_str(r#"{"textFontSize":24}"#).unwrap();
+        assert_eq!(old.label_direction, LabelDirection::Left);
+        let patch: AnnotationAppearancePatch = serde_json::from_str(r#"{"labelDirection":"right"}"#).unwrap();
+        assert_eq!(patch.apply(old).label_direction, LabelDirection::Right);
     }
 
     #[test]

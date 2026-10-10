@@ -184,6 +184,13 @@ primary display.
 
 ## Screenshot editing flow
 
+Capture HUD placement uses measured panel and mode-selector bounds. The
+screenshot toolbar's visible rows receive pointer input while empty layout
+space remains usable by the canvas. Recording and OCR panels avoid the movable
+mode selector and stay inside the display; recording options scroll separately
+from the fixed Start/Cancel footer. Layout changes never initiate remote OCR.
+See [ADR 0087](adr/0087-capture-hud-layout.md).
+
 The flattened PNG remains the shareable asset. A marked screenshot also owns a
 versioned document in `Annotations/<uuid>.json` and an immutable clean source in
 `Annotations/<uuid>.source.png`. Legacy and unannotated images have no project
@@ -228,12 +235,21 @@ one number, optional multiline description, badge center and label rectangle;
 its handles move the badge and label independently. Both parts translate when
 cropped and use the common preview/export renderer. Badge style and size join
 the local appearance preference; note content stays in the editable document.
-Like normal text editing (ADR 0060), the description textarea owns its live
-value, composition, caret and native history. Canvas selection notifications
-observe edits without writing text back into that editor. Canvas Undo/Redo and
-document revision loads clear selection, so picking a callout initializes a
-fresh textarea from the document, keyed by mark ID.
-See ADR 0083.
+Descriptions are edited directly in a transparent canvas textarea; the inspector
+contains number, style, size and color controls. Like normal text editing (ADR
+0060), the textarea owns its live value, composition, caret and native history.
+A callout draft keeps the badge and connector visible while the textarea presents
+the description. Clicking another canvas location, switching tools or exporting
+commits that draft as one edit to the existing callout. Return adds a line;
+Cmd/Ctrl+Return commits, and Escape cancels the draft without removing its badge.
+The canvas grip moves the description independently. The V1 document fields and
+crop/export boundary remain unchanged. See ADRs 0083 and 0085.
+
+Screenshot label bubbles share the text mark and inline editor, with an optional
+`labelDirection` field. The text rect remains fixed when its dot is clicked;
+only the tip and dot change sides. Shared document geometry drives canvas/export,
+selection bounds and the accessible dot control. New labels reserve room for
+both sides, while crops keep the intersecting body, tip or dot. See ADR 0084.
 
 ## Managed library flow
 

@@ -1,15 +1,18 @@
 import { KiriIcon } from "../components/KiriIcons";
+import { useLayoutEffect, useState } from "react";
 import { fmt, t } from "../i18n";
 import type { PreparedOcrRequestDto } from "../lib/ipc";
 import type { Rect } from "../annotation/geom";
 import { useDialogFocusTrap } from "../settings/useDialogFocusTrap";
 import { ocrProviderLabel } from "./providerLabel";
+import { capturePanelLayout } from "../windows/toolbar-layout.js";
 import "./remoteOcrConsent.css";
 
 interface RemoteOcrConsentProps {
   prepared: PreparedOcrRequestDto;
   anchor: Rect;
   bounds: Rect;
+  modeSelectorBounds?: Rect | null;
   failed: boolean;
   onCancel(): void;
   onUseLocal(): void;
@@ -20,27 +23,34 @@ export function RemoteOcrConsent({
   prepared,
   anchor,
   bounds,
+  modeSelectorBounds,
   failed,
   onCancel,
   onUseLocal,
   onSend,
 }: RemoteOcrConsentProps) {
   const dialogRef = useDialogFocusTrap<HTMLElement>();
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const measurePanel = () => {
+    const element = dialogRef.current;
+    if (!element) return;
+    const height = Math.ceil(element.getBoundingClientRect().height +
+      Math.max(0, element.scrollHeight - element.clientHeight));
+    setMeasuredHeight(current => current === height ? current : height);
+  };
+  useLayoutEffect(measurePanel);
+  useLayoutEffect(() => {
+    const element = dialogRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(measurePanel);
+    observer.observe(element);
+    for (const child of element.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, []);
   const profile = prepared.profile;
   if (!profile) return null;
-
-  const margin = 8;
-  const width = Math.min(440, Math.max(320, bounds.width - margin * 2));
-  const height = failed ? 350 : 320;
-  const maxTop = Math.max(margin, bounds.height - height - margin);
-  const below = anchor.y + anchor.height + 10;
-  const above = anchor.y - height - 10;
-  const belowFits = below + height + margin <= bounds.height;
-  const top = Math.min(Math.max(margin, belowFits ? below : above), maxTop);
-  const centerX = anchor.x + anchor.width / 2 - width / 2;
-  const left = Math.min(
-    Math.max(margin, centerX),
-    Math.max(margin, bounds.width - width - margin),
+  const { left, top, width, maxHeight } = capturePanelLayout(
+    anchor, bounds, { width: 440, height: measuredHeight }, modeSelectorBounds,
   );
 
   return (
@@ -51,14 +61,8 @@ export function RemoteOcrConsent({
       aria-modal="true"
       aria-labelledby="remote-ocr-consent-title"
       onPointerDown={(event) => event.stopPropagation()}
-      style={{ left, top, width, maxHeight: Math.max(240, bounds.height - margin * 2) }}
+      style={{ left, top, width, maxHeight }}
     >
-      <div
-        className="kiri-remote-consent__tail"
-        data-above={!belowFits || undefined}
-        aria-hidden="true"
-      />
-
       <div className="kiri-remote-consent__header">
         <div>
           <span className="kiri-remote-consent__warning">
