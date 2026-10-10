@@ -149,3 +149,17 @@ steps, close protection and Save As. All 356 frontend checks, build, Cargo
 check and diff checks passed. The local Rust result remained 333 passed,
 one failed at the previously recorded contrast assertion, and one ignored.
 No fixed-path native app was installed or restarted for this repair.
+
+## Integration with direct screenshot pinning
+
+Merged `origin/main` at `1c7357c` after PR #123, preserving direct Pin,
+hover color copying, ADR 0081/0082/0083 and the `58a0858` initial-focus repair.
+No merge conflicts occurred. All 728 keys and shared values remain intact in
+each of the seven language dictionaries. The isolated annotation harness now
+supplies the toolbar's new Pin callback; it does not request a native pin.
+
+All 362 frontend checks, frontend build, Cargo check, harness-inclusive
+TypeScript check and diff check passed. Local Rust still reports 333 passed,
+the same native contrast assertion failure, and one ignored. Current-head CI
+is tracked on PR #125. The shared native app remains owned by the coordinated
+combination acceptance; this synchronization did not install or restart it.
