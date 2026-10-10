@@ -1492,8 +1492,12 @@ function TextEditor(props: {
     // Creation happens on pointerdown. Focus after its native mouse default
     // action, which otherwise returns WebKit focus to the underlying canvas.
     const frame = requestAnimationFrame(() => {
-      ref.current?.focus();
-      ref.current?.select();
+      const textarea = ref.current;
+      // Typing or clicking may already focus this editor before the frame.
+      // Preserve that input and selection instead of selecting its new text.
+      if (!textarea || textarea.ownerDocument.activeElement === textarea) return;
+      textarea.focus();
+      textarea.select();
     });
     return () => cancelAnimationFrame(frame);
   }, []);

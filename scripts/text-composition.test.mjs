@@ -86,6 +86,63 @@ test("Return commits before finishing capture; a saved-image editor only commits
   handleTextEditorKey(key(), image, true);
   assert.deepEqual(image.calls, ["commit"]);
 });
+
+function textFocusFrame(textarea) {
+  const filename = "AnnotationCanvas.tsx";
+  const source = readFileSync(new URL(`../src/annotation/${filename}`, import.meta.url), "utf8");
+  const tree = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let editor, callback;
+  function findEditor(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "TextEditor") editor = node;
+    ts.forEachChild(node, findEditor);
+  }
+  findEditor(tree);
+  assert.ok(editor);
+  function findFrame(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(tree) === "requestAnimationFrame") {
+      assert.equal(callback, undefined, "initial editor focus frame is unambiguous");
+      callback = node.arguments[0].getText(tree);
+    }
+    ts.forEachChild(node, findFrame);
+  }
+  findFrame(editor);
+  assert.ok(callback);
+  const compiled = ts.transpileModule(`const run = ${callback};`, {
+    compilerOptions: {target: ts.ScriptTarget.ES2022},
+  }).outputText;
+  return new Function("ref", `${compiled}\nreturn run;`)({current: textarea});
+}
+
+function nativeTextarea(value = "") {
+  const ownerDocument = {activeElement: null};
+  return {value, ownerDocument, selectionStart: value.length, selectionEnd: value.length,
+    focus() {ownerDocument.activeElement = this;},
+    select() {this.selectionStart = 0; this.selectionEnd = this.value.length;},
+    type(text) {
+      const start = this.selectionStart;
+      this.value = this.value.slice(0, start) + text + this.value.slice(this.selectionEnd);
+      this.selectionStart = this.selectionEnd = start + text.length;
+    },
+  };
+}
+
+test("late initial focus preserves the first typed character and multiline capture content", () => {
+  const textarea = nativeTextarea(), frame = textFocusFrame(textarea);
+  textarea.focus(); textarea.type("l");
+  frame();
+  textarea.type("ine one\nline two");
+  assert.equal(textarea.value, "line one\nline two");
+});
+
+test("late initial focus preserves a user's caret while an untouched reopened editor selects its text", () => {
+  const focused = nativeTextarea("saved text"), lateFrame = textFocusFrame(focused);
+  focused.focus(); focused.selectionStart = focused.selectionEnd = 5;
+  lateFrame(); focused.type(" edited");
+  assert.equal(focused.value, "saved edited text");
+  const untouched = nativeTextarea("saved text"), initialFrame = textFocusFrame(untouched);
+  initialFrame(); untouched.type("replacement");
+  assert.equal(untouched.value, "replacement");
+});
 test("capture-phase video save/close does not commit an active IME even with false flags", () => {
   let handler;
   const surface = { addEventListener(_, callback) { handler = callback; }, removeEventListener() {} };
