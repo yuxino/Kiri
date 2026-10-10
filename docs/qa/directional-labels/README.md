@@ -27,13 +27,20 @@ browser retesting also verified Space activation after this integration.
 
 ## Local checks and limits
 
-The branch incorporates numbered-callout merge `4225a50`, including main
-`eb3a8c9` (hover colors and Windows confirmation dispatch). Only the three
-README feature paragraphs required conflict resolution; both descriptions are
-retained. Label annotation source, rendering and styles match the previously
-validated implementation, and ADR 0084 remains intact.
+The branch incorporates numbered-callout base `58a0858`, including main
+`eb3a8c9` (hover colors and Windows confirmation dispatch). All seven language
+key sets and the paired READMEs retain the three features; ADR 0084 remains
+intact. Label geometry, rendering and styles match the previously validated
+implementation.
 
-`pnpm build`, `pnpm test:release-tools` (362 tests), `cargo check`, and
+The shared TextEditor now preserves an editor already focused before its
+initial animation frame. All 14 text/composition checks passed, including
+execution of the actual delayed focus callback against early multiline input
+and an existing caret; untouched reopened text retains its initial selection.
+This dependency merged without conflicts and leaves only the label feature
+and its tests/documentation in this stacked PR's diff.
+
+`pnpm build`, `pnpm test:release-tools` (364 tests), `cargo check`, and
 `git diff --check` passed after this integration. The complete macOS 27.0.1 Rust run had 334 passing tests,
 one ignored test and one failure in the pre-existing
 `native_annotations_follow_live_frames_and_independent_time_ranges` test at its

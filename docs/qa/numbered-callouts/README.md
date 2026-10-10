@@ -122,3 +122,30 @@ The product design is unchanged.
 No fixed-path app was installed or restarted for this branch synchronization;
 the shared installation remains owned by the coordinated integration check.
 Current-head CI is tracked on PR #125 before merge approval.
+
+## Initial text-focus timing
+
+The combined renderer [run](https://github.com/yuxino/Kiri/actions/runs/38031534672)
+at `d43f249` failed the saved-text assertion after a new capture. Its frontend
+and renderer scripts were unchanged from the preceding passing `e2b037a` run;
+the failed artifact did not record the textarea's value or saved document.
+
+A controlled replay of that artifact delayed the actual initial focus frame
+until after the first keyboard character. The callback selected the new `l`,
+so subsequent input produced `ine one\nline two`. The saved document matched
+the incorrect textarea value exactly. This reproduces a product input race
+with the same assertion failure; it does not require a late IPC response.
+
+The initial focus callback now preserves an editor that has already gained
+focus. Two executable callback regressions cover early typing, an existing
+caret and normal selection of untouched saved text. The renderer check keeps
+its saved-text assertion and also checks the complete two-line value before
+Enter and its exact equality with the exported text.
+
+On this feature branch, the same delayed-frame replay retained
+`line one\nline two` in both the editor and exported document. The entire
+image-editing renderer sequence then passed, including undo/redo, both Escape
+steps, close protection and Save As. All 356 frontend checks, build, Cargo
+check and diff checks passed. The local Rust result remained 333 passed,
+one failed at the previously recorded contrast assertion, and one ignored.
+No fixed-path native app was installed or restarted for this repair.
