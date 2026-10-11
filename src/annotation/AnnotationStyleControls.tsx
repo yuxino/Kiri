@@ -30,7 +30,8 @@ export function AnnotationStyleControls(props: {
     kind === "mosaic" ? "Mosaic" : kind === "pen" ? "Pen" : kind === "rectangle" ? "Rectangle" : kind === "arrow" ? "Arrow" : kind === "line" ? "Line" : kind === "text" ? "Text" : "Select");
   const selectedCallout = props.selected?.kind === "callout" ? props.selected : null;
   return <fieldset disabled={props.disabled} className="kiri-annotation-controls" aria-label={t("Tool options")} data-tool={kind}>
-    <div className="kiri-annotation-controls-heading"><strong>{label}</strong>{props.selected && <span>{t("Selected object")}</span>}
+    <div className="kiri-annotation-controls-heading">
+      <div className="kiri-annotation-controls-title"><strong>{label}</strong>{props.selected && <span>{t("Selected object")}</span>}</div>
       {props.selected && props.onDelete && <button type="button" className="kiri-annotation-action"
         onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
         onClick={props.onDelete}>{t("Delete annotation")}</button>}
