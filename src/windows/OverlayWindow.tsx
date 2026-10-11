@@ -591,6 +591,13 @@ export function OverlayWindow() {
       if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (colorPicker.onCopyKeyDown(e)) return;
       const mod = e.metaKey || e.ctrlKey;
+      if (!mod && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+        if (phaseRef.current === "annotating") {
+          e.preventDefault();
+          canvasRef.current?.deleteSelection();
+        }
+        return;
+      }
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) canvasRef.current?.redo();
@@ -1318,6 +1325,7 @@ export function OverlayWindow() {
             onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
             onChange={(patch, transient) => { setAnnotationError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient); }}
             onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
+            onDelete={() => canvasRef.current?.deleteSelection()}
             onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
           canUndo={canUndo}
           canRedo={canRedo}

@@ -27,6 +27,7 @@ import "./VideoProjectStatus.css";
 
 import {importVideoSticker,rasterizeVideoStickers,type VideoSticker} from "./video-stickers";
 import {markIndexAt,selectionBounds,translateMark,type AnnotationMark,type Tool} from "../annotation/model";
+import {isTextComposition} from "../annotation/text-composition.js";
 import {hitTestHandle} from "../annotation/geom";
 import {VideoAnnotationsEditor} from "./VideoAnnotationsEditor";
 import {paintVideoAnnotation,rasterizeVideoAnnotations} from "./video-annotation-render";
@@ -247,7 +248,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
     if(busy)return;
     commitAnnotation.current?.();
     const id=annotating?annotationId:effectId;
-    if(!id){removeClip();return;}
+    if(!id){if(!annotating)removeClip();return;}
     const current=docRef.current;
     apply({...current,effects:current.effects.filter(item=>item.id!==id),annotations:current.annotations.filter(item=>item.id!==id),stickers:current.stickers.filter(item=>item.id!==id)});
     setEffectId(null);setAnnotationId(null);setAnnotationRevision(value=>value+1);
@@ -361,11 +362,11 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
     if(!editing) return;
     const onKey=(event:KeyboardEvent)=>{
       const target=event.target as HTMLElement;
-      if(event.defaultPrevented||target.closest("input,select,textarea,[contenteditable=true],[role=listbox]")) return;
+      if(event.defaultPrevented||isTextComposition(event)||target.closest("input,select,textarea,[contenteditable],[role=listbox],[role=dialog]")) return;
       if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="z") {event.preventDefault();undo(event.shiftKey);}
       else if(event.code==="Space" && !target.closest("[role=dialog],summary")) {event.preventDefault();playEdit();}
       else if(event.key.toLowerCase()==="s" && !event.metaKey && !event.ctrlKey) {event.preventDefault();split();}
-      else if(event.key==="Delete"||event.key==="Backspace") {event.preventDefault();removeSelection();}
+      else if(!event.metaKey&&!event.ctrlKey&&!event.altKey&&(event.key==="Delete"||event.key==="Backspace")) {event.preventDefault();removeSelection();}
     };
     const stopProjectShortcut=installVideoProjectShortcuts(window,{save:()=>{if(!busy)void flushProject();}});
     window.addEventListener("keydown",onKey); return()=>{stopProjectShortcut();window.removeEventListener("keydown",onKey);};

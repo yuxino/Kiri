@@ -3,6 +3,7 @@ import {createPortal} from "react-dom";
 import {VideoEffectSlider} from "./VideoEffectSlider";
 import {ChoiceSelect} from "../components/ChoiceSelect";
 import AnnotationCanvas, {type AnnotationCanvasHandle} from "../annotation/AnnotationCanvas";
+import {isTextComposition} from "../annotation/text-composition.js";
 import {COLOR_HEX, COLOR_LABELS, COLOR_PRESETS, type AnnotationMark, type AppearanceSettings, type MosaicShape, type Tool} from "../annotation/model";
 import {KiriIcon, type IconName} from "../components/KiriIcons";
 import {t} from "../i18n";
@@ -74,10 +75,10 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
   }
   useEffect(()=>{
     const key=(event:KeyboardEvent)=>{
-      if(props.disabled||event.defaultPrevented)return;
+      if(props.disabled||event.defaultPrevented||isTextComposition(event))return;
       if(event.target instanceof HTMLElement&&event.target.closest(".kiri-label-dot"))return;
       if(event.target instanceof HTMLElement&&event.target.closest("[role=listbox],[role=dialog]"))return;
-      if(event.target instanceof HTMLElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName))return;
+      if(event.target instanceof HTMLElement&&event.target.closest("input,textarea,select,[contenteditable]"))return;
       if(!props.active){const entry=tools.find(item=>item.key===event.key.toLowerCase());if(entry&&!event.metaKey&&!event.ctrlKey&&!event.altKey){event.preventDefault();event.stopImmediatePropagation();selectTool(entry.tool);}return;}
       if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="z"){event.preventDefault();event.stopImmediatePropagation();canvas.current?.finishAppearanceAdjustment();event.shiftKey?canvas.current?.redo():canvas.current?.undo();return;}
       if(event.metaKey||event.ctrlKey||event.altKey)return;

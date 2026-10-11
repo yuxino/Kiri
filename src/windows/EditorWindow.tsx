@@ -289,6 +289,7 @@ export function EditorWindow(props: { id: string }) {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (isTextComposition(e)) return;
       if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable]")) return;
       if (qrRequestRef.current) {
@@ -335,8 +336,11 @@ export function EditorWindow(props: { id: string }) {
         else canvasRef.current?.undo();
         return;
       }
-      if (e.key === "Delete" || e.key === "Backspace") {
-        if (tool !== "crop") canvasRef.current?.deleteSelection();
+      if (!mod && !e.altKey && (e.key === "Delete" || e.key === "Backspace")) {
+        if (tool !== "crop") {
+          e.preventDefault();
+          canvasRef.current?.deleteSelection();
+        }
         return;
       }
       if (!mod && !e.altKey) {
@@ -516,6 +520,7 @@ export function EditorWindow(props: { id: string }) {
             onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
             onChange={(patch, transient) => {setActionError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient);}}
             onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
+            onDelete={() => canvasRef.current?.deleteSelection()}
             onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
       </div>}
 

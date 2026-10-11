@@ -262,6 +262,7 @@ function annotation(initialDocument, options = {}) {
     const value = {width: 640, height: 360, drawCalls: [],
       getBoundingClientRect: () => options.boundingRect?.() ?? ({left: 0, top: 0, width: initialDocument.canvas.width, height: initialDocument.canvas.height}),
       setPointerCapture() {}, releasePointerCapture() {},
+      focus() { value.focused = true; },
       toBlob(callback) { callback(new Blob([new Uint8Array([1, 2, 3])], {type: "image/png"})); },
     };
     const context = {font: "", setTransform() {}, save() {}, restore() {},
@@ -716,6 +717,8 @@ test("switching to another existing watermark after deleting a draft resolves it
   h.ref.current.editWatermark(); h.component.render();
   watermarkEditor(h).props.onTextChange(""); h.component.render();
   h.pointer("onPointerDown", 390, 140); h.pointer("onPointerUp", 390, 140);
+  assert.equal(watermarkEditor(h), undefined, "the click selects the retained watermark");
+  h.mouse("onDoubleClick", 390, 140, 2);
   assert.equal(watermarkEditor(h).props.editing.id, last.id);
   assert.equal(watermarkEditor(h).props.editing.text, last.text);
   assert.deepEqual((await h.ref.current.exportResult()).document.marks, [last]);
@@ -819,6 +822,60 @@ const reflowCallout = {kind: "callout", id: 81, center: {x: 80, y: 80}, number: 
 const initialFrame = {left: 0, top: 0, width: 640, height: 360};
 const inspectorFrame = {left: 80, top: 60, width: 480, height: 270};
 const calloutEditor = h => nodes(h.component.render()).find(node => node?.props?.editing?.callout);
+
+for (const tool of ["select", "callout"]) {
+  test(`${tool} single-click selects a callout and double-click alone opens its native editor`, () => {
+    const h = annotation(documentWith([reflowCallout]), {tool});
+    h.pointer("onPointerDown", 80, 80); h.pointer("onPointerUp", 80, 80);
+    h.mouse("onClick", 80, 80, 1);
+    assert.equal(calloutEditor(h), undefined);
+    assert.equal(h.live.focused, true);
+    h.mouse("onDoubleClick", 80, 80, 2);
+    assert.equal(calloutEditor(h)?.props.editing.id, reflowCallout.id);
+    assert.deepEqual(h.changes, []);
+    h.component.unmount();
+  });
+}
+
+for (const tool of ["select", "pen", "rectangle", "line", "arrow", "text", "label", "callout", "mosaic", "watermark"]) {
+  test(`delete selection under ${tool} removes only that object, survives export, and can undo/redo`, async () => {
+    const h = annotation(documentWith([text, reflowCallout, rectangle]), {tool, selectedMarkId: reflowCallout.id});
+    h.ref.current.deleteSelection(); h.component.render();
+    assert.deepEqual(h.changes.at(-1), [text, rectangle]);
+    assert.deepEqual((await h.ref.current.exportResult()).document.marks, [text, rectangle]);
+    h.ref.current.deleteSelection(); h.component.render();
+    assert.equal(h.changes.length, 1, "repeat Delete cannot remove the next object");
+    h.ref.current.undo(); h.component.render();
+    assert.deepEqual(h.changes.at(-1), [text, reflowCallout, rectangle]);
+    h.ref.current.redo(); h.component.render();
+    assert.deepEqual(h.changes.at(-1), [text, rectangle]);
+    h.component.unmount();
+  });
+}
+
+test("explicit deletion discards an inline draft instead of resurrecting it or replacing its neighbour", async () => {
+  const h = annotation(documentWith([reflowCallout, text]), {selectedMarkId: reflowCallout.id});
+  h.ref.current.editSelectedText(); h.component.render();
+  calloutEditor(h).props.onTextChange("unsaved draft"); h.component.render();
+  h.ref.current.deleteSelection(); h.component.render();
+  assert.equal(calloutEditor(h), undefined);
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [text]);
+  h.ref.current.undo(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), [reflowCallout, text]);
+  h.component.unmount();
+});
+
+test("deletion respects the synchronous export lock", () => {
+  const lock = {locked: false};
+  const h = annotation(documentWith([text]), {selectedMarkId: text.id, interactionLock: lock});
+  lock.locked = true;
+  h.ref.current.deleteSelection(); h.component.render();
+  assert.deepEqual(h.changes, []);
+  lock.locked = false;
+  h.ref.current.deleteSelection(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), []);
+  h.component.unmount();
+});
 
 const devCalloutText = "Dev drag abcdef\n中文保存测试";
 const devCalloutMeasure = value => [...value].reduce((width, character) => width + (/\p{Script=Han}/u.test(character) ? 14 : 7.4), 0);
@@ -926,10 +983,10 @@ for (const part of ["badge", "description"]) {
   });
 }
 
-test("a callout click below the drag threshold edits; its connector still moves the whole callout", () => {
+test("a callout click below the drag threshold selects; its connector still moves the whole callout", () => {
   const h = annotation(documentWith([reflowCallout]));
   h.pointer("onPointerDown", 250, 80); h.pointer("onPointerMove", 252, 81); h.pointer("onPointerUp", 252, 81);
-  assert.deepEqual(h.changes, []); assert.equal(calloutEditor(h).props.editing.id, reflowCallout.id);
+  assert.deepEqual(h.changes, []); assert.equal(calloutEditor(h), undefined);
   h.ref.current.commitTextEditing(); h.component.render();
   h.pointer("onPointerDown", 140, 80); h.pointer("onPointerMove", 180, 110); h.pointer("onPointerUp", 180, 110);
   const moved = h.changes.at(-1)[0];
@@ -985,7 +1042,7 @@ function reflowClick(extraMarks = []) {
   resize(inspectorFrame);
   h.pointer("onPointerUp", 250, 80, {detail: 0});
   h.mouse("onClick", 250, 80, 1);
-  assert.equal(calloutEditor(h)?.props.editing.id, reflowCallout.id);
+  assert.equal(calloutEditor(h), undefined, "one click selects without taking native text focus");
   return {...h, resize};
 }
 
@@ -1005,6 +1062,7 @@ test("a native double click restores the same callout after its inspector reflow
 
 test("an ordinary single click on reflowed blank canvas still commits the callout draft", async () => {
   const h = reflowClick();
+  h.ref.current.editSelectedText(); h.component.render();
   calloutEditor(h).props.onTextChange("updated explanation"); h.component.render();
   h.pointer("onPointerDown", 250, 80, {detail: 0});
   h.resize(initialFrame);
@@ -1078,7 +1136,7 @@ test("double clicking blank canvas without a stage reflow never reopens a callou
   const h = annotation(documentWith([reflowCallout]));
   h.pointer("onPointerDown", 250, 80, {detail: 0}); h.pointer("onPointerUp", 250, 80, {detail: 0});
   h.mouse("onClick", 250, 80, 1);
-  assert.ok(calloutEditor(h));
+  assert.equal(calloutEditor(h), undefined);
   h.pointer("onPointerDown", 310, 80, {detail: 0}); h.pointer("onPointerUp", 310, 80, {detail: 0});
   h.mouse("onClick", 310, 80, 2); h.mouse("onDoubleClick", 310, 80, 2);
   assert.equal(calloutEditor(h), undefined);

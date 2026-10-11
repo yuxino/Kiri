@@ -685,6 +685,54 @@ async def finish_before_placement_cases(browser, report):
                     await context.close()
 
 
+async def deletion_cases(browser, report):
+    tools = ["Pen (P)", "Rectangle (R)", "Line (L)", "Arrow (A)",
+             "Text (T)", "Numbered callout (N)", "Label bubble (B)",
+             "Mosaic (M)", "Watermark (W)"]
+    for surface in ["editor", "overlay"]:
+        for title in tools:
+            for key in ["Delete", "Backspace"]:
+                context, page, errors, source_hash, empty_hash = await placement_setup(browser, surface)
+                try:
+                    await page.get_by_role("button", name=title, exact=True).click()
+                    start = await placement_point(page, .3, .4) if title != "Watermark (W)" else None
+                    if title in ["Text (T)", "Numbered callout (N)", "Label bubble (B)", "Watermark (W)"]:
+                        if start:
+                            await page.mouse.click(start["x"], start["y"])
+                        editor = await placement_input(page)
+                        await page.keyboard.type("Delete test 123")
+                        await page.keyboard.press("Backspace")
+                        assert await editor.input_value() == "Delete test 12"
+                        frame = await editor.bounding_box()
+                        existing = start if title == "Numbered callout (N)" else {"x": frame["x"] + frame["width"] / 2, "y": frame["y"] + frame["height"] / 2}
+                        blank = await placement_point(page, .85, .8)
+                        await page.mouse.click(blank["x"], blank["y"])
+                        await editor.wait_for(state="detached")
+                        await page.mouse.click(existing["x"], existing["y"])
+                        assert await page.locator("textarea").count() == 0, "Single click must select, not edit"
+                    else:
+                        end = await placement_point(page, .55, .6)
+                        await placement_drag(page, start, end)
+                    assert await page.get_by_role("button", name="Delete annotation", exact=True).count() == 1
+                    await page.keyboard.press(key)
+                    await page.mouse.move(20, 20)
+                    await page.wait_for_function("!document.querySelector('.kiri-annotation-controls-heading span')")
+                    assert await placement_canvas_hash(page) == empty_hash, (surface, title, key)
+                    await page.keyboard.press("Control+z")
+                    assert await placement_canvas_hash(page) != empty_hash, "Undo must restore the object"
+                    await page.keyboard.press("Control+Shift+z")
+                    assert await placement_canvas_hash(page) == empty_hash, "Redo must remove it again"
+                    document = await placement_export(page, surface, source_hash)
+                    assert document["marks"] == [], document
+                    assert not errors, errors
+                    report.setdefault("deletion", []).append({"surface": surface, "tool": title, "key": key, "passed": True})
+                except Exception:
+                    await page.screenshot(path=str(OUT / f"delete-{surface}-{title.split()[0]}-{key}-failure.png"))
+                    raise
+                finally:
+                    await context.close()
+
+
 async def verify():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"scope": "Actual product windows with isolated IPC; no native or IME claim", "editor": [], "overlay": [], "finishBeforePlacement": []}
@@ -705,6 +753,7 @@ async def verify():
             await callout_pointer_case(browser, report)
             await anchored_label_case(browser, report)
             await finish_before_placement_cases(browser, report)
+            await deletion_cases(browser, report)
             await browser.close()
             report["passed"] = True
     finally:

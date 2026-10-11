@@ -961,7 +961,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           start: { x: e.clientX, y: e.clientY }, moved: false, wasEditing: editingRef.current !== null, consumed: false,
           editingCalloutId: editingRef.current?.callout ? editingRef.current.id : null,
         };
-        if (canvasClickRef.current.editingCalloutId !== calloutClickRef.current?.id) calloutClickRef.current = null;
+        if (editingRef.current && canvasClickRef.current.editingCalloutId !== calloutClickRef.current?.id) calloutClickRef.current = null;
         finishAppearanceAdjustment();
         const canvas = canvasRef.current!;
         gestureRectRef.current = canvas.getBoundingClientRect();
@@ -995,6 +995,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           finishGesture();
           return;
         }
+        // A selected object owns keyboard actions even after using an inspector
+        // field. Do this only after the composition/validation guards above.
+        canvas.focus({preventScroll: true});
         const current = history.elements;
         // Committing may append/remove a mark or update its measured bounds.
         // Use the synchronous selection, rather than this render's old index.
@@ -1016,7 +1019,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           selectMark(null);
           return;
         }
-        if (t === "watermark") {
+        const editingExistingWatermark = t === "watermark" &&
+          ((hit !== null && current[hit].kind === "watermark") ||
+            (selectedLine?.kind === "watermark" && selectedHandle !== null));
+        if (t === "watermark" && !editingExistingWatermark) {
           startWatermark(hit !== null && current[hit].kind === "watermark" ? hit : null, p);
           return;
         }
@@ -1062,7 +1068,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         const calloutHit = t === "callout" ? hit : null;
         const editingCallout = (calloutHit !== null && current[calloutHit].kind === "callout") ||
           (t === "callout" && selectedLine?.kind === "callout" && selectedHandle !== null);
-        if (t === "select" || editingExistingShape || editingCallout || editingExistingText) {
+        if (t === "select" || editingExistingShape || editingCallout || editingExistingText || editingExistingWatermark) {
           let handleInteraction = selectedMatchesTool ? selectedHandle : null;
           const index = handleInteraction
             ? selected
@@ -1441,11 +1447,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           }
           setDraft(null);
           if (preview?.kind === "callout" && !changed) {
-            if (toolRef.current === "select" && gestureRectRef.current) {
+            if (gestureRectRef.current) {
               const {left, top, width, height} = gestureRectRef.current;
               calloutClickRef.current = {id: preview.id, frame: {left, top, width, height}};
             }
-            editCallout(interaction.index);
           }
         }
         redraw();
@@ -1459,25 +1464,6 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         history,appendMark,fitTextBounds,createCallout,editCallout,validateMarks,
       ],
     );
-
-    // Keyboard shortcuts (overlay-level keys are handled by the parent).
-    useEffect(() => {
-      const onKeyDown = (e: KeyboardEvent) => {
-        const canvasWindow = window as unknown as { __kiriOverlay?: boolean };
-        if (!canvasWindow.__kiriOverlay) return;
-        if (interactionsDisabled()) return;
-        if (editingRef.current) return;
-        if (e.key === "Delete" || e.key === "Backspace") {
-          if (toolRef.current === "select" && selectedIndexRef.current !== null) {
-            history.remove(selectedIndexRef.current);
-            selectMark(null);
-            syncMarks();
-          }
-        }
-      };
-      window.addEventListener("keydown", onKeyDown);
-      return () => window.removeEventListener("keydown", onKeyDown);
-    }, [history, interactionsDisabled, syncMarks]);
 
     const selectedIndexRef = useRef<number | null>(null);
     useEffect(() => {
@@ -1507,9 +1493,19 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     };
     deleteRef.current = () => {
       if (interactionsDisabled()) return;
-      if (selectedIndexRef.current === null) return;
+      const index = editingRef.current?.index ?? selectedIndexRef.current;
+      if (index === null && !editingRef.current) return;
       finishAppearanceAdjustment();
-      history.remove(selectedIndexRef.current);
+      // Discard the inline draft before removing its saved mark; otherwise a
+      // later tool change/export can commit that draft into the next object.
+      editingRef.current = null;
+      setEditing(null);
+      interactionRef.current = {kind: "none"};
+      calloutClickRef.current = null;
+      blankDoubleClickRef.current = false;
+      setDraft(null);
+      setSelectCursor("default");
+      if (index !== null) history.remove(index);
       selectMark(null);
       syncMarks();
     };
@@ -1781,10 +1777,12 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       >
         <canvas
           ref={canvasRef}
+          tabIndex={-1}
           width={Math.round(view.width * devicePixelRatio)}
           height={Math.round(view.height * devicePixelRatio)}
           style={{
             display: "block",
+            outline: "none",
             width: view.width,
             height: view.height,
             // Spec §6.7: mosaic uses a crosshair, select tracks hover
@@ -1804,6 +1802,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           onClick={(event) => {
             const point = toPoint(event.nativeEvent);
             const selected = selectedIndexRef.current === null ? null : history.elements[selectedIndexRef.current];
+            if (event.detail === 1 && (selected?.kind !== "callout" || canvasClickRef.current.moved)) {
+              calloutClickRef.current = null;
+            }
             const eligible = !interactionsDisabled() && toolRef.current === "select" &&
               !editingRef.current && !canvasClickRef.current.wasEditing && !canvasClickRef.current.consumed && !canvasClickRef.current.moved &&
               markIndexAt(history.elements, point, hitTestScale) === null &&
@@ -1814,8 +1815,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           onDoubleClick={(event) => {
             const activeTool = toolRef.current;
             if (interactionsDisabled() || editingRef.current ||
-              !["select", "text", "label"].includes(activeTool) ||
-              (activeTool !== "select" && canvasClickRef.current.moved)) return;
+              !["select", "text", "label", "callout", "watermark"].includes(activeTool) ||
+              canvasClickRef.current.moved) return;
             // The inspector may shrink the stage on the first click and hide
             // again on the second. Resolve the second click in its own frame,
             // rather than the layout React rendered after that click ended.
@@ -1826,17 +1827,18 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               documentUnitsPerViewPixel(frame, documentSize));
             if (index !== null && history.elements[index].kind === "text") {
               editText(index);
-            } else if (activeTool !== "select") {
-              return;
+            } else if (index !== null && history.elements[index].kind === "callout") {
+              editCallout(index);
             } else if (index !== null && history.elements[index].kind === "watermark") {
               startWatermark(index);
+            } else if (activeTool !== "select" && activeTool !== "callout") {
+              return;
             } else if (index === null) {
               const first = calloutClickRef.current;
               calloutClickRef.current = null;
               const reflowed = first && (["left", "top", "width", "height"] as const).some(
                 key => Math.abs(frame[key] - first.frame[key]) > .5);
-              if (first && reflowed && !canvasClickRef.current.moved &&
-                canvasClickRef.current.editingCalloutId === first.id) {
+              if (first && reflowed) {
                 const previousIndex = markIndexAt(history.elements, pointInFrame(first.frame),
                   documentUnitsPerViewPixel(first.frame, documentSize));
                 if (previousIndex !== null && history.elements[previousIndex].kind === "callout" &&

@@ -25,6 +25,8 @@ Während der Eingabe von Text, einer nummerierten Beschreibung oder einer Beschr
 
 Wählen Sie eine vorhandene Anmerkung aus, um ihren Stil zu ändern. Mosaik bietet Freihand, Rechteck und Ellipse sowie Pixel- und Unschärfeeffekte mit einstellbarer Stärke. Mit Wasserzeichen (W) schreiben Sie ein wiederholtes Muster direkt ins Bild und passen Deckkraft, Winkel und Abstand an. Wählen Sie das Werkzeug erneut, um vorhandenen Text weiterzubearbeiten, auch nach dem Speichern.
 
+Vorhandenen Text, nummerierte Hinweise, Beschriftungen und Wasserzeichen mit einem Klick auswählen, durch Ziehen verschieben und mit einem Doppelklick bearbeiten. Ausgewählte Anmerkungen mit `Delete`, `Backspace` oder **Anmerkung löschen** entfernen; mit `⌘Z` / `Ctrl+Z` rückgängig machen. Beim Tippen löschen die Tasten nur Text.
+
 ## Erste Schritte
 
 1. Drücken Sie `⇧⌘A` auf macOS oder `Shift+Ctrl+A` auf Windows / Linux X11. Wählen Sie ein Fenster oder ziehen Sie einen Bereich auf.

@@ -5,6 +5,7 @@ import * as capabilities from "../../src/windows/video-capabilities.js";
 import * as trim from "../../src/windows/video-trim.js";
 import * as projectSave from "../../src/windows/video-project-save.js";
 import * as shortcuts from "../../src/windows/video-project-shortcuts.js";
+import * as composition from "../../src/annotation/text-composition.js";
 
 async function pureModule(name) {
   const source = readFileSync(new URL(`../../src/windows/${name}.ts`, import.meta.url), "utf8");
@@ -19,7 +20,8 @@ const source = 'import React from "react";\n' + readFileSync(new URL("../../src/
 /** Render real editor handlers while replacing only native/DOM/media boundaries. */
 export function createVideoPlayerHarness(caps) {
   let options;
-  const player = { duration: 10, currentTime: 0, videoWidth: 1920, videoHeight: 1080, pause() {} };
+  const player = { duration: 10, currentTime: 0, videoWidth: 1920, videoHeight: 1080, readyState: 1,
+    pause() {}, addEventListener() {}, removeEventListener() {} };
   const harness = createLibraryHarness({}, source, {
     attachRef(node) { if (node.type === "video") node.props.ref.current = player; },
     modules: {
@@ -51,6 +53,7 @@ export function createVideoPlayerHarness(caps) {
       "./VideoProjectStatus.css": {},
       "./video-stickers": {},
       "../annotation/model": {},
+      "../annotation/text-composition.js": composition,
       "../annotation/geom": {},
       "./VideoAnnotationsEditor": { VideoAnnotationsEditor: "annotations-editor" },
       "./video-annotation-render": {},
@@ -62,6 +65,7 @@ export function createVideoPlayerHarness(caps) {
   component.render();
   return {
     ...component,
+    window: harness.window,
     projectOptions: () => options,
     openEditor() {
       const button = nodes(component.render()).find(node => node?.type === "button" && nodes(node).includes("Trim & Export"));

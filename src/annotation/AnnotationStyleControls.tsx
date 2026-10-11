@@ -22,6 +22,7 @@ export function AnnotationStyleControls(props: {
   tool: Tool; selected: AnnotationMark | null; appearance: AppearanceSettings; editing?: boolean; disabled?: boolean;
   nextNumber: number; onNextNumber(value: number): void; onCalloutEdit(patch: Partial<CalloutMark>, transient: boolean): void;
   onChange(patch: Partial<AppearanceSettings>, transient?: boolean): void; onFinish(): void; onEditText(): void; onEditWatermark(): void;
+  onDelete?(): void;
 }) {
   const a = selectedAnnotationAppearance(props.appearance, props.selected);
   const kind = props.selected?.kind === "text" && props.selected.labelDirection ? "label" : props.selected?.kind ?? props.tool;
@@ -60,6 +61,9 @@ export function AnnotationStyleControls(props: {
           <AnnotationColors value={a.colorPreset} onChange={colorPreset => props.onChange({colorPreset})}/>
         </>}
     </div>
+    {props.selected && props.onDelete && <button type="button" className="kiri-annotation-action"
+      onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+      onClick={props.onDelete}>{t("Delete annotation")}</button>}
     {kind === "mosaic" && <p className="kiri-annotation-hint">{t("Brush over private details, or drag a rectangle or ellipse.")}</p>}
     {(kind === "text" || kind === "label" || kind === "callout") && <p className="kiri-annotation-hint">{t("Drag to move or resize. Double-click to edit the text.")}</p>}
   </fieldset>;

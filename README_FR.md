@@ -25,6 +25,8 @@ Pendant la saisie de texte, d’une description numérotée ou d’une légende,
 
 Sélectionnez une annotation existante pour modifier son style. La mosaïque propose le dessin libre, le rectangle et l’ellipse, avec pixellisation ou flou et intensité réglable. Filigrane (W) permet de saisir un motif répété directement sur l’image et de régler l’opacité, l’angle et l’espacement. Sélectionnez à nouveau l’outil pour modifier le texte existant, même après enregistrement.
 
+Cliquez une fois sur un texte, une note numérotée, une étiquette ou un filigrane existant pour le sélectionner, faites-le glisser pour le déplacer et double-cliquez pour le modifier. Supprimez une annotation sélectionnée avec `Delete`, `Backspace` ou **Supprimer l’annotation** ; annulez avec `⌘Z` / `Ctrl+Z`. Pendant la saisie, ces touches suppriment uniquement du texte.
+
 ## Premiers pas
 
 1. Appuyez sur `⇧⌘A` sous macOS ou `Shift+Ctrl+A` sous Windows / Linux X11, puis sélectionnez une fenêtre ou faites glisser une zone.

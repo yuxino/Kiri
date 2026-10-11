@@ -160,6 +160,31 @@ test("full-capability editor keeps speed, effects and annotation tools", t => {
   assert.equal(tree.includes("Basic editing: trim, delete and reorder clips at original speed."), false);
 });
 
+test("Delete with no selected annotation never removes the underlying clip", t => {
+  const player = createVideoPlayerHarness(full);
+  t.after(() => player.unmount());
+  const tree = nodes(player.openEditor());
+  tree.find(node => node?.type === "annotations-editor").props.onActivate();
+  player.render();
+  const before = player.projectOptions().getProject();
+  player.window.dispatchEvent({type: "keydown", key: "Delete", target: {closest: () => null}, preventDefault() {}});
+  player.render();
+  assert.deepEqual(player.projectOptions().getProject(), before);
+});
+
+test("composition and modified Delete retain the video document", t => {
+  const player = createVideoPlayerHarness(full);
+  t.after(() => player.unmount());
+  player.openEditor();
+  const before = player.projectOptions().getProject();
+  for (const flags of [{isComposing: true}, {keyCode: 229}, {metaKey: true}, {ctrlKey: true}, {altKey: true}]) {
+    player.window.dispatchEvent({type: "keydown", key: "Backspace", target: {closest: () => null},
+      preventDefault() {}, ...flags});
+    player.render();
+    assert.deepEqual(player.projectOptions().getProject(), before);
+  }
+});
+
 test("actual restore handler rejects unsupported saved content without replacing current state", async t => {
   const player = createVideoPlayerHarness(basic);
   t.after(() => player.unmount());
