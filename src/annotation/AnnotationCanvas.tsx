@@ -997,6 +997,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         }
         // A selected object owns keyboard actions even after using an inspector
         // field. Do this only after the composition/validation guards above.
+        // Suppress the pointer's later default focus: a newly mounted textarea
+        // must keep the synchronous focus it receives during this same press.
+        e.preventDefault();
         canvas.focus({preventScroll: true});
         const current = history.elements;
         // Committing may append/remove a mark or update its measured bounds.
@@ -1974,13 +1977,11 @@ function TextEditor(props: {
   const hintHeight = 32 * editing.uiScale;
   const hintTop = editing.rect.y + editing.rect.height + 4 * editing.uiScale;
 
-  // Callouts open on pointerup and saved text on double-click, after the
-  // canvas mouse focus action. Own the next key before the first frame;
-  // reopened text keeps the same initial selection as the RAF fallback.
+  // The canvas suppresses its native pointer-focus default. New and reopened
+  // editors can therefore own the very next key before the first frame.
   useLayoutEffect(() => {
-    if (editing.callout || editing.watermark) ref.current?.focus();
-    else if (editing.index !== null) {
-      ref.current?.focus();
+    ref.current?.focus();
+    if (!editing.callout && !editing.watermark && editing.index !== null) {
       ref.current?.select();
     }
   }, []);

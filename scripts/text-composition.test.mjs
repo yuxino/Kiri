@@ -131,7 +131,7 @@ test("reopened text and labels own focus before the first frame and retain immed
   }
 });
 
-test("synchronous callout and watermark focus keeps the caret; new text still uses its post-mouse frame", () => {
+test("new text, callouts and watermarks own the next key without waiting for a frame", () => {
   for (const editing of [{index: 0, callout: {}}, {index: 0, watermark: {}}]) {
     const textarea = nativeTextarea("saved text");
     textFocusCallback("layout", textarea, editing)();
@@ -140,9 +140,12 @@ test("synchronous callout and watermark focus keeps the caret; new text still us
   }
   const textarea = nativeTextarea();
   textFocusCallback("layout", textarea, {index: null})();
-  assert.equal(textarea.ownerDocument.activeElement, null);
+  assert.equal(textarea.ownerDocument.activeElement, textarea);
+  textarea.type("immediate input");
   textFocusFrame(textarea)();
   assert.equal(textarea.ownerDocument.activeElement, textarea);
+  assert.equal(textarea.value, "immediate input");
+  assert.equal(textarea.selectionStart, textarea.value.length);
 });
 
 function nativeTextarea(value = "") {
