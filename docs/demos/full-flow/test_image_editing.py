@@ -137,12 +137,14 @@ async def main():
     expected+='中文'
     assert await description.input_value()==expected
     assert await description.evaluate('el=>window.calloutChildMutations')==0,'callout input rewrote native textarea DOM'
-    # Selection changes create a separate native editor; reselecting retains text.
+    # A single click selects; a double click creates a separate native editor.
     await f.get_by_title('Numbered callout (N)',exact=True).click();await page.mouse.click(950,480)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='2'")
     await description.press_sequentially('second description',delay=10)
     await f.get_by_title('Select (V)',exact=True).click();await page.mouse.click(480,380)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
+    assert await description.count()==0,'single-click selection started text editing'
+    await page.mouse.dblclick(480,380)
     await page.screenshot(path=str(OUT/'callout-reselection.png'))
     assert await description.input_value()==expected,{'stage':'reselection','actual':await description.input_value()}
     await description.press('Meta+ArrowDown' if sys.platform=='darwin' else 'Control+End')
@@ -151,10 +153,10 @@ async def main():
     await description.press(mod+'+Shift+z');assert await description.input_value()==expected+'x'
     await description.press(mod+'+z');assert await description.input_value()==expected
     await description.press_sequentially(' edited',delay=10)
-    await f.get_by_title('Undo (⌘Z)',exact=True).click();await page.mouse.click(480,380)
+    await f.get_by_title('Undo (⌘Z)',exact=True).click();await page.mouse.dblclick(480,380)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     assert await description.input_value()==expected,'canvas Undo did not restore the callout field'
-    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click();await page.mouse.click(480,380)
+    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click();await page.mouse.dblclick(480,380)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     expected+=' edited'
     assert await description.input_value()==expected,'canvas Redo did not restore the callout field'
