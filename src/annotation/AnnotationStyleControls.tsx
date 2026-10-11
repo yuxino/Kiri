@@ -30,7 +30,11 @@ export function AnnotationStyleControls(props: {
     kind === "mosaic" ? "Mosaic" : kind === "pen" ? "Pen" : kind === "rectangle" ? "Rectangle" : kind === "arrow" ? "Arrow" : kind === "line" ? "Line" : kind === "text" ? "Text" : "Select");
   const selectedCallout = props.selected?.kind === "callout" ? props.selected : null;
   return <fieldset disabled={props.disabled} className="kiri-annotation-controls" aria-label={t("Tool options")} data-tool={kind}>
-    <div className="kiri-annotation-controls-heading"><strong>{label}</strong>{props.selected && <span>{t("Selected object")}</span>}</div>
+    <div className="kiri-annotation-controls-heading"><strong>{label}</strong>{props.selected && <span>{t("Selected object")}</span>}
+      {props.selected && props.onDelete && <button type="button" className="kiri-annotation-action"
+        onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+        onClick={props.onDelete}>{t("Delete annotation")}</button>}
+    </div>
     <div className="kiri-annotation-control-fields">
       {kind === "select" ? <span className="kiri-annotation-hint">{t("Click an object to edit it. Drag its handles to resize.")}</span> :
         kind === "watermark" ? <WatermarkControls appearance={a} onChange={props.onChange} onFinish={props.onFinish} onEdit={props.onEditWatermark}/> :
@@ -61,9 +65,6 @@ export function AnnotationStyleControls(props: {
           <AnnotationColors value={a.colorPreset} onChange={colorPreset => props.onChange({colorPreset})}/>
         </>}
     </div>
-    {props.selected && props.onDelete && <button type="button" className="kiri-annotation-action"
-      onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
-      onClick={props.onDelete}>{t("Delete annotation")}</button>}
     {kind === "mosaic" && <p className="kiri-annotation-hint">{t("Brush over private details, or drag a rectangle or ellipse.")}</p>}
     {(kind === "text" || kind === "label" || kind === "callout") && <p className="kiri-annotation-hint">{t("Drag to move or resize. Double-click to edit the text.")}</p>}
   </fieldset>;

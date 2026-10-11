@@ -1,5 +1,6 @@
 .kiri-annotation-controls { margin:0; padding:8px 10px; border:0; min-width:0; width:100%; box-sizing:border-box; color:#f7f7f4; font:500 11px/1.4 var(--kiri-font-ui); }
-.kiri-annotation-controls-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+.kiri-annotation-controls-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+.kiri-annotation-controls-heading .kiri-annotation-action { margin-left:auto; }
 .kiri-annotation-controls-heading strong { font-weight:600; }
 .kiri-annotation-controls-heading span, .kiri-annotation-hint { color:#b7b7b2; font-size:10px; }
 .kiri-annotation-hint { margin:6px 0 0; }

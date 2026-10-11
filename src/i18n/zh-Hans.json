@@ -529,7 +529,7 @@
   "Drag to change the end": "拖动调整结束时间",
   "Drag the grip to reorder, the middle to move, or either edge to change the duration.": "拖左侧换顺序，拖中间移动时间，拖两端调整时长。",
   "Text content": "文字内容",
-  "Selected object": "正在修改",
+  "Selected object": "已选中",
   "Click an object to edit it. Drag its handles to resize.": "点选画面里的标注即可修改，拖动手柄调整大小。",
   "Draw on the picture. Your stroke stays editable.": "直接在画面上画，画完还可以调整。",
   "Drag on the picture to draw a rectangle.": "在画面上拖动，画出矩形。",
