@@ -709,11 +709,13 @@ async def deletion_cases(browser, report):
                         await page.mouse.click(blank["x"], blank["y"])
                         await editor.wait_for(state="detached")
                         await page.mouse.click(existing["x"], existing["y"])
-                        assert await page.locator("textarea").count() == 0, "Single click must select, not edit"
                     else:
                         end = await placement_point(page, .55, .6)
                         await placement_drag(page, start, end)
-                    assert await page.get_by_role("button", name="Delete annotation", exact=True).count() == 1
+                    # Pointerup schedules React's selected-object controls;
+                    # count() can observe the preceding frame in a busy runner.
+                    await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
+                    assert await page.locator("textarea").count() == 0, "Single click must select, not edit"
                     await page.keyboard.press(key)
                     await page.mouse.move(20, 20)
                     await page.wait_for_function("!document.querySelector('.kiri-annotation-controls-heading span')")
