@@ -2198,10 +2198,8 @@ function AssetCard(props: {
         </span>
         {menuOpen &&
           createPortal(
-            // Render the context menu outside the card subtree: the card's
-            // hover transform (translateY) would otherwise become the fixed
-            // positioning containing block, breaking both the menu's screen
-            // position and its stacking above neighboring cards.
+            // Keep viewport-anchored menus above neighboring cards and the
+            // scroll container.
             menu,
             document.body,
           )}
@@ -2422,7 +2420,7 @@ function BatchActionBar(props: {
     <div className="library-batch-bar" role="toolbar" aria-label={countLabel}>
       <span
         style={{
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: 700,
           color: "var(--kiri-label)",
           padding: "0 10px",

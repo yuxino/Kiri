@@ -1124,7 +1124,7 @@ button:active:not(:disabled) {
   border-radius: 10px;
   background: transparent;
   color: var(--kiri-label);
-  font: 600 12px var(--kiri-font-ui);
+  font: 600 13px var(--kiri-font-ui);
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -1194,7 +1194,9 @@ button:active:not(:disabled) {
 }
 
 .kiri-card-actions {
-  position: relative;
+  position: absolute;
+  right: 4px;
+  top: -42px;
   flex: 0 0 auto;
   z-index: 2;
   display: flex;
@@ -1262,7 +1264,7 @@ button:active:not(:disabled) {
 
 .library-recording-save__detail {
   color: var(--kiri-secondary-label);
-  font-size: 10.5px;
+  font-size: 13px;
 }
 
 .library-recording-save__footer {
@@ -1272,13 +1274,13 @@ button:active:not(:disabled) {
   gap: 7px;
   min-height: 30px;
   padding: 0 1px;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .library-recording-save__footer > span:last-child {
   color: var(--kiri-disabled-label);
-  font-size: 9.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
