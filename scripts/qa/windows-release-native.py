@@ -363,6 +363,19 @@ def batch_trash_acceptance(executable):
     selected = {item["id"] for item in before if item.get("ocrText") is None and item.get("qrText") is None}
     if len(selected) < 2:
         raise RuntimeError("Native batch acceptance needs multiple finished captures")
+    # The preceding ordinary capture intentionally leaves its completion card
+    # above other apps. Its native window overlaps the Library tab, so wait
+    # for the real completion deadline before one physical navigation click.
+    def completion_card_visible():
+        for window in desktop.windows(process=process.pid, visible_only=True):
+            for control in window.descendants():
+                try:
+                    if control.window_text() == "Pin Screenshot on Top" and control.is_visible():
+                        return True
+                except Exception:
+                    continue
+        return False
+    wait_for("ordinary completion card closes before Library navigation", lambda: not completion_card_visible())
     subprocess.run([str(executable)], env=app_environment, check=True, timeout=10)
     find("Library").click_input()
     find("Select captures").click_input()

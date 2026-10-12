@@ -583,9 +583,14 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
     let source_width = asset.pixel_width.max(1) as f64;
     let source_height = asset.pixel_height.max(1) as f64;
     let scale = (680.0 / source_width).min(480.0 / source_height).min(1.0);
-    let placement = app.state::<AppState>().capture_pin_placements.lock().unwrap()
-        .get(asset.id, (asset.pixel_width, asset.pixel_height))
-        .filter(|origin| app.available_monitors().is_ok_and(|monitors| monitors.iter().any(|monitor| {
+    let origin = {
+        let state = app.state::<AppState>();
+        let placements = state.capture_pin_placements.lock().unwrap();
+        placements.get(asset.id, (asset.pixel_width, asset.pixel_height))
+    };
+    // A native monitor query may dispatch to the event loop. Never retain
+    // the origin mutex while waiting on that loop's capture confirmations.
+    let placement = origin.filter(|origin| app.available_monitors().is_ok_and(|monitors| monitors.iter().any(|monitor| {
             origin.fits_monitor(Rect::new(f64::from(monitor.position().x), f64::from(monitor.position().y),
                 f64::from(monitor.size().width), f64::from(monitor.size().height)), monitor.scale_factor())
         })));
