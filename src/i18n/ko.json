@@ -186,7 +186,6 @@
   "View": "보기",
   "Esc to close": "Esc로 닫기",
   "Close · Esc": "닫기 · Esc",
-  "Delete (N)": "삭제 ({n})",
   "Restore (N)": "복원 ({n})",
   "Delete Permanently (N)": "영구 삭제 ({n})",
   "Add to Favorites": "즐겨찾기에 추가",
@@ -744,5 +743,10 @@
   "Edit watermark": "워터마크 편집",
   "Tool options": "도구 옵션",
   "Watermark is too dense. Increase its size or spacing.": "워터마크가 너무 촘촘합니다. 글자 크기나 간격을 늘리세요.",
-  "Watermark text must be 512 characters or fewer.": "워터마크 텍스트는 512자 이하여야 합니다."
+  "Watermark text must be 512 characters or fewer.": "워터마크 텍스트는 512자 이하여야 합니다.",
+  "Select captures": "캡처 선택",
+  "Select All": "모두 선택",
+  "Select capture": "캡처 선택",
+  "Move to Trash ({n})": "휴지통으로 이동 ({n})",
+  "Couldn't move these captures to Trash.": "이 캡처를 휴지통으로 이동할 수 없습니다."
 }

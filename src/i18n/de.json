@@ -186,7 +186,6 @@
   "View": "Anzeigen",
   "Esc to close": "Esc zum Schließen",
   "Close · Esc": "Schließen · Esc",
-  "Delete (N)": "Löschen ({n})",
   "Restore (N)": "Wiederherstellen ({n})",
   "Delete Permanently (N)": "Endgültig löschen ({n})",
   "Add to Favorites": "Zu Favoriten hinzufügen",
@@ -744,5 +743,10 @@
   "Edit watermark": "Wasserzeichen bearbeiten",
   "Tool options": "Werkzeugoptionen",
   "Watermark is too dense. Increase its size or spacing.": "Das Wasserzeichen ist zu dicht. Vergrößere die Schrift oder den Abstand.",
-  "Watermark text must be 512 characters or fewer.": "Wasserzeichen dürfen höchstens 512 Zeichen enthalten."
+  "Watermark text must be 512 characters or fewer.": "Wasserzeichen dürfen höchstens 512 Zeichen enthalten.",
+  "Select captures": "Aufnahmen auswählen",
+  "Select All": "Alle auswählen",
+  "Select capture": "Aufnahme auswählen",
+  "Move to Trash ({n})": "In den Papierkorb ({n})",
+  "Couldn't move these captures to Trash.": "Diese Aufnahmen konnten nicht in den Papierkorb verschoben werden."
 }

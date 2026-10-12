@@ -186,7 +186,6 @@
   "View": "查看",
   "Esc to close": "按 Esc 關閉",
   "Close · Esc": "關閉 · Esc",
-  "Delete (N)": "刪除 ({n})",
   "Restore (N)": "還原 ({n})",
   "Delete Permanently (N)": "永久刪除 ({n})",
   "Add to Favorites": "加入收藏",
@@ -744,5 +743,10 @@
   "Edit watermark": "編輯浮水印",
   "Tool options": "工具選項",
   "Watermark is too dense. Increase its size or spacing.": "浮水印過於密集，請增大字級或間距。",
-  "Watermark text must be 512 characters or fewer.": "浮水印文字不能超過 512 個字元。"
+  "Watermark text must be 512 characters or fewer.": "浮水印文字不能超過 512 個字元。",
+  "Select captures": "多選素材",
+  "Select All": "全選",
+  "Select capture": "選擇素材",
+  "Move to Trash ({n})": "移到回收筒（{n}）",
+  "Couldn't move these captures to Trash.": "無法將這些素材移到回收筒。"
 }

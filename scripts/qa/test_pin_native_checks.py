@@ -4,12 +4,22 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from pin_native_checks import borderless_geometry_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
+from pin_native_checks import borderless_geometry_evidence, capture_origin_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 from windows_qa_profile import isolated_app_directories, isolated_windows_profile
 
 
 class NativePinChecks(unittest.TestCase):
     asset = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+    def test_pin_must_match_capture_origin_and_size(self):
+        selected = (470, 160, 1150, 420)
+        self.assertTrue(capture_origin_evidence(selected, selected)["matches_capture_region"])
+        for actual in [(0, 0, 680, 260), (470, 160, 1150, 640), (471, 161, 1151, 421)]:
+            if actual == (471, 161, 1151, 421):
+                capture_origin_evidence(actual, selected)
+            else:
+                with self.assertRaises(RuntimeError):
+                    capture_origin_evidence(actual, selected)
 
     def trace(self, events, count=2):
         return f"completion queued until overlay destruction labels={count}\n" + "\n".join(events)

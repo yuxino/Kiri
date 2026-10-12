@@ -186,7 +186,6 @@
   "View": "View",
   "Esc to close": "Esc to close",
   "Close · Esc": "Close · Esc",
-  "Delete (N)": "Delete ({n})",
   "Restore (N)": "Restore ({n})",
   "Delete Permanently (N)": "Delete Permanently ({n})",
   "Add to Favorites": "Add to Favorites",
@@ -744,5 +743,10 @@
   "Edit watermark": "Edit watermark",
   "Tool options": "Tool options",
   "Watermark is too dense. Increase its size or spacing.": "Watermark is too dense. Increase its size or spacing.",
-  "Watermark text must be 512 characters or fewer.": "Watermark text must be 512 characters or fewer."
+  "Watermark text must be 512 characters or fewer.": "Watermark text must be 512 characters or fewer.",
+  "Select captures": "Select captures",
+  "Select All": "Select All",
+  "Select capture": "Select capture",
+  "Move to Trash ({n})": "Move to Trash ({n})",
+  "Couldn't move these captures to Trash.": "Couldn't move these captures to Trash."
 }

@@ -186,7 +186,6 @@
   "View": "表示",
   "Esc to close": "Esc で閉じる",
   "Close · Esc": "閉じる · Esc",
-  "Delete (N)": "削除 ({n})",
   "Restore (N)": "復元 ({n})",
   "Delete Permanently (N)": "完全に削除 ({n})",
   "Add to Favorites": "お気に入りに追加",
@@ -744,5 +743,10 @@
   "Edit watermark": "透かしを編集",
   "Tool options": "ツールの設定",
   "Watermark is too dense. Increase its size or spacing.": "透かしが密集しすぎています。文字サイズか間隔を大きくしてください。",
-  "Watermark text must be 512 characters or fewer.": "透かしの文字数は 512 文字以内にしてください。"
+  "Watermark text must be 512 characters or fewer.": "透かしの文字数は 512 文字以内にしてください。",
+  "Select captures": "キャプチャを選択",
+  "Select All": "すべて選択",
+  "Select capture": "キャプチャを選択",
+  "Move to Trash ({n})": "ゴミ箱に移動（{n}）",
+  "Couldn't move these captures to Trash.": "これらのキャプチャをゴミ箱に移動できませんでした。"
 }

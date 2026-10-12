@@ -57,6 +57,12 @@ physical position updates; Windows and Linux retain native dragging (ADR 0095).
 The screenshot toolbar also starts OCR through the existing explicit mode switch,
 reusing the committed selection and remote-consent flow.
 
+Recent screenshot references retain the validated selection position and logical
+size rather than treating Retina pixels as window points. A bounded in-memory
+origin registry serves direct/completion pinning; changed dimensions or display
+geometry use the existing fitted fallback. Existing references keep their
+user-adjusted frame (ADR 0096). Wayland placement remains compositor-controlled.
+
 The screenshot toolbar can request a direct pin through its existing capture
 confirmation. After the overlay is destroyed, Rust opens the saved image's
 reference window; a pin failure retains the completion card for retry (ADR 0081).
@@ -307,6 +313,12 @@ native draft. Older single watermarks retain their stored layout until their
 text or styling is changed. See ADRs 0088, 0090 and 0092.
 
 ## Managed library flow
+
+Library and Trash expose explicit Select captures, individual checkboxes and
+filtered Select All, alongside rubber-band selection. Normal card clicks retain
+direct opening. Batch mutations keep a retryable selection on failure and
+serialize pending actions; recoverable movement is labelled Move to Trash
+(ADR 0097).
 
 `AppState` owns one mutex-guarded library context containing the active root,
 library UUID, copy generation, availability, and loaded `AssetLibrary`.

@@ -191,3 +191,6 @@ development.
 
 - [`adr/0094-screenshot-ocr-and-annotation-layer-order.md`](adr/0094-screenshot-ocr-and-annotation-layer-order.md) — screenshot-toolbar OCR and creation-order annotation compositing.
 - [`adr/0095-macos-pinned-image-movement.md`](adr/0095-macos-pinned-image-movement.md) — pointer-based macOS reference movement across asynchronous WebView IPC.
+
+- [ADR 0096: Capture-origin reference placement](adr/0096-capture-origin-pin-placement.md)
+- [ADR 0097: Explicit library batch selection](adr/0097-explicit-library-batch-selection.md)

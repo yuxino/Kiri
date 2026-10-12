@@ -47,6 +47,13 @@ def borderless_geometry_evidence(client, outer):
     return {"client": list(client), "window": list(outer), "native_nonclient_frame": False}
 
 
+def capture_origin_evidence(actual, selected):
+    """Native screen pixels must retain both the selection origin and size."""
+    if len(actual) != 4 or len(selected) != 4 or any(abs(a - b) > 1 for a, b in zip(actual, selected)):
+        raise RuntimeError(f"Pin moved or resized the capture: selected={selected}, actual={actual}")
+    return {"selected": list(selected), "initial_pin": list(actual), "matches_capture_region": True}
+
+
 def annotated_capture_evidence(library, asset, source, copied):
     from PIL import Image, ImageChops, ImageStat
 

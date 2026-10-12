@@ -32,6 +32,8 @@ pub struct AppState {
     /// actually been destroyed. Creating another WebView from the synchronous
     /// confirmation IPC can block WebView2 before its response is delivered.
     pub pending_capture_completion: std::sync::Mutex<Option<PendingCaptureCompletion>>,
+    /// Bounded session-only origins for toolbar/completion-card references.
+    pub capture_pin_placements: std::sync::Mutex<crate::core::pin_placement::RecentCapturePinPlacements>,
     pub recording: std::sync::Mutex<RecordingFlow>,
     /// Finalization outlives the live recording session and can overlap a new
     /// capture. These transient jobs are never written as library assets.
@@ -534,6 +536,7 @@ impl AppState {
             capture_start: Default::default(),
             capture: Default::default(),
             pending_capture_completion: Default::default(),
+            capture_pin_placements: Default::default(),
             recording: Default::default(),
             recording_save_jobs: Default::default(),
             saved_annotation_appearance: std::sync::Mutex::new(AnnotationAppearance::default()),

@@ -12,7 +12,7 @@ import time
 
 from pywinauto import Desktop, keyboard, mouse
 from PIL import Image, ImageChops, ImageGrab, ImageStat
-from pin_native_checks import annotated_capture_evidence, borderless_geometry_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
+from pin_native_checks import annotated_capture_evidence, borderless_geometry_evidence, capture_origin_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 from windows_qa_profile import isolated_windows_profile
 
 
@@ -167,6 +167,7 @@ def direct_pin_acceptance(source, expected, region, user32):
     # nonclient frame in WM_NCCALCSIZE. Style bits alone do not prove a titlebar.
     frame = borderless_geometry_evidence(client_bounds(pin), outer_bounds(pin))
     report["pin_native_frame"] = frame
+    report["pin_capture_origin"] = capture_origin_evidence(client_bounds(pin), region)
     wait_for("direct reference native topmost applied", lambda: user32.GetWindowLongW(pin.handle, -20) & 0x00000008)
     items = json.loads((library / "library.json").read_text())
     created = [item for item in items if item["id"] not in before_ids]
@@ -353,6 +354,36 @@ def quick_capture_acceptance():
         fixture.wait(timeout=10)
 
 
+def batch_trash_acceptance(executable):
+    # All assets here were generated under isolated_windows_profile, never a
+    # user's library. Keep permanent deletion out of this recoverable test.
+    before = json.loads((library / "library.json").read_text())
+    if any(item.get("trashedAt") is not None for item in before):
+        raise RuntimeError("Batch fixture requires an initially empty Trash")
+    selected = {item["id"] for item in before if item.get("ocrText") is None and item.get("qrText") is None}
+    if len(selected) < 2:
+        raise RuntimeError("Native batch acceptance needs multiple finished captures")
+    subprocess.run([str(executable)], env=app_environment, check=True, timeout=10)
+    find("Library").click_input()
+    find("Select captures").click_input()
+    find("Select All").click_input()
+    move = find(re.escape(f"Move to Trash ({len(selected)})"))
+    snapshot("batch-selected")
+    move.click_input()
+    wait_for("selected native assets move to recoverable Trash", lambda:
+             all(item.get("trashedAt") is not None for item in json.loads((library / "library.json").read_text()) if item["id"] in selected))
+    if not all((library / "Assets" / item["filename"]).is_file() for item in before if item["id"] in selected):
+        raise RuntimeError("Moving to Trash must retain the original media files")
+    find("Trash").click_input()
+    find("Select captures").click_input()
+    find("Select All").click_input()
+    find(re.escape(f"Restore ({len(selected)})")).click_input()
+    wait_for("batch restore returns the original native index", lambda:
+             json.loads((library / "library.json").read_text()) == before)
+    report["batch_trash"] = {"selected_count":len(selected), "files_preserved":True, "restored_original_index":True}
+    report["checks"].append("explicit native multi-select and Select All move captures to recoverable Trash and restore the unchanged assets")
+
+
 def smoke(executable, update_button, label):
     global process
     if not executable.is_file():
@@ -376,6 +407,7 @@ def smoke(executable, update_button, label):
         report["checks"].append(f"{label} opens and cancels native capture")
         if label == "NSIS installation":
             quick_capture_acceptance()
+            batch_trash_acceptance(executable)
     except Exception:
         try:
             snapshot(f"{label.split()[0]}-failure")

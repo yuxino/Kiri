@@ -21,7 +21,7 @@ import traceback
 from PIL import Image, ImageChops, ImageGrab, ImageStat
 from linux_desktop_fixture import DesktopFixture, RECORDING_REGION
 from linux_audio_tone import inspect_tone
-from pin_native_checks import annotated_capture_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
+from pin_native_checks import annotated_capture_evidence, capture_origin_evidence, pin_lifecycle_evidence, pin_open_log_marker, proportional_resize_evidence
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -391,6 +391,35 @@ def pin_window():
     return pins[0] if pins else None
 
 
+def native_batch_trash_acceptance():
+    wait_for_feedback_to_close()
+    fixture.request("hide")
+    before = assets()
+    if any(item.get("trashedAt") is not None for item in before):
+        raise RuntimeError("Batch fixture requires an initially empty Trash")
+    selected = {item["id"] for item in before if item.get("ocrText") is None and item.get("qrText") is None}
+    if len(selected) < 2:
+        raise RuntimeError("Native batch acceptance needs multiple finished captures")
+    command(str(args.executable.resolve()))
+    click_control("Library")
+    click_control("Select captures")
+    click_control("Select All")
+    wait_for_control(f"Move to Trash ({len(selected)})")
+    screenshot("batch-selected.png")
+    click_control(f"Move to Trash ({len(selected)})")
+    wait_for("selected native assets move to recoverable Trash", lambda:
+             all(item.get("trashedAt") is not None for item in assets() if item["id"] in selected))
+    if not all((library / "Assets" / item["filename"]).is_file() for item in before if item["id"] in selected):
+        raise RuntimeError("Moving to Trash must retain the original media files")
+    click_control("Trash")
+    click_control("Select captures")
+    click_control("Select All")
+    click_control(f"Restore ({len(selected)})")
+    wait_for("batch restore returns the original native index", lambda: assets() == before)
+    report["batch_trash"] = {"selected_count":len(selected), "files_preserved":True, "restored_original_index":True}
+    report["checks"].append("explicit native multi-select and Select All move captures to recoverable Trash and restore unchanged assets")
+
+
 def native_pin_acceptance():
     wait_for_feedback_to_close()
     fixture.request("show")
@@ -428,6 +457,8 @@ def native_pin_acceptance():
                                               "WM_NORMAL_HINTS").stdout
     command("xdotool", "windowactivate", "--sync", pin)
     before = geometry(pin)
+    x, y, width, height = (int(before[key]) for key in ("X", "Y", "WIDTH", "HEIGHT"))
+    report["pin_capture_origin"] = capture_origin_evidence((x, y, x + width, y + height), (220, 240, 900, 620))
     command("xdotool", "mousemove", str(int(before["X"]) + 30), str(int(before["Y"]) + 30))
     # Native mapping precedes WebKit navigation/React handlers. Require a
     # painted hover action before attempting the one real image drag.
@@ -1073,6 +1104,7 @@ try:
         raise RuntimeError("Cancelled countdown started recording or imported an asset")
     report["checks"].append("visible countdown takes native keyboard focus; Escape cancels without a later recorder or saved asset")
     native_pin_acceptance()
+    native_batch_trash_acceptance()
     report["success"] = True
 except Exception as error:
     report["error"] = str(error)

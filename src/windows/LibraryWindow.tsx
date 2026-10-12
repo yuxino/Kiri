@@ -119,9 +119,12 @@ export function LibraryWindow() {
   const [kindFilter, setKindFilter] = useState<"all" | "image" | "video" | "gif">("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
-  // Batch selection starts only from a rubber-band drag. Ordinary card clicks
-  // open the asset and never introduce selection chrome.
+  // Ordinary card clicks open directly; explicit Select or a rubber-band
+  // gesture enters the recoverable batch workflow.
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const batchMutationLock = useRef(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportFailures, setExportFailures] = useState<string[]>([]);
   const [exportError, setExportError] = useState(false);
@@ -165,7 +168,33 @@ export function LibraryWindow() {
     [filteredAssets],
   );
 
-  const clearSelection = () => setSelection(new Set());
+  const clearSelection = () => {
+    setSelection(new Set());
+    setSelectionMode(false);
+  };
+  const toggleSelection = (id: string) => {
+    if (batchBusy || exportBusy) return;
+    setSelection(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const performBatch = async (action: () => Promise<void>, notice: string, failure: string) => {
+    if (batchMutationLock.current || exportBusy) return;
+    batchMutationLock.current = true;
+    setBatchBusy(true);
+    try {
+      await action();
+      clearSelection();
+      showLocalNotice(notice);
+    } catch {
+      setError({ message: failure, recovery: null });
+    } finally {
+      batchMutationLock.current = false;
+      setBatchBusy(false);
+    }
+  };
 
   // Only visible assets are actionable. A library refresh can remove a card
   // before React has committed the effect that prunes its stale selection.
@@ -216,6 +245,7 @@ export function LibraryWindow() {
   };
 
   const bandPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (batchBusy || exportBusy) return;
     // Only start a band from the empty grid area (not on a card/button).
     const target = e.target as HTMLElement | null;
     if (target && target.closest("[data-card],button,input,a,[data-menu]")) return;
@@ -301,20 +331,20 @@ export function LibraryWindow() {
 
   // Esc closes the active menu first, otherwise it clears batch selection.
   useEffect(() => {
-    if (selection.size === 0 && menuFor === null) return;
+    if (selection.size === 0 && !selectionMode && menuFor === null) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
         if (menuFor !== null) {
           closeMenu(true);
-        } else {
+        } else if (!batchMutationLock.current && !exportBusy) {
           clearSelection();
         }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeMenu, menuFor, selection.size]);
+  }, [closeMenu, menuFor, selection.size, selectionMode, exportBusy]);
 
   useEffect(() => {
     if (menuFor === null) return;
@@ -486,11 +516,20 @@ export function LibraryWindow() {
     };
   }, [refresh, refreshAssetContent]);
 
-  // ⌘/Ctrl+F focuses search. Batch selection is intentionally pointer-only
-  // so selection chrome appears only after a visible rubber-band gesture.
+  // Select-all applies to the filtered assets only after explicit selection.
+  // Editing a search, title or tag retains native text selection.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      if (destination === "captures" && mod && !e.altKey && !e.shiftKey &&
+          e.key.toLowerCase() === "a" && (selectionMode || selection.size > 0) &&
+          !e.defaultPrevented && !e.isComposing &&
+          !(e.target as HTMLElement | null)?.closest?.("input,textarea,select,[contenteditable]") &&
+          !batchBusy && !exportBusy) {
+        e.preventDefault();
+        setSelection(new Set(visibleAssetIds));
+        return;
+      }
       if (
         destination === "captures" &&
         mod &&
@@ -504,7 +543,8 @@ export function LibraryWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [assets, destination, favoritesOnly, kindFilter, query, tagFilter]);
+  }, [assets, destination, favoritesOnly, kindFilter, query, tagFilter,
+      selectionMode, selection.size, visibleAssetIds, batchBusy, exportBusy]);
 
   const gridStyle: React.CSSProperties = {
     display: "grid",
@@ -956,6 +996,22 @@ export function LibraryWindow() {
           </div>
 
           <div className="library-control-panel__actions">
+            {destination === "captures" && libraryStatus?.availability === "ready" && <>
+              <button type="button" className="kiri-button kiri-button--secondary"
+                aria-pressed={selectionMode || selectionIds.length > 0}
+                disabled={batchBusy || exportBusy || (!selectionMode && selectionIds.length === 0 && filteredAssets.length === 0)}
+                onClick={() => {
+                  closeMenu();
+                  if (selectionMode || selectionIds.length > 0) clearSelection();
+                  else setSelectionMode(true);
+                }}>
+                <KiriIcon name="checkmark" size={15} />
+                {t(selectionMode || selectionIds.length > 0 ? "Cancel" : "Select captures")}
+              </button>
+              {(selectionMode || selectionIds.length > 0) && <button type="button"
+                className="kiri-button kiri-button--secondary" disabled={batchBusy || exportBusy || filteredAssets.length === 0}
+                onClick={() => setSelection(new Set(visibleAssetIds))}>{t("Select All")}</button>}
+            </>}
             {destination==="captures"&&!showingTrash&&<button type="button" className="kiri-button kiri-button--secondary" disabled={mediaImportBusy||libraryStatus?.availability!=="ready"} title={t("Import local images or videos")} onClick={()=>void importMedia()}><ImagePlus size={15}/>{t(mediaImportBusy?"Importing…":"Import media")}</button>}
             {destination==="captures"&&!showingTrash&&<button type="button" className="kiri-button kiri-button--secondary" disabled={mediaImportBusy||libraryStatus?.availability!=="ready"} title={t("Paste Image (Cmd/Ctrl+V)")} onClick={()=>void pasteImage()}><KiriIcon name="doc.on.doc" size={15}/>{t("Paste Image")}</button>}
             {destination === "captures" &&
@@ -1106,7 +1162,7 @@ export function LibraryWindow() {
           count={selectionIds.length}
           showingTrash={showingTrash}
           allFavorites={selectionIds.length > 0 && selectionIds.every((id) => assets.find((a) => a.id === id)?.isFavorite)}
-          busy={exportBusy}
+          busy={exportBusy || batchBusy}
           onExport={() => {
             if (exportBusy) return;
             setExportBusy(true); setExportFailures([]); setExportError(false);
@@ -1119,11 +1175,7 @@ export function LibraryWindow() {
             }).catch(() => setExportError(true)).finally(() => setExportBusy(false));
           }}
           onRestore={() => {
-            void api
-              .batchRestore(selectionIds)
-              .then(() => showLocalNotice(t("Restored to Library")))
-              .catch(() => {});
-            clearSelection();
+            void performBatch(() => api.batchRestore(selectionIds), t("Restored to Library"), "Couldn't complete this action");
           }}
           onDelete={() =>
             showConfirmDialog(
@@ -1136,19 +1188,12 @@ export function LibraryWindow() {
             )
           }
           onMoveToTrash={() => {
-            void api
-              .batchMoveToTrash(selectionIds)
-              .then(() => showLocalNotice(t("Moved to Trash")))
-              .catch(() => {});
-            clearSelection();
+            void performBatch(() => api.batchMoveToTrash(selectionIds), t("Moved to Trash"), "Couldn't move these captures to Trash.");
           }}
           onToggleFavorite={() => {
             const allFav = selectionIds.every((id) => assets.find((a) => a.id === id)?.isFavorite);
-            void api
-              .batchSetFavorite(selectionIds, !allFav)
-              .then(() => showLocalNotice(allFav ? t("Remove from Favorites") : t("Add to Favorites")))
-              .catch(() => {});
-            clearSelection();
+            void performBatch(() => api.batchSetFavorite(selectionIds, !allFav),
+              t(allFav ? "Remove from Favorites" : "Add to Favorites"), "Couldn't complete this action");
           }}
           onClear={clearSelection}
         />
@@ -1267,7 +1312,9 @@ export function LibraryWindow() {
                     onMenu={(x, y, trigger, focusFirst) => openMenu(asset.id, x, y, trigger, focusFirst)}
                     menu={menuFor === asset.id ? itemMenu(asset) : null}
                     selected={selection.has(asset.id)}
-                    selectionActive={selectionIds.length > 0}
+                    selectionActive={selectionMode || selectionIds.length > 0}
+                    selectionBusy={batchBusy || exportBusy}
+                    onToggleSelection={() => toggleSelection(asset.id)}
                     registerRef={(el) => {
                       if (el) cardElsRef.current.set(asset.id, el);
                       else cardElsRef.current.delete(asset.id);
@@ -1585,6 +1632,8 @@ function AssetCard(props: {
   onOpen(): void;
   selected: boolean;
   selectionActive: boolean;
+  selectionBusy?: boolean;
+  onToggleSelection?(): void;
   registerRef(el: HTMLDivElement | null): void;
   onAvailability(availability: AssetAvailability): void;
   onRestoreMissing(): Promise<void>;
@@ -1601,6 +1650,8 @@ function AssetCard(props: {
     onOpen,
     selected,
     selectionActive,
+    selectionBusy,
+    onToggleSelection,
     registerRef,
     onAvailability,
     onRestoreMissing,
@@ -1704,6 +1755,10 @@ function AssetCard(props: {
   };
   const handleClick = (event: React.MouseEvent) => {
     if (event.defaultPrevented) return;
+    if (selectionActive) {
+      if (!selectionBusy && !(event.target as HTMLElement | null)?.closest?.("button,input,a,[contenteditable]")) onToggleSelection?.();
+      return;
+    }
     openCard();
   };
   const [titleDraft, setTitleDraft] = useState(asset.title ?? "");
@@ -1772,7 +1827,8 @@ function AssetCard(props: {
           if (!event.repeat) onCopy();
         } else if (target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
-          if (contentAvailable) openCard();
+          if (selectionActive) { if (!selectionBusy) onToggleSelection?.(); }
+          else if (contentAvailable) openCard();
         }
       }}
       onClick={handleClick}
@@ -1804,29 +1860,11 @@ function AssetCard(props: {
         cursor: "default",
       }}
     >
-      {/* Selected corner badge — small, non-interactive status mark. */}
-      {selected && (
-        <div
-          style={{
-            position: "absolute",
-            top: 7,
-            right: 7,
-            width: 20,
-            height: 20,
-            borderRadius: "50%",
-            background: "var(--kiri-accent)",
-            color: "var(--kiri-on-accent)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "none",
-            zIndex: 2,
-            pointerEvents: "none",
-          }}
-        >
-          <KiriIcon name="checkmark" size={11} />
-        </div>
-      )}
+      {selectionActive && <input type="checkbox" checked={selected} disabled={selectionBusy}
+        aria-label={`${t("Select capture")}: ${asset.title ?? asset.filename}`}
+        onClick={event => event.stopPropagation()}
+        onChange={() => onToggleSelection?.()}
+        style={{ position: "absolute", top: 10, right: 10, width: 18, height: 18, zIndex: 3, margin: 0, accentColor: "var(--kiri-accent)" }} />}
       <div
         ref={previewRef}
         style={{
@@ -2428,23 +2466,24 @@ function BatchActionBar(props: {
       <div style={{ width: 1, height: 22, background: "var(--kiri-surface-border)" }} />
       {showingTrash ? (
         <>
-          <BatchBarButton icon="arrow.uturn.backward" label={t("Restore (N)").replace("{n}", String(count))} onClick={onRestore} />
-          <BatchBarButton icon="trash.fill" label={t("Delete Permanently (N)").replace("{n}", String(count))} destructive onClick={onDelete} />
+          <BatchBarButton icon="arrow.uturn.backward" label={t("Restore (N)").replace("{n}", String(count))} disabled={busy} onClick={onRestore} />
+          <BatchBarButton icon="trash.fill" label={t("Delete Permanently (N)").replace("{n}", String(count))} disabled={busy} destructive onClick={onDelete} />
         </>
       ) : (
         <>
           <BatchBarButton icon="folder" label={t("Export Selected")} onClick={onExport} disabled={busy} />
-          <BatchBarButton icon="trash" label={t("Delete (N)").replace("{n}", String(count))} destructive onClick={onMoveToTrash} />
+          <BatchBarButton icon="trash" label={t("Move to Trash ({n})").replace("{n}", String(count))} disabled={busy} destructive onClick={onMoveToTrash} />
           <BatchBarButton
             icon={allFavorites ? "star.fill" : "star"}
             label={allFavorites ? t("Remove from Favorites") : t("Add to Favorites")}
             accent
+            disabled={busy}
             onClick={onToggleFavorite}
           />
         </>
       )}
       <div style={{ width: 1, height: 22, background: "var(--kiri-surface-border)" }} />
-      <BatchBarButton icon="xmark" label={t("Cancel")} onClick={onClear} />
+      <BatchBarButton icon="xmark" label={t("Cancel")} disabled={busy} onClick={onClear} />
     </div>
   );
 }

@@ -186,7 +186,6 @@
   "View": "Afficher",
   "Esc to close": "Échap pour fermer",
   "Close · Esc": "Fermer · Échap",
-  "Delete (N)": "Supprimer ({n})",
   "Restore (N)": "Restaurer ({n})",
   "Delete Permanently (N)": "Supprimer définitivement ({n})",
   "Add to Favorites": "Ajouter aux favoris",
@@ -744,5 +743,10 @@
   "Edit watermark": "Modifier le filigrane",
   "Tool options": "Options de l’outil",
   "Watermark is too dense. Increase its size or spacing.": "Le filigrane est trop dense. Augmentez sa taille ou son espacement.",
-  "Watermark text must be 512 characters or fewer.": "Le filigrane doit contenir 512 caractères au maximum."
+  "Watermark text must be 512 characters or fewer.": "Le filigrane doit contenir 512 caractères au maximum.",
+  "Select captures": "Sélectionner des captures",
+  "Select All": "Tout sélectionner",
+  "Select capture": "Sélectionner la capture",
+  "Move to Trash ({n})": "Mettre à la corbeille ({n})",
+  "Couldn't move these captures to Trash.": "Impossible de mettre ces captures à la corbeille."
 }

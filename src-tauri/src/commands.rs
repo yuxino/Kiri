@@ -583,7 +583,14 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
     let source_width = asset.pixel_width.max(1) as f64;
     let source_height = asset.pixel_height.max(1) as f64;
     let scale = (680.0 / source_width).min(480.0 / source_height).min(1.0);
-    let (width, height) = ((source_width * scale).max(80.0), (source_height * scale).max(60.0));
+    let placement = app.state::<AppState>().capture_pin_placements.lock().unwrap()
+        .get(asset.id, (asset.pixel_width, asset.pixel_height))
+        .filter(|origin| app.available_monitors().is_ok_and(|monitors| monitors.iter().any(|monitor| {
+            origin.fits_monitor(Rect::new(f64::from(monitor.position().x), f64::from(monitor.position().y),
+                f64::from(monitor.size().width), f64::from(monitor.size().height)), monitor.scale_factor())
+        })));
+    let (width, height) = placement.map(|origin| (origin.frame.width, origin.frame.height))
+        .unwrap_or(((source_width * scale).max(80.0), (source_height * scale).max(60.0)));
     let asset_id = asset.id;
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(window) = app.get_webview_window(&label) {
@@ -601,18 +608,31 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
             .decorations(false)
             .transparent(true)
             .shadow(false)
-            .always_on_top(true);
-        #[cfg(target_os = "linux")]
-        let builder = builder.visible(false);
+            .always_on_top(true)
+            .visible(false);
+        let builder = if let Some(origin) = placement {
+            builder.position(origin.frame.x, origin.frame.y)
+        } else { builder };
         let window = builder.build()
             .map_err(|error| format!("Pinned screenshot could not be opened: {error}"))?;
+        if let Some(origin) = placement {
+            // Windows requires physical coordinates after creation to avoid
+            // Tao choosing a different monitor's DPI for logical positions.
+            if let Err(error) = platform::place_transient_window(&window, origin.frame, origin.backing_scale) {
+                let _ = window.close();
+                return Err(format!("Pinned screenshot could not be positioned: {error}"));
+            }
+        }
         #[cfg(target_os = "linux")]
         if let Err(error) = platform::linux::show_pinned_screenshot(&window, width, height) {
             let _ = window.close();
             return Err(format!("Pinned screenshot could not be opened: {error:#}"));
         }
         #[cfg(not(target_os = "linux"))]
-        let _ = window;
+        if let Err(error) = window.show().and_then(|_| window.set_focus()) {
+            let _ = window.close();
+            return Err(format!("Pinned screenshot could not be shown: {error}"));
+        }
         log::info!("[pin] screenshot opened asset_id={asset_id}");
         Ok(())
     }).await.map_err(|error| format!("Pinned screenshot window stopped: {error}"))?
@@ -2742,6 +2762,12 @@ pub fn confirm_capture(
         "confirm_capture: completion queued until overlay destruction labels={}",
         session.overlay_labels.len()
     );
+    if let Some(id) = session_feedback.preview.asset_id.as_ref().and_then(|id| uuid::Uuid::parse_str(id).ok()) {
+        state.capture_pin_placements.lock().unwrap().remember(id,
+            crate::core::pin_placement::CapturePinPlacement::new(
+                display.screen_frame, staged.selection, display.backing_scale, pixel_size,
+            ));
+    }
     *pending = Some(PendingCaptureCompletion {
         session,
         preview: session_feedback.preview,

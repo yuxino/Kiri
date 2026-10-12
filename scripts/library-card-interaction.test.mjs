@@ -195,6 +195,79 @@ function cardProps(overrides = {}) {
   };
 }
 
+const selectButton = tree => nodes(tree).find(node => node?.type === "button" && nodes(node).includes("Select captures"));
+const assetCards = tree => nodes(tree).filter(node => node?.type?.name === "AssetCard");
+const batchBar = tree => nodes(tree).find(node => node?.type?.name === "BatchActionBar");
+
+test("explicit selection toggles cards and checkboxes without opening their editor", () => {
+  let toggles = 0, opens = 0;
+  const harness = createLibraryHarness();
+  const props = cardProps({selectionActive:true,onToggleSelection:()=>toggles++,onOpen:()=>opens++});
+  const card = harness.mount("AssetCard", props);
+  let tree = card.render();
+  tree.props.onClick({defaultPrevented:false,target:{closest:()=>null}});
+  const target={closest:()=>null};
+  tree.props.onKeyDown({key:" ",target,currentTarget:target,preventDefault(){}});
+  const checkbox = nodes(tree).find(node=>node?.type==="input"&&node.props.type==="checkbox");
+  assert.equal(checkbox.props.checked,false);
+  checkbox.props.onChange();
+  assert.equal(toggles,3);assert.equal(opens,0);
+  tree = card.render({...props,selectionBusy:true,selected:true});
+  assert.equal(nodes(tree).find(node=>node?.type==="input").props.disabled,true);
+  tree.props.onClick({defaultPrevented:false,target:{closest:()=>null}});
+  assert.equal(toggles,3);
+  card.unmount();
+});
+
+test("Select All targets filtered finished assets, keeps text-select shortcuts, and Escape exits empty selection", async () => {
+  const assets=[{...testAsset,id:"image"},{...testAsset,id:"video",kind:"video"}];
+  const harness=createLibraryHarness({listAssets:async()=>assets,getRecordingSaveJobs:async()=>[{id:"saving",kind:"video",createdAt:testAsset.createdAt,isSaving:true}]});
+  const library=harness.mount("LibraryWindow",{});
+  library.render();await settleRequests();
+  const filter=nodes(library.render()).find(node=>node?.type?.name==="FilterBar");
+  filter.props.onChangeKind("image");library.render();
+  selectButton(library.render()).props.onClick();
+  let tree=library.render();
+  assert.ok(assetCards(tree).every(card=>card.props.selectionActive));
+  let prevented=0;
+  const key={type:"keydown",key:"a",ctrlKey:true,preventDefault:()=>prevented++,target:{closest:()=>({})}};
+  harness.window.dispatchEvent(key);tree=library.render();
+  assert.equal(prevented,0);assert.equal(batchBar(tree),undefined);
+  harness.window.dispatchEvent({...key,target:{closest:()=>null}});tree=library.render();
+  assert.equal(prevented,1);assert.equal(batchBar(tree).props.count,1);
+  assert.deepEqual(assetCards(tree).filter(card=>card.props.selected).map(card=>card.props.asset.id),["image"]);
+  assetCards(tree)[0].props.onToggleSelection();tree=library.render();
+  assert.equal(batchBar(tree),undefined);
+  harness.window.dispatchEvent({type:"keydown",key:"Escape",preventDefault(){}});
+  assert.ok(selectButton(library.render()),"Escape must exit selection even with zero checked cards");
+  library.unmount();
+});
+
+test("batch Trash remains retryable on failure and dispatches one exact snapshot while busy", async () => {
+  const calls=[];let pending=deferred();
+  const assets=[{...testAsset,id:"one"},{...testAsset,id:"two"}];
+  const harness=createLibraryHarness({listAssets:async()=>assets,batchMoveToTrash:ids=>{calls.push([...ids]);return pending.promise;}});
+  const library=harness.mount("LibraryWindow",{});
+  library.render();await settleRequests();
+  selectButton(library.render()).props.onClick();
+  for(const card of assetCards(library.render()))card.props.onToggleSelection();
+  const action=batchBar(library.render()).props.onMoveToTrash;
+  action();action();
+  assert.equal(batchBar(library.render()).props.busy,true);
+  assert.deepEqual(calls,[["one","two"]]);
+  harness.window.dispatchEvent({type:"keydown",key:"Escape",preventDefault(){}});
+  assert.equal(batchBar(library.render()).props.count,2,"in-flight Trash must not discard the retry selection");
+  pending.reject(new Error("disk full"));await settleRequests();
+  let tree=library.render();
+  assert.equal(batchBar(tree).props.count,2);assert.equal(batchBar(tree).props.busy,false);
+  assert.ok(nodes(tree).includes("Couldn't move these captures to Trash."));
+  pending=deferred();batchBar(tree).props.onMoveToTrash();
+  pending.resolve();await settleRequests();
+  tree=library.render();assert.equal(batchBar(tree),undefined);
+  assert.ok(selectButton(tree));assert.equal(calls.length,2);
+  library.unmount();
+});
+
 function preview(tree) {
   return nodes(tree).find((node) => node?.type === "img" || node?.type === "video");
 }

@@ -39,6 +39,8 @@
 
 Single-click existing text, numbered notes, labels, or watermarks to select them; drag to move and double-click to edit. Press `Delete` or `Backspace` to remove a selected annotation, or click **Delete annotation**. Undo with `⌘Z` / `Ctrl+Z`. While typing, deletion keys only delete text.
 
+In Library, choose **Select captures**, check individual items or **Select All**, then **Move to Trash**. Restore them together from Trash when needed. Ordinary clicks still open captures directly; drag selection remains available.
+
 ## Get started
 
 1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.
