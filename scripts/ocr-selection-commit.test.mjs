@@ -46,11 +46,11 @@ test('toolbar OCR is explicit, disabled while completing and independent of scre
  const component=harness.mount('Toolbar',{selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},
   tool:'select',appearance:{},canUndo:false,canRedo:false,canSetSize:false,disabled:false,
   onOcr:()=>recognitions++,onDone:()=>captures++});
- const target=nodes(component.render()).find(node=>node?.props?.title==='OCR');
+ const target=nodes(component.render()).find(node=>node?.props?.title==='Recognize Text');
  assert.ok(target);assert.equal(target.props.icon,'text.viewfinder');
  assert.equal(recognitions,0);target.props.onClick();
  assert.equal(recognitions,1);assert.equal(captures,0);
- const busy=nodes(component.render({selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},tool:"select",appearance:{},disabled:true,onOcr:()=>recognitions++})).find(node=>node?.props?.title==='OCR');
+ const busy=nodes(component.render({selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},tool:"select",appearance:{},disabled:true,onOcr:()=>recognitions++})).find(node=>node?.props?.title==='Recognize Text');
  assert.equal(busy.props.disabled,true);
  component.unmount();
 });

@@ -43,9 +43,15 @@ async def main():
    await f.get_by_role('button',name='文字',exact=True).click();await f.get_by_text('识别结果',exact=True).wait_for();await page.wait_for_timeout(400)
    third=await calls();assert len(third)==3,third
    assert third[-1]['a']['selection']=={'x':210,'y':150,'width':805,'height':380}
+   await f.get_by_role('button',name='复制',exact=True).click()
+   f=await open_mode('截图');await select((230,160),(980,510));assert len(await calls())==3
+   await f.locator('.kiri-capture-toolbar').get_by_role('button',name='识别文字',exact=True).click()
+   await f.get_by_text('识别结果',exact=True).wait_for()
+   fourth=await calls();assert len(fourth)==4,fourth
+   assert fourth[-1]['a']['selection']=={'x':230,'y':160,'width':750,'height':350}
    assert not errors,errors
    await page.screenshot(path=str(OUT/'ocr-selection-check.png'))
-   (OUT/'ocr-selection-check.json').write_text(json.dumps({'passed':['no partial-drag request','one request on release','full release bounds','click does not recognize','reverse drag','reuse existing selection once'],'requests':[x['a']['selection'] for x in third]},ensure_ascii=False,indent=2)+'\n')
+   (OUT/'ocr-selection-check.json').write_text(json.dumps({'passed':['no partial-drag request','one request on release','full release bounds','click does not recognize','reverse drag','reuse existing selection once','screenshot-toolbar OCR'],'requests':[x['a']['selection'] for x in fourth]},ensure_ascii=False,indent=2)+'\n')
    await context.close();await browser.close()
  finally:
   server.shutdown();server.server_close()

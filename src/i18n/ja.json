@@ -350,6 +350,7 @@
   "Could not cancel recording. Try again.": "録画を中止できません。もう一度お試しください。",
   "Text History": "テキスト履歴",
   "Read, copy, and revisit recognized text": "認識したテキストを読み返し、コピー",
+  "Recognize Text": "テキストを認識",
   "Recognize Text Locally": "ローカルで文字認識",
   "Read Text": "テキストを読む",
   "Copy Text": "テキストをコピー",
