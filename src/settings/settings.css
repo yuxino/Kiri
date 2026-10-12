@@ -19,16 +19,13 @@
 }
 
 .kiri-settings__columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; gap: 28px; }
-.kiri-settings__ocr-column { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.kiri-settings__ocr-column { min-width: 0; display: flex; flex-direction: column; gap: 24px; }
 .kiri-settings__columns .kiri-settings-section__heading { min-height: 36px; align-items: flex-start; box-sizing: border-box; }
-.kiri-settings-section--general { grid-row: 1 / span 2; }
-.kiri-settings-section.kiri-settings-section--about { grid-column: 2; display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--kiri-surface-border); padding-top: 20px; }
-.kiri-settings-section--about .kiri-version-row { border: 0; border-radius: 0; background: transparent; padding: 0; min-height: 0; }
+.kiri-settings-section.kiri-settings-section--about { display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--kiri-surface-border); padding-bottom: 24px; }
+.kiri-settings-section--about .kiri-version-row { flex-direction: column; align-items: stretch; gap: 16px; border: 0; border-radius: 0; background: transparent; padding: 0; min-height: 0; }
 @container settings-page (max-width: 940px) {
   .kiri-settings__columns { grid-template-columns: 1fr; gap: 28px; }
   .kiri-settings__columns .kiri-settings-section__heading { min-height: 0; }
-  .kiri-settings-section--general { grid-row: auto; }
-  .kiri-settings-section.kiri-settings-section--about { grid-column: auto; }
 }
 
 .kiri-shortcut-actions, .kiri-storage-actions { max-width: 64%; }
@@ -705,3 +702,11 @@
 .kiri-language-menu .kiri-choice-option:hover,
 .kiri-language-menu .kiri-choice-option:focus-visible,
 .kiri-language-menu .kiri-choice-option[aria-selected=true] { background: var(--kiri-group-fill); }
+
+.kiri-settings-section--about .kiri-version-title strong { font-size: 18px; }
+.kiri-settings-section--about .kiri-settings-badge { background: transparent; padding: 0; border-radius: 0; font-size: 14px; font-weight: 400; }
+.kiri-settings-section--about .kiri-update-copy > span { font-size: 14px; line-height: 1.6; }
+.kiri-settings-section--about .kiri-update-actions { justify-content: flex-start; }
+.kiri-settings-section--about .kiri-update-notes { border: 0; border-radius: 0; background: transparent; padding: 0; font-size: 14px; }
+.kiri-settings-section--about .kiri-update-notes strong { font-size: 14px; }
+.kiri-settings-section--about .kiri-update-notes p { font-size: 14px; line-height: 1.65; }

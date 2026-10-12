@@ -24,7 +24,9 @@ metadata and actions together at the top of the detail. QR content and its image
 form one content group. Existing capture/editor QR and OCR results retain their
 existing action policies.
 
-Settings shows General in the left column, OCR and About in the right column.
+Settings shows General in the left column, About/updates and OCR in the right
+column. Settings is anchored at the bottom of the sidebar as an application
+control, separated from the four content destinations by a simple divider.
 It uses the available workspace width and stacks sections when that content
 becomes narrow. Rows wrap according to section width, including long translated
 button labels. Related General rows share one group with simple dividers; the

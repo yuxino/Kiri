@@ -2485,12 +2485,7 @@ function SegmentedPicker(props: {
   value: number;
   onChange(index: number): void;
 }) {
-  return (
-    <nav
-      className="library-section-picker"
-      aria-label="Kiri"
-    >
-      {props.options.map((option, index) => (
+  const buttons = props.options.map((option, index) => (
         <button
           type="button"
           key={option.icon}
@@ -2508,9 +2503,11 @@ function SegmentedPicker(props: {
             {option.notification && <span className="library-update-label" aria-hidden="true">{t("New update")}</span>}
           </span>
         </button>
-      ))}
-    </nav>
-  );
+  ));
+  return <nav className="library-section-picker" aria-label="Kiri">
+    {buttons.slice(0, -1)}
+    <div className="library-section-picker__footer">{buttons[buttons.length - 1]}</div>
+  </nav>;
 }
 
 function EmptyState(props: {

@@ -12,7 +12,12 @@ successful checks for six hours in the running app. Failed checks can retry on
 a later activation after five minutes. Do not add a periodic background timer,
 download automatically, or change the signature/installation trust boundary.
 
-A visible New update label beside Settings indicates an available version. The
+Settings sits in the sidebar footer. Its New update text uses the same
+readable typography, without a separate chip. The update section appears first
+in the right Settings column, with a clear version hierarchy and primary
+download/install action. Opening Settings with a known update scrolls and
+focuses that heading; late discovery never moves the user's focus. A visible
+New update label indicates an available version. The
 accessible label also announces that availability. Failure or an up-to-date
 result never creates a notification. Settings shows the version and notes using the
 existing update actions. Linux and Windows portable packages retain their

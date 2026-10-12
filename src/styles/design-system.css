@@ -165,6 +165,8 @@ textarea {
 .library-root { font-size: 14px; display: flex; height: 100%; position: relative; }
 .library-sidebar {
   flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   padding: 22px 12px;
   background: var(--kiri-canvas);
@@ -340,7 +342,8 @@ textarea {
   transform: scale(0.9);
 }
 
-.library-section-picker { display: flex; flex-direction: column; gap: 4px; }
+.library-section-picker { display: flex; flex: 1; flex-direction: column; gap: 4px; min-height: 0; }
+.library-section-picker__footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--kiri-surface-border); }
 .library-section-picker__button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 10px; box-sizing: border-box; color: var(--kiri-secondary-label); background: transparent; border: 0; border-radius: 7px; font: 500 14px/1.4 var(--kiri-font-ui); text-align: left; cursor: pointer; }
 .library-section-picker__button svg { flex-shrink: 0; }
 .library-section-picker__button:hover:not([data-active]) { color: var(--kiri-label); background: var(--kiri-group-fill); }
@@ -1341,4 +1344,4 @@ button:active:not(:disabled) {
 .library-batch-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px var(--kiri-space-page); flex: 0 0 auto; border-bottom: 1px solid var(--kiri-surface-border); background: var(--kiri-card); }
 
 .library-section-picker__copy { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; flex: 1; min-width: 0; gap: 5px 8px; }
-.library-update-label { max-width: 100%; padding: 2px 6px; box-sizing: border-box; border: 1px solid var(--kiri-surface-border); border-radius: 5px; background: var(--kiri-card); color: var(--kiri-label); font-size: 14px; font-weight: 650; line-height: 1.4; }
+.library-update-label { max-width: 100%; color: var(--kiri-label); font-size: 14px; font-weight: 650; line-height: 1.4; }

@@ -22,6 +22,13 @@ import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import "./settings.css";
 
 export function SettingsView({ updater }: { updater: AppUpdater }) {
+  const openedWithUpdate = useRef(updater.hasUpdate);
+  useEffect(() => {
+    if (!openedWithUpdate.current) return;
+    const heading = document.getElementById("about-settings-title");
+    heading?.scrollIntoView({ block: "start" });
+    heading?.focus({ preventScroll: true });
+  }, []);
   const [settings, setSettings] = useState<OcrProviderSettingsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -95,6 +102,7 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
         <div className="kiri-settings__columns">
           <GeneralSettingsSection />
           <div className="kiri-settings__ocr-column">
+            <AboutSettingsSection updater={updater} />
         {operationError && (
           <div className="kiri-settings-alert kiri-settings-alert--error" role="alert">
             {t(operationError)}
@@ -140,7 +148,6 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
         )}
 
           </div>
-          <AboutSettingsSection updater={updater} />
         </div>
       </div>
 
@@ -262,7 +269,7 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
     <section className="kiri-settings-section kiri-settings-section--about" aria-labelledby="about-settings-title">
       <div className="kiri-settings-section__heading">
         <div>
-          <h2 id="about-settings-title">{t("About")}</h2>
+          <h2 id="about-settings-title" tabIndex={-1}>{t(updater.hasUpdate ? "Update available" : "About")}</h2>
           {(manualUpdates || isPortable) && <p>
             {t(manualUpdates ? "Linux updates are installed manually from a downloaded package."
               : "Portable version: download the latest ZIP from Releases to update.")}
@@ -302,7 +309,9 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
         <div className="kiri-update-actions">
           <button
             type="button"
-            className="kiri-button kiri-button--secondary kiri-update-button"
+            className={updater.hasUpdate
+              ? "kiri-button kiri-button--primary kiri-update-button"
+              : "kiri-button kiri-button--secondary kiri-update-button"}
             disabled={busy || isPortable === null}
             aria-describedby="kiri-update-status"
             onClick={runPrimaryAction}

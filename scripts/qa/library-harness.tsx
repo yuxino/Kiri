@@ -15,6 +15,8 @@ const savingJobs = params.has("saving") ? [
   { id: "saving-gif", kind: "gif", createdAt: new Date().toISOString(), duration: 8, pixelWidth: 720, pixelHeight: 405 },
 ] : [];
 const workspace = params.has("workspace");
+let resolveLateUpdate: (() => void) | undefined;
+const lateUpdate = params.has("lateUpdate") ? new Promise<void>(resolve => { resolveLateUpdate = resolve; }) : null;
 const examples = [
   { kind: "image", fileSize: 12500, title: "Screenshot with a long title for layout checking" },
   { kind: "video", fileSize: 1500000000, title: "Recording" },
@@ -52,6 +54,7 @@ const emit = (event: string, payload: unknown) => {
 };
 Object.assign(window, {
   __qaActions: actions,
+  __qaResolveUpdate: () => resolveLateUpdate?.(),
   __qaGifState: (job: unknown) => emit("gif-conversion-state", job),
   __qaCompleteSave: () => {
     const job = savingJobs.shift();
@@ -87,6 +90,7 @@ Object.assign(window, {
         case "plugin:updater|check":
           actions.push("check-update");
           if (params.has("updateFailure")) throw new Error("Controlled offline update check");
+          if (lateUpdate) await lateUpdate;
           return params.has("update") ? {rid:7,currentVersion:"1.6.17",version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
         case "plugin:resources|close": return null;
         case "set_capture_shortcut_editing": return null;
