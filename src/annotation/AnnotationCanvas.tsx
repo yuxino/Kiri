@@ -304,6 +304,16 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       historyRef.current = new AnnotationHistory(initialProject?.marks ?? []);
     }
     const history = historyRef.current;
+    // Keep new identities distinct when the clock stalls or moves backward.
+    // Existing document identities remain unchanged.
+    const lastMarkIdRef = useRef(0);
+    const newMarkId = useCallback(() => {
+      const occupied = new Set(history.elements.map((mark) => mark.id));
+      let id = Math.max(Date.now(), lastMarkIdRef.current + 1);
+      while (occupied.has(id)) id += 1;
+      lastMarkIdRef.current = id;
+      return id;
+    }, [history]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [marks, setMarks] = useState<AnnotationMark[]>(() =>
       history.elements.slice(),
@@ -764,7 +774,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const width = Math.max(1, Math.min(180 * uiScale, documentSize.width - 2 * insets.x));
       const height = Math.max(1, Math.min(ap.watermarkFontSize * 1.25, documentSize.height - 2 * insets.y));
       const center = point ?? {x: documentSize.width / 2, y: documentSize.height / 2};
-      const mark: WatermarkMark = previous ?? {kind: "watermark", id: Date.now() + Math.random(), text: "",
+      const mark: WatermarkMark = previous ?? {kind: "watermark", id: newMarkId(), text: "",
         rect: {x: center.x - width / 2, y: center.y - height / 2, width, height},
         color: ap.watermarkColor, fontSize: ap.watermarkFontSize, opacity: ap.watermarkOpacity / 100,
         rotation: ap.watermarkRotation, mode: "tiled", spacing: ap.watermarkSpacing};
@@ -1044,7 +1054,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             height,
           };
           const nextEditing: EditingState = {
-            id: Date.now() + Math.random(),
+            id: newMarkId(),
             // Blank text-tool presses create a new mark; a stale selection
             // must not replace an existing mark. Body presses use the same
             // move/resize path as Select, and double-click reopens the editor.
@@ -1363,7 +1373,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           const t = interaction.tool;
           const ap = appearanceRef.current;
           if (t === "callout") {
-            appendMark(createCallout(interaction.start, p, Date.now() + Math.random()));
+            appendMark(createCallout(interaction.start, p, newMarkId()));
             editCallout(history.elements.length - 1);
           } else if (t === "pen") {
             const points = interaction.points;
@@ -1372,7 +1382,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             if (points.length > 0) {
               appendMark({
                 kind: "pen",
-                id: Date.now() + Math.random(),
+                id: newMarkId(),
                 points: [...points],
                 color: ap.colorPreset,
                 width: ap.penWidth,
@@ -1386,7 +1396,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             if(mosaic.shape!=="brush"&&(Math.abs(p.x-interaction.start.x)<1||Math.abs(p.y-interaction.start.y)<1)){setDraft(null);return;}
             appendMark({
               ...mosaic,
-              id: Date.now() + Math.random(),
+              id: newMarkId(),
               points: mosaic.shape === "brush" ? [...points] : [interaction.start, p],
             });
           } else if (t === "rectangle") {
@@ -1394,7 +1404,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             if(Math.abs(p.x-start.x)<1||Math.abs(p.y-start.y)<1){setDraft(null);return;}
             appendMark({
               kind: "rectangle",
-              id: Date.now() + Math.random(),
+              id: newMarkId(),
               rect: {
                 x: Math.min(start.x, p.x),
                 y: Math.min(start.y, p.y),
@@ -1409,7 +1419,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             if (Math.hypot(p.x - start.x, p.y - start.y) >= 3) {
               appendMark({
                 kind: t === "arrow" ? "arrow" : "line",
-                id: Date.now() + Math.random(),
+                id: newMarkId(),
                 start,
                 end: p,
                 color: ap.colorPreset,

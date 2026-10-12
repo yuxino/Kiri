@@ -288,7 +288,7 @@ function annotation(initialDocument, options = {}) {
       }},
     },
     document: {createElement: type => { assert.equal(type, "canvas"); return canvas(); }},
-    globals: {devicePixelRatio: 1},
+    globals: {devicePixelRatio: 1, ...options.globals},
     attachRef(node) { if (node.type === "canvas") node.props.ref.current = live; },
   });
   const props = {ref, image, region: {x: 0, y: 0, ...initialDocument.canvas}, initialDocument,
@@ -1589,4 +1589,30 @@ test("an explicit text commit reports an active IME draft instead of allowing a 
  assert.equal(inlineEditor(h),undefined);
  assert.equal(h.ref.current.commitTextEditing(),true,"an already finished input is ready to switch");
  h.component.unmount();
+});
+
+
+test("new mark IDs stay distinct with a frozen or backward clock and preserve loaded identities", async () => {
+  const stamp = 1791808605190;
+  let now = stamp;
+  const loaded = [{...text, id: stamp}, {...rectangle, id: stamp + 1}];
+  const h = annotation(documentWith(loaded), {tool: "label", globals: {Date: {now: () => now}, Math: Object.assign(Object.create(Math), {random: () => 0})}});
+  h.pointer("onPointerDown", 80, 240); h.pointer("onPointerUp", 80, 240);
+  const firstId = inlineEditor(h).props.editing.id;
+  inlineEditor(h).props.onTextChange("first note"); h.component.render();
+  blankPress(h);
+  now = stamp - 1000;
+  blankPress(h);
+  const secondId = inlineEditor(h).props.editing.id;
+  assert.notEqual(firstId, secondId);
+  assert.equal(loaded.some(mark => mark.id === firstId || mark.id === secondId), false);
+  inlineEditor(h).props.onTextChange("second note"); h.component.render();
+  h.ref.current.commitTextEditing(); h.component.render();
+  const saved = (await h.ref.current.exportResult()).document;
+  assert.equal(new Set(saved.marks.map(mark => mark.id)).size, 4);
+  assert.deepEqual(saved.marks.slice(0, 2), loaded);
+  h.ref.current.undo(); h.component.render();
+  h.ref.current.redo(); h.component.render();
+  assert.deepEqual((await h.ref.current.exportResult()).document, saved);
+  h.component.unmount();
 });
