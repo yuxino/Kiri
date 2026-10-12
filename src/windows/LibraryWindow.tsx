@@ -2503,8 +2503,10 @@ function SegmentedPicker(props: {
           onClick={() => props.onChange(index)}
         >
           <KiriIcon name={option.icon} size={16} />
-          <span>{option.label}</span>
-          {option.notification && <span className="library-update-dot" aria-hidden="true" />}
+          <span className="library-section-picker__copy">
+            <span>{option.label}</span>
+            {option.notification && <span className="library-update-label" aria-hidden="true">{t("New update")}</span>}
+          </span>
         </button>
       ))}
     </nav>

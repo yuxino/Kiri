@@ -744,5 +744,6 @@
   "Move to Trash ({n})": "Mettre à la corbeille ({n})",
   "Couldn't move these captures to Trash.": "Impossible de mettre ces captures à la corbeille.",
   "Opening Kiri checks for updates.": "Kiri vérifie les mises à jour à l’ouverture.",
-  "Update available": "Mise à jour disponible"
+  "Update available": "Mise à jour disponible",
+  "New update": "Mise à jour"
 }

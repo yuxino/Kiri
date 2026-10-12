@@ -744,5 +744,6 @@
   "Move to Trash ({n})": "In den Papierkorb ({n})",
   "Couldn't move these captures to Trash.": "Diese Aufnahmen konnten nicht in den Papierkorb verschoben werden.",
   "Opening Kiri checks for updates.": "Beim Öffnen sucht Kiri nach Updates.",
-  "Update available": "Update verfügbar"
+  "Update available": "Update verfügbar",
+  "New update": "Update"
 }

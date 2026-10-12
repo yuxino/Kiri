@@ -12,9 +12,9 @@ successful checks for six hours in the running app. Failed checks can retry on
 a later activation after five minutes. Do not add a periodic background timer,
 download automatically, or change the signature/installation trust boundary.
 
-A small neutral dot beside Settings indicates an available version. The
+A visible New update label beside Settings indicates an available version. The
 accessible label also announces that availability. Failure or an up-to-date
-result never creates a dot. Settings shows the version and notes using the
+result never creates a notification. Settings shows the version and notes using the
 existing update actions. Linux and Windows portable packages retain their
 manual Releases route and never query an unsupported installer target.
 

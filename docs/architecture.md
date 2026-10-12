@@ -563,7 +563,7 @@ manifest when its native window is visible at startup or gains focus. Successful
 checks are cached for six hours per app session; failures may retry at the next
 activation after five minutes, without a periodic timer. Existing available or
 downloaded updates are retained rather than replaced by focus checks. Settings
-also offers an explicit check. A neutral dot beside Settings appears only when
+also offers an explicit check. A visible New update label beside Settings appears only when
 an update is available; offline failures remain quiet. See ADR 0099.
 The configured endpoint and updater public key are compiled into Kiri; release
 notes can supply display text but never an executable path, alternate endpoint,

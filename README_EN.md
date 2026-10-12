@@ -43,7 +43,7 @@ In Library, choose **Select captures**, check individual items or **Select All**
 
 The main window keeps Library, Text History, QR Favorites, Trash and Settings in a fixed sidebar. Pages share their title and action layout, with batch actions above the capture grid. Settings uses columns for General and OCR in wide windows and one column in narrow windows.
 
-Opening the main panel checks for updates on macOS and installed Windows builds. A dot beside Settings indicates a newer version; downloading and installing remain explicit actions. Linux and Windows Portable users still update manually from Releases.
+Opening the main panel checks for updates on macOS and installed Windows builds. A New update label beside Settings indicates a newer version; downloading and installing remain explicit actions. Linux and Windows Portable users still update manually from Releases.
 
 ## Get started
 

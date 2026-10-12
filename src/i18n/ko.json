@@ -744,5 +744,6 @@
   "Move to Trash ({n})": "휴지통으로 이동 ({n})",
   "Couldn't move these captures to Trash.": "이 캡처를 휴지통으로 이동할 수 없습니다.",
   "Opening Kiri checks for updates.": "Kiri를 열면 업데이트를 확인합니다.",
-  "Update available": "업데이트 있음"
+  "Update available": "업데이트 있음",
+  "New update": "업데이트"
 }

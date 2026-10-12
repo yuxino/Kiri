@@ -1340,4 +1340,5 @@ button:active:not(:disabled) {
 
 .library-batch-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px var(--kiri-space-page); flex: 0 0 auto; border-bottom: 1px solid var(--kiri-surface-border); background: var(--kiri-card); }
 
-.library-update-dot { width: 6px; height: 6px; flex: 0 0 6px; margin-left: auto; border-radius: 50%; background: var(--kiri-label); }
+.library-section-picker__copy { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; flex: 1; min-width: 0; gap: 5px 8px; }
+.library-update-label { max-width: 100%; padding: 2px 6px; box-sizing: border-box; border: 1px solid var(--kiri-surface-border); border-radius: 5px; background: var(--kiri-card); color: var(--kiri-label); font-size: 14px; font-weight: 650; line-height: 1.4; }

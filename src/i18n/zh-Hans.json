@@ -744,5 +744,6 @@
   "Move to Trash ({n})": "移到回收站（{n}）",
   "Couldn't move these captures to Trash.": "无法将这些素材移到回收站。",
   "Opening Kiri checks for updates.": "打开 Kiri 时检查更新。",
-  "Update available": "有新版本"
+  "Update available": "有更新",
+  "New update": "有更新"
 }
