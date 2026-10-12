@@ -117,6 +117,13 @@ Object.assign(window, {
           asset.ocrText = String(args.replacement ?? original);
           return {...asset};
         }
+        case "empty_trash":
+          actions.push(command);
+          if (params.has("trashFailure")) throw new Error("Controlled trash deletion failure");
+          if (params.has("trashPending")) await new Promise<void>(resolve => Object.assign(window, { __qaResolveTrash: resolve }));
+          assets.splice(0);
+          emit("library-changed", null);
+          return null;
         case "get_asset_availability": return { status: "ready" };
         case "copy_asset": actions.push(command); return null;
         case "list_pending_recordings": case "list_text_history": return [];

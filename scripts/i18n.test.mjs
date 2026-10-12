@@ -140,21 +140,19 @@ test("an open confirmation follows language changes without freezing the library
       locale.setLanguage(language); return true;
     },
   });
-  let request;
-  const libraryHarness = createLibraryHarness({ showConfirmDialog: (...args) => { request = args; return Promise.resolve(); } },
-    null, { modules: { "../i18n": libraryLocale } });
+  const libraryHarness = createLibraryHarness({}, null, { modules: { "../i18n": libraryLocale } });
   const library = libraryHarness.mount("LibraryWindow", {});
   library.render(); await settleRequests();
   nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(3);
   library.render(); await settleRequests();
-  nodes(library.render()).find(node => node?.type === "button" && node.props.title === libraryLocale.t("Empty Trash")).props.onClick();
-  const [kind, title, message, confirmLabel, ids, localize] = request;
-  const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/ConfirmWindow.tsx", import.meta.url), "utf8");
-  const dialogHarness = createLibraryHarness({}, source, { modules: {
-    "../i18n": dialogLocale,
-    "@tauri-apps/api/window": { getCurrentWindow: () => ({ close: async () => {} }) },
-  } });
-  const dialog = dialogHarness.mount("ConfirmWindow", { kind, title, message, confirmLabel, ids, localize });
+  nodes(library.render()).find(node => node?.props?.className?.includes("library-empty-trash")).props.onClick();
+  const props = nodes(library.render()).find(node => node?.type === "empty-trash-dialog").props;
+  const source = 'import React from "react";\n' + readFileSync(new URL("../src/components/EmptyTrashDialog.tsx", import.meta.url), "utf8");
+  const dialogHarness = createLibraryHarness({}, source, {
+    modules: { "../i18n": dialogLocale }, globals: { HTMLElement: class {} },
+    attachRef: node => { if (node.type === "dialog") node.props.ref.current = { showModal() {}, close() {} }; },
+  });
+  const dialog = dialogHarness.mount("EmptyTrashDialog", props);
   for (const language of languages) {
     listeners.forEach(listener => listener(language));
     const text = nodes(dialog.render());

@@ -179,6 +179,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     "../i18n": { t: (value) => value, fmt: (value) => value },
     "../../src-tauri/icons/128x128.png": "",
     "../components/KiriIcons": { KiriIcon: "icon" },
+    "../components/EmptyTrashDialog": { EmptyTrashDialog: "empty-trash-dialog" },
     "../lib/kiri-resource-url.js": {
       kiriResourceUrl: (route, [id], { v }) => `${route}:${id}?v=${v}`,
     },

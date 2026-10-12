@@ -1345,3 +1345,33 @@ button:active:not(:disabled) {
 
 .library-section-picker__copy { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; flex: 1; min-width: 0; gap: 5px 8px; }
 .library-update-label { max-width: 100%; color: var(--kiri-label); font-size: 14px; font-weight: 650; line-height: 1.4; }
+
+/* Empty Trash shares the toolbar's control sizing and keeps its danger cue. */
+.library-empty-trash {
+  color: var(--kiri-coral);
+  background: color-mix(in srgb, var(--kiri-coral) 5%, var(--kiri-elevated));
+  border-color: color-mix(in srgb, var(--kiri-coral) 35%, transparent);
+}
+.library-empty-trash:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--kiri-coral) 10%, var(--kiri-elevated));
+  border-color: var(--kiri-coral);
+}
+
+.kiri-confirm-dialog {
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  margin: auto;
+  padding: 24px;
+  color: var(--kiri-label);
+  background: var(--kiri-elevated);
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 16px;
+  font: 14px var(--kiri-font-ui);
+}
+.kiri-confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.22); }
+.kiri-confirm-dialog h2 { margin: 0 0 12px; font-size: 20px; line-height: 1.3; }
+.kiri-confirm-dialog p { margin: 0; font-size: 14px; line-height: 1.6; }
+.kiri-confirm-dialog .kiri-confirm-dialog__error { margin-top: 16px; color: var(--kiri-coral); }
+.kiri-confirm-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.kiri-confirm-dialog .kiri-button { min-height: 36px; font-size: 14px; }

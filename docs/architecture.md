@@ -70,7 +70,9 @@ reference window; a pin failure retains the completion card for retry (ADR 0081)
 Windows dispatches confirmation, resident feedback, and library-window
 presentation to one serial worker. WebView2 creation never blocks their IPC or
 native event callbacks, and repeated resident-window requests preserve order.
-Confirmation creation errors return to the caller. Permanent deletion and
+Confirmation creation errors return to the caller. Empty Trash in the main panel
+uses an in-WebView modal instead of creating a desktop-wide confirm window
+(ADR 0100); the existing async deletion command remains unchanged. Permanent deletion and
 empty-trash filesystem work use blocking workers; empty-trash chooses its
 deleted IDs and invalidates their thumbnails under the same generation barrier
 and library lock. `scripts/qa/confirmation-native.py` exercises real Windows

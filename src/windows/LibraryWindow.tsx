@@ -28,6 +28,7 @@ import { useAppUpdater } from "../settings/useAppUpdater";
 import { QrFavorites } from "../qr/QrResults";
 import { TextHistory, OcrDialog } from "../ocr/TextHistory";
 import brandIcon from "../../src-tauri/icons/128x128.png";
+import { EmptyTrashDialog } from "../components/EmptyTrashDialog";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
 import {
@@ -126,6 +127,7 @@ export function LibraryWindow() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
+  const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
   const batchMutationLock = useRef(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportFailures, setExportFailures] = useState<string[]>([]);
@@ -1043,21 +1045,11 @@ export function LibraryWindow() {
             {destination === "captures" && showingTrash && assets.length > 0 && (
               <button
                 type="button"
-                className="kiri-button kiri-button--destructive"
-                title={t("Empty Trash")}
-                onClick={() =>
-                  showConfirmDialog(
-                    "emptyTrash",
-                    "Empty Trash?",
-                    "All captures in Trash will be permanently deleted. This cannot be undone.",
-                    "Empty Trash",
-                    undefined,
-                    true,
-                  )
-                }
-                style={{ minHeight: 30, padding: "0 10px", fontSize: 11.5, flexShrink: 0 }}
+                className="kiri-button kiri-button--secondary library-empty-trash"
+                disabled={batchBusy || exportBusy || libraryStatus?.availability !== "ready"}
+                onClick={() => { closeMenu(); setEmptyTrashOpen(true); }}
               >
-                <KiriIcon name="trash.fill" size={12} />
+                <KiriIcon name="trash.fill" size={15} />
                 {t("Empty Trash")}
               </button>
             )}
@@ -1376,6 +1368,14 @@ export function LibraryWindow() {
         </React.Suspense>
       )}
 
+      {emptyTrashOpen && <EmptyTrashDialog
+        onClose={() => setEmptyTrashOpen(false)}
+        onConfirm={async () => {
+          await api.emptyTrash();
+          clearSelection();
+          await refresh();
+        }}
+      />}
       {ocrAsset && <OcrDialog key={ocrAsset.id} asset={ocrAsset} onClose={() => setOcrAsset(null)} />}
 
       {/* Local operation feedback floats above content without shifting it. */}

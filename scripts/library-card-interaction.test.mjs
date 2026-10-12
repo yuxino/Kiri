@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -8,22 +9,29 @@ import {
   testAsset,
 } from "./helpers/library-render-harness.mjs";
 
-test("a failed confirmation window shows an error without dispatching deletion", async () => {
-  const opened = deferred();
-  let deleted = false;
+test("Empty Trash opens a local dialog and only confirms through the existing command", async () => {
+  let deleted = 0, opened = 0;
   const harness = createLibraryHarness({
-    showConfirmDialog: () => opened.promise,
-    emptyTrash: async () => { deleted = true; },
+    showConfirmDialog: async () => { opened++; },
+    emptyTrash: async () => { deleted++; },
   });
   const library = harness.mount("LibraryWindow", {});
   library.render(); await settleRequests();
   nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(3);
   library.render(); await settleRequests();
-  nodes(library.render()).find(node => node?.type === "button" && node.props.title === "Empty Trash").props.onClick();
-  opened.reject(new Error("WebView creation failed"));
-  await settleRequests();
-  assert.ok(nodes(library.render()).includes("Couldn't complete this action"));
-  assert.equal(deleted, false);
+  const trigger = () => nodes(library.render()).find(node => node?.props?.className?.includes("library-empty-trash"));
+  trigger().props.onClick();
+  const dialog = () => nodes(library.render()).find(node => node?.type === "empty-trash-dialog");
+  assert.ok(dialog());
+  assert.equal(deleted, 0);
+  assert.equal(opened, 0);
+  dialog().props.onClose();
+  assert.equal(dialog(), undefined);
+  assert.equal(deleted, 0);
+  trigger().props.onClick();
+  await dialog().props.onConfirm();
+  assert.equal(deleted, 1);
+  assert.equal(opened, 0);
   library.unmount();
 });
 
@@ -737,9 +745,78 @@ test("Trash destructive actions stay in Trash when switching to secondary destin
     return library.render();
   };
   for (const destination of [1, 2, 4]) {
-    assert.ok(nodes(await navigate(3)).find(node => node?.type === "button" && node.props.title === "Empty Trash"));
+    assert.ok(nodes(await navigate(3)).find(node => node?.type === "button" && node.props.className?.includes("library-empty-trash")));
     const tree = await navigate(destination);
-    assert.equal(nodes(tree).some(node => node?.type === "button" && node.props.title === "Empty Trash"), false);
+    assert.equal(nodes(tree).some(node => node?.type === "button" && node.props.className?.includes("library-empty-trash")), false);
   }
   library.unmount();
+});
+
+const emptyTrashSource = 'import React from "react";\n' + readFileSync(new URL("../src/components/EmptyTrashDialog.tsx", import.meta.url), "utf8");
+function localTrashDialog(props) {
+  class FocusTarget { isConnected = true; focused = 0; focus() { this.focused++; } }
+  const opener = new FocusTarget();
+  const native = { opened: 0, closed: 0, showModal() { this.opened++; }, close() { this.closed++; } };
+  const harness = createLibraryHarness({}, emptyTrashSource, {
+    document: { activeElement: opener }, globals: { HTMLElement: FocusTarget },
+    attachRef: node => { if (node.type === "dialog") node.props.ref.current = native; },
+  });
+  const mounted = harness.mount("EmptyTrashDialog", props);
+  const button = label => nodes(mounted.render()).find(node => node?.type === "button" && nodes(node).includes(label));
+  return { mounted, button, native, opener };
+}
+
+test("local trash confirmation uses a modal with safe cancel focus and restores its opener", () => {
+  let calls = 0, closed = 0;
+  const ui = localTrashDialog({ onConfirm: async () => { calls++; }, onClose: () => { closed++; } });
+  const tree = ui.mounted.render();
+  assert.equal(tree.type, "dialog");
+  assert.equal(tree.props.role, "alertdialog");
+  assert.equal(ui.native.opened, 1);
+  assert.equal(ui.button("Cancel").props.autoFocus, true);
+  ui.button("Cancel").props.onClick();
+  assert.equal(closed, 1);
+  assert.equal(calls, 0);
+  ui.mounted.unmount();
+  assert.equal(ui.native.closed, 1);
+  assert.equal(ui.opener.focused, 1);
+});
+
+test("local trash confirmation blocks duplicate deletion and cancellation while deletion is pending", async () => {
+  const request = deferred(); let calls = 0, closed = 0;
+  const ui = localTrashDialog({ onConfirm: () => { calls++; return request.promise; }, onClose: () => { closed++; } });
+  const confirm = ui.button("Empty Trash").props.onClick;
+  confirm(); confirm();
+  assert.equal(calls, 1);
+  assert.equal(ui.button("Deleting…").props.disabled, true);
+  assert.equal(ui.button("Cancel").props.disabled, true);
+  ui.mounted.render().props.onCancel({ preventDefault() {} });
+  ui.button("Cancel").props.onClick();
+  assert.equal(closed, 0);
+  request.resolve(); await settleRequests();
+  assert.equal(closed, 1);
+  ui.mounted.unmount();
+});
+
+test("local trash deletion failure stays visible and can retry through the same command", async () => {
+  let calls = 0, closed = 0;
+  const ui = localTrashDialog({ onConfirm: async () => { if (++calls === 1) throw Error("Controlled failure"); }, onClose: () => { closed++; } });
+  ui.button("Empty Trash").props.onClick(); await settleRequests();
+  assert.equal(closed, 0);
+  assert.ok(nodes(ui.mounted.render()).includes("Couldn't complete this action"));
+  assert.equal(ui.button("Empty Trash").props.disabled, false);
+  ui.button("Empty Trash").props.onClick(); await settleRequests();
+  assert.equal(calls, 2);
+  assert.equal(closed, 1);
+  ui.mounted.unmount();
+});
+
+test("local trash confirmation isolates shortcuts and Escape never dispatches deletion", () => {
+  let calls = 0, closed = 0, prevented = 0, stopped = 0;
+  const ui = localTrashDialog({ onConfirm: async () => { calls++; }, onClose: () => { closed++; } });
+  ui.mounted.render().props.onKeyDown({ key: "Enter", preventDefault() { prevented++; }, stopPropagation() { stopped++; } });
+  assert.equal(prevented, 1); assert.equal(stopped, 1);
+  ui.mounted.render().props.onCancel({ preventDefault() { prevented++; } });
+  assert.equal(closed, 1); assert.equal(calls, 0);
+  ui.mounted.unmount();
 });
