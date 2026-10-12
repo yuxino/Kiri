@@ -210,7 +210,6 @@
   "In Use": "Used by Another App",
   "About": "About",
   "Version %@": "Version %@",
-  "Updates are checked only when you choose to check.": "Updates are checked only when you choose to check.",
   "Portable version: download the latest ZIP from Releases to update.": "Portable version: download the latest ZIP from Releases to update.",
   "Check for Updates": "Check for Updates",
   "Checking…": "Checking…",
@@ -358,7 +357,6 @@
   "Couldn't copy text.": "Couldn't copy text.",
   "You can close this window. Successful results are saved to Text History.": "You can close this window. Successful results are saved to Text History.",
   "Search recognized text": "Search recognized text",
-  "Saved on this device": "Saved on this device",
   "Couldn't load Text History.": "Couldn't load Text History.",
   "Couldn't move this text to Trash.": "Couldn't move this text to Trash.",
   "No matching text": "No matching text",
@@ -639,7 +637,6 @@
   "QR recognition failed.": "QR recognition failed.",
   "Recognizing QR Codes…": "Recognizing QR Codes…",
   "Search QR Favorites": "Search QR Favorites",
-  "QR images and content stay in your local library.": "QR images and content stay in your local library.",
   "Could not load QR Favorites.": "Could not load QR Favorites.",
   "No QR favorites match this search.": "No QR favorites match this search.",
   "Save a QR code to find and reuse it here.": "Save a QR code to find and reuse it here.",
@@ -745,5 +742,7 @@
   "Select All": "Select All",
   "Select capture": "Select capture",
   "Move to Trash ({n})": "Move to Trash ({n})",
-  "Couldn't move these captures to Trash.": "Couldn't move these captures to Trash."
+  "Couldn't move these captures to Trash.": "Couldn't move these captures to Trash.",
+  "Opening Kiri checks for updates.": "Opening Kiri checks for updates.",
+  "Update available": "Update available"
 }

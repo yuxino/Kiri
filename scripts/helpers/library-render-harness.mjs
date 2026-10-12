@@ -129,6 +129,22 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
   };
   const modules = {
     react: React,
+    "@tauri-apps/api/app": { getVersion: apiOverrides.getVersion ?? (async () => "1.6.17") },
+    "@tauri-apps/api/window": { getCurrentWindow: () => ({
+      isVisible: environment.isVisible ?? (async () => false),
+      onFocusChanged: subscribe("libraryFocus"),
+    }) },
+    "@tauri-apps/plugin-updater": { check: apiOverrides.check ?? (async () => null) },
+    "@tauri-apps/plugin-process": { relaunch: apiOverrides.relaunch ?? (async () => {}) },
+    get "../settings/useAppUpdater"() {
+      const hook = { exports: {} };
+      const source = readFileSync(new URL("../../src/settings/useAppUpdater.ts", import.meta.url), "utf8");
+      new Function("require", "module", "exports", "navigator", "Date", componentCode(source))(
+        name => modules[name], hook, hook.exports,
+        environment.navigator ?? { userAgent: "Macintosh" }, environment.globals?.Date ?? Date,
+      );
+      return hook.exports;
+    },
     "@tauri-apps/api/webview": {getCurrentWebview:()=>({onDragDropEvent:subscribe("mediaDrop")})},
     "lucide-react": {ImagePlus:"icon", QrCode:"icon", Copy:"icon", ExternalLink:"icon", Star:"icon", X:"icon", Trash2:"icon", ChevronRight:"icon"},
     "./text-history.css": {},
@@ -148,6 +164,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
         listPendingRecordings: async () => [],
         getRecordingSaveJobs: async () => [],
         getDockVisibility: async () => ({ supported: true, visible: true }),
+        platformCapabilities: async () => ({ manualUpdates: false }),
         getShortcutStatus: async () => ({ status: "enabled", label: "shortcut" }),
         ...apiOverrides,
       },

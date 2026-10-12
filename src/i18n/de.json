@@ -210,7 +210,6 @@
   "In Use": "Belegt",
   "About": "Über Kiri",
   "Version %@": "Version %@",
-  "Updates are checked only when you choose to check.": "Updates werden nur auf Ihre Anforderung geprüft.",
   "Portable version: download the latest ZIP from Releases to update.": "Portable Version: Zum Aktualisieren die neueste ZIP-Datei von Releases herunterladen.",
   "Check for Updates": "Nach Updates suchen",
   "Checking…": "Wird geprüft…",
@@ -358,7 +357,6 @@
   "Couldn't copy text.": "Text konnte nicht kopiert werden.",
   "You can close this window. Successful results are saved to Text History.": "Sie können dieses Fenster schließen. Erfolgreiche Ergebnisse werden im Textverlauf gespeichert.",
   "Search recognized text": "Erkannten Text suchen",
-  "Saved on this device": "Auf diesem Gerät gespeichert",
   "Couldn't load Text History.": "Textverlauf konnte nicht geladen werden.",
   "Couldn't move this text to Trash.": "Text konnte nicht in den Papierkorb verschoben werden.",
   "No matching text": "Kein passender Text",
@@ -639,7 +637,6 @@
   "QR recognition failed.": "QR-Erkennung fehlgeschlagen.",
   "Recognizing QR Codes…": "QR-Codes werden erkannt…",
   "Search QR Favorites": "QR-Favoriten durchsuchen",
-  "QR images and content stay in your local library.": "QR-Bilder und Inhalte bleiben in Ihrer lokalen Bibliothek.",
   "Could not load QR Favorites.": "QR-Favoriten konnten nicht geladen werden.",
   "No QR favorites match this search.": "Keine QR-Favoriten entsprechen dieser Suche.",
   "Save a QR code to find and reuse it here.": "Einen QR-Code speichern, um ihn hier zu finden und wiederzuverwenden.",
@@ -745,5 +742,7 @@
   "Select All": "Alle auswählen",
   "Select capture": "Aufnahme auswählen",
   "Move to Trash ({n})": "In den Papierkorb ({n})",
-  "Couldn't move these captures to Trash.": "Diese Aufnahmen konnten nicht in den Papierkorb verschoben werden."
+  "Couldn't move these captures to Trash.": "Diese Aufnahmen konnten nicht in den Papierkorb verschoben werden.",
+  "Opening Kiri checks for updates.": "Beim Öffnen sucht Kiri nach Updates.",
+  "Update available": "Update verfügbar"
 }

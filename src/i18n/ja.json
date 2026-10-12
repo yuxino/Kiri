@@ -210,7 +210,6 @@
   "In Use": "他のアプリが使用中",
   "About": "Kiri について",
   "Version %@": "バージョン %@",
-  "Updates are checked only when you choose to check.": "確認を選んだときだけアップデートをオンラインで確認します。",
   "Portable version: download the latest ZIP from Releases to update.": "ポータブル版の更新は Releases から最新の ZIP をダウンロードしてください。",
   "Check for Updates": "アップデートを確認",
   "Checking…": "確認中…",
@@ -358,7 +357,6 @@
   "Couldn't copy text.": "テキストをコピーできませんでした。",
   "You can close this window. Successful results are saved to Text History.": "このウインドウを閉じても、認識結果はテキスト履歴に保存されます。",
   "Search recognized text": "認識したテキストを検索",
-  "Saved on this device": "このデバイスに保存",
   "Couldn't load Text History.": "テキスト履歴を読み込めませんでした。ライブラリを確認して再試行してください。",
   "Couldn't move this text to Trash.": "ゴミ箱に移動できませんでした。",
   "No matching text": "一致するテキストはありません",
@@ -639,7 +637,6 @@
   "QR recognition failed.": "QRコードの読み取りに失敗しました。",
   "Recognizing QR Codes…": "QRコードを読み取り中…",
   "Search QR Favorites": "QRコレクションを検索",
-  "QR images and content stay in your local library.": "QRコード画像と内容は端末のライブラリに保存されます。",
   "Could not load QR Favorites.": "QRコレクションを読み込めません。",
   "No QR favorites match this search.": "検索に一致するQRコードがありません。",
   "Save a QR code to find and reuse it here.": "QRコードを保存すると、ここで検索して再利用できます。",
@@ -745,5 +742,7 @@
   "Select All": "すべて選択",
   "Select capture": "キャプチャを選択",
   "Move to Trash ({n})": "ゴミ箱に移動（{n}）",
-  "Couldn't move these captures to Trash.": "これらのキャプチャをゴミ箱に移動できませんでした。"
+  "Couldn't move these captures to Trash.": "これらのキャプチャをゴミ箱に移動できませんでした。",
+  "Opening Kiri checks for updates.": "Kiri を開くと更新を確認します。",
+  "Update available": "更新があります"
 }

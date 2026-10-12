@@ -24,6 +24,7 @@ import {
   type ShortcutStatusDto,
 } from "../lib/ipc";
 import { t, fmt } from "../i18n";
+import { useAppUpdater } from "../settings/useAppUpdater";
 import { QrFavorites } from "../qr/QrResults";
 import { TextHistory, OcrDialog } from "../ocr/TextHistory";
 import brandIcon from "../../src-tauri/icons/128x128.png";
@@ -86,6 +87,7 @@ function groupByDay<T extends { createdAt: number | string }>(assets: T[]): { ke
 }
 
 export function LibraryWindow() {
+  const updater = useAppUpdater();
   const [ocrAsset, setOcrAsset] = useState<AssetDto | null>(null);
   const [assets, setAssets] = useState<AssetDto[]>([]);
   const [section, setSection] = useState<Section>("library");
@@ -973,7 +975,7 @@ export function LibraryWindow() {
           { label: t("Text History"), icon: "text.viewfinder" },
           { label: t("QR Favorites"), icon: "qrcode" },
           { label: t("Trash"), icon: "trash" },
-          { label: t("Settings"), icon: "slider.horizontal.3" },
+          { label: t("Settings"), icon: "slider.horizontal.3", notification: updater.hasUpdate ? t("Update available") : undefined },
         ]}
         value={destination === "settings" ? 4 : destination === "qr" ? 2 : destination === "text" ? 1 : section === "library" ? 0 : 3}
         onChange={(index) => {
@@ -1370,7 +1372,7 @@ export function LibraryWindow() {
             </div>
           }
         >
-          <SettingsView />
+          <SettingsView updater={updater} />
         </React.Suspense>
       )}
 
@@ -2479,7 +2481,7 @@ function BatchBarButton(props: {
 
 
 function SegmentedPicker(props: {
-  options: { label: string; icon: IconName }[];
+  options: { label: string; icon: IconName; notification?: string }[];
   value: number;
   onChange(index: number): void;
 }) {
@@ -2491,8 +2493,10 @@ function SegmentedPicker(props: {
       {props.options.map((option, index) => (
         <button
           type="button"
-          key={option.label}
+          key={option.icon}
           className="library-section-picker__button"
+          aria-label={option.notification ? `${option.label} · ${option.notification}` : undefined}
+          title={option.notification}
           data-active={props.value === index || undefined}
           aria-pressed={props.value === index}
           aria-current={props.value === index ? "page" : undefined}
@@ -2500,6 +2504,7 @@ function SegmentedPicker(props: {
         >
           <KiriIcon name={option.icon} size={16} />
           <span>{option.label}</span>
+          {option.notification && <span className="library-update-dot" aria-hidden="true" />}
         </button>
       ))}
     </nav>

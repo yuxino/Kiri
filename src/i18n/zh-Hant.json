@@ -210,7 +210,6 @@
   "In Use": "被其他應用佔用",
   "About": "關於",
   "Version %@": "版本 %@",
-  "Updates are checked only when you choose to check.": "只有你點選檢查時，Kiri 才會聯網檢查更新。",
   "Portable version: download the latest ZIP from Releases to update.": "綠色版請到 Releases 下載新版 ZIP，解壓後手動替換程序。",
   "Check for Updates": "檢查更新",
   "Checking…": "正在檢查…",
@@ -358,7 +357,6 @@
   "Couldn't copy text.": "無法複製文字，請重試。",
   "You can close this window. Successful results are saved to Text History.": "可以關閉此視窗，辨識成功後會自動儲存到「文字」。",
   "Search recognized text": "搜尋辨識文字",
-  "Saved on this device": "儲存在本機",
   "Couldn't load Text History.": "無法加載文字歷史，請確認素材庫可用後重試。",
   "Couldn't move this text to Trash.": "未能移入垃圾桶，請重試。",
   "No matching text": "沒有找到相關文字",
@@ -639,7 +637,6 @@
   "QR recognition failed.": "二維碼辨識失敗，請重試。",
   "Recognizing QR Codes…": "正在辨識二維碼…",
   "Search QR Favorites": "搜尋二維碼收藏",
-  "QR images and content stay in your local library.": "二維碼圖片和內容儲存在本機圖庫中。",
   "Could not load QR Favorites.": "無法讀取二維碼收藏。",
   "No QR favorites match this search.": "沒有符合搜尋條件的二維碼收藏。",
   "Save a QR code to find and reuse it here.": "收藏二維碼後，可在這裡查找和復用。",
@@ -745,5 +742,7 @@
   "Select All": "全選",
   "Select capture": "選擇素材",
   "Move to Trash ({n})": "移到回收筒（{n}）",
-  "Couldn't move these captures to Trash.": "無法將這些素材移到回收筒。"
+  "Couldn't move these captures to Trash.": "無法將這些素材移到回收筒。",
+  "Opening Kiri checks for updates.": "開啟 Kiri 時檢查更新。",
+  "Update available": "有新版本"
 }

@@ -557,14 +557,19 @@ downloaded replacement `.deb` packages and does not create signed updater
 artifacts or expose the in-app installer. The release page is its explicit
 manual update route.
 
-Settings reads the installed version from Tauri's application metadata and
-does not run a background updater. A visible **Check for Updates** action asks
-Tauri's official updater plugin to read a fixed HTTPS `latest.json` manifest.
+The main window owns one updater session across Settings navigation. It reads
+the installed version from Tauri metadata and checks a fixed HTTPS `latest.json`
+manifest when its native window is visible at startup or gains focus. Successful
+checks are cached for six hours per app session; failures may retry at the next
+activation after five minutes, without a periodic timer. Existing available or
+downloaded updates are retained rather than replaced by focus checks. Settings
+also offers an explicit check. A neutral dot beside Settings appears only when
+an update is available; offline failures remain quiet. See ADR 0099.
 The configured endpoint and updater public key are compiled into Kiri; release
 notes can supply display text but never an executable path, alternate endpoint,
 or public key.
 
-Check, download, and install are separate visible actions. Download progress
+Download, install, and macOS restart remain separate visible actions. Download progress
 uses the plugin's actual byte events and stays indeterminate when the server
 does not provide a length. The downloaded platform archive must pass minisign
 verification before the UI reaches its install-ready state. On macOS,

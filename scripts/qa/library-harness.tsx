@@ -83,9 +83,18 @@ Object.assign(window, {
         case "get_dock_visibility": return {supported:true,visible:true};
         case "platform_capabilities": return {manualUpdates:false,videoEditing:true};
         case "plugin:app|version": return "1.6.17";
+        case "plugin:window|is_visible": return true;
+        case "plugin:updater|check":
+          actions.push("check-update");
+          if (params.has("updateFailure")) throw new Error("Controlled offline update check");
+          return params.has("update") ? {rid:7,currentVersion:"1.6.17",version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
+        case "plugin:resources|close": return null;
         case "set_capture_shortcut_editing": return null;
         case "set_capture_shortcut": return {status:"enabled",label:"⇧⌘A"};
-        case "set_language": return null;
+        case "set_language":
+          actions.push(`set-language:${args.language}`);
+          if (params.has("languageFailure")) throw new Error("Controlled language save failure");
+          return null;
         case "set_dock_visibility": return null;
         case "get_ocr_provider_settings":
           if(params.has("settingsFailure")) throw new Error("Controlled OCR settings load failure");

@@ -32,8 +32,8 @@ redundant title and oversized empty OCR panel are removed.
 
 Preserve ADR 0015's system typography, monochrome tokens and unchanged brand
 artwork. Keep destructive controls in the destination that owns them. Selection,
-search, editing, update/network and native window commands retain their existing
-behavior.
+search, editing and native window commands retain their existing behavior.
+Panel-open update discovery is specified separately in ADR 0099.
 
 ## Verification and consequences
 

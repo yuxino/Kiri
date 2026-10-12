@@ -684,12 +684,12 @@
 .kiri-language-select {
   max-width: 100%;
   min-width: 150px;
-  padding: 8px 30px 8px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--kiri-surface-border);
   border-radius: 7px;
   background: var(--kiri-group-fill);
   color: inherit;
-  font: 13px var(--kiri-font-ui);
+  font: 14px var(--kiri-font-ui);
   min-height: 36px;
 }
 
@@ -698,3 +698,10 @@
   .kiri-shortcut-actions, .kiri-storage-actions, .kiri-update-actions { justify-content: flex-start; max-width: none; }
   .kiri-settings-section__heading { align-items: flex-start; }
 }
+
+.kiri-language-select:hover:not(:disabled) { background: var(--kiri-card); border-color: var(--kiri-secondary-label); }
+.kiri-language-menu { box-sizing: border-box; background: var(--kiri-card); color: var(--kiri-label); border-color: var(--kiri-surface-border); font-size: 14px; box-shadow: 0 4px 14px #0002; }
+.kiri-language-menu .kiri-choice-option { padding: 9px 10px; min-height: 36px; }
+.kiri-language-menu .kiri-choice-option:hover,
+.kiri-language-menu .kiri-choice-option:focus-visible,
+.kiri-language-menu .kiri-choice-option[aria-selected=true] { background: var(--kiri-group-fill); }

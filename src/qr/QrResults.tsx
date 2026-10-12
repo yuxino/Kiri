@@ -216,7 +216,6 @@ export function QrFavorites() {
   return <div className="text-history">
     <aside className="text-history__sidebar"><label className="text-history__search"><QrCode size={15}/><input type="search" aria-label={t("Search QR Favorites")} placeholder={t("Search QR Favorites")} value={query} onChange={event => setQuery(event.target.value)}/></label>
       <div className="text-history__list">{records.map(asset => <button type="button" className="ocr-history__item" aria-current={asset.id === selected || undefined} key={asset.id} onClick={() => setSelected(asset.id)}><span className="text-history__excerpt">{asset.qrText}</span><time>{new Date(asset.createdAt).toLocaleString()}</time></button>)}</div>
-      <p className="text-history__footnote">{t("QR images and content stay in your local library.")}</p>
     </aside>
     <main className="text-history__detail">{asset ? <QrDetails key={asset.id} code={favoriteCode(asset.qrText ?? "")} saved removable
       meta={<time>{new Date(asset.createdAt).toLocaleString()}</time>}

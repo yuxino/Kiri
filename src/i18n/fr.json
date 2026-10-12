@@ -210,7 +210,6 @@
   "In Use": "Déjà utilisé",
   "About": "À propos",
   "Version %@": "Version %@",
-  "Updates are checked only when you choose to check.": "Les mises à jour sont recherchées uniquement à votre demande.",
   "Portable version: download the latest ZIP from Releases to update.": "Version portable : téléchargez le dernier ZIP depuis Releases pour mettre à jour.",
   "Check for Updates": "Rechercher des mises à jour",
   "Checking…": "Vérification…",
@@ -358,7 +357,6 @@
   "Couldn't copy text.": "Impossible de copier le texte.",
   "You can close this window. Successful results are saved to Text History.": "Vous pouvez fermer cette fenêtre. Les résultats réussis sont enregistrés dans l’historique du texte.",
   "Search recognized text": "Rechercher du texte reconnu",
-  "Saved on this device": "Stocké sur cet appareil",
   "Couldn't load Text History.": "Impossible de charger l’historique du texte.",
   "Couldn't move this text to Trash.": "Impossible de mettre ce texte à la corbeille.",
   "No matching text": "Aucun texte correspondant",
@@ -639,7 +637,6 @@
   "QR recognition failed.": "Échec de la reconnaissance QR.",
   "Recognizing QR Codes…": "Reconnaissance des codes QR…",
   "Search QR Favorites": "Rechercher dans les favoris QR",
-  "QR images and content stay in your local library.": "Les images et contenus QR restent dans votre bibliothèque locale.",
   "Could not load QR Favorites.": "Impossible de charger les favoris QR.",
   "No QR favorites match this search.": "Aucun favori QR ne correspond à cette recherche.",
   "Save a QR code to find and reuse it here.": "Enregistrez un code QR pour le retrouver et le réutiliser ici.",
@@ -745,5 +742,7 @@
   "Select All": "Tout sélectionner",
   "Select capture": "Sélectionner la capture",
   "Move to Trash ({n})": "Mettre à la corbeille ({n})",
-  "Couldn't move these captures to Trash.": "Impossible de mettre ces captures à la corbeille."
+  "Couldn't move these captures to Trash.": "Impossible de mettre ces captures à la corbeille.",
+  "Opening Kiri checks for updates.": "Kiri vérifie les mises à jour à l’ouverture.",
+  "Update available": "Mise à jour disponible"
 }

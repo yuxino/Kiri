@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { getVersion } from "@tauri-apps/api/app";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
+import { ChoiceSelect } from "../components/ChoiceSelect";
+import { stateDetails, type AppUpdater } from "./useAppUpdater";
 import { KiriIcon } from "../components/KiriIcons";
 import { fmt, getLanguage, languageNames, languages, onLanguageChange, setLanguage, t, type KiriLanguage } from "../i18n";
 import {
@@ -22,7 +21,7 @@ import { OcrSettingsSection } from "./OcrSettingsSection";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import "./settings.css";
 
-export function SettingsView() {
+export function SettingsView({ updater }: { updater: AppUpdater }) {
   const [settings, setSettings] = useState<OcrProviderSettingsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -141,7 +140,7 @@ export function SettingsView() {
         )}
 
           </div>
-          <AboutSettingsSection />
+          <AboutSettingsSection updater={updater} />
         </div>
       </div>
 
@@ -182,187 +181,12 @@ export function SettingsView() {
   );
 }
 
-type UpdateDetails = {
-  version: string;
-  notes: string | null;
-};
-
-type UpdateAction = "check" | "download" | "install" | "relaunch" | "open";
-
-type UpdateState =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | { kind: "upToDate" }
-  | ({ kind: "available" } & UpdateDetails)
-  | ({ kind: "downloading"; downloaded: number; total?: number } & UpdateDetails)
-  | ({ kind: "verifying" } & UpdateDetails)
-  | ({ kind: "downloaded" } & UpdateDetails)
-  | ({ kind: "installing"; isWindows: boolean } & UpdateDetails)
-  | ({ kind: "readyToRestart" } & UpdateDetails)
-  | ({ kind: "relaunching" } & UpdateDetails)
-  | ({ kind: "error"; action: UpdateAction; details?: UpdateDetails });
-
-function updateDetails(update: Update): UpdateDetails {
-  return {
-    version: update.version,
-    notes: update.body?.trim() || null,
-  };
-}
-
-function AboutSettingsSection() {
-  const [currentVersion, setCurrentVersion] = useState("");
-  const isWindows = /Windows/i.test(navigator.userAgent);
-  const [isPortable, setIsPortable] = useState<boolean | null>(isWindows ? null : false);
-  const [manualUpdates, setManualUpdates] = useState(/Linux/i.test(navigator.userAgent));
-  const [updateState, setUpdateState] = useState<UpdateState>({ kind: "idle" });
-  const updateRef = useRef<Update | null>(null);
-  const operationRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  const finishOperation = () => {
-    operationRef.current = false;
-    if (!mountedRef.current) {
-      const update = updateRef.current;
-      updateRef.current = null;
-      if (update) void update.close().catch(() => {});
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-    mountedRef.current = true;
-    void api.platformCapabilities().then(caps => { if (active) setManualUpdates(caps.manualUpdates); }).catch(() => {});
-    void getVersion()
-      .then((version) => {
-        if (active) setCurrentVersion(version);
-      })
-      .catch(() => {});
-    if (isWindows) {
-      void api.isPortableBuild()
-        .then((portable) => { if (active) setIsPortable(portable); })
-        .catch(() => { if (active) setIsPortable(true); });
-    }
-    return () => {
-      active = false;
-      mountedRef.current = false;
-      if (!operationRef.current) {
-        const update = updateRef.current;
-        updateRef.current = null;
-        if (update) void update.close().catch(() => {});
-      }
-    };
-  }, []);
-
-  const checkForUpdates = async () => {
-    if (isPortable !== false || manualUpdates) return;
-    if (operationRef.current) return;
-    operationRef.current = true;
-    setUpdateState({ kind: "checking" });
-    try {
-      const previous = updateRef.current;
-      updateRef.current = null;
-      if (previous) await previous.close();
-
-      const update = await check({ timeout: 15_000 });
-      if (!update) {
-        setUpdateState({ kind: "upToDate" });
-        return;
-      }
-      updateRef.current = update;
-      setCurrentVersion(update.currentVersion);
-      setUpdateState({ kind: "available", ...updateDetails(update) });
-    } catch {
-      setUpdateState({ kind: "error", action: "check" });
-    } finally {
-      finishOperation();
-    }
-  };
-
-  const downloadUpdate = async () => {
-    if (operationRef.current) return;
-    const update = updateRef.current;
-    if (!update) {
-      setUpdateState({ kind: "error", action: "check" });
-      return;
-    }
-    operationRef.current = true;
-    const details = updateDetails(update);
-    let downloaded = 0;
-    let total: number | undefined;
-    setUpdateState({ kind: "downloading", downloaded, ...details });
-    try {
-      await update.download((event) => {
-        if (event.event === "Started") {
-          downloaded = 0;
-          total = event.data.contentLength;
-        } else if (event.event === "Progress") {
-          downloaded += event.data.chunkLength;
-        } else if (event.event === "Finished") {
-          setUpdateState({ kind: "verifying", ...details });
-          return;
-        }
-        setUpdateState({ kind: "downloading", downloaded, total, ...details });
-      }, { timeout: 120_000 });
-      setUpdateState({ kind: "downloaded", ...details });
-    } catch {
-      setUpdateState({ kind: "error", action: "download", details });
-    } finally {
-      finishOperation();
-    }
-  };
-
-  const installUpdate = async () => {
-    if (isPortable !== false) return;
-    if (operationRef.current) return;
-    const update = updateRef.current;
-    if (!update) {
-      setUpdateState({ kind: "error", action: "check" });
-      return;
-    }
-    operationRef.current = true;
-    const details = updateDetails(update);
-    setUpdateState({ kind: "installing", isWindows, ...details });
-    try {
-      await update.install({ restartAfterInstall: true });
-      if (!isWindows) setUpdateState({ kind: "readyToRestart", ...details });
-    } catch {
-      setUpdateState({ kind: "error", action: "install", details });
-    } finally {
-      finishOperation();
-    }
-  };
-
-  const restartUpdatedApp = async () => {
-    if (operationRef.current) return;
-    const details = stateDetails(updateState);
-    if (!details) return;
-    operationRef.current = true;
-    setUpdateState({ kind: "relaunching", ...details });
-    try {
-      await relaunch();
-    } catch {
-      setUpdateState({ kind: "error", action: "relaunch", details });
-    } finally {
-      finishOperation();
-    }
-  };
-
-  const openRecoveryPage = async () => {
-    if (operationRef.current) return;
-    operationRef.current = true;
-    const details = stateDetails(updateState);
-    try {
-      await api.openReleasePage();
-    } catch {
-      setUpdateState({ kind: "error", action: "open", details: details ?? undefined });
-    } finally {
-      finishOperation();
-    }
-  };
-
+function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
+  const { currentVersion, isWindows, isPortable, manualUpdates, updateState,
+    checkForUpdates, downloadUpdate, installUpdate, restartUpdatedApp, openRecoveryPage } = updater;
   let status = t(manualUpdates ? "Linux updates are installed manually from a downloaded package." : isPortable
     ? "Portable version: download the latest ZIP from Releases to update."
-    : "Updates are checked only when you choose to check.");
+    : "Opening Kiri checks for updates.");
   if (updateState.kind === "checking") {
     status = t("Checking…");
   } else if (updateState.kind === "upToDate") {
@@ -389,7 +213,7 @@ function AboutSettingsSection() {
   } else if (updateState.kind === "relaunching") {
     status = t("Restarting Kiri…");
   } else if (updateState.kind === "error") {
-    const errors: Record<UpdateAction, string> = {
+    const errors: Record<string, string> = {
       check: "Couldn't check for updates. Try again.",
       download: "Couldn't download the update. Try again.",
       install: "Couldn't install the update. Try again.",
@@ -498,23 +322,6 @@ function AboutSettingsSection() {
       </div>
     </section>
   );
-}
-
-function stateDetails(state: UpdateState): UpdateDetails | null {
-  switch (state.kind) {
-    case "available":
-    case "downloading":
-    case "verifying":
-    case "downloaded":
-    case "installing":
-    case "readyToRestart":
-    case "relaunching":
-      return { version: state.version, notes: state.notes };
-    case "error":
-      return state.details ?? null;
-    default:
-      return null;
-  }
 }
 
 function GeneralSettingsSection() {
@@ -681,15 +488,16 @@ function GeneralSettingsSection() {
           <span>{t("Changes apply to every Kiri window.")}</span>
           {languageError && <span role="alert">{t("Could not save the language preference.")}</span>}
         </div>
-        <select
+        <ChoiceSelect
           className="kiri-language-select"
-          aria-label={t("Language")}
+          menuClassName="kiri-language-menu"
+          menuMinWidth={220}
+          label={t("Language")}
           value={language}
           disabled={languageBusy}
-          onChange={(event) => void switchTo(event.target.value as KiriLanguage)}
-        >
-          {languages.map((item) => <option key={item} value={item}>{languageNames[item]}</option>)}
-        </select>
+          onChange={(next) => { if (next !== language) void switchTo(next); }}
+          options={languages.map((item) => ({ value: item, label: languageNames[item] }))}
+        />
       </div>
       <DockVisibilityRow />
       {shortcutStatus?.status === "systemManaged" ? <PortalShortcutsCard /> : <div className="kiri-settings-card kiri-shortcut-row">

@@ -18,7 +18,7 @@ macOS needs Screen & System Audio Recording permission; click highlights also ne
 
 Linux: Wayland capture supports one connected display. MP4 recording supports system audio and microphone through the local PulseAudio or PipeWire audio service. Click highlights remain unavailable. Saved videos support basic cuts and MP4 export; advanced video effects are unavailable. See the [Linux guide](linux.md) for setup and recording controls.
 
-Updates: macOS and Windows installer builds use Settings → About → Check for Updates. Linux and Windows Portable users download a new package from Releases. Portable settings and captures stay in the Windows user profile.
+Updates: macOS and Windows installer builds check when you open the main panel. A dot beside Settings indicates a newer version; use Settings → About to download and install it. You can also check manually. Linux and Windows Portable users download a new package from Releases. Portable settings and captures stay in the Windows user profile.
 
 macOS Dock: Settings → Show in Dock controls the Dock icon immediately and remembers your choice. The tray and capture shortcut remain available when it is hidden.
 

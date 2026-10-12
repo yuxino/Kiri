@@ -210,7 +210,6 @@
   "In Use": "사용 중",
   "About": "정보",
   "Version %@": "버전 %@",
-  "Updates are checked only when you choose to check.": "업데이트 확인을 선택했을 때만 확인합니다.",
   "Portable version: download the latest ZIP from Releases to update.": "포터블 버전: 업데이트하려면 Releases에서 최신 ZIP을 받으세요.",
   "Check for Updates": "업데이트 확인",
   "Checking…": "확인 중…",
@@ -358,7 +357,6 @@
   "Couldn't copy text.": "글자를 복사하지 못했습니다.",
   "You can close this window. Successful results are saved to Text History.": "이 창을 닫아도 됩니다. 성공한 결과는 글자 기록에 저장됩니다.",
   "Search recognized text": "인식한 글자 검색",
-  "Saved on this device": "이 기기에 저장됨",
   "Couldn't load Text History.": "글자 기록을 불러오지 못했습니다.",
   "Couldn't move this text to Trash.": "이 글자를 휴지통으로 이동하지 못했습니다.",
   "No matching text": "일치하는 글자가 없습니다",
@@ -639,7 +637,6 @@
   "QR recognition failed.": "QR 인식에 실패했습니다.",
   "Recognizing QR Codes…": "QR 코드 인식 중…",
   "Search QR Favorites": "QR 즐겨찾기 검색",
-  "QR images and content stay in your local library.": "QR 이미지와 내용은 로컬 라이브러리에 보관됩니다.",
   "Could not load QR Favorites.": "QR 즐겨찾기를 불러오지 못했습니다.",
   "No QR favorites match this search.": "검색에 맞는 QR 즐겨찾기가 없습니다.",
   "Save a QR code to find and reuse it here.": "QR 코드를 저장하면 여기에서 찾고 재사용할 수 있습니다.",
@@ -745,5 +742,7 @@
   "Select All": "모두 선택",
   "Select capture": "캡처 선택",
   "Move to Trash ({n})": "휴지통으로 이동 ({n})",
-  "Couldn't move these captures to Trash.": "이 캡처를 휴지통으로 이동할 수 없습니다."
+  "Couldn't move these captures to Trash.": "이 캡처를 휴지통으로 이동할 수 없습니다.",
+  "Opening Kiri checks for updates.": "Kiri를 열면 업데이트를 확인합니다.",
+  "Update available": "업데이트 있음"
 }

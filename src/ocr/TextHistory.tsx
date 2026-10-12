@@ -167,7 +167,6 @@ export function TextHistory() {
           <time dateTime={new Date(record.createdAt).toISOString()}>{new Date(record.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
         </button>)}
       </div>
-      <p className="text-history__footnote">{t("Saved on this device")}</p>
     </aside>
     <main className="text-history__detail">
       {loadError ? <div className="text-history__empty" role="alert"><p>{t("Couldn't load Text History.")}</p><button type="button" className="kiri-button kiri-button--secondary" onClick={() => setRevision((v) => v + 1)}>{t("Retry")}</button></div> :

@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
-test("the app uses Tauri's signed updater as a manual staged flow", () => {
-  const settings = read("src/settings/SettingsView.tsx");
+test("downloads and installs remain separate signed user actions", () => {
+  const settings = read("src/settings/useAppUpdater.ts");
   const ipc = read("src/lib/ipc.ts");
   const rust = read("src-tauri/src/updates.rs");
   const lib = read("src-tauri/src/lib.rs");
@@ -74,37 +74,42 @@ test("CI signs updater artifacts without exposing a private key", () => {
 // Run the actual update component's handlers with isolated IPC and hook state.
 // No network, installer or user library is touched by these regressions.
 const { createLibraryHarness, nodes, deferred, settleRequests } = await import('./helpers/library-render-harness.mjs');
-function updaterHarness(windows = true, portable = false, linux = false) {
+function updaterHarness(windows = true, portable = false, linux = false, options = {}) {
   const pending = deferred();
   const installs = [];
   let checks = 0;
+  let closes = 0;
+  let downloads = 0;
   let releaseOpens = 0;
   let progress;
   let restarts = 0;
   const update = { version: '9.9.9', currentVersion: '1.5.0', body: 'Release notes',
-    close: async () => {},
-    download: callback => { progress = callback; return pending.promise; },
+    close: async () => { closes++; },
+    download: callback => { downloads++; progress = callback; return pending.promise; },
     install: async options => { installs.push(options); },
   };
   const settings = read('src/settings/SettingsView.tsx');
-  const source = `import React, { useState, useRef, useEffect } from 'react';
-    import { api } from '../lib/ipc';
-    const check = api.check, getVersion = api.getVersion, relaunch = api.relaunch;
+  const source = `import React from 'react';
+    import { useAppUpdater, stateDetails } from '../settings/useAppUpdater';
     const t = value => value, fmt = (value, arg) => value.replace('%@', arg);
-    ${settings.slice(settings.indexOf('type UpdateDetails ='), settings.indexOf('function GeneralSettingsSection'))}
-    export { AboutSettingsSection };`;
-  const harness = createLibraryHarness({ check: async () => { checks++; return update; },
+    ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
+    export function TestAbout() { return AboutSettingsSection({ updater: useAppUpdater() }); }`;
+  const harness = createLibraryHarness({ check: async () => { checks++; return options.check ? options.check(update) : update; },
     getVersion: async () => '1.5.0', isPortableBuild: async () => portable,
-    platformCapabilities: async () => ({ manualUpdates: linux }),
+    platformCapabilities: options.capabilities ?? (async () => ({ manualUpdates: linux })),
     openReleasePage: async () => { releaseOpens++; },
     relaunch: async () => { restarts++; } }, source, {
       navigator: { userAgent: linux ? 'Linux' : windows ? 'Windows' : 'Macintosh' },
+      isVisible: async () => options.visible ?? false,
+      globals: options.globals,
     });
-  const component = harness.mount('AboutSettingsSection');
+  const component = harness.mount('TestAbout');
   const render = () => component.render();
   const button = () => nodes(render()).find(node => node?.type === 'button');
   return { pending, installs, render, button, progress: event => progress(event),
-    restarts: () => restarts, checks: () => checks, releaseOpens: () => releaseOpens };
+    restarts: () => restarts, checks: () => checks, releaseOpens: () => releaseOpens,
+    focus: () => harness.emit("libraryFocus", { payload: true }),
+    unmount: () => component.unmount(), closes: () => closes, downloads: () => downloads };
 }
 
 test('Windows download reports bytes and cannot install until verification succeeds', async () => {
@@ -181,4 +186,84 @@ test('Linux packages use manual updates without querying an unsupported manifest
   assert.equal(h.releaseOpens(), 1);
   assert.equal(h.checks(), 0);
   assert.deepEqual(h.installs, []);
+});
+
+test('opening a visible panel discovers an update without downloading it', async () => {
+  const h = updaterHarness(false, false, false, { visible: true });
+  h.render(); await settleRequests(); h.render(); await settleRequests();
+  assert.equal(h.checks(), 1);
+  assert.ok(nodes(h.render()).includes('Kiri v9.9.9 is available.'));
+  assert.equal(h.downloads(), 0);
+  assert.deepEqual(h.installs, []);
+  h.focus(); h.focus(); await settleRequests();
+  assert.equal(h.checks(), 1);
+  h.button().props.onClick(); await settleRequests();
+  assert.equal(h.downloads(), 1);
+  h.focus(); await settleRequests();
+  assert.equal(h.checks(), 1, 'focus cannot replace an update being downloaded');
+  h.pending.resolve(); await settleRequests();
+  assert.ok(nodes(h.button()).includes('Install Update'));
+  h.unmount(); await settleRequests(); assert.equal(h.closes(), 1);
+});
+
+test('hidden panels and unsupported packages do not check automatically', async () => {
+  for (const [windows, portable, linux, visible] of [[false,false,false,false], [true,true,false,true], [false,false,true,true]]) {
+    const h = updaterHarness(windows,portable,linux,{visible});
+    h.render(); await settleRequests(); h.render(); await settleRequests();
+    h.focus(); await settleRequests(); assert.equal(h.checks(),0);
+    h.unmount();
+  }
+});
+
+test('automatic checks are single flight and release native handles after late completion', async () => {
+  const pending = deferred();
+  const h = updaterHarness(false,false,false,{visible:true,check: update => pending.promise.then(() => update)});
+  h.render(); await settleRequests(); h.render(); await settleRequests();
+  h.focus(); h.focus(); await settleRequests(); assert.equal(h.checks(),1);
+  h.unmount(); pending.resolve(); await settleRequests();
+  assert.equal(h.closes(),1); assert.equal(h.downloads(),0);
+});
+
+test('automatic failures stay quiet and retry only on a later panel activation', async () => {
+  let now = 1000;
+  const h = updaterHarness(false,false,false,{visible:true,globals:{Date:{now:()=>now}},check:async()=>{throw Error('offline');}});
+  h.render(); await settleRequests(); h.render(); await settleRequests();
+  assert.equal(h.checks(),1);
+  assert.ok(nodes(h.render()).includes('Opening Kiri checks for updates.'));
+  assert.equal(nodes(h.render()).some(n=>n?.props?.role==='alert'),false);
+  now += 299999; h.focus(); await settleRequests(); assert.equal(h.checks(),1);
+  now += 1; h.focus(); await settleRequests(); assert.equal(h.checks(),2);
+  h.unmount();
+});
+
+test('a successful no-update check is cached for six hours without a timer', async () => {
+  let now = 1000;
+  const h = updaterHarness(false,false,false,{visible:true,globals:{Date:{now:()=>now}},check:async()=>null});
+  h.render(); await settleRequests(); h.render(); await settleRequests();
+  assert.equal(h.checks(),1); assert.ok(nodes(h.render()).includes('Kiri v1.5.0 is up to date.'));
+  now += 6*60*60*1000-1; h.focus(); await settleRequests(); assert.equal(h.checks(),1);
+  now += 1; h.focus(); await settleRequests(); assert.equal(h.checks(),2);
+  h.unmount();
+});
+
+test('the settings notification follows discovered availability across navigation', async () => {
+  const update = { version:'9.9.9',currentVersion:'1.6.17',body:'notes',close:async()=>{},download:async()=>{},install:async()=>{} };
+  const harness = createLibraryHarness({check:async()=>update},null,{isVisible:async()=>true});
+  const main = harness.mount('LibraryWindow');
+  main.render(); await settleRequests(); main.render(); await settleRequests();
+  const picker = () => nodes(main.render()).find(n=>n?.type?.name==='SegmentedPicker');
+  assert.equal(picker().props.options[4].notification,'Update available');
+  picker().props.onChange(4); main.render();
+  picker().props.onChange(1); main.render();
+  assert.equal(picker().props.options[4].notification,'Update available');
+  main.unmount();
+});
+
+test('missing or failed platform capabilities cannot trigger automatic network requests', async () => {
+  for (const capabilities of [async()=>({}), async()=>{throw Error('unavailable');}]) {
+    const h = updaterHarness(false,false,false,{visible:true,capabilities});
+    h.render(); await settleRequests(); h.render(); await settleRequests();
+    h.focus(); await settleRequests(); assert.equal(h.checks(),0);
+    h.unmount();
+  }
 });

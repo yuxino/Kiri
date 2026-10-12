@@ -42,7 +42,7 @@ history.
 - [x] Release CI verifies tags and produces Windows drafts without an intentional macOS policy failure
 - [x] One maintainer-signed Universal macOS DMG supports both Apple silicon and Intel
 - [x] Native macOS and Windows media pipelines require no downloaded encoder
-- [x] Signed, user-initiated in-app updates with real progress and no background checks
+- [x] Signed in-app updates with panel-open discovery, real progress, and explicit download/install
 - [x] Interactive screenshot and recording completion preview with open, copy, recoverable Trash, and Undo actions
 - [x] Re-editable local screenshot annotations with completion-card and library editor entry points
 - [x] Shared last-used annotation styling across capture and editor windows

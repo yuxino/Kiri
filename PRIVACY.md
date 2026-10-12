@@ -55,10 +55,13 @@ It serves only those video bytes to the local player, exposes no general file or
 application API, and stops when Kiri exits. It does not send media or metadata to
 another device or website.
 
-## Manual update checks
+## Update checks when opening Kiri
 
-Kiri does not check for application updates in the background. When the user
-clicks **Check for Updates** in Settings, Kiri requests the fixed public
+On macOS and installed Windows builds, opening the main panel checks for
+updates. Successful checks are cached for six hours in the running app; failed
+checks may retry on another panel activation after five minutes. There is no
+periodic background timer. Settings also offers **Check for Updates**.
+Kiri requests the fixed public
 `github.com/yuxino/kiri/releases/latest/download/latest.json` manifest over
 HTTPS. If a newer release exists, Kiri displays its version and release notes.
 It does not download anything until the user clicks **Download Update**, and it

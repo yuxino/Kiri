@@ -64,8 +64,9 @@ Linux. Preserve these decisions:
   Recording, merging, thumbnails, and GIF conversion use platform media APIs
   and must not download or launch a third-party media executable. On Linux that
   means system GStreamer plugins, not a downloaded FFmpeg binary.
-- macOS and installed Windows application updates are manual and signed. Check, download, install, and the
-  macOS relaunch are separate user actions; Windows explicitly offers Install
+- macOS and installed Windows application updates are signed. Opening the main
+  panel checks for a newer version, with cached results and no periodic timer.
+  Download, install, and macOS relaunch remain separate user actions; Windows explicitly offers Install
   and Restart, then exits into its passive NSIS installer and reopens afterward.
   GitHub Releases is an error-recovery link, not the normal updater.
   Linux uses replacement `.deb` packages downloaded and installed by the user;

@@ -1339,3 +1339,5 @@ button:active:not(:disabled) {
 .library-gif-error > div { display: flex; gap: 8px; }
 
 .library-batch-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px var(--kiri-space-page); flex: 0 0 auto; border-bottom: 1px solid var(--kiri-surface-border); background: var(--kiri-card); }
+
+.library-update-dot { width: 6px; height: 6px; flex: 0 0 6px; margin-left: auto; border-radius: 50%; background: var(--kiri-label); }

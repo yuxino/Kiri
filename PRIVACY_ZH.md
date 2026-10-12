@@ -20,9 +20,9 @@ Kiri 默认在系统应用数据目录中维护一个素材库。设置可以把
 
 Kiri 使用操作系统媒体框架完成录屏、暂停分段合并、视频缩略图和 MP4 转 GIF。macOS 使用 AVFoundation 与 ImageIO，Windows 使用 Media Foundation 与系统图像组件，Linux 使用系统已安装的 GStreamer 插件。Kiri 不会下载或执行 FFmpeg 等第三方媒体程序；这些操作中的截屏、录屏、文件名、素材库信息、凭据和媒体内容始终留在设备上。
 
-## 手动检查更新
+## 打开 Kiri 时检查更新
 
-Kiri 不会在后台检查应用更新。只有你在设置页明确点击「检查更新」时，Kiri 才会通过 HTTPS 请求固定的公开清单 `github.com/yuxino/kiri/releases/latest/download/latest.json`。发现新版本后，Kiri 会显示版本号和版本说明；只有点击「下载更新」才会下载，只有再点击「安装更新」才会安装。Tauri 官方更新器会使用 Kiri 内置的公钥验证下载包签名，通过后界面才允许安装。macOS 仅在你进一步点击后重启；Windows 会关闭 Kiri，由安装程序完成更新。固定的 Releases 页面只在失败时作为恢复入口显示。
+macOS 与 Windows 安装版在打开主面板时检查更新。同一次运行中，成功检查的结果缓存六小时；失败后，五分钟后的再次打开或激活面板可以重试，不使用后台定时器。设置页仍可手动点击「检查更新」。Kiri 通过 HTTPS 请求固定的公开清单 `github.com/yuxino/kiri/releases/latest/download/latest.json`。发现新版本后，Kiri 会显示版本号和版本说明；只有点击「下载更新」才会下载，只有再点击「安装更新」才会安装。Tauri 官方更新器会使用 Kiri 内置的公钥验证下载包签名，通过后界面才允许安装。macOS 仅在你进一步点击后重启；Windows 会关闭 Kiri，由安装程序完成更新。固定的 Releases 页面只在失败时作为恢复入口显示。
 
 更新请求会包含当前平台与版本，但不会携带截屏、录屏、文件名、素材库信息、OCR 数据、凭据、遥测或账号标识。
 

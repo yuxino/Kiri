@@ -8,8 +8,7 @@
 .ocr-history__item:hover { background: var(--kiri-group-fill); }
 .ocr-history__item[aria-current] { background: var(--kiri-card); box-shadow: inset 3px 0 var(--kiri-label); }
 .text-history__excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.5; font-size: 14px; }
-.ocr-history__item time, .text-history__footnote, .text-history__record-header, .text-reader__caption { font-size: 13px; color: var(--kiri-secondary-label); }
-.text-history__footnote { margin: 0; padding: 14px 20px; border-top: 1px solid var(--kiri-surface-border); }
+.ocr-history__item time, .text-history__record-header, .text-reader__caption { font-size: 13px; color: var(--kiri-secondary-label); }
 .text-history__detail { flex: 1; min-width: 0; overflow: auto; padding: 20px var(--kiri-space-page); container-type: inline-size; background: var(--kiri-card); }
 .text-history__record-heading { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .text-history__record-heading time { color: var(--kiri-secondary-label); font-size: 13px; }
