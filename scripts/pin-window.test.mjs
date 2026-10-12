@@ -8,11 +8,12 @@ import { createLibraryHarness, deferred, nodes, settleRequests } from "./helpers
 
 const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/PinWindow.tsx", import.meta.url), "utf8");
 
-function pinWindow() {
+function pinWindow(options = {}) {
   const requests = [];
   const sizes = [];
+  const positions = [];
   let drags = 0, closes = 0;
-  let pinned, reads = 0;
+  let pinned, changed, reads = 0;
   const window = {
     // The Linux window manager can still be applying the builder's true state.
     isAlwaysOnTop: async () => { reads += 1; return false; },
@@ -21,20 +22,23 @@ function pinWindow() {
     close: async () => { closes += 1; },
     innerSize: async () => ({ width: 400, height: 200 }),
     scaleFactor: async () => 2,
+    outerPosition: options.outerPosition ?? (async () => ({ x: -400, y: 100 })),
     setSize(value) { const result = deferred(); sizes.push({ value, ...result }); return result.promise; },
+    setPosition(value) { const result = deferred(); positions.push({ value, ...result }); return result.promise; },
   };
-  const h = createLibraryHarness({}, source, {modules: {
+  const h = createLibraryHarness({}, source, {navigator: { userAgent: options.userAgent ?? "Windows" }, modules: {
     "@tauri-apps/api/window": {getCurrentWindow: () => window},
-    "@tauri-apps/api/dpi": {PhysicalSize: class { constructor(width, height) { this.width = width; this.height = height; } }},
-    "../lib/ipc": {mediaUrl: () => "image:test", onAssetContentChanged: async () => () => {},
+    "@tauri-apps/api/dpi": {PhysicalSize: class { constructor(width, height) { this.width = width; this.height = height; } },
+      PhysicalPosition: class { constructor(x, y) { this.x = x; this.y = y; } }},
+    "../lib/ipc": {mediaUrl: () => "image:test", onAssetContentChanged: async callback => { changed = callback; return () => { changed = null; }; },
       onPinOnTop: async callback => { pinned = callback; return () => { pinned = null; }; }},
     "./pin-window.css": {},
   }});
   const component = h.mount("PinWindow", {id: "test-image"});
   component.render();
-  return {component, requests, sizes, drags: () => drags, closes: () => closes,
+  return {component, requests, sizes, positions, drags: () => drags, closes: () => closes,
     keyboard: event => h.window.dispatchEvent({ type: "keydown", ...event }),
-    reads: () => reads, pinned: () => pinned()};
+    reads: () => reads, pinned: () => pinned(), changed: id => changed(id)};
 }
 
 const pinButton = component => nodes(component.render()).find(node => node?.type === "button");
@@ -136,6 +140,85 @@ test("borderless corner resize preserves aspect and coalesces pending Retina upd
   assert.deepEqual({ ...h.sizes[1].value }, { width: 600, height: 300 });
   h.sizes[1].resolve();
   await settleRequests();
+});
+
+const moveEvent = (x, y, pointerId = 1) => ({ button: 0, pointerId, screenX: x, screenY: y,
+  preventDefault() {}, currentTarget: { setPointerCapture() {} } });
+const imageSurface = h => nodes(h.component.render()).find(node => node?.type === "main");
+
+test("macOS image dragging uses physical positions and coalesces Retina movement", async () => {
+  const h = pinWindow({ userAgent: "Macintosh" });
+  const image = imageSurface(h);
+  image.props.onPointerDown(moveEvent(100, 100));
+  image.props.onPointerMove(moveEvent(150, 125));
+  await settleRequests();
+  assert.equal(h.drags(), 0, "AppKit dragging must not depend on an asynchronous mouse-down event");
+  assert.deepEqual({ ...h.positions[0].value }, { x: -300, y: 150 });
+  image.props.onPointerMove(moveEvent(170, 135));
+  image.props.onPointerUp(moveEvent(200, 150));
+  assert.equal(h.positions.length, 1, "native moves stay serial");
+  h.positions[0].resolve();
+  await settleRequests();
+  assert.deepEqual({ ...h.positions[1].value }, { x: -200, y: 200 });
+  h.positions[1].resolve();
+  await settleRequests();
+  image.props.onPointerMove(moveEvent(400, 400));
+  assert.equal(h.positions.length, 2, "released pointers cannot move the window");
+});
+
+test("a short macOS drag retains its last position while the native origin is loading", async () => {
+  const origin = deferred();
+  const h = pinWindow({ userAgent: "Mac OS X", outerPosition: () => origin.promise });
+  const image = imageSurface(h);
+  image.props.onPointerDown(moveEvent(30, 40));
+  image.props.onPointerMove(moveEvent(45, 50, 2));
+  image.props.onPointerUp(moveEvent(60, 80));
+  assert.equal(h.positions.length, 0);
+  origin.resolve({ x: 20, y: 30 });
+  await settleRequests();
+  assert.deepEqual({ ...h.positions[0].value }, { x: 80, y: 110 });
+  h.positions[0].resolve();
+});
+
+test("cancelled and unmounted macOS drags cannot apply a late origin or pending movement", async () => {
+  for (const end of ["cancel", "unmount"]) {
+    const origin = deferred();
+    const h = pinWindow({ userAgent: "Macintosh", outerPosition: () => origin.promise });
+    const image = imageSurface(h);
+    image.props.onPointerDown(moveEvent(100, 100));
+    image.props.onPointerMove(moveEvent(200, 200));
+    if (end === "cancel") image.props.onPointerCancel();
+    else h.component.unmount();
+    origin.resolve({ x: 20, y: 30 });
+    await settleRequests();
+    assert.equal(h.positions.length, 0, end);
+  }
+});
+
+test("right clicks never start macOS movement and other desktops retain native drag", async () => {
+  const mac = pinWindow({ userAgent: "Macintosh" });
+  imageSurface(mac).props.onPointerDown({ button: 2 });
+  await settleRequests();
+  assert.equal(mac.positions.length, 0);
+  for (const userAgent of ["Windows", "Linux"]) {
+    const h = pinWindow({ userAgent });
+    imageSurface(h).props.onPointerDown({ button: 0 });
+    assert.equal(h.drags(), 1);
+    assert.equal(h.positions.length, 0);
+  }
+});
+
+test("saved image revisions refresh only their pin and recover an image load failure", async () => {
+  const h = pinWindow();
+  await settleRequests();
+  const img = () => nodes(h.component.render()).find(node => node?.type === "img");
+  assert.equal(img().props.src, "image:test?v=0");
+  h.changed("another-image");
+  assert.equal(img().props.src, "image:test?v=0");
+  img().props.onError();
+  assert.equal(img(), undefined);
+  h.changed("test-image");
+  assert.equal(img().props.src, "image:test?v=1");
 });
 
 const overlaySource = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");

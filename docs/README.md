@@ -190,3 +190,4 @@ development.
 - [ADR 0093: Consistent annotation selection and deletion](adr/0093-annotation-selection-and-deletion.md)
 
 - [`adr/0094-screenshot-ocr-and-annotation-layer-order.md`](adr/0094-screenshot-ocr-and-annotation-layer-order.md) — screenshot-toolbar OCR and creation-order annotation compositing.
+- [`adr/0095-macos-pinned-image-movement.md`](adr/0095-macos-pinned-image-movement.md) — pointer-based macOS reference movement across asynchronous WebView IPC.

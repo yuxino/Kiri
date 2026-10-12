@@ -52,6 +52,8 @@ unrestricted filesystem path.
 Each active screenshot has at most one pin window. It reads the saved flattened
 image through the existing local media route. Unpinning or closing that window
 does not change the library asset.
+macOS moves the image reference using captured pointer coordinates and serialized
+physical position updates; Windows and Linux retain native dragging (ADR 0095).
 The screenshot toolbar also starts OCR through the existing explicit mode switch,
 reusing the committed selection and remote-consent flow.
 
