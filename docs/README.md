@@ -195,6 +195,8 @@ development.
 - [ADR 0096: Capture-origin reference placement](adr/0096-capture-origin-pin-placement.md)
 - [ADR 0097: Explicit library batch selection](adr/0097-explicit-library-batch-selection.md)
 
-- [ADR 0098: Unified main-window workspace](adr/0098-unified-main-window-workspace.md) — proposed shared navigation and responsive settings layout.
+- [ADR 0098: Unified main-window workspace](adr/0098-unified-main-window-workspace.md) — shared navigation and responsive settings layout.
 
 - [ADR 0099: Panel-open update discovery](adr/0099-panel-open-update-discovery.md) — cached version checks and a Settings notification; downloads and installs remain explicit.
+
+- [ADR 0100: In-window Empty Trash confirmation](adr/0100-in-window-empty-trash-confirmation.md) — main-WebView modal, safe focus and single-flight deletion.

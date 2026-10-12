@@ -111,10 +111,39 @@ def wait_for(predicate, description):
     raise RuntimeError("Timed out waiting for " + description)
 
 
-def cancel_dialog(mode, label, window):
+def has_visible_control(owner, name, control_type=None):
+    for control in owner.descendants():
+        try:
+            if (re.fullmatch(name, control.window_text()) and control.is_visible()
+                    and (control_type is None or control.element_info.control_type == control_type)):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def local_trash_dialog(library):
+    title = find("Empty Trash\\?", owner=library)
+    if title.top_level_parent().handle != library.handle:
+        raise RuntimeError("Empty Trash escaped the main application window")
+    candidate = title
+    for _ in range(12):
+        rect, outer = candidate.rectangle(), library.rectangle()
+        if (rect.width() < outer.width() and rect.height() < outer.height()
+                and rect.left >= outer.left and rect.right <= outer.right
+                and rect.top >= outer.top and rect.bottom <= outer.bottom
+                and has_visible_control(candidate, "Cancel", "Button")
+                and has_visible_control(candidate, "Empty Trash", "Button")):
+            return candidate
+        candidate = candidate.parent()
+    raise RuntimeError("Local Empty Trash dialog bounds or actions are missing")
+
+
+def cancel_dialog(mode, label, window, local=False):
     # The library batch bar also has Cancel; target the confirmed dialog.
     phase(f"{label}: find dialog Cancel", mode=mode)
-    cancel = find("Cancel", owner=window)
+    owner = local_trash_dialog(window) if local else window
+    cancel = find("Cancel", owner=owner)
     handle = window.handle
     phase(f"{label}: capture confirmation", handle=handle)
     window.capture_as_image().save(output / f"{label}.png")
@@ -130,8 +159,14 @@ def cancel_dialog(mode, label, window):
         phase(f"{label}: click Cancel", handle=handle)
         cancel.click_input()
     phase(f"{label}: wait for confirmation close", handle=handle)
-    wait_for(lambda: not any(w.handle == handle for w in desktop.windows(
-        process=process.pid, visible_only=True)), "confirmation close")
+    if local:
+        wait_for(lambda: not has_visible_control(window, "Empty Trash\\?"), "local confirmation close")
+        if not any(w.handle == handle for w in desktop.windows(process=process.pid, visible_only=True)):
+            raise RuntimeError("Cancel closed the main application window")
+        find("Empty Trash", owner=window, predicate=lambda control: control.element_info.control_type == "Button")
+    else:
+        wait_for(lambda: not any(w.handle == handle for w in desktop.windows(
+            process=process.pid, visible_only=True)), "confirmation close")
     phase(f"{label}: confirmation closed", handle=handle)
 
 
@@ -170,14 +205,14 @@ try:
         phase(f"empty-trash-{index}: click Empty Trash", mode=mode)
         find("Empty Trash").click_input()
         phase(f"empty-trash-{index}: find confirmation", mode=mode)
-        dialog = find("Empty Trash\\?").top_level_parent()
-        cancel_dialog(mode, f"empty-trash-{index}", dialog)
+        local_trash_dialog(library)
+        cancel_dialog(mode, f"empty-trash-{index}", library, local=True)
         phase(f"empty-trash-{index}: verify cancellation preserved fixtures", mode=mode)
         if (root / "library.json").read_bytes() != index_bytes:
             raise RuntimeError("Cancellation changed the library index")
         if any(not (root / "Assets" / asset["filename"]).is_file() for asset in assets):
             raise RuntimeError("Cancellation deleted a fixture")
-    report["checks"].append("six repeated empty-trash confirmations render and close; Escape/Cancel preserve all assets")
+    report["checks"].append("six in-window empty-trash confirmations render and close without closing the main window; Escape/Cancel preserve all assets")
 
     phase("single-delete: open disposable asset context menu")
     find("Discard 1", predicate=lambda c: c.rectangle().height() > 150).click_input(button="right")
@@ -208,7 +243,7 @@ try:
     phase("confirmed-empty-trash: open confirmation")
     find("Empty Trash").click_input()
     phase("confirmed-empty-trash: find confirmation")
-    dialog = find("Empty Trash\\?").top_level_parent()
+    dialog = local_trash_dialog(library)
     phase("confirmed-empty-trash: click dialog Empty Trash")
     find("Empty Trash", owner=dialog).click_input()
     phase("confirmed-empty-trash: wait for durable deletion")

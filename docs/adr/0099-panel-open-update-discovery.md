@@ -1,6 +1,6 @@
 # ADR 0099: Discover updates when opening the main panel
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-12
 - Supersedes: ADR 0025 only for manual update discovery
 
@@ -33,5 +33,5 @@ signature failure and explicit restart behavior have isolated regressions.
 
 Opening the panel now makes a metadata request. Privacy documentation records
 this change. No captures, credentials or library data accompany that request.
-The owner requested this discovery behavior while reviewing the sidebar; the
-larger workspace redesign still needs review before merge.
+The owner requested this discovery behavior while reviewing the sidebar and
+approved releasing the larger workspace redesign on 2026-10-13.

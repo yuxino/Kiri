@@ -1,6 +1,6 @@
 # ADR 0098: Unified main-window workspace
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-12
 - Extends: ADR 0015 and ADR 0097
 
@@ -45,6 +45,5 @@ never copied into this harness. Exercise navigation after Trash, search,
 selection, text editing and copying. Verify compact and populated OCR profile
 states, loading/errors, scrolling, focus and reduced-motion behavior.
 
-This changes the main window's information hierarchy and needs owner review
-before merging. Renderer evidence establishes layout and browser interaction;
+The owner approved releasing this information hierarchy on 2026-10-13. Renderer evidence establishes layout and browser interaction;
 it does not establish packaged-app acceptance or real desktop capture behavior.
