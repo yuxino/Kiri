@@ -188,3 +188,5 @@ development.
 - [ADR 0091: Direct text annotation toolbar buttons](adr/0091-direct-text-annotation-toolbar.md)
 - [ADR 0092: Finish editing and clear selection before the next placement](adr/0092-finish-text-edit-before-placement.md)
 - [ADR 0093: Consistent annotation selection and deletion](adr/0093-annotation-selection-and-deletion.md)
+
+- [`adr/0094-screenshot-ocr-and-annotation-layer-order.md`](adr/0094-screenshot-ocr-and-annotation-layer-order.md) — screenshot-toolbar OCR and creation-order annotation compositing.

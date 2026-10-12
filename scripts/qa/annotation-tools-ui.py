@@ -746,6 +746,9 @@ async def verify():
             await page.locator("canvas").wait_for()
             report["mosaicPixels"] = await page.evaluate("__annotationToolsQa.mosaicPixels()")
             assert all(value == (255 if key == "edgeAlpha" else 0) for key, value in report["mosaicPixels"].items()), report["mosaicPixels"]
+            report["mosaicLayerPixels"] = await page.evaluate("__annotationToolsQa.mosaicLayerPixels()")
+            assert report["mosaicLayerPixels"]["cases"] == 144, report["mosaicLayerPixels"]
+            assert all(value == 0 for key, value in report["mosaicLayerPixels"].items() if key != "cases"), report["mosaicLayerPixels"]
             report["watermarkPixels"] = await page.evaluate("__annotationToolsQa.watermarkPixels()")
             assert report["watermarkPixels"]["success"], report["watermarkPixels"]
             await page.close()

@@ -59,7 +59,7 @@ export interface AnnotationCanvasHandle {
   redo(): void;
   clearAnnotations(): void;
   deleteSelection(): void;
-  commitTextEditing(): void;
+  commitTextEditing(): boolean;
   cancelTextEditing(): boolean;
   editSelectedText(): void;
   editWatermark(): void;
@@ -1726,7 +1726,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         },
         deleteSelection: () => deleteRef.current(),
         commitTextEditing: () => {
-          if (!interactionsDisabled()) commitText();
+          if (interactionsDisabled() || isTextComposition({target: canvasRef.current?.ownerDocument?.activeElement})) return false;
+          commitText();
+          return editingRef.current === null;
         },
         cancelTextEditing: () => {
           if (interactionsDisabled() || !editingRef.current) return false;

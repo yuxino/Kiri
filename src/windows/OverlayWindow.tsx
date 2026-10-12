@@ -1337,6 +1337,12 @@ export function OverlayWindow() {
           onRedo={() => canvasRef.current?.redo()}
           onDone={() => void complete()}
           onPin={() => void complete(true)}
+          onOcr={() => {
+            const canvas = canvasRef.current;
+            canvas?.finishAppearanceAdjustment();
+            if (canvas && !canvas.commitTextEditing()) return;
+            switchMode("ocr");
+          }}
           onQr={() => { if (selectionRef.current && !completionLock.locked) void runQr(selectionRef.current); }}
           onCancel={cancel}
         />
@@ -1944,6 +1950,7 @@ interface ToolbarProps {
   onRedo(): void;
   onDone(): void;
   onPin(): void;
+  onOcr(): void;
   onQr(): void;
   onCancel(): void;
   onTextFontBegin?(): void;
@@ -1979,7 +1986,7 @@ const toolbarRowStyle: React.CSSProperties = {
 
 export function Toolbar(props: ToolbarProps) {
   const {selection, bounds, tool, setTool, canUndo, canRedo, canSetSize, sizeControlsOpen, onToggleSize,
-    disabled, onUndo, onRedo, onDone, onPin, onQr, onCancel} = props;
+    disabled, onUndo, onRedo, onDone, onPin, onOcr, onQr, onCancel} = props;
   const [detailsOpen, setDetailsOpen] = useState(false);
   useEffect(() => setDetailsOpen(tool !== "select" || props.selectedMark != null || props.selectedCalloutId !== undefined || props.selectedLabelId !== undefined),
     [tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
@@ -2051,6 +2058,7 @@ export function Toolbar(props: ToolbarProps) {
           <div className="kiri-annotation-tool-group">
             <ToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={!canUndo} onClick={onUndo}/>
             <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo}/>
+            <ToolButton icon="text.viewfinder" title={t("OCR")} disabled={disabled} onClick={onOcr}/>
             <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr}/>
             <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "Tool options")}
               active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}

@@ -21,12 +21,18 @@ export function watermarkPixelCases(createCanvas, renderAll, cropAnnotationDocum
       if(Math.abs(lower[index]-Math.round(higher[index]*watermark.opacity))>1)opacityViolations++;
     }else if(lower[index]!==0)opacityViolations++;
   }
-  // Reverse mark order deliberately: the white object is later in persisted data.
+  // Later objects cover an earlier watermark; a later watermark stays above them.
   const layer=render([{...watermark,opacity:1},{kind:"rectangle",id:81,
     rect:{...watermark.rect},color:"white",width:35}],640,360,"#fff")
     .getContext("2d").getImageData(0,0,640,360).data;
   const layerReference=render([{...watermark,opacity:1}],640,360,"#fff")
     .getContext("2d").getImageData(0,0,640,360).data;
+  const topLayer=render([{kind:"rectangle",id:81,rect:{...watermark.rect},color:"white",width:35},
+    {...watermark,opacity:1}],640,360,"#fff").getContext("2d").getImageData(0,0,640,360).data;
+  let topLayerChangedPixels=0;
+  for(let index=0;index<topLayer.length;index+=4) {
+    if([0,1,2,3].some(channel=>topLayer[index+channel]!==layerReference[index+channel]))topLayerChangedPixels++;
+  }
   let lastLayerDarkPixels=0,lastLayerChangedPixels=0;
   for(let index=0;index<layer.length;index+=4){
     if(layer[index]<50&&layer[index+1]<50&&layer[index+2]<50&&layer[index+3]>0)lastLayerDarkPixels++;
@@ -50,12 +56,12 @@ export function watermarkPixelCases(createCanvas, renderAll, cropAnnotationDocum
     transparentBackground:lower[3]===0&&higher[3]===0,
     textHasVisiblePixels:visibleTextPixels>100,
     opacityRespected:opacityViolations===0,
-    watermarkDrawnLast:lastLayerDarkPixels>100&&lastLayerChangedPixels===0,
+    watermarkCreationOrderPreserved:lastLayerChangedPixels>100&&topLayerChangedPixels===0,
     cropPhasePreserved:cropPhaseChangedPixels===0,
   };
   return {
     success:Object.values(checks).every(Boolean),checks,
     transparentCornerAlpha:{low:lower[3],high:higher[3]},visibleTextPixels,opacityViolations,
-    lastLayerDarkPixels,lastLayerChangedPixels,cropPhaseChangedPixels,cropComparedPixels,
+    lastLayerDarkPixels,lastLayerChangedPixels,topLayerChangedPixels,cropPhaseChangedPixels,cropComparedPixels,
   };
 }

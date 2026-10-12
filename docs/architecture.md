@@ -52,6 +52,9 @@ unrestricted filesystem path.
 Each active screenshot has at most one pin window. It reads the saved flattened
 image through the existing local media route. Unpinning or closing that window
 does not change the library asset.
+The screenshot toolbar also starts OCR through the existing explicit mode switch,
+reusing the committed selection and remote-consent flow.
+
 The screenshot toolbar can request a direct pin through its existing capture
 confirmation. After the overlay is destroyed, Rust opens the saved image's
 reference window; a pin failure retains the completion card for retry (ADR 0081).
@@ -663,7 +666,12 @@ normalized zoom/mask rectangles and independent annotation tracks. The screensho
 annotation canvas publishes editable marks into a shared, bounded undo history.
 Navigation and export commit pending text before reading the document snapshot. A separate
 video decoder extracts twelve small timeline thumbnails, while preview playback
-skips removed source intervals. The central canvas always composites the edited frame. Annotation drafts publish live marks to the compositor; the transparent annotation input layer retains handles and uses the camera transform so drawing and dragging stay aligned after zoom/crop. Explicit layer order is shared by preview and both native encoders. Overlays (annotations, stickers, masks and spotlight) composite back to front, followed by whole-picture adjustments (zoom, crop/background and fade) in their own order. Older payloads without a layer keep their historical composition. Timeline grips reorder within these two stacks; the bar moves source timing across retained clips and its edges clamp to valid trim limits. macOS uses an sRGB working context to match Canvas and Windows blending. Screenshot blur brushes and live video privacy masks share a bounded CPU blur, using premultiplied pixels and clamped edges; the preview does not depend on Canvas filter support. Three box passes approximate the native Gaussian blur, so minor pixel differences between preview and encoded output are expected. `export_video_copy` accepts an asset ID only from its matching viewer.
+skips removed source intervals. The central canvas always composites the edited frame. Annotation drafts publish live marks to the compositor; the transparent annotation input layer retains handles and uses the camera transform so drawing and dragging stay aligned after zoom/crop. Screenshot annotations, including watermarks, composite in persisted creation order;
+a mosaic samples the composed image below its consecutive stroke group. A group
+retains deterministic strongest coverage without crossing intervening annotations.
+Layered-mosaic preview samples at source resolution, matching PNG export and
+reopening. Editing and dragging replace marks in place. Video keeps its independent
+explicit layer order, shared by preview and both native encoders. Overlays (annotations, stickers, masks and spotlight) composite back to front, followed by whole-picture adjustments (zoom, crop/background and fade) in their own order. Older payloads without a layer keep their historical composition. Timeline grips reorder within these two stacks; the bar moves source timing across retained clips and its edges clamp to valid trim limits. macOS uses an sRGB working context to match Canvas and Windows blending. Screenshot blur brushes and live video privacy masks share a bounded CPU blur, using premultiplied pixels and clamped edges; the preview does not depend on Canvas filter support. Three box passes approximate the native Gaussian blur, so minor pixel differences between preview and encoded output are expected. `export_video_copy` accepts an asset ID only from its matching viewer.
 A single-flight worker opens the readable source under the library lock,
 copies a snapshot outside the lock, then uses AVFoundation or Windows MediaComposition to concatenate the retained
 intervals and render a new MP4. Native

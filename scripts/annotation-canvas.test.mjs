@@ -1538,3 +1538,55 @@ test("selecting a label stays stationary when its inspector changes the stage mi
   assert.equal(h.changes.at(-1)[0].labelDirection,"right");
   assert.equal(h.changes.at(-1)[0].text,label.text);
 });
+
+const overlappingLayers = [
+  {kind:"text",id:201,text:"PRIVATE",rect:{x:22,y:30,width:88,height:24},color:"black",fontSize:18,background:"transparent"},
+  {kind:"text",id:202,text:"label",rect:{x:22,y:30,width:88,height:24},color:"cherry",fontSize:18,background:"transparent",labelDirection:"left"},
+  {kind:"callout",id:203,center:{x:30,y:40},size:24,number:1,style:"outline",text:"note",labelRect:{x:50,y:26,width:70,height:30},color:"cherry",fontSize:14},
+  {kind:"rectangle",id:204,rect:{x:20,y:28,width:80,height:36},color:"black",width:4},
+  {kind:"line",id:205,start:{x:20,y:35},end:{x:100,y:55},color:"cherry",width:5},
+  {kind:"arrow",id:206,start:{x:20,y:35},end:{x:100,y:55},color:"cherry",width:5},
+  {kind:"pen",id:207,points:[{x:20,y:40},{x:55,y:30},{x:100,y:55}],color:"black",width:5},
+  {kind:"mosaic",id:208,points:[{x:10,y:10},{x:124,y:86}],brushDiameter:24,intensity:"strong",style:"pixel",shape:"rectangle"},
+  {kind:"watermark",id:209,text:"PRIVATE",rect:{x:22,y:30,width:88,height:24},color:"black",fontSize:18,opacity:1,rotation:0,mode:"single",spacing:80},
+];
+
+test("all overlapping annotation tools select the latest layer in either creation order", () => {
+ const point={x:25,y:40};
+ for(const lower of overlappingLayers) for(const upper of overlappingLayers) {
+  if(lower.id===upper.id)continue;
+  assert.equal(model.markIndexAt([lower,upper],point),1,`${lower.kind} then ${upper.kind}`);
+ }
+});
+
+for (const mark of overlappingLayers) test(`${mark.kind} appearance edits preserve its mixed document layer through save, reopen and undo`,async()=>{
+ const others=overlappingLayers.filter(item=>item.id!==mark.id);
+ const doc=documentWith([others[0],mark,...others.slice(1)]);
+ const h=annotation(doc,{selectedMarkId:mark.id});
+ const patch=mark.kind==="watermark"?{watermarkOpacity:50}:mark.kind==="mosaic"?{mosaicIntensity:"soft"}:{colorPreset:mark.color==="black"?"cherry":"black"};
+ h.ref.current.updateSelectionAppearance(patch);h.component.render();
+ const saved=await h.ref.current.exportResult();
+ assert.deepEqual(saved.document.marks.map(item=>item.id),doc.marks.map(item=>item.id));
+ assert.notDeepEqual(saved.document.marks[1],mark);
+ const reopened=annotation(saved.document);
+ assert.deepEqual((await reopened.ref.current.exportResult()).document.marks,saved.document.marks);
+ h.ref.current.undo();h.component.render();
+ assert.deepEqual((await h.ref.current.exportResult()).document.marks,doc.marks);
+ h.ref.current.redo();h.component.render();
+ assert.deepEqual((await h.ref.current.exportResult()).document.marks,saved.document.marks);
+ h.component.unmount();reopened.component.unmount();
+});
+
+test("an explicit text commit reports an active IME draft instead of allowing a mode switch",()=>{
+ const h=annotation(documentWith([text]),{selectedMarkId:text.id});
+ h.ref.current.editSelectedText();h.component.render();
+ const target={};h.live.ownerDocument={activeElement:target};
+ composition.setTextComposition(target,true);
+ assert.equal(h.ref.current.commitTextEditing(),false);
+ assert.ok(inlineEditor(h),"mode-switch callers must retain the composing input");
+ composition.setTextComposition(target,false);
+ assert.equal(h.ref.current.commitTextEditing(),true);h.component.render();
+ assert.equal(inlineEditor(h),undefined);
+ assert.equal(h.ref.current.commitTextEditing(),true,"an already finished input is ready to switch");
+ h.component.unmount();
+});

@@ -717,7 +717,7 @@ test("watermark drawing isolates alpha/transform and hides only the inline-edit 
 
 let nativeCanvas;
 try {nativeCanvas=await import(process.env.KIRI_TEST_CANVAS_MODULE??"@napi-rs/canvas");} catch {}
-test("real watermark pixels stay transparent, respect opacity, draw last and keep crop phase",{
+test("real watermark pixels stay transparent, respect opacity, preserve creation order and keep crop phase",{
   skip:!nativeCanvas&&"Set KIRI_TEST_CANVAS_MODULE to a native Canvas adapter for this pixel regression.",
 },async()=>{
   const {renderAll}=await loadAnnotationRender();
@@ -728,7 +728,7 @@ test("real watermark pixels stay transparent, respect opacity, draw last and kee
     const result=watermarkPixelCases(nativeCanvas.createCanvas,renderAll,cropAnnotationDocument);
     assert.equal(result.success,true,JSON.stringify(result));
     assert.deepEqual(result.checks,{transparentBackground:true,textHasVisiblePixels:true,
-      opacityRespected:true,watermarkDrawnLast:true,cropPhasePreserved:true});
+      opacityRespected:true,watermarkCreationOrderPreserved:true,cropPhasePreserved:true});
     assert.equal(result.cropComparedPixels,35916);
   }finally{globalThis.document=previous;}
 });

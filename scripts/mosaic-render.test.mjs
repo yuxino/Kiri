@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import { mosaicLayerPixelCases } from "./helpers/mosaic-layer-pixel-cases.mjs";
 import { mosaicPixelCases } from "./helpers/mosaic-pixel-cases.mjs";
 
 const moduleUrl = text => `data:text/javascript;base64,${Buffer.from(text).toString("base64")}`;
@@ -44,6 +45,20 @@ test("mosaic growth keeps its pixel grid stable and weak committed/draft strokes
       changedCoveredPixels: 0, weakenedPixels: 0, weakenedDraftPixels: 0,
       weakenedBlurPixels: 0, mixedStyleOrderDiff: 0, previewExportDiff: 0, edgeAlpha: 255,
       sourceReopenDiff: 0, blurSourceReopenDiff: 0,
+    });
+  } finally { globalThis.document = previousDocument; }
+});
+
+test("later mosaics sample earlier text and shapes across draft, preview and saved layers", {
+  skip: !canvas && "Run mosaicLayerPixelCases in the isolated browser Canvas harness.",
+}, async () => {
+  const previousDocument = globalThis.document;
+  globalThis.document = {createElement: () => canvas.createCanvas(1, 1)};
+  try {
+    const {renderAll} = await import(compile("../src/annotation/render.ts"));
+    assert.deepEqual(mosaicLayerPixelCases(canvas.createCanvas, renderAll), {
+      cases: 144, referenceDiff: 0, previewDiff: 0, draftDiff: 0, laterInkMissingPixels: 0,
+      unchangedRedactions: 0, interleavedDiff: 0, reopenedDiff: 0,
     });
   } finally { globalThis.document = previousDocument; }
 });

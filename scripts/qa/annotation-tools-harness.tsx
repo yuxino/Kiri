@@ -9,6 +9,7 @@ import {DEFAULT_APPEARANCE, type AnnotationDocumentV1} from "../../src/annotatio
 import {DEFAULT_RECORDING_OPTIONS} from "../../src/lib/ipc";
 import {languages, setLanguage, type KiriLanguage} from "../../src/i18n";
 import {renderAll} from "../../src/annotation/render";
+import {mosaicLayerPixelCases} from "../helpers/mosaic-layer-pixel-cases.mjs";
 import {mosaicPixelCases} from "../helpers/mosaic-pixel-cases.mjs";
 import {watermarkPixelCases} from "../helpers/watermark-pixel-cases.mjs";
 import {cropAnnotationDocument} from "../../src/annotation/crop.js";
@@ -52,6 +53,7 @@ const createCanvas = (w: number, h: number) => {
   const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h; return canvas;
 };
 const qa = {actions, source, get document() {return stored;}, exports: [] as Uint8Array[],
+  mosaicLayerPixels: () => mosaicLayerPixelCases(createCanvas, renderAll),
   mosaicPixels: () => mosaicPixelCases(createCanvas, renderAll),
   watermarkPixels: () => watermarkPixelCases(createCanvas, renderAll, cropAnnotationDocument),
 };
@@ -72,6 +74,21 @@ mockIPC((command, payload) => {
     case "get_recording_options": return DEFAULT_RECORDING_OPTIONS;
     case "mic_supported": return true;
     case "platform_capabilities": return {recording: true, localOcr: true, microphone: true, systemAudio: true};
+    case "prepare_ocr_request":
+      actions.push({command, payload});
+      if (params.get("ocr") === "preparing") return new Promise(() => {});
+      return {requestId: "qa-ocr-request", engine: params.get("ocr") === "remote"
+        ? {kind: "profile", profileId: "qa-profile"} : {kind: "local"},
+        imageWidth: 200, imageHeight: 100, byteLength: 1024,
+        profile: params.get("ocr") === "remote" ? {id: "qa-profile", revision: 1, name: "Generated QA profile",
+          provider: "openAi", origin: "https://fixture.invalid", model: "QA", hasApiKey: true} : null};
+    case "recognize_prepared_ocr_local":
+      actions.push({command, payload});
+      if (params.get("ocr") === "failed") throw new Error("Generated local OCR failure");
+      return {text: "Kiri OCR generated fixture", saved: true};
+    case "recognize_prepared_ocr_remote":
+      actions.push({command, payload}); return {text: "Kiri OCR generated remote fixture", saved: true};
+    case "cancel_prepared_ocr": actions.push({command, payload}); return;
     case "take_editor_qr_request": return false;
     case "save_file_dialog": actions.push({command, payload}); return "qa-save-token";
     case "prepare_capture_annotation": case "prepare_asset_annotation": {

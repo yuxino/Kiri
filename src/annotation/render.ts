@@ -492,26 +492,28 @@ function drawMosaicMark(
   ctx.restore();
 }
 
-/** Full render: background image → mosaics → other marks → draft → cursor → selection. */
-export function renderAll(
-  r: RenderContext,
-  marks: AnnotationMark[],
-  options: {
-    draft?: AnnotationMark | null;
-    brushCursor?: Point | null;
-    brushDiameter?: number;
-    selectedIndex?: number | null;
-    editingIndex?: number | null;
-    editingId?: number;
-    chromeOnly?: boolean;
-  } = {},
-) {
-  const { ctx } = r;
-  const region = { x: 0, y: 0, width: r.regionSize.width, height: r.regionSize.height };
+type RenderOptions = {
+  draft?: AnnotationMark | null;
+  brushCursor?: Point | null;
+  brushDiameter?: number;
+  selectedIndex?: number | null;
+  editingIndex?: number | null;
+  editingId?: number;
+  chromeOnly?: boolean;
+};
 
-  if(options.chromeOnly){
-    ctx.clearRect(0,0,region.width,region.height);
-  }else{
+function hasLayeredMosaic(marks: AnnotationMark[], draft?: AnnotationMark | null): boolean {
+  let lower = false;
+  for (const mark of draft ? [...marks, draft] : marks) {
+    if (mark.kind === "mosaic") { if (lower) return true; }
+    else lower = true;
+  }
+  return false;
+}
+
+function renderDocument(r: RenderContext, marks: AnnotationMark[], options: RenderOptions, preview: boolean) {
+  const {ctx} = r;
+  const region = {x: 0, y: 0, width: r.regionSize.width, height: r.regionSize.height};
   if (r.exporting) {
     // PNG exports retain the source alpha unless an annotation covers it.
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -549,29 +551,71 @@ export function renderAll(
     );
   }
 
-  const mosaics = marks.filter((m): m is Extract<AnnotationMark, {kind: "mosaic"}> => m.kind === "mosaic");
-  if (options.draft?.kind === "mosaic") mosaics.push(options.draft);
-  const others = marks.filter((m) => m.kind !== "mosaic" && m.kind !== "watermark");
-  for (const mark of orderedMosaics(mosaics)) drawMark(mark, r, ctx);
-  for (const mark of others) {
-    if (options.editingIndex !== null && options.editingIndex !== undefined) {
-      const editingMark = marks[options.editingIndex];
-      if (editingMark && mark.id === editingMark.id) {
-        if (mark.kind === "callout") drawMark(mark, r, ctx, true);
+  // Creation order defines annotation layers. Consecutive mosaic strokes share
+  // one sampling snapshot and retain the strongest coverage within that run.
+  const layers = [...marks];
+  if (options.draft) layers.push(options.draft);
+  const paint = (mark: AnnotationMark, sampling = r, editing = false) => {
+    ctx.save();
+    try { drawMark(mark, sampling, ctx, editing); }
+    finally { ctx.restore(); }
+  };
+  let hasLowerMarks = false;
+  let snapshot: HTMLCanvasElement | null = null;
+  try {
+    for (let index = 0; index < layers.length;) {
+      const mark = layers[index];
+      if (mark.kind === "mosaic") {
+        const run: Extract<AnnotationMark, {kind: "mosaic"}>[] = [];
+        while (layers[index]?.kind === "mosaic") {
+          run.push(layers[index++] as Extract<AnnotationMark, {kind: "mosaic"}>);
+        }
+        let sampling = r;
+        if (hasLowerMarks) {
+          snapshot ??= document.createElement("canvas");
+          snapshot.width = ctx.canvas.width;
+          snapshot.height = ctx.canvas.height;
+          snapshot.getContext("2d")!.drawImage(ctx.canvas, 0, 0);
+          sampling = {...r, sourceImage: snapshot, sourceWidth: snapshot.width,
+            sourceHeight: snapshot.height, sourceOffset: {x: 0, y: 0}};
+        }
+        for (const mosaic of orderedMosaics(run)) paint(mosaic, sampling);
         continue;
       }
+      index++;
+      const editing = options.editingIndex != null && marks[options.editingIndex]?.id === mark.id;
+      if (mark.kind === "watermark") {
+        paint(mark, r, preview && (editing || mark.id === options.editingId));
+      } else if (editing) {
+        if (mark.kind === "callout") paint(mark, r, true);
+      } else paint(mark);
+      hasLowerMarks = true;
     }
-    drawMark(mark, r, ctx);
+  } finally {
+    if (snapshot) { snapshot.width = 0; snapshot.height = 0; }
   }
-  if (options.draft && options.draft.kind !== "mosaic" && options.draft.kind !== "watermark") drawMark(options.draft, r, ctx);
-  const watermarks = marks.filter(mark => mark.kind === "watermark");
-  if (options.draft?.kind === "watermark") watermarks.push(options.draft);
-  for (const mark of watermarks) {
-    const editing = !r.exporting && (mark.id === options.editingId ||
-      (options.editingIndex != null && marks[options.editingIndex]?.id === mark.id));
-    drawMark(mark, r, ctx, editing);
-  }
-  }
+}
+
+/** Background → ordered annotation/mosaic layers → interaction chrome. */
+export function renderAll(r: RenderContext, marks: AnnotationMark[], options: RenderOptions = {}) {
+  const {ctx} = r;
+  const region = {x: 0, y: 0, width: r.regionSize.width, height: r.regionSize.height};
+  if (options.chromeOnly) {
+    ctx.clearRect(0, 0, region.width, region.height);
+  } else if (!r.exporting && hasLayeredMosaic(marks, options.draft)) {
+    // Sample annotations at source resolution in both preview and export;
+    // editor zoom and display DPR must not change mosaic pixels or layer order.
+    const composed = document.createElement("canvas");
+    composed.width = Math.max(1, Math.round(region.width * r.scaleX));
+    composed.height = Math.max(1, Math.round(region.height * r.scaleY));
+    try {
+      renderDocument({...r, ctx: composed.getContext("2d")!, exporting: true}, marks, options, true);
+      ctx.clearRect(0, 0, region.width, region.height);
+      ctx.fillStyle = "#141414";
+      ctx.fillRect(0, 0, region.width, region.height);
+      ctx.drawImage(composed, 0, 0, region.width, region.height);
+    } finally { composed.width = 0; composed.height = 0; }
+  } else renderDocument(r, marks, options, !r.exporting);
 
   if (!r.exporting && options.brushCursor && options.brushDiameter) {
     drawBrushCursor(

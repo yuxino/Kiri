@@ -54,7 +54,7 @@ function Harness() {
     {callouts&&<Toolbar selection={{x:0,y:0,width:Math.min(640,bounds.width),height:Math.min(640,bounds.width)*360/640}} bounds={bounds}
       tool={tool} setTool={setTool} appearance={appearance} setAppearance={setAppearance} canUndo={undo} canRedo={redo}
       canSetSize={false} sizeControlsOpen={false} onToggleSize={()=>{}} disabled={false}
-      onUndo={()=>canvas.current?.undo()} onRedo={()=>canvas.current?.redo()} onPin={()=>{}} onQr={()=>{}} onCancel={()=>{}}
+      onUndo={()=>canvas.current?.undo()} onRedo={()=>canvas.current?.redo()} onPin={()=>{}} onOcr={()=>{}} onQr={()=>{}} onCancel={()=>{}}
       onDone={()=>{void canvas.current?.exportResult().then(result=>{if(result){Object.assign(window,{__qaExport:result.document});setExported(URL.createObjectURL(new Blob([result.png as BlobPart],{type:"image/png"})));}});}}
       showLabelControls={tool==="label"||(tool==="select"&&selectedLabel!==null)} selectedLabelId={selectedLabel?.id}
       labelControls={<LabelControls selected={selectedLabel} appearance={appearance}

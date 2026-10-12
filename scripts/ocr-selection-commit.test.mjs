@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { createLibraryHarness, nodes } from './helpers/library-render-harness.mjs';
+import { capturePanelLayout, captureToolbarPosition } from '../src/windows/toolbar-layout.js';
 const source=readFileSync(new URL('../src/windows/OverlayWindow.tsx',import.meta.url),'utf8');
 const tree=ts.createSourceFile('OverlayWindow.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 
@@ -33,4 +35,22 @@ test('explicit OCR mode switching reuses a finished selection once',()=>{
  const mode=source.slice(start,end);
  assert.match(mode,/void runOcr\(selectionRef\.current\)/);
  assert.match(mode,/\[completionLock, discardPreparedOcr, discardQr, runOcr\]/);
+});
+
+test('toolbar OCR is explicit, disabled while completing and independent of screenshot completion', () => {
+ const toolbar=source.slice(source.indexOf('const TOOLS:'));
+ const harness=createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
+  import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
+  const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}`);
+ let recognitions=0,captures=0;
+ const component=harness.mount('Toolbar',{selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},
+  tool:'select',appearance:{},canUndo:false,canRedo:false,canSetSize:false,disabled:false,
+  onOcr:()=>recognitions++,onDone:()=>captures++});
+ const target=nodes(component.render()).find(node=>node?.props?.title==='OCR');
+ assert.ok(target);assert.equal(target.props.icon,'text.viewfinder');
+ assert.equal(recognitions,0);target.props.onClick();
+ assert.equal(recognitions,1);assert.equal(captures,0);
+ const busy=nodes(component.render({selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},tool:"select",appearance:{},disabled:true,onOcr:()=>recognitions++})).find(node=>node?.props?.title==='OCR');
+ assert.equal(busy.props.disabled,true);
+ component.unmount();
 });
