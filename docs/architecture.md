@@ -314,6 +314,15 @@ text or styling is changed. See ADRs 0088, 0090 and 0092.
 
 ## Managed library flow
 
+The main window uses a persistent destination sidebar and a shared workspace
+header for Library, Text History, QR Favorites, Trash and Settings. Contextual
+capture filters and search share a toolbar; batch actions occupy an in-flow row
+above the scrolling grid. Text and QR details consolidate actions with record
+metadata. Settings uses General and OCR columns when space allows, with About
+below OCR, and stacks those sections in narrow windows. Container queries follow
+the actual content/section width instead of the overall native window width
+(ADR 0098). This layout does not change capture, editor or native IPC policies.
+
 Library and Trash expose explicit Select captures, individual checkboxes and
 filtered Select All, alongside rubber-band selection. Normal card clicks retain
 direct opening. Batch mutations keep a retryable selection on failure and

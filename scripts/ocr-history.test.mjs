@@ -8,7 +8,11 @@ const source = 'import React from "react";\n' + readFileSync(new URL("../src/ocr
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const record = (id, text) => ({ ...testAsset, id, ocrText: text });
 const hasText = (tree, text) => nodes(tree).includes(text);
-const button = (tree, text) => nodes(tree).find((node) => node?.type === "button" && hasText(node, text));
+// Text History passes its edit controls to the real reader's toolbar slot.
+const button = (tree, text) => {
+  const reader = nodes(tree).find((node) => node?.type?.name === "TextReader");
+  return [...nodes(tree), ...nodes(reader?.props.actions)].find((node) => node?.type === "button" && hasText(node, text));
+};
 
 test("an older search response cannot replace the current text history", async () => {
   const first = deferred(), second = deferred();

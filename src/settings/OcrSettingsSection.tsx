@@ -39,7 +39,6 @@ export function OcrSettingsSection({
       <div className="kiri-settings-section__heading">
         <div>
           <h2 id="ocr-settings-title">{t("Text Recognition")}</h2>
-          <p>{t("Choose the engine Kiri prepares after you select text on screen.")}</p>
         </div>
         <button
           type="button"

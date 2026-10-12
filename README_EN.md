@@ -41,6 +41,8 @@ Single-click existing text, numbered notes, labels, or watermarks to select them
 
 In Library, choose **Select captures**, check individual items or **Select All**, then **Move to Trash**. Restore them together from Trash when needed. Ordinary clicks still open captures directly; drag selection remains available.
 
+The main window keeps Library, Text History, QR Favorites, Trash and Settings in a fixed sidebar. Pages share their title and action layout, with batch actions above the capture grid. Settings uses columns for General and OCR in wide windows and one column in narrow windows.
+
 ## Get started
 
 1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.

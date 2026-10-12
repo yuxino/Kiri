@@ -13,13 +13,25 @@
 .kiri-qr-marker svg { display: block; pointer-events: none; }
 .qr-details { min-width: 0; }
 .qr-content { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; line-height: 1.75; font-size: 14px; padding: 18px 0; box-sizing: border-box; max-height: min(240px, 30vh); overflow: auto; unicode-bidi: plaintext; }
-.qr-host, .qr-warning, .qr-feedback { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.qr-host, .qr-warning, .qr-feedback { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .qr-host, .qr-feedback { color: var(--kiri-secondary-label); }
 .qr-host { max-height: 4.8em; overflow: auto; }
 .qr-warning { color: var(--kiri-coral); }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .qr-prompt { color: var(--kiri-secondary-label); font-size: 13px; line-height: 1.7; padding: 24px 0; }
-.qr-favorite-image { display: block; max-width: 100%; max-height: 240px; margin-bottom: 24px; object-fit: contain; border: 1px solid var(--kiri-surface-border); }
+/* Saved QR details use the same metadata/action line as Text History. */
+.qr-details--saved .qr-details__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding-bottom: 18px; margin-bottom: 24px; border-bottom: 1px solid var(--kiri-surface-border); }
+.qr-details--saved .qr-actions { justify-content: flex-end; }
+.qr-details--saved .qr-details__body { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: start; gap: 28px; }
+.qr-details__content { min-width: 0; }
+.qr-favorite-image { display: block; width: 200px; max-width: 100%; max-height: 240px; box-sizing: border-box; padding: 12px; object-fit: contain; background: var(--kiri-canvas); border: 1px solid var(--kiri-surface-border); border-radius: 8px; }
+.qr-details--saved .qr-content { padding: 0 0 12px; max-height: none; }
+.qr-details--saved .qr-host { margin: 0; }
+@container (max-width: 560px) {
+  .qr-details--saved .qr-details__body { grid-template-columns: 1fr; gap: 20px; }
+  .qr-details--saved .qr-actions { justify-content: flex-start; }
+}
+
 .qr-overlay, .qr-results-inline { position: absolute; inset: 0; pointer-events: none; }
 .qr-overlay { z-index: 20; }
 .qr-overlay-status { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; box-sizing: border-box; max-width: calc(100% - 32px); padding: 8px 8px 8px 14px; border: 1px solid var(--kiri-surface-border); border-radius: 10px; background: var(--kiri-elevated); color: var(--kiri-label); font-size: 12px; line-height: 1.5; pointer-events: auto; z-index: 2; }

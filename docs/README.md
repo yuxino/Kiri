@@ -194,3 +194,5 @@ development.
 
 - [ADR 0096: Capture-origin reference placement](adr/0096-capture-origin-pin-placement.md)
 - [ADR 0097: Explicit library batch selection](adr/0097-explicit-library-batch-selection.md)
+
+- [ADR 0098: Unified main-window workspace](adr/0098-unified-main-window-workspace.md) — proposed shared navigation and responsive settings layout.

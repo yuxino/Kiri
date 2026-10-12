@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { QrCode, Copy, ExternalLink, Star, X, Trash2, ChevronRight } from "lucide-react";
 import { api, mediaUrl, onLibraryChanged, type AssetDto, type QrCodeDto, type QrScanDto } from "../lib/ipc";
 import { t, fmt } from "../i18n";
@@ -7,8 +7,8 @@ import { initialQrSelection, qrCodeCenter, qrContentType, qrLooksLikeLink } from
 import "../ocr/text-history.css";
 import "./qr.css";
 
-export function QrDetails({ code, action, saved = false, removable = false, autoSaving = false, autoSaveError = null }: {
-  code: QrCodeDto; action(action: string): Promise<unknown>; saved?: boolean; removable?: boolean; autoSaving?: boolean; autoSaveError?: string | null;
+export function QrDetails({ code, action, saved = false, removable = false, autoSaving = false, autoSaveError = null, preview, meta }: {
+  code: QrCodeDto; action(action: string): Promise<unknown>; saved?: boolean; removable?: boolean; autoSaving?: boolean; autoSaveError?: string | null; preview?: ReactNode; meta?: ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -34,23 +34,37 @@ export function QrDetails({ code, action, saved = false, removable = false, auto
       if (mounted.current) setMessage(t(typeof error === "string" ? error : "Could not complete this QR action."));
     } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   };
-  return <section className="qr-details" aria-label={t("QR Content")}>
-    <span className="text-reader__caption qr-content-type">{t(code.text ? contentType : "QR Content")}</span>
-    <div className="qr-content" tabIndex={0}>{code.text ?? t("This QR code could not be decoded. Try a clearer image.")}</div>
-    {code.text && <>
-      {code.host && <p className="qr-host">{t("Destination")}: <bdi>{code.host}</bdi></p>}
-      {(linkWarning || directionWarning) && <p className="qr-warning" role="note">{t(linkWarning ? "Review this content carefully. This link may be unsafe." : "Review this content carefully.")}</p>}
-      {!code.url && linkWarning && <p className="qr-warning">{t("Only explicit HTTP or HTTPS links without credentials can be opened.")}</p>}
-      <div className="qr-actions">
-        {code.url && <button type="button" className="kiri-button kiri-button--primary" disabled={busy} onClick={() => void run("open")}><ExternalLink size={14}/>{t("Open Link")}</button>}
-        <button type="button" className={`kiri-button ${code.url ? "kiri-button--secondary" : "kiri-button--primary"}`} disabled={busy} onClick={() => void run("copy")}><Copy size={14}/>{t("Copy Text")}</button>
-        {!removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || autoSaving} onClick={() => void run(favorite ? "unfavorite" : "favorite")}><Star size={14} fill={favorite ? "currentColor" : "none"}/>{t(autoSaving ? "Saving…" : favorite ? "Remove Favorite" : "Save QR Code")}</button>}
-        {removable && <>
-          <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run("copyImage")}><QrCode size={14}/>{t("Copy QR Image")}</button>
-          <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run("remove")}><Trash2 size={14}/>{t("Remove Favorite")}</button>
+  const controls = code.text ? (
+    <div className="qr-actions">
+      {code.url && <button type="button" className="kiri-button kiri-button--primary" disabled={busy} onClick={() => void run("open")}><ExternalLink size={14}/>{t("Open Link")}</button>}
+      <button type="button" className={`kiri-button ${code.url ? "kiri-button--secondary" : "kiri-button--primary"}`} disabled={busy} onClick={() => void run("copy")}><Copy size={14}/>{t("Copy Text")}</button>
+      {!removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || autoSaving} onClick={() => void run(favorite ? "unfavorite" : "favorite")}><Star size={14} fill={favorite ? "currentColor" : "none"}/>{t(autoSaving ? "Saving…" : favorite ? "Remove Favorite" : "Save QR Code")}</button>}
+      {removable && <>
+        <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run("copyImage")}><QrCode size={14}/>{t("Copy QR Image")}</button>
+        <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run("remove")}><Trash2 size={14}/>{t("Remove Favorite")}</button>
+      </>}
+    </div>
+  ) : null;
+  return <section className={`qr-details${removable ? " qr-details--saved" : ""}`} aria-label={t("QR Content")}>
+    <header className="qr-details__header">
+      <div className="text-history__record-heading">
+        <span className="text-reader__caption qr-content-type">{t(code.text ? contentType : "QR Content")}</span>
+        {meta}
+      </div>
+      {removable && controls}
+    </header>
+    <div className="qr-details__body">
+      {preview}
+      <div className="qr-details__content">
+        <div className="qr-content" tabIndex={0}>{code.text ?? t("This QR code could not be decoded. Try a clearer image.")}</div>
+        {code.text && <>
+          {code.host && <p className="qr-host">{t("Destination")}: <bdi>{code.host}</bdi></p>}
+          {(linkWarning || directionWarning) && <p className="qr-warning" role="note">{t(linkWarning ? "Review this content carefully. This link may be unsafe." : "Review this content carefully.")}</p>}
+          {!code.url && linkWarning && <p className="qr-warning">{t("Only explicit HTTP or HTTPS links without credentials can be opened.")}</p>}
+          {!removable && controls}
         </>}
       </div>
-    </>}
+    </div>
     {autoSaveError && <p className="qr-feedback" role="status">{t(autoSaveError)}</p>}
     {message && <p className="qr-feedback" role="status">{message}</p>}
   </section>;
@@ -204,7 +218,10 @@ export function QrFavorites() {
       <div className="text-history__list">{records.map(asset => <button type="button" className="ocr-history__item" aria-current={asset.id === selected || undefined} key={asset.id} onClick={() => setSelected(asset.id)}><span className="text-history__excerpt">{asset.qrText}</span><time>{new Date(asset.createdAt).toLocaleString()}</time></button>)}</div>
       <p className="text-history__footnote">{t("QR images and content stay in your local library.")}</p>
     </aside>
-    <main className="text-history__detail">{asset ? <><img className="qr-favorite-image" src={mediaUrl(asset.id)} alt={t("QR Source Image")}/><QrDetails key={asset.id} code={favoriteCode(asset.qrText ?? "")} saved removable action={action => api.qrFavoriteAction(asset.id, action)}/></> : <div className="text-history__empty" role={error ? "alert" : "status"}><QrCode size={28}/><p>{t(error ? "Could not load QR Favorites." : loading ? "Loading…" : query ? "No QR favorites match this search." : "Save a QR code to find and reuse it here.")}</p></div>}</main>
+    <main className="text-history__detail">{asset ? <QrDetails key={asset.id} code={favoriteCode(asset.qrText ?? "")} saved removable
+      meta={<time>{new Date(asset.createdAt).toLocaleString()}</time>}
+      preview={<img className="qr-favorite-image" src={mediaUrl(asset.id)} alt={t("QR Source Image")} />}
+      action={action => api.qrFavoriteAction(asset.id, action)} /> : <div className="text-history__empty" role={error ? "alert" : "status"}><QrCode size={28}/><p>{t(error ? "Could not load QR Favorites." : loading ? "Loading…" : query ? "No QR favorites match this search." : "Save a QR code to find and reuse it here.")}</p></div>}</main>
   </div>;
 }
 

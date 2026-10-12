@@ -960,19 +960,44 @@ export function LibraryWindow() {
   return (
     <div
       className="library-root kiri-canvas-surface"
-      style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}
     >
       {mediaDrop&&<div className="library-media-drop">{t("Drop images or videos to import")}</div>}
-      {/* The top controls form one workspace: identity and global navigation
-          above, contextual asset filters in an inset rail below. */}
+      <aside className="library-sidebar">
+        <div className="library-sidebar__brand">
+          <img src={brandIcon} alt="" />
+          <strong>kiri</strong>
+        </div>
+      <SegmentedPicker
+        options={[
+          { label: t("Library"), icon: "square.grid.3x3.fill" },
+          { label: t("Text History"), icon: "text.viewfinder" },
+          { label: t("QR Favorites"), icon: "qrcode" },
+          { label: t("Trash"), icon: "trash" },
+          { label: t("Settings"), icon: "slider.horizontal.3" },
+        ]}
+        value={destination === "settings" ? 4 : destination === "qr" ? 2 : destination === "text" ? 1 : section === "library" ? 0 : 3}
+        onChange={(index) => {
+          clearSelection();
+          setMenuFor(null);
+          if (index === 4) {
+            setDestination("settings");
+            return;
+          }
+          if (index === 1) { setDestination("text"); return; }
+          if (index === 2) { setDestination("qr"); return; }
+          setDestination("captures");
+          setSection(index === 0 ? "library" : "trash");
+          setKindFilter("all");
+          setFavoritesOnly(false);
+          setTagFilter(null);
+        }}
+      />
+      </aside>
+      <div className="library-workspace">
       <header className="library-control-panel">
         <div className="library-control-panel__primary">
-          <div className="library-control-panel__identity">
-            <div className="library-control-panel__brand">
-              <img src={brandIcon} alt="" />
-            </div>
             <div className="library-control-panel__titles">
-              <span className="library-control-panel__title">
+              <h1 id="library-page-title" className="library-control-panel__title">
                 {destination === "settings"
                   ? t("Settings")
                   : destination === "qr" ? t("QR Favorites")
@@ -980,7 +1005,7 @@ export function LibraryWindow() {
                   : showingTrash
                     ? t("Trash")
                     : t("Library")}
-              </span>
+              </h1>
               <span className="library-control-panel__subtitle">
                 {destination === "settings"
                   ? t("Language, storage, and text recognition")
@@ -993,7 +1018,6 @@ export function LibraryWindow() {
                       : fmt(assets.length === 1 ? "%d capture" : "%d captures", assets.length)}
               </span>
             </div>
-          </div>
 
           <div className="library-control-panel__actions">
             {destination === "captures" && libraryStatus?.availability === "ready" && <>
@@ -1014,10 +1038,36 @@ export function LibraryWindow() {
             </>}
             {destination==="captures"&&!showingTrash&&<button type="button" className="kiri-button kiri-button--secondary" disabled={mediaImportBusy||libraryStatus?.availability!=="ready"} title={t("Import local images or videos")} onClick={()=>void importMedia()}><ImagePlus size={15}/>{t(mediaImportBusy?"Importing…":"Import media")}</button>}
             {destination==="captures"&&!showingTrash&&<button type="button" className="kiri-button kiri-button--secondary" disabled={mediaImportBusy||libraryStatus?.availability!=="ready"} title={t("Paste Image (Cmd/Ctrl+V)")} onClick={()=>void pasteImage()}><KiriIcon name="doc.on.doc" size={15}/>{t("Paste Image")}</button>}
-            {destination === "captures" &&
-              !libraryStatusError &&
-              libraryStatus?.availability === "ready" && (
-              <div className="kiri-library-search">
+            {destination === "captures" && showingTrash && assets.length > 0 && (
+              <button
+                type="button"
+                className="kiri-button kiri-button--destructive"
+                title={t("Empty Trash")}
+                onClick={() =>
+                  showConfirmDialog(
+                    "emptyTrash",
+                    "Empty Trash?",
+                    "All captures in Trash will be permanently deleted. This cannot be undone.",
+                    "Empty Trash",
+                    undefined,
+                    true,
+                  )
+                }
+                style={{ minHeight: 30, padding: "0 10px", fontSize: 11.5, flexShrink: 0 }}
+              >
+                <KiriIcon name="trash.fill" size={12} />
+                {t("Empty Trash")}
+              </button>
+            )}
+
+          </div>
+        </div>
+
+        {destination === "captures" &&
+          !libraryStatusError &&
+          libraryStatus?.availability === "ready" && (
+          <div className="library-control-panel__filter-rail">
+            <div className="kiri-library-search">
                 <KiriIcon name="magnifyingglass" size={14} />
                 <input
                   ref={searchInputRef}
@@ -1048,40 +1098,7 @@ export function LibraryWindow() {
                     <KiriIcon name="xmark" size={10} />
                   </button>
                 )}
-              </div>
-            )}
-            <SegmentedPicker
-              options={[
-                { label: t("Library"), icon: "square.grid.3x3.fill" },
-                { label: t("Text History"), icon: "text.viewfinder" },
-                { label: t("QR Favorites"), icon: "qrcode" },
-                { label: t("Trash"), icon: "trash" },
-                { label: t("Settings"), icon: "slider.horizontal.3" },
-              ]}
-              value={destination === "settings" ? 4 : destination === "qr" ? 2 : destination === "text" ? 1 : section === "library" ? 0 : 3}
-              onChange={(index) => {
-                clearSelection();
-                setMenuFor(null);
-                if (index === 4) {
-                  setDestination("settings");
-                  return;
-                }
-                if (index === 1) { setDestination("text"); return; }
-                if (index === 2) { setDestination("qr"); return; }
-                setDestination("captures");
-                setSection(index === 0 ? "library" : "trash");
-                setKindFilter("all");
-                setFavoritesOnly(false);
-                setTagFilter(null);
-              }}
-            />
-          </div>
-        </div>
-
-        {destination === "captures" &&
-          !libraryStatusError &&
-          libraryStatus?.availability === "ready" && (
-          <div className="library-control-panel__filter-rail">
+            </div>
             <FilterBar
               kind={kindFilter}
               favoritesOnly={favoritesOnly}
@@ -1091,27 +1108,7 @@ export function LibraryWindow() {
               onToggleFavorites={() => setFavoritesOnly((value) => !value)}
               onToggleTag={(tag) => setTagFilter((current) => (current?.toLowerCase() === tag.toLowerCase() ? null : tag))}
             />
-            {showingTrash && assets.length > 0 && (
-              <button
-                type="button"
-                className="kiri-button kiri-button--destructive"
-                title={t("Empty Trash")}
-                onClick={() =>
-                  showConfirmDialog(
-                    "emptyTrash",
-                    "Empty Trash?",
-                    "All captures in Trash will be permanently deleted. This cannot be undone.",
-                    "Empty Trash",
-                    undefined,
-                    true,
-                  )
-                }
-                style={{ minHeight: 30, padding: "0 10px", fontSize: 11.5, flexShrink: 0 }}
-              >
-                <KiriIcon name="trash.fill" size={12} />
-                {t("Empty Trash")}
-              </button>
-            )}
+
           </div>
         )}
       </header>
@@ -1229,7 +1226,7 @@ export function LibraryWindow() {
             flex: 1,
             overflowY: "auto",
             overflowX: "hidden",
-            padding: "0 22px 24px",
+            padding: "8px var(--kiri-space-page) 24px",
             position: "relative",
             touchAction: "none",
             cursor: band ? "crosshair" : undefined,
@@ -1279,8 +1276,8 @@ export function LibraryWindow() {
                 />
                 <span
                   style={{
-                    fontSize: 12.5,
-                    fontWeight: 700,
+                    fontSize: 14,
+                    fontWeight: 650,
                     color: "var(--kiri-label)",
                   }}
                 >
@@ -1288,7 +1285,7 @@ export function LibraryWindow() {
                 </span>
                 <span
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 12.5,
                     fontWeight: 600,
                     color: "var(--kiri-secondary-label)",
                     background: "var(--kiri-group-fill)",
@@ -1386,7 +1383,7 @@ export function LibraryWindow() {
           key={gifConversionIds.size > 0 ? "gif-progress" : notice?.id}
           role={gifConversionIds.size === 0 && notice?.symbol?.startsWith("exclamationmark") ? "alert" : "status"}
           aria-atomic="true"
-          style={{ bottom: selectionIds.length > 0 ? 84 : 24 }}
+          style={{ bottom: 24 }}
         >
           {gifConversionIds.size > 0 ? (
             <>
@@ -1450,7 +1447,7 @@ export function LibraryWindow() {
           style={{
             position: "absolute",
             left: "50%",
-            top: destination === "captures" ? 116 : 76,
+            top: 96,
             transform: "translateX(-50%)",
             background: "var(--kiri-elevated)",
             border: "1px solid var(--kiri-surface-border)",
@@ -1460,7 +1457,8 @@ export function LibraryWindow() {
             gap: 12,
             alignItems: "center",
             boxShadow: "none",
-            maxWidth: 560,
+            maxWidth: "min(560px, calc(100% - 48px))",
+            boxSizing: "border-box",
             zIndex: 20,
           }}
         >
@@ -1518,6 +1516,7 @@ export function LibraryWindow() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }
@@ -1848,14 +1847,10 @@ function AssetCard(props: {
         position: "relative",
         background: "var(--kiri-card)",
         border: `1px solid ${selected ? "var(--kiri-accent-strong)" : highlighted ? "color-mix(in srgb, var(--kiri-label) 34%, var(--kiri-surface-border))" : "var(--kiri-surface-border)"}`,
-        borderRadius: 16,
-        padding: 9,
-        transform: highlighted && !selected ? "translateY(-2px)" : "none",
-        boxShadow: selected
-          ? "0 0 0 2px var(--kiri-accent-alpha-18), 0 10px 24px rgba(0,0,0,0.08)"
-          : highlighted
-            ? "0 10px 24px rgba(0,0,0,0.075)"
-            : "0 1px 0 rgba(0,0,0,0.025)",
+        borderRadius: 10,
+        padding: 8,
+        transform: "none",
+        boxShadow: selected ? "0 0 0 2px var(--kiri-accent-alpha-18)" : "none",
         transition: "transform 0.18s ease-out, box-shadow 0.18s ease-out, border-color 0.18s ease-out",
         cursor: "default",
       }}
@@ -1869,7 +1864,7 @@ function AssetCard(props: {
         ref={previewRef}
         style={{
           height: 154,
-          borderRadius: 11,
+          borderRadius: 6,
           overflow: "hidden",
           background: "var(--kiri-group-fill)",
           border: "1px solid color-mix(in srgb, var(--kiri-surface-border) 72%, transparent)",
@@ -1979,7 +1974,7 @@ function AssetCard(props: {
               onError={() => void checkAvailability(true)}
               style={previewImageStyle}
             />
-            <div style={{ position: "absolute", left: 8, bottom: 8, background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 10, fontWeight: 600 }}>
+            <div style={{ position: "absolute", left: 8, bottom: 8, background: "rgba(0,0,0,0.6)", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 13, fontWeight: 600 }}>
               GIF
             </div>
           </div>
@@ -2010,7 +2005,7 @@ function AssetCard(props: {
               flex: 1,
               minWidth: 0,
               height: 28,
-              fontSize: 11.5,
+              fontSize: 14,
               fontWeight: 600,
               color: "var(--kiri-label)",
               border: "1px solid var(--kiri-accent)",
@@ -2048,7 +2043,7 @@ function AssetCard(props: {
           >
             <span
               style={{
-                fontSize: 11.5,
+                fontSize: 14,
                 fontWeight: 700,
                 color: asset.title ? "var(--kiri-label)" : "var(--kiri-secondary-label)",
                 overflow: "hidden",
@@ -2192,7 +2187,7 @@ function AssetCard(props: {
             gridColumn: "1 / -1",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            fontSize: 9.5,
+            fontSize: 13,
             fontWeight: 500,
             color: "var(--kiri-disabled-label)",
             letterSpacing: "0.01em",
@@ -2222,7 +2217,7 @@ function AssetCard(props: {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 4,
-                fontSize: 10,
+                fontSize: 13,
                 fontWeight: 600,
                 color: "var(--kiri-accent)",
                 background: "var(--kiri-accent-soft-alpha-10)",
@@ -2275,7 +2270,7 @@ function AssetCard(props: {
               }}
               style={{
                 width: 70,
-                fontSize: 10,
+                fontSize: 13,
                 fontWeight: 500,
                 color: "var(--kiri-label)",
                 border: "1px solid var(--kiri-accent)",
@@ -2387,13 +2382,7 @@ function FilterBar(props: {
         <span>{t("Favorites")}</span>
       </button>
       <div className="library-tag-filter">
-        {allTags.length === 0 ? (
-          <span className="library-tag-filter__hint">
-            <KiriIcon name="tag" size={10} />
-            <span>{t("Tag captures via the ⋯ menu to filter by category")}</span>
-          </span>
-        ) : (
-          allTags.map((tag) => {
+        {allTags.map((tag) => {
             const active = tagFilter?.toLowerCase() === tag.toLowerCase();
             return (
               <button
@@ -2409,15 +2398,12 @@ function FilterBar(props: {
                 {tag}
               </button>
             );
-          })
-        )}
+          })}
       </div>
     </div>
   );
 }
-/** Floating batch-action bar — a frosted pill anchored at the bottom-center
- * of the grid. Appears while items are selected; actions adapt to the
- * current section (Trash → restore / delete; Library → trash / favorite). */
+/** Contextual selection toolbar; it stays above the scrollable grid. */
 function BatchActionBar(props: {
   count: number;
   showingTrash: boolean;
@@ -2433,25 +2419,7 @@ function BatchActionBar(props: {
   const { count, showingTrash, allFavorites, busy, onExport, onRestore, onDelete, onMoveToTrash, onToggleFavorite, onClear } = props;
   const countLabel = t("Selected {n}").replace("{n}", String(count));
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: "50%",
-        bottom: 28,
-        transform: "translateX(-50%)",
-        zIndex: 20,
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "6px 8px",
-        borderRadius: 16,
-        background: "color-mix(in srgb, var(--kiri-elevated) 94%, transparent)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
-        border: "1px solid var(--kiri-surface-border)",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
-      }}
-    >
+    <div className="library-batch-bar" role="toolbar" aria-label={countLabel}>
       <span
         style={{
           fontSize: 12,
@@ -2519,9 +2487,8 @@ function SegmentedPicker(props: {
 }) {
   return (
     <nav
-      key={props.value}
       className="library-section-picker"
-      aria-label={t("Library")}
+      aria-label="Kiri"
     >
       {props.options.map((option, index) => (
         <button
@@ -2530,9 +2497,10 @@ function SegmentedPicker(props: {
           className="library-section-picker__button"
           data-active={props.value === index || undefined}
           aria-pressed={props.value === index}
+          aria-current={props.value === index ? "page" : undefined}
           onClick={() => props.onChange(index)}
         >
-          <KiriIcon name={option.icon} size={12} />
+          <KiriIcon name={option.icon} size={16} />
           <span>{option.label}</span>
         </button>
       ))}

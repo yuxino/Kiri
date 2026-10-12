@@ -91,15 +91,11 @@ export function SettingsView() {
   };
 
   return (
-    <main className="kiri-settings" aria-labelledby="settings-page-title">
+    <main className="kiri-settings" aria-label={t("Settings")}>
       <div className="kiri-settings__content">
-        <header className="kiri-settings__intro">
-          <div className="kiri-settings__eyebrow">kiri</div>
-          <h1 id="settings-page-title">{t("Settings")}</h1>
-        </header>
-
-        <GeneralSettingsSection />
-
+        <div className="kiri-settings__columns">
+          <GeneralSettingsSection />
+          <div className="kiri-settings__ocr-column">
         {operationError && (
           <div className="kiri-settings-alert kiri-settings-alert--error" role="alert">
             {t(operationError)}
@@ -144,7 +140,9 @@ export function SettingsView() {
           />
         )}
 
-        <AboutSettingsSection />
+          </div>
+          <AboutSettingsSection />
+        </div>
       </div>
 
       {editingProfile !== undefined && (
@@ -437,15 +435,14 @@ function AboutSettingsSection() {
                 : t("Check for Updates");
 
   return (
-    <section className="kiri-settings-section" aria-labelledby="about-settings-title">
+    <section className="kiri-settings-section kiri-settings-section--about" aria-labelledby="about-settings-title">
       <div className="kiri-settings-section__heading">
         <div>
           <h2 id="about-settings-title">{t("About")}</h2>
-          <p>
-            {t(manualUpdates ? "Linux updates are installed manually from a downloaded package." : isPortable
-              ? "Portable version: download the latest ZIP from Releases to update."
-              : "Check, download, and install updates only when you choose each step.")}
-          </p>
+          {(manualUpdates || isPortable) && <p>
+            {t(manualUpdates ? "Linux updates are installed manually from a downloaded package."
+              : "Portable version: download the latest ZIP from Releases to update.")}
+          </p>}
         </div>
       </div>
       <div className="kiri-settings-card kiri-version-row">
@@ -671,12 +668,13 @@ function GeneralSettingsSection() {
       : "—";
 
   return (
-    <section className="kiri-settings-section" aria-labelledby="general-settings-title">
+    <section className="kiri-settings-section kiri-settings-section--general" aria-labelledby="general-settings-title">
       <div className="kiri-settings-section__heading">
         <div>
           <h2 id="general-settings-title">{t("General")}</h2>
         </div>
       </div>
+      <div className="kiri-settings-group">
       <div className="kiri-settings-card kiri-language-row">
         <div>
           <strong>{t("Language")}</strong>
@@ -830,6 +828,7 @@ function GeneralSettingsSection() {
             </>
           ) : null}
         </div>
+      </div>
       </div>
     </section>
   );

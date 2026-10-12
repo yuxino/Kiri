@@ -725,3 +725,21 @@ test("failed paste uses a readable error toast; a newer notice gets its own full
   assert.ok(!nodes(library.render()).some(node=>node?.props?.className==="library-toast"));
   library.unmount();
 });
+
+
+test("Trash destructive actions stay in Trash when switching to secondary destinations", async () => {
+  const harness = createLibraryHarness({ listAssets: async () => [testAsset] });
+  const library = harness.mount("LibraryWindow");
+  library.render(); await settleRequests();
+  const navigate = async (index) => {
+    nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(index);
+    library.render(); await settleRequests();
+    return library.render();
+  };
+  for (const destination of [1, 2, 4]) {
+    assert.ok(nodes(await navigate(3)).find(node => node?.type === "button" && node.props.title === "Empty Trash"));
+    const tree = await navigate(destination);
+    assert.equal(nodes(tree).some(node => node?.type === "button" && node.props.title === "Empty Trash"), false);
+  }
+  library.unmount();
+});

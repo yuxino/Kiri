@@ -4,8 +4,8 @@ import { KiriIcon } from "../components/KiriIcons";
 import { t } from "../i18n";
 import "./text-history.css";
 
-export function TextReader({ text, imageId, saved = true, editor }: {
-  text: string; imageId?: string; saved?: boolean; editor?: ReactNode;
+export function TextReader({ text, imageId, saved = true, editor, heading, actions }: {
+  text: string; imageId?: string; saved?: boolean; editor?: ReactNode; heading?: ReactNode; actions?: ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -28,11 +28,14 @@ export function TextReader({ text, imageId, saved = true, editor }: {
   };
   return <div className="text-reader">
     <div className="text-reader__actions">
-      <span className="text-reader__caption">{t("Recognized Text")}</span>
-      {!editor && <button type="button" className="kiri-button kiri-button--primary" disabled={!text.trim()} onClick={() => void copy()}>
-        <KiriIcon name={copied ? "checkmark" : "doc.on.doc"} size={14} />
-        {t(copied ? "Text Copied" : "Copy Text")}
-      </button>}
+      {heading ?? <span className="text-reader__caption">{t("Recognized Text")}</span>}
+      <div className="text-history__record-actions">
+        {!editor && <button type="button" className="kiri-button kiri-button--primary" disabled={!text.trim()} onClick={() => void copy()}>
+          <KiriIcon name={copied ? "checkmark" : "doc.on.doc"} size={14} />
+          {t(copied ? "Text Copied" : "Copy Text")}
+        </button>}
+        {actions}
+      </div>
     </div>
     {copyError && <p className="text-history__error" role="alert">{t("Couldn't copy text.")}</p>}
     {!saved && text.trim() && <p className="text-history__error" role="status">{t("History wasn't saved. Copy the text before closing.")}</p>}
@@ -169,10 +172,14 @@ export function TextHistory() {
     <main className="text-history__detail">
       {loadError ? <div className="text-history__empty" role="alert"><p>{t("Couldn't load Text History.")}</p><button type="button" className="kiri-button kiri-button--secondary" onClick={() => setRevision((v) => v + 1)}>{t("Retry")}</button></div> :
         selected ? <>
-          <header className="text-history__record-header">
-            <time>{new Date(selected.createdAt).toLocaleString()}</time>
-            <div className="text-history__record-actions">
-              {editing ? <>
+          {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
+          {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
+          <TextReader key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
+            heading={<div className="text-history__record-heading">
+              <span className="text-reader__caption">{t("Recognized Text")}</span>
+              <time>{new Date(selected.createdAt).toLocaleString()}</time>
+            </div>}
+            actions={editing ? <>
                 <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { setEditing(false); setEditError(false); }}>{t("Cancel")}</button>
                 <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}>{t("Save")}</button>
               </> : <>
@@ -180,11 +187,6 @@ export function TextHistory() {
                 <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => { setDraft(selected.ocrText ?? ""); setEditing(true); setEditError(false); }}>{t("Edit Text")}</button>
                 <button type="button" className="kiri-icon-button" disabled={deleting || loading || saving} onClick={() => void remove()} title={t("Move to Trash")} aria-label={t("Move to Trash")}><KiriIcon name="trash" size={16} /></button>
               </>}
-            </div>
-          </header>
-          {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
-          {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
-          <TextReader key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
             editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setEditing(false); setEditError(false); } }}
               aria-label={t("Edit recognized text")} maxLength={1024 * 1024} /> : undefined} />
