@@ -22,6 +22,10 @@ export function EmptyTrashDialog({ onConfirm, onClose }: {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    if (busy) dialogRef.current?.focus();
+  }, [busy]);
+
   const confirm = async () => {
     if (operation.current) return;
     operation.current = true;
@@ -42,6 +46,7 @@ export function EmptyTrashDialog({ onConfirm, onClose }: {
     <dialog
       ref={dialogRef}
       className="kiri-confirm-dialog"
+      tabIndex={-1}
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="empty-trash-title"
@@ -55,6 +60,19 @@ export function EmptyTrashDialog({ onConfirm, onClose }: {
         // Main-window shortcuts must not move focus or change selection here.
         event.stopPropagation();
         if (event.key === "Enter" || event.key === "Return") event.preventDefault();
+        if (event.key === "Tab") {
+          const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+          const first = buttons[0], last = buttons[buttons.length - 1];
+          if (!first) {
+            event.preventDefault();
+            event.currentTarget.focus();
+          } else if (!buttons.includes(document.activeElement as HTMLButtonElement) ||
+            (event.shiftKey && document.activeElement === first) ||
+            (!event.shiftKey && document.activeElement === last)) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+          }
+        }
       }}
     >
       <h2 id="empty-trash-title">{t("Empty Trash?")}</h2>

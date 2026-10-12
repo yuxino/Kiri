@@ -756,7 +756,7 @@ const emptyTrashSource = 'import React from "react";\n' + readFileSync(new URL("
 function localTrashDialog(props) {
   class FocusTarget { isConnected = true; focused = 0; focus() { this.focused++; } }
   const opener = new FocusTarget();
-  const native = { opened: 0, closed: 0, showModal() { this.opened++; }, close() { this.closed++; } };
+  const native = { opened: 0, closed: 0, showModal() { this.opened++; }, close() { this.closed++; }, focus() {} };
   const harness = createLibraryHarness({}, emptyTrashSource, {
     document: { activeElement: opener }, globals: { HTMLElement: FocusTarget },
     attachRef: node => { if (node.type === "dialog") node.props.ref.current = native; },
