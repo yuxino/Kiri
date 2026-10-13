@@ -4121,7 +4121,7 @@ fn reset_startup_if_current(app: &AppHandle, token: uuid::Uuid) -> bool {
     }
 }
 
-fn show_recording_startup_failure(app: &AppHandle, token: uuid::Uuid, message: String, recovery: Option<RecoveryAction>) -> bool {
+fn show_recording_startup_failure(app: &AppHandle, token: uuid::Uuid, message: String, recovery: Option<crate::state::RecoveryAction>) -> bool {
     let monitor = app.state::<AppState>().recording.lock().unwrap().completion_monitor.clone();
     if !reset_startup_if_current(app, token) { return false; }
     emit_error(app, message.clone(), recovery);
