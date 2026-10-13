@@ -4795,6 +4795,9 @@ pub async fn pause_recording(app: AppHandle) -> Result<(), String> {
             reset_recording_session(&app);
             return Err(error);
         }
+        if let Some(encoder) = active.encoder.as_ref() {
+            encoder.set_windows_paused(true);
+        }
         let state = app.state::<AppState>();
         let mut recording = state.recording.lock().unwrap();
         recording.active = Some(active);
@@ -4888,6 +4891,9 @@ pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
                 .as_mut()
                 .ok_or_else(|| "The native recorder is unavailable.".to_string())?;
             recorder.resume().map_err(|error| error.to_string())?;
+            if let Some(encoder) = active.encoder.as_ref() {
+                encoder.set_windows_paused(false);
+            }
             recording.is_paused = false;
             recording.is_recording = true;
             recording.started_at = Some(std::time::Instant::now());
@@ -5072,6 +5078,9 @@ fn stop_recording_session(
                     ),
                     duration: (elapsed > 0.0).then_some(elapsed),
                 });
+        if let Some(encoder) = recording.active.as_ref().and_then(|active| active.encoder.as_ref()) {
+            encoder.set_windows_paused(true);
+        }
         recording.is_recording = false;
         recording.is_paused = false;
         recording.is_finalizing = true;

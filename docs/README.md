@@ -206,3 +206,5 @@ development.
 - [ADR 0102: Visible recording startup failures](adr/0102-visible-recording-startup-failures.md) — session-safe failure cards and optional Windows capture-border capability checks.
 
 - [ADR 0103: Annotation tool double-click completion](adr/0103-annotation-tool-double-click-completion.md)
+
+- [ADR 0104: Windows recording active time](adr/0104-windows-recording-active-time.md) — keep static footage duration and exclude pauses.

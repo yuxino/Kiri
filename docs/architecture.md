@@ -462,7 +462,9 @@ MP4 with optional AAC audio and explicit BT.709 color metadata, keeping playback
 and Core Image export consistent at both small and HD dimensions. Legacy videos
 without color tags still depend on platform color-space inference.
 Windows uses Windows Graphics Capture plus WASAPI
-through `cpal`, then sends the buffers to Media Foundation. Linux uses a portal
+through `cpal`, then sends the buffers to Media Foundation. Its constant frame-rate
+timeline follows active elapsed time and reuses the latest frame when WGC has no
+new desktop pixels; pause and finalization do not advance it (ADR 0104). Linux uses a portal
 ScreenCast session and PipeWire frames with system GStreamer for H.264 with optional AAC
 MP4. Portal consent is separate from the frozen screenshot: the user must pick
 the same display, and the stream dimensions are validated before region capture.

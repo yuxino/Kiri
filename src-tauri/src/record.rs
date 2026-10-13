@@ -510,6 +510,43 @@ fn ensure_audio_queues_healthy(statuses: &[AudioQueueStatus]) -> Result<()> {
     Ok(())
 }
 
+/// Windows Graphics Capture may stop delivering frames for a static desktop.
+/// Video time follows active recording time, never the number of callbacks.
+#[cfg(any(windows, test))]
+struct ActiveRecordingClock {
+    active_since: Option<Instant>,
+    elapsed: Duration,
+}
+
+#[cfg(any(windows, test))]
+impl ActiveRecordingClock {
+    fn new(now: Instant) -> Self {
+        Self { active_since: Some(now), elapsed: Duration::ZERO }
+    }
+
+    fn elapsed(&self, now: Instant) -> Duration {
+        self.elapsed + self.active_since.map_or(Duration::ZERO,
+            |since| now.saturating_duration_since(since))
+    }
+
+    fn set_paused(&mut self, paused: bool, now: Instant) {
+        if paused {
+            self.elapsed = self.elapsed(now);
+            self.active_since = None;
+        } else if self.active_since.is_none() {
+            self.active_since = Some(now);
+        }
+    }
+}
+
+#[cfg(any(windows, test))]
+fn recording_frame_count(elapsed: Duration, fps: u32) -> i64 {
+    // At least one frame represents even a very short completed recording.
+    let count = elapsed.as_nanos().saturating_mul(u128::from(fps))
+        .div_ceil(1_000_000_000).max(1);
+    i64::try_from(count).unwrap_or(i64::MAX)
+}
+
 #[cfg(windows)]
 enum WindowsNativeInput {
     Video(Vec<u8>),
@@ -523,6 +560,7 @@ struct WindowsNativeSegmentEncoder {
     worker: JoinHandle<Result<()>>,
     audio_statuses: Vec<AudioQueueStatus>,
     shutdown: Arc<AtomicBool>,
+    clock: Arc<Mutex<ActiveRecordingClock>>,
 }
 
 #[cfg(windows)]
@@ -542,6 +580,7 @@ impl WindowsNativeSegmentEncoder {
         let width = u32::try_from(config.width).context("invalid native encoder width")?;
         let height = u32::try_from(config.height).context("invalid native encoder height")?;
         let bitrate = u32::try_from(config.bitrate).context("invalid native encoder bitrate")?;
+        if config.fps == 0 { bail!("Invalid native recording frame rate."); }
         let audio_enabled = audio_rx.is_some() || mic_rx.is_some();
         let encoder = VideoEncoder::new(
             VideoSettingsBuilder::new(width, height)
@@ -558,43 +597,54 @@ impl WindowsNativeSegmentEncoder {
         let shutdown = Arc::new(AtomicBool::new(false));
         let worker_shutdown = Arc::clone(&shutdown);
         let fps = config.fps;
+        let clock = Arc::new(Mutex::new(ActiveRecordingClock::new(Instant::now())));
+        let worker_clock = Arc::clone(&clock);
+        let frame_interval = Duration::from_secs_f64(1.0 / f64::from(fps));
         let system_spec = config.audio;
         let microphone_spec = config.mic;
         let worker = std::thread::spawn(move || -> Result<()> {
             let mut encoder = encoder;
             let mut frame_index = 0i64;
+            let mut latest_frame = None;
             let mut mixer = NativeAudioMixer::new(system_spec.is_some(), microphone_spec.is_some());
-            while let Ok(input) = input_rx.recv() {
+            loop {
                 if worker_shutdown.load(Ordering::Acquire) {
                     break;
                 }
+                let input = input_rx.recv_timeout(frame_interval);
+                let closed = matches!(input, Err(mpsc::RecvTimeoutError::Disconnected));
                 match input {
-                    WindowsNativeInput::Video(mut frame) => {
+                    Ok(WindowsNativeInput::Video(mut frame)) => {
                         flip_bgra_rows(&mut frame, width as usize, height as usize)?;
-                        let timestamp = frame_index.saturating_mul(10_000_000) / i64::from(fps);
-                        encoder
-                            .send_frame_buffer(&frame, timestamp)
-                            .context("Windows H.264 encoder rejected a video frame")?;
-                        frame_index = frame_index.saturating_add(1);
+                        latest_frame = Some(frame);
                     }
-                    WindowsNativeInput::Audio(index, bytes) => {
-                        let spec = if index == 0 {
-                            system_spec
-                        } else {
-                            microphone_spec
-                        };
+                    Ok(WindowsNativeInput::Audio(index, bytes)) => {
+                        let spec = if index == 0 { system_spec } else { microphone_spec };
                         if let Some(spec) = spec {
-                            mixer
-                                .push(index, pcm_to_48khz_stereo_i16(&bytes, spec))
+                            mixer.push(index, pcm_to_48khz_stereo_i16(&bytes, spec))
                                 .context("native audio mixer exceeded its bounded buffer")?;
                             for block in mixer.drain(false) {
-                                encoder
-                                    .send_audio_buffer(&block, 0)
+                                encoder.send_audio_buffer(&block, 0)
                                     .context("Windows H.264 encoder rejected an audio buffer")?;
                             }
                         }
                     }
+                    Err(_) => {}
                 }
+                if let Some(frame) = latest_frame.as_ref() {
+                    let elapsed = worker_clock.lock().unwrap().elapsed(Instant::now());
+                    let target = recording_frame_count(elapsed, fps);
+                    // A bounded latest-frame cache fills unchanged/dropped frames
+                    // on the existing CFR timeline; pause never advances this clock.
+                    while frame_index < target {
+                        if worker_shutdown.load(Ordering::Acquire) { break; }
+                        let timestamp = frame_index.saturating_mul(10_000_000) / i64::from(fps);
+                        encoder.send_frame_buffer(frame, timestamp)
+                            .context("Windows H.264 encoder rejected a video frame")?;
+                        frame_index = frame_index.saturating_add(1);
+                    }
+                }
+                if closed { break; }
             }
             if worker_shutdown.load(Ordering::Acquire) {
                 drop(encoder);
@@ -664,7 +714,12 @@ impl WindowsNativeSegmentEncoder {
             worker,
             audio_statuses,
             shutdown,
+            clock,
         })
+    }
+
+    fn set_paused(&self, paused: bool) {
+        self.clock.lock().unwrap().set_paused(paused, Instant::now());
     }
 
     fn join_inputs(&mut self) {
@@ -679,6 +734,8 @@ impl WindowsNativeSegmentEncoder {
     }
 
     fn finish(mut self) -> Result<PathBuf> {
+        // Freeze before draining inputs, so encoder shutdown does not add time.
+        self.set_paused(true);
         self.join_inputs();
         let worker_result = self
             .worker
@@ -1089,6 +1146,15 @@ impl SegmentEncoder {
         }
     }
 
+    pub fn set_windows_paused(&self, paused: bool) {
+        #[cfg(windows)]
+        match &self.inner {
+            SegmentEncoderInner::WindowsNative(encoder) => encoder.set_paused(paused),
+        }
+        #[cfg(not(windows))]
+        let _ = paused;
+    }
+
     pub fn finish(self) -> Result<PathBuf> {
         match self.inner {
             #[cfg(target_os = "macos")]
@@ -1237,6 +1303,62 @@ mod tests {
         pipe_rx.report_writer_failure();
         let encoder_error = ensure_audio_queues_healthy(&[pipe_status]).unwrap_err();
         assert!(encoder_error.to_string().contains("encoder fault=true"));
+    }
+
+    #[test]
+    fn recording_clock_counts_static_time_and_excludes_every_pause() {
+        let start = Instant::now();
+        let at = |seconds| start + Duration::from_secs(seconds);
+        let mut clock = ActiveRecordingClock::new(start);
+        assert_eq!(recording_frame_count(clock.elapsed(at(5)), 30), 150);
+        clock.set_paused(true, at(5));
+        clock.set_paused(true, at(7)); // Repeated pause must not add time.
+        assert_eq!(clock.elapsed(at(12)), Duration::from_secs(5));
+        clock.set_paused(false, at(12));
+        clock.set_paused(false, at(13)); // Repeated resume must not reset time.
+        assert_eq!(clock.elapsed(at(15)), Duration::from_secs(8));
+        clock.set_paused(true, at(15));
+        clock.set_paused(false, at(20));
+        clock.set_paused(true, at(22));
+        assert_eq!(recording_frame_count(clock.elapsed(at(40)), 30), 300);
+    }
+
+    #[test]
+    fn recording_frame_count_preserves_subframe_and_exact_boundaries() {
+        assert_eq!(recording_frame_count(Duration::ZERO, 30), 1);
+        assert_eq!(recording_frame_count(Duration::from_millis(1), 30), 1);
+        assert_eq!(recording_frame_count(Duration::from_secs(1), 30), 30);
+        assert_eq!(recording_frame_count(Duration::from_millis(1001), 30), 31);
+        assert_eq!(recording_frame_count(Duration::from_secs(3600), 30), 108000);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_encoder_keeps_static_frame_duration_without_paused_time() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("static-with-pause.mp4");
+        let config = EncoderConfig {width: 256, height: 144, fps: 30,
+            bitrate: 1_000_000, audio: None, mic: None};
+        let (tx, rx) = mpsc::sync_channel(2);
+        let encoder = SegmentEncoder::start_windows_native(&config, path.clone(), rx, None, None).unwrap();
+        let active_started = Instant::now();
+        tx.send(vec![128; 256 * 144 * 4]).unwrap(); // Exactly one capture callback.
+        std::thread::sleep(Duration::from_millis(600));
+        encoder.set_windows_paused(true);
+        let first_active = active_started.elapsed();
+        std::thread::sleep(Duration::from_millis(600));
+        encoder.set_windows_paused(false);
+        let resumed = Instant::now();
+        std::thread::sleep(Duration::from_millis(600));
+        encoder.set_windows_paused(true);
+        let expected = first_active + resumed.elapsed();
+        drop(tx);
+        assert_eq!(encoder.finish().unwrap(), path);
+        let (width, height, duration) = probe_video_native(&path).unwrap();
+        assert_eq!((width, height), (256, 144));
+        let duration = duration.unwrap();
+        assert!((duration - expected.as_secs_f64()).abs() < 0.15,
+            "encoded duration {duration}, active elapsed {expected:?}");
     }
 
     #[cfg(windows)]

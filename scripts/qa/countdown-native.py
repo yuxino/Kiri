@@ -2,6 +2,7 @@
 import ctypes,json,os,re,subprocess,time
 from pathlib import Path
 from pywinauto import Desktop,keyboard,mouse
+import win32com.client
 from windows_crash_report import configure_crash_capture,collect_crash_details
 
 if os.environ.get('GITHUB_ACTIONS')!='true':raise SystemExit('Use an isolated CI desktop')
@@ -57,6 +58,8 @@ try:
   if mode=='click':cancel.click_input()
   else:keyboard.send_keys('{ESC}')
   cancelled();report['checks'].append(mode+' cancellation; visible, focused and capture-protected')
+ library=Path(os.environ['APPDATA'])/'kiri'
+ before_ids={a['id'] for a in json.loads((library/'library.json').read_text(encoding='utf-8'))} if (library/'library.json').exists() else set()
  cancel=begin();seen=set();deadline=time.monotonic()+4
  while time.monotonic()<deadline:
   try:
@@ -70,8 +73,23 @@ try:
  pause=find('Pause Recording',timeout=35);stop=find('Stop and Save Recording');panel=stop.top_level_parent()
  affinity=ctypes.c_uint();ctypes.windll.user32.GetWindowDisplayAffinity(panel.handle,ctypes.byref(affinity))
  if affinity.value!=0x11:raise RuntimeError('Recording controls lost capture exclusion')
- time.sleep(1);pause.click_input();find('Resume Recording').click_input();time.sleep(1)
+ # Static source: WGC callbacks need not arrive at the configured frame rate.
+ time.sleep(3);pause.click_input();time.sleep(2)
+ find('Resume Recording').click_input();time.sleep(3)
  find('Stop and Save Recording').click_input();time.sleep(5)
+ items=json.loads((library/'library.json').read_text(encoding='utf-8'))
+ created=[a for a in items if a['id'] not in before_ids and a['kind']=='video']
+ if len(created)!=1:raise RuntimeError('Static recording did not save exactly one video')
+ asset=created[0];path=library/'Assets'/asset['filename']
+ shell=win32com.client.Dispatch('Shell.Application')
+ item=shell.NameSpace(str(path.parent)).ParseName(path.name)
+ duration=float(item.ExtendedProperty('System.Media.Duration'))/10_000_000
+ # Six measured active seconds plus up to the initial post-countdown second.
+ # The deliberate two-second pause must not appear in the saved media.
+ if not 6.0 <= duration <= 8.5:raise RuntimeError(f'Static recording duration {duration} is outside active elapsed bounds')
+ report['static_recording']={'media_duration':duration,'paused_seconds':2,
+     'measured_active_seconds':6,'file_size':path.stat().st_size}
+ report['checks'].append('static desktop MP4 preserves active elapsed time and excludes its deliberate pause')
  report['checks'].append('countdown completed; recording started, paused, resumed and stopped')
  report['success']=True
 except Exception as error:
