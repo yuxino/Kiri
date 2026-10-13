@@ -1354,9 +1354,9 @@ mod tests {
         let expected = first_active + resumed.elapsed();
         drop(tx);
         assert_eq!(encoder.finish().unwrap(), path);
-        let (width, height, duration) = probe_video_native(&path).unwrap();
-        assert_eq!((width, height), (256, 144));
-        let duration = duration.unwrap();
+        let media = crate::media_import::prepare(&path).unwrap();
+        assert_eq!((media.width, media.height), (256, 144));
+        let duration = media.duration.unwrap();
         assert!((duration - expected.as_secs_f64()).abs() < 0.15,
             "encoded duration {duration}, active elapsed {expected:?}");
     }
