@@ -1354,9 +1354,25 @@ mod tests {
         let expected = first_active + resumed.elapsed();
         drop(tx);
         assert_eq!(encoder.finish().unwrap(), path);
-        let media = crate::media_import::prepare(&path).unwrap();
-        assert_eq!((media.width, media.height), (256, 144));
-        let duration = media.duration.unwrap();
+        if let Some(output) = std::env::var_os("KIRI_VIDEO_QA_DIR") {
+            let output = PathBuf::from(output);
+            std::fs::create_dir_all(&output).unwrap();
+            std::fs::copy(&path, output.join("static-recording-with-pause.mp4")).unwrap();
+        }
+        // Probe the container through the editor's exact native timeline.
+        // Shell video properties can report zero for very short generated files.
+        use std::os::windows::ffi::OsStrExt;
+        use windows::{core::HSTRING, Storage::StorageFile, Media::Editing::MediaClip,
+            Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED}};
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED).unwrap(); }
+        struct Apartment;
+        impl Drop for Apartment {fn drop(&mut self) { unsafe { RoUninitialize(); } }}
+        let _apartment = Apartment;
+        let wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+        let file = StorageFile::GetFileFromPathAsync(&HSTRING::from_wide(&wide)).unwrap().join().unwrap();
+        let clip = MediaClip::CreateFromFileAsync(&file).unwrap().join().unwrap();
+        let duration = clip.OriginalDuration().unwrap().Duration as f64 / 10_000_000.0;
+        assert_eq!(crate::gif::video_dimensions(&path).unwrap(), (256, 144));
         assert!((duration - expected.as_secs_f64()).abs() < 0.15,
             "encoded duration {duration}, active elapsed {expected:?}");
     }
