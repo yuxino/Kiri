@@ -343,6 +343,7 @@ export const api = {
       },
     });
   },
+  openLibrary: () => invoke<void>("open_library"),
   copySupportInfo: () => invoke<void>("copy_support_info"),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
   copyCaptureColor: (hex: string) => invoke<void>("copy_capture_color", { hex }),

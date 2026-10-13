@@ -126,6 +126,7 @@ function ActionButton(props: {
 }
 
 export function ToastWindow(props: { title?: string; symbol?: string }) {
+  const failureCard = useRef<HTMLElement | null>(null);
   const initialCompletion = useRef(initialCompletionFromUrl()).current;
   const [notice, setNotice] = useState<NoticePayload | null>(
     initialCompletion || !props.title
@@ -292,10 +293,26 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
   }, [completion, gifProgress?.isConverting, undo]);
 
   useEffect(() => {
-    if (!completion) return;
+    if (!completion || (completion.phase === "failed" && !completion.assetId)) return;
     void getCurrentWindow().setSize(new LogicalSize(COMPLETION_WIDTH,
       completion.phase === "failed" ? 224 : COMPLETION_HEIGHT)).catch(() => {});
-  }, [completion?.id, completion?.phase]);
+  }, [completion?.id, completion?.phase, completion?.assetId]);
+
+  useEffect(() => {
+    if (completion?.phase !== "failed" || completion.assetId || !failureCard.current) return;
+    const card = failureCard.current;
+    let lastHeight = 0;
+    const resize = () => {
+      const height = Math.min(224, Math.max(112, Math.ceil(card.getBoundingClientRect().height) + 12));
+      if (height === lastHeight) return;
+      lastHeight = height;
+      void getCurrentWindow().setSize(new LogicalSize(COMPLETION_WIDTH, height)).catch(() => {});
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [completion?.id, completion?.phase, completion?.assetId]);
 
   // Ordinary notices stay just long enough to register without lingering. Ready cards
   // remain for eight seconds; the compact Undo state gets only three seconds.
@@ -467,8 +484,8 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
           />
         </section>
       ) : (
-        <section className={`kiri-completion-card${isFailed ? " is-failed" : ""}`} aria-label={title}>
-          <button
+        <section ref={failureCard} className={`kiri-completion-card${isFailed ? " is-failed" : ""}${isFailed && !assetId ? " is-startup-failure" : ""}`} aria-label={title}>
+          {isFailed && !assetId ? <div className="kiri-startup-failure-icon" aria-hidden="true"><KiriIcon name="exclamationmark.triangle" size={22} /></div> : <button
             type="button"
             className="kiri-completion-preview"
             disabled={!assetId || isProcessing || pendingAction !== null}
@@ -506,10 +523,10 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
                 <span className="kiri-completion-spinner" />
               </span>
             )}
-          </button>
+          </button>}
 
           <div className="kiri-completion-content">
-            <div className="kiri-completion-copy" role="status" aria-live="polite">
+            <div className="kiri-completion-copy" role={isFailed ? "alert" : "status"} aria-live={isFailed ? "assertive" : "polite"}>
               <strong>{title}</strong>
               <span className={actionError || isFailed ? "is-error" : ""} title={detail}>
                 {detail}
@@ -530,8 +547,10 @@ export function ToastWindow(props: { title?: string; symbol?: string }) {
             )}
             {isFailed && (
               <div className="kiri-completion-actions">
-                <ActionButton action="gif" icon="sparkles.rectangle.stack" label={t("Retry")}
-                  pending={pendingAction} onClick={createGif} />
+                {assetId ? <ActionButton action="gif" icon="sparkles.rectangle.stack" label={t("Retry")}
+                  pending={pendingAction} onClick={createGif} /> :
+                  <ActionButton action="open" icon="folder" label={t("Open Library")}
+                    pending={pendingAction} onClick={() => void runAction("open", () => api.openLibrary(), hideWindow)} /> }
                 <button type="button" className="kiri-completion-action" onClick={hideWindow}>{t("Close")}</button>
               </div>
             )}
@@ -607,8 +626,12 @@ function ToastStyles() {
 
       .kiri-toast-shell { pointer-events: none; }
       .kiri-completion-card.is-failed { align-items: start; }
+      .kiri-completion-card.is-startup-failure { height: auto; grid-template-columns: 24px minmax(0, 1fr); padding: 12px; }
+      .kiri-startup-failure-icon { color: var(--kiri-coral); padding-top: 1px; }
+      .kiri-completion-card.is-failed .kiri-completion-copy strong { white-space: normal; overflow-wrap: anywhere; max-height: 54px; overflow: auto; }
+      .kiri-completion-card.is-failed .kiri-completion-copy > span { font-size: 14px; }
       .kiri-completion-card.is-failed .kiri-completion-copy > span {
-        white-space: normal; overflow: auto; max-height: 112px; overflow-wrap: anywhere;
+        white-space: normal; overflow: auto; max-height: 84px; overflow-wrap: anywhere;
       }
       .kiri-completion-content progress { width: 100%; height: 4px; accent-color: var(--kiri-label); }
 

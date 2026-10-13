@@ -292,6 +292,7 @@ pub fn run() {
             ocr_commands::recognize_prepared_ocr_local,
             ocr_commands::recognize_prepared_ocr_remote,
             ocr_commands::cancel_prepared_ocr,
+            commands::open_library,
             commands::copy_support_info,
             commands::copy_text,
             commands::copy_capture_color,

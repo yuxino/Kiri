@@ -409,6 +409,12 @@ def tray_callback_acceptance(main_window, label):
     # Deliver the locked tray-icon 0.24 callback through the real Win32 window.
     # This verifies native dispatch/presentation/menu handling, not a physical
     # taskbar mouse press or Explorer's overflow placement.
+    main_window = wait_for("native main panel", lambda: next((window for window in
+        Desktop(backend="win32").windows(process=process.pid, visible_only=True)
+        if window.window_text().lower().startswith("kiri")), None))
+    # UIA's top-level parent can be a WebView child HWND. Operate on the real
+    # top-level Win32 window, and wait for the whole serial presenter to finish.
+    previous_opens = native_log.read_text(encoding="utf-8", errors="replace").count("library visible reason=tray-left-click")
     user32 = ctypes.windll.user32
     user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
     user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
@@ -433,7 +439,9 @@ def tray_callback_acceptance(main_window, label):
     wait_for("hidden main panel", lambda: not user32.IsWindowVisible(main_window.handle))
     if not user32.PostMessageW(handle, 6002, 0, 0x0202):  # WM_LBUTTONUP
         raise ctypes.WinError()
-    wait_for("left tray callback restores the existing panel", lambda: user32.IsWindowVisible(main_window.handle))
+    wait_for("left tray callback restores the existing panel", lambda:
+        user32.IsWindowVisible(main_window.handle) and
+        native_log.read_text(encoding="utf-8", errors="replace").count("library visible reason=tray-left-click") > previous_opens)
     snapshot(f"{label.split()[0]}-tray-left-restored")
     user32.ShowWindow(main_window.handle, 0)
     if not user32.PostMessageW(handle, 6002, 0, 0x0205):  # WM_RBUTTONUP

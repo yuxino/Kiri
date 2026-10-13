@@ -202,3 +202,5 @@ development.
 - [ADR 0100: In-window Empty Trash confirmation](adr/0100-in-window-empty-trash-confirmation.md) — main-WebView modal, safe focus and single-flight deletion.
 
 - [ADR 0101: Tray activation, support information and pin boundaries](adr/0101-tray-support-information-and-pin-frame.md) — Windows left-click activation, explicit support-info copying and a persistent neutral pin outline.
+
+- [ADR 0102: Visible recording startup failures](adr/0102-visible-recording-startup-failures.md) — session-safe failure cards and optional Windows capture-border capability checks.

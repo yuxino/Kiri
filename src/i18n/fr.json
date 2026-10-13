@@ -747,5 +747,8 @@
   "Update available": "Mise à jour disponible",
   "New update": "Mise à jour",
   "Copy Info": "Copier les infos",
-  "Couldn't copy info. Try again.": "Impossible de copier les infos. Réessayez."
+  "Couldn't copy info. Try again.": "Impossible de copier les infos. Réessayez.",
+  "No system-audio output device is available.": "Aucun périphérique de sortie audio système disponible.",
+  "No microphone input device is available.": "Aucun périphérique d’entrée microphone disponible.",
+  "Check recording options and try again. If it still fails, copy info from Settings → About.": "Vérifiez les options de capture et réessayez. Si le problème persiste, copiez les infos dans Réglages → À propos."
 }

@@ -853,6 +853,7 @@ fn show_completion_preview_inner(
             return;
         }
     }
+    let height = if preview.phase == "failed" { if preview.asset_id.is_none() { 144.0 } else { 224.0 } } else { 124.0 };
     let label = "toast";
     let asset_id = preview.asset_id.as_deref().unwrap_or_default();
     let initial_url = format!(
@@ -881,7 +882,7 @@ fn show_completion_preview_inner(
                     .resizable(false)
                     .focused(false)
                     .visible(false)
-                    .inner_size(360.0, 124.0)
+                    .inner_size(360.0, height)
                     .position(0.0, 0.0);
             let window = match builder.build() {
                 Ok(window) => window,
@@ -902,7 +903,7 @@ fn show_completion_preview_inner(
         })
         .or_else(|| app.primary_monitor().ok().flatten());
     if let Some(monitor) = target_monitor {
-        position_completion_toast(&window, &monitor, 124.0);
+        position_completion_toast(&window, &monitor, height);
     }
 
     #[cfg(not(target_os = "linux"))]

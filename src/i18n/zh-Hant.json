@@ -747,5 +747,8 @@
   "Update available": "有更新",
   "New update": "有更新",
   "Copy Info": "複製資訊",
-  "Couldn't copy info. Try again.": "無法複製資訊，請重試。"
+  "Couldn't copy info. Try again.": "無法複製資訊，請重試。",
+  "No system-audio output device is available.": "找不到系統聲音輸出裝置。",
+  "No microphone input device is available.": "找不到麥克風輸入裝置。",
+  "Check recording options and try again. If it still fails, copy info from Settings → About.": "檢查錄影選項後重試。如仍失敗，請從「設定 → 關於」複製資訊回報。"
 }

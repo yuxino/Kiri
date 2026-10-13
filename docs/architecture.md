@@ -195,6 +195,13 @@ screen. Windows retains the selected monitor's
 virtual-desktop origin so a secondary-display capture is not shown on the
 primary display.
 
+Recording startup failures return only their current session to idle and present
+a persistent failure card on the capture display without activating Kiri. Known
+device/display recovery guidance is localized; raw native errors stay in logs.
+A failure with no saved asset offers Open Library instead of a GIF retry. Windows
+queries optional capture-border control before disabling the system indicator;
+unsupported builds retain the system default (ADR 0102).
+
 ## Screenshot editing flow
 
 Capture HUD placement uses measured panel and mode-selector bounds. The

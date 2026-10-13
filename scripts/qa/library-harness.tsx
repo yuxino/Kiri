@@ -1,6 +1,7 @@
 // Isolated real-component layout check. No native commands or user assets.
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { ToastWindow } from "../../src/windows/ToastWindow";
 import { PinWindow } from "../../src/windows/PinWindow";
 import { LibraryWindow } from "../../src/windows/LibraryWindow";
 import { setLanguage, type KiriLanguage } from "../../src/i18n";
@@ -126,6 +127,8 @@ Object.assign(window, {
           emit("library-changed", null);
           return null;
         case "get_asset_availability": return { status: "ready" };
+        case "open_library": actions.push(command); return null;
+        case "plugin:window|set_size": case "plugin:window|set_ignore_cursor_events": return null;
         case "copy_support_info":
           actions.push(command);
           if (params.has("copyFailure")) throw new Error("Test clipboard unavailable");
@@ -144,4 +147,4 @@ Object.assign(window, {
 });
 const language = params.get("language") ?? "en";
 setLanguage((["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"].includes(language) ? language : "en") as KiriLanguage);
-createRoot(document.getElementById("root")!).render(params.has("pin") ? <PinWindow id="pin-fixture" /> : <LibraryWindow />);
+createRoot(document.getElementById("root")!).render(params.has("toast") ? <ToastWindow /> : params.has("pin") ? <PinWindow id="pin-fixture" /> : <LibraryWindow />);

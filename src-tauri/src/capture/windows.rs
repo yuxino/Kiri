@@ -597,6 +597,19 @@ fn crop_rgba_to_bgra(
     out
 }
 
+fn recording_draw_border_settings() -> DrawBorderSettings {
+    // IsBorderRequired is optional on supported Windows 10 builds. Asking to
+    // disable it unconditionally makes windows-capture reject the entire session.
+    match GraphicsCaptureApi::is_border_settings_supported() {
+        Ok(true) => DrawBorderSettings::WithoutBorder,
+        Ok(false) => DrawBorderSettings::Default,
+        Err(error) => {
+            log::warn!("WindowsRecorder: could not query capture-border support: {error}");
+            DrawBorderSettings::Default
+        }
+    }
+}
+
 fn recording_minimum_update_interval() -> MinimumUpdateIntervalSettings {
     match GraphicsCaptureApi::is_minimum_update_interval_supported() {
         Ok(true) => MinimumUpdateIntervalSettings::Custom(std::time::Duration::from_secs_f64(
@@ -672,7 +685,7 @@ impl WindowsRecorder {
         let settings = Settings::new(
             monitor,
             cursor,
-            DrawBorderSettings::WithoutBorder,
+            recording_draw_border_settings(),
             SecondaryWindowSettings::Default,
             recording_minimum_update_interval(),
             DirtyRegionSettings::Default,

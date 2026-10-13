@@ -747,5 +747,8 @@
   "Update available": "更新があります",
   "New update": "更新あり",
   "Copy Info": "情報をコピー",
-  "Couldn't copy info. Try again.": "情報をコピーできませんでした。もう一度お試しください。"
+  "Couldn't copy info. Try again.": "情報をコピーできませんでした。もう一度お試しください。",
+  "No system-audio output device is available.": "システム音声の出力デバイスが見つかりません。",
+  "No microphone input device is available.": "マイクの入力デバイスが見つかりません。",
+  "Check recording options and try again. If it still fails, copy info from Settings → About.": "録画設定を確認して再試行してください。改善しない場合は「設定 → Kiri について」から情報をコピーしてお知らせください。"
 }

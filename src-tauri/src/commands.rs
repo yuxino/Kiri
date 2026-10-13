@@ -3665,6 +3665,14 @@ pub fn copy_capture_color(
 }
 
 #[tauri::command]
+pub fn open_library(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    if !matches!(window.label(), "library" | "toast") {
+        return Err("This command is unavailable from this window.".into());
+    }
+    crate::show_library_window(&app, "recording-error-recovery")
+}
+
+#[tauri::command]
 pub async fn copy_support_info(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     require_library_window(&window)?;
     let displays = app.available_monitors().ok().map(|monitors| monitors.into_iter().map(|monitor| {
@@ -4113,6 +4121,19 @@ fn reset_startup_if_current(app: &AppHandle, token: uuid::Uuid) -> bool {
     }
 }
 
+fn show_recording_startup_failure(app: &AppHandle, token: uuid::Uuid, message: String, recovery: Option<RecoveryAction>) -> bool {
+    let monitor = app.state::<AppState>().recording.lock().unwrap().completion_monitor.clone();
+    if !reset_startup_if_current(app, token) { return false; }
+    emit_error(app, message.clone(), recovery);
+    let mut preview = CompletionPreviewDto::processing(
+        uuid::Uuid::new_v4().to_string(), "video", &message,
+        "Check recording options and try again. If it still fails, copy info from Settings → About.",
+    );
+    preview.phase = "failed".into();
+    show_completion_preview(app, &preview, monitor);
+    true
+}
+
 fn startup_is_current(app: &AppHandle, token: uuid::Uuid) -> bool {
     let state = app.state::<AppState>();
     let recording = state.recording.lock().unwrap();
@@ -4294,8 +4315,21 @@ fn recording_start_error_notice(error: &str, resuming: bool) -> String {
             error.to_string()
         };
     }
-    let _ = (error, resuming);
-    "Could not start screen recording.".into()
+    match error {
+        "No system-audio output device is available." => "No system-audio output device is available.".into(),
+        "No microphone input device is available." => "No microphone input device is available.".into(),
+        "The selected display changed or is no longer uniquely available. Select it again."
+        | "The selected display is no longer available. Select it again."
+        | "The selected display is ambiguous. Select it again."
+        | "The selected display identity is unavailable. Select it again." => {
+            if resuming {
+                "The selected display changed or is no longer available. Stop and save the paused recording, then start a new capture.".into()
+            } else {
+                "The selected display is no longer available. Start a new capture.".into()
+            }
+        }
+        _ => "Could not start screen recording.".into(),
+    }
 }
 
 fn start_recorder(
@@ -4584,14 +4618,14 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
     };
     #[cfg(target_os = "linux")]
     if let Err(error) = linux_run_on_main(&app, present_controls) {
-        if reset_startup_if_current(&app, startup_token) {
+        if show_recording_startup_failure(&app, startup_token, "Could not start screen recording.".into(), None) {
             return Err(error);
         }
         return Ok(());
     }
     #[cfg(not(target_os = "linux"))]
     if let Err(error) = present_controls() {
-        if reset_startup_if_current(&app, startup_token) {
+        if show_recording_startup_failure(&app, startup_token, "Could not start screen recording.".into(), None) {
             return Err(error);
         }
         return Ok(());
@@ -4622,8 +4656,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
             let recovery = Some(RecoveryAction::OpenInputMonitoringSettings);
             #[cfg(any(windows, target_os = "linux"))]
             let recovery = None;
-            if reset_startup_if_current(&app, startup_token) {
-                emit_error(&app, message.into(), recovery);
+            if show_recording_startup_failure(&app, startup_token, message.into(), recovery) {
                 return Err(error.to_string());
             }
             return Ok(());
@@ -4637,13 +4670,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
         Ok(prepared) => prepared,
         Err(error) => {
             log::error!("recording: encoder preparation failed: {error}");
-            if reset_startup_if_current(&app, startup_token) {
-                emit_error(
-                    &app,
-                    "Could not prepare the video encoder. Check your connection and try recording again."
-                        .into(),
-                    None,
-                );
+            if show_recording_startup_failure(&app, startup_token, "Could not start the video encoder.".into(), None) {
                 return Err(error);
             }
             return Ok(());
@@ -4664,8 +4691,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
         Ok(started) => started,
         Err(error) => {
             log::error!("recording: start_recorder failed: {error}");
-            if reset_startup_if_current(&app, startup_token) {
-                emit_error(&app, recording_start_error_notice(&error, false), None);
+            if show_recording_startup_failure(&app, startup_token, recording_start_error_notice(&error, false), None) {
                 return Err(error);
             }
             return Ok(());
@@ -4688,8 +4714,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
             log::error!("recording: start_encoder failed: {error}");
             let _ = started.recorder.stop();
             let _ = std::fs::remove_file(&out_path);
-            if reset_startup_if_current(&app, startup_token) {
-                emit_error(&app, recording_encoder_error_notice(&error), None);
+            if show_recording_startup_failure(&app, startup_token, recording_encoder_error_notice(&error), None) {
                 return Err(error);
             }
             return Ok(());
@@ -5913,6 +5938,14 @@ mod command_security_tests {
             super::recording_start_error_notice("native failure at /private/test.mp4", false),
             "Could not start screen recording."
         );
+    }
+
+    #[test]
+    fn recording_notice_exposes_only_known_device_and_display_recovery() {
+        assert_eq!(super::recording_start_error_notice("No system-audio output device is available.", false), "No system-audio output device is available.");
+        assert_eq!(super::recording_start_error_notice("No microphone input device is available.", false), "No microphone input device is available.");
+        assert_eq!(super::recording_start_error_notice("The selected display is ambiguous. Select it again.", false), "The selected display is no longer available. Start a new capture.");
+        assert!(super::recording_start_error_notice("The selected display is ambiguous. Select it again.", true).contains("Stop and save"));
     }
 
     #[cfg(target_os = "macos")]

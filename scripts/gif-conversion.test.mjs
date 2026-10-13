@@ -169,3 +169,25 @@ test("new completion cards restore Cancel without losing a newer progress event"
     toast.unmount();
   }
 });
+
+
+test("recording failure cards persist, accept input, and offer library recovery rather than a GIF retry", async()=>{
+  let opened=0,hidden=0,timers=0;const interactive=[];
+  const source='import React from "react";\n'+readFileSync(new URL("../src/windows/ToastWindow.tsx",import.meta.url),"utf8");
+  const h=createLibraryHarness({openLibrary:async()=>{opened++;}},source,{
+    search:'?mode=completion&phase=failed&kind=video&title=Could%20not%20start%20screen%20recording.',
+    modules:{
+      "@tauri-apps/api/dpi":{LogicalSize:class{}},
+      "@tauri-apps/api/event":{listen:async()=>()=>{}},
+      "@tauri-apps/api/window":{getCurrentWindow:()=>({hide:async()=>{hidden++;},setSize:async()=>{},setIgnoreCursorEvents:async ignore=>interactive.push(!ignore)})},
+    },
+  });
+  h.window.setTimeout=()=>{timers++;return 1;};h.window.clearTimeout=()=>{};
+  const c=h.mount("ToastWindow",{}),tree=c.render();await settleRequests();
+  assert.equal(timers,0,"a startup failure stays available until acknowledged");
+  assert.ok(interactive.includes(true));
+  assert.ok(!nodes(tree).includes('Retry'),"no nonexistent GIF asset should be retried");
+  const action=nodes(tree).find(n=>typeof n?.type==='function'&&n.props?.label==='Open Library');
+  assert.ok(action);action.props.onClick();await settleRequests();
+  assert.equal(opened,1);assert.equal(hidden,1);c.unmount();
+});

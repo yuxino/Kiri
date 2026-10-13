@@ -747,5 +747,8 @@
   "Update available": "Update available",
   "New update": "New update",
   "Copy Info": "Copy Info",
-  "Couldn't copy info. Try again.": "Couldn't copy info. Try again."
+  "Couldn't copy info. Try again.": "Couldn't copy info. Try again.",
+  "No system-audio output device is available.": "No system-audio output device is available.",
+  "No microphone input device is available.": "No microphone input device is available.",
+  "Check recording options and try again. If it still fails, copy info from Settings → About.": "Check recording options and try again. If it still fails, copy info from Settings → About."
 }

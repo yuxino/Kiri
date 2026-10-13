@@ -747,5 +747,8 @@
   "Update available": "Update verfügbar",
   "New update": "Update",
   "Copy Info": "Infos kopieren",
-  "Couldn't copy info. Try again.": "Infos konnten nicht kopiert werden. Bitte erneut versuchen."
+  "Couldn't copy info. Try again.": "Infos konnten nicht kopiert werden. Bitte erneut versuchen.",
+  "No system-audio output device is available.": "Kein Ausgabegerät für Systemaudio verfügbar.",
+  "No microphone input device is available.": "Kein Mikrofon-Eingabegerät verfügbar.",
+  "Check recording options and try again. If it still fails, copy info from Settings → About.": "Prüfen Sie die Aufnahmeoptionen und versuchen Sie es erneut. Kopieren Sie bei weiteren Fehlern die Infos unter Einstellungen → Über Kiri."
 }
