@@ -433,9 +433,10 @@ def tray_callback_acceptance(main_window, label):
         raise RuntimeError("Expected one native Kiri tray callback window")
     handle = handles[0]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.IsWindowVisible.argtypes = [wintypes.HWND]
-    user32.ShowWindow(main_window.handle, 0)
+    # Follow CloseRequested → Tauri hide, keeping its visibility cache accurate.
+    if not user32.PostMessageW(main_window.handle, 0x0010, 0, 0):  # WM_CLOSE
+        raise ctypes.WinError()
     wait_for("hidden main panel", lambda: not user32.IsWindowVisible(main_window.handle))
     if not user32.PostMessageW(handle, 6002, 0, 0x0202):  # WM_LBUTTONUP
         raise ctypes.WinError()
@@ -443,7 +444,10 @@ def tray_callback_acceptance(main_window, label):
         user32.IsWindowVisible(main_window.handle) and
         native_log.read_text(encoding="utf-8", errors="replace").count("library visible reason=tray-left-click") > previous_opens)
     snapshot(f"{label.split()[0]}-tray-left-restored")
-    user32.ShowWindow(main_window.handle, 0)
+    # Follow CloseRequested → Tauri hide, keeping its visibility cache accurate.
+    if not user32.PostMessageW(main_window.handle, 0x0010, 0, 0):  # WM_CLOSE
+        raise ctypes.WinError()
+    wait_for("main panel hidden through its normal close request", lambda: not user32.IsWindowVisible(main_window.handle))
     if not user32.PostMessageW(handle, 6002, 0, 0x0205):  # WM_RBUTTONUP
         raise ctypes.WinError()
     menu = wait_for("native right-click tray menu", lambda: next(iter(
