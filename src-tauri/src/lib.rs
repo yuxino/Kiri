@@ -8,6 +8,7 @@ mod commands;
 mod batch_export;
 mod core;
 mod diagnostics;
+mod support_info;
 mod dock_settings;
 mod gif;
 mod video_export;
@@ -291,6 +292,7 @@ pub fn run() {
             ocr_commands::recognize_prepared_ocr_local,
             ocr_commands::recognize_prepared_ocr_remote,
             ocr_commands::cancel_prepared_ocr,
+            commands::copy_support_info,
             commands::copy_text,
             commands::copy_capture_color,
             commands::start_recording_flow,
@@ -640,6 +642,18 @@ fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
             _ => {}
         });
+    #[cfg(windows)]
+    {
+        // Keep right-click menus, but a completed left click opens the panel.
+        // Use the existing serial presenter so tray callbacks never wait on WebView2.
+        builder = builder.show_menu_on_left_click(false).on_tray_icon_event(|tray, event| {
+            if tray_click_opens_library(&event) {
+                if let Err(error) = show_library_window(tray.app_handle(), "tray-left-click") {
+                    log::error!("[tray] library open failed: {error}");
+                }
+            }
+        });
+    }
     #[cfg(target_os = "macos")]
     {
         builder = builder.icon_as_template(true);
@@ -649,6 +663,14 @@ fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
     Ok(())
+}
+
+#[cfg(any(windows, test))]
+fn tray_click_opens_library(event: &tauri::tray::TrayIconEvent) -> bool {
+    matches!(event, tauri::tray::TrayIconEvent::Click {
+        button: tauri::tray::MouseButton::Left,
+        button_state: tauri::tray::MouseButtonState::Up, ..
+    })
 }
 
 fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
@@ -771,6 +793,29 @@ mod tests {
         worker.join().unwrap();
         assert_ne!(worker_id, caller);
         assert_eq!(worker_name.as_deref(), Some("kiri-capture-start"));
+    }
+
+    #[test]
+    fn only_a_completed_left_tray_click_opens_the_panel() {
+        use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+        for button in [MouseButton::Left, MouseButton::Right, MouseButton::Middle] {
+            for button_state in [MouseButtonState::Up, MouseButtonState::Down] {
+                let event = TrayIconEvent::Click {
+                    id: "main".into(), position: tauri::PhysicalPosition::new(0.0, 0.0),
+                    rect: tauri::Rect {
+                        position: tauri::PhysicalPosition::new(0, 0).into(),
+                        size: tauri::PhysicalSize::new(24, 24).into(),
+                    }, button, button_state,
+                };
+                assert_eq!(super::tray_click_opens_library(&event),
+                    button == MouseButton::Left && button_state == MouseButtonState::Up);
+            }
+        }
+        assert!(!super::tray_click_opens_library(&TrayIconEvent::Enter {
+            id: "main".into(), position: tauri::PhysicalPosition::new(0.0, 0.0),
+            rect: tauri::Rect { position: tauri::PhysicalPosition::new(0, 0).into(),
+                size: tauri::PhysicalSize::new(24, 24).into() },
+        }));
     }
 
     #[test]

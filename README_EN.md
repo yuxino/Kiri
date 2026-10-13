@@ -45,11 +45,13 @@ The main window keeps Library, Text History, QR Favorites, Trash and Settings in
 
 Opening the main panel checks for updates on macOS and installed Windows builds. A New update label beside Settings indicates a newer version; downloading and installing remain explicit actions. Linux and Windows Portable users still update manually from Releases.
 
+In Settings → About, **Copy Info** copies Kiri and OS versions, architecture, language, and display resolution/scale for issue reports. It does not include captures, credentials or personal paths. On Windows, a tray left click opens the main panel; right click opens its menu.
+
 ## Get started
 
 1. Press `⇧⌘A` on macOS or `Shift+Ctrl+A` on Windows / Linux X11, then select a window or drag a region.
 2. Choose Screenshot, Record, or OCR. After selecting a screenshot region, you can also start OCR directly from its toolbar.
-3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Click the toolbar’s pin icon to save and pin in one step, or choose **Pin** on the completion card. The borderless reference can be dragged and resized proportionally from its lower-right corner. Hover to unpin or close it.
+3. Press `Enter` or double-click an unmarked area inside the selection to finish a screenshot; `Esc` cancels. While annotating, switch to the Select tool first; double-clicking text still edits it. Screenshots are copied to your clipboard and saved in the library. Click the toolbar’s pin icon to save and pin in one step, or choose **Pin** on the completion card. The reference has a thin border and can be dragged and resized proportionally from its lower-right corner. Hover to unpin or close it.
 
 Annotations stack in creation order. A later mosaic processes earlier text, shapes and watermarks; annotations added afterward appear above it. Moving or editing a mark keeps its original layer.
 

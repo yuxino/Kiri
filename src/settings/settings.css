@@ -230,6 +230,8 @@
   gap: 7px;
 }
 
+.kiri-support-copy-status { font-size: 14px; color: var(--kiri-secondary-label); }
+
 .kiri-update-progress {
   width: min(100%, 360px);
   height: 6px;

@@ -745,5 +745,7 @@
   "Couldn't move these captures to Trash.": "Couldn't move these captures to Trash.",
   "Opening Kiri checks for updates.": "Opening Kiri checks for updates.",
   "Update available": "Update available",
-  "New update": "New update"
+  "New update": "New update",
+  "Copy Info": "Copy Info",
+  "Couldn't copy info. Try again.": "Couldn't copy info. Try again."
 }

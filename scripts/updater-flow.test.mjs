@@ -89,7 +89,9 @@ function updaterHarness(windows = true, portable = false, linux = false, options
     install: async options => { installs.push(options); },
   };
   const settings = read('src/settings/SettingsView.tsx');
-  const source = `import React from 'react';
+  const source = `import React, {useState, useRef, useEffect} from 'react';
+    import {api} from '../lib/ipc';
+    import {KiriIcon} from '../components/KiriIcons';
     import { useAppUpdater, stateDetails } from '../settings/useAppUpdater';
     const t = value => value, fmt = (value, arg) => value.replace('%@', arg);
     ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
@@ -266,4 +268,45 @@ test('missing or failed platform capabilities cannot trigger automatic network r
     h.focus(); await settleRequests(); assert.equal(h.checks(),0);
     h.unmount();
   }
+});
+
+function supportInfoHarness(copySupportInfo) {
+  const settings = read('src/settings/SettingsView.tsx');
+  const source = `import React, {useState, useRef, useEffect} from 'react';
+    import {api} from '../lib/ipc'; import {KiriIcon} from '../components/KiriIcons';
+    import {stateDetails} from '../settings/useAppUpdater';
+    const t=value=>value, fmt=(value,arg)=>value.replace('%@',arg);
+    ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
+    export function TestAbout() { return AboutSettingsSection({ updater: {
+      currentVersion:'1.6.18', isWindows:true, isPortable:false, updateState:{kind:'idle'}, hasUpdate:false,
+      checkForUpdates:()=>{}, downloadUpdate:()=>{}, installUpdate:()=>{}, restartUpdatedApp:()=>{}, openRecoveryPage:()=>{},
+    }}); }`;
+  const h=createLibraryHarness({copySupportInfo},source);
+  h.window.setTimeout=()=>1; h.window.clearTimeout=()=>{};
+  const component=h.mount('TestAbout');
+  return {render:()=>component.render(),button:()=>nodes(component.render()).find(n=>n?.props?.['aria-label']==='Copy Info')};
+}
+
+test('copying support info is single-flight and shows success only after the clipboard write', async()=>{
+  const pending=deferred(); let copies=0;
+  const h=supportInfoHarness(()=>{copies++;return pending.promise;});
+  h.button().props.onClick(); h.button().props.onClick();
+  assert.equal(copies,1);
+  assert.equal(h.button().props.disabled,true);
+  assert.ok(!nodes(h.render()).includes('Copied'));
+  pending.resolve();await settleRequests();
+  assert.ok(nodes(h.render()).includes('Copied'));
+  assert.equal(h.button().props.disabled,false);
+});
+
+test('clipboard failure keeps support copying retryable without claiming success',async()=>{
+  let copies=0;
+  const h=supportInfoHarness(async()=>{if(++copies===1)throw Error('Clipboard busy');});
+  h.button().props.onClick();await settleRequests();
+  assert.ok(nodes(h.render()).includes("Couldn't copy info. Try again."));
+  assert.ok(!nodes(h.render()).includes('Copied'));
+  h.button().props.onClick();await settleRequests();
+  assert.equal(copies,2);
+  assert.ok(nodes(h.render()).includes('Copied'));
+  assert.ok(!nodes(h.render()).includes("Couldn't copy info. Try again."));
 });

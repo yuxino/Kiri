@@ -189,6 +189,21 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
 }
 
 function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
+  const [copyState, setCopyState] = useState<"idle" | "copying" | "copied" | "error">("idle");
+  const copying = useRef(false);
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+  const copyInfo = async () => {
+    if (copying.current) return;
+    copying.current = true;
+    setCopyState("copying");
+    try { await api.copySupportInfo(); setCopyState("copied"); }
+    catch { setCopyState("error"); }
+    finally { copying.current = false; }
+  };
   const { currentVersion, isWindows, isPortable, manualUpdates, updateState,
     checkForUpdates, downloadUpdate, installUpdate, restartUpdatedApp, openRecoveryPage } = updater;
   let status = t(manualUpdates ? "Linux updates are installed manually from a downloaded package." : isPortable
@@ -318,6 +333,13 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
           >
             {buttonLabel}
           </button>
+          <button type="button" className="kiri-button kiri-button--secondary"
+            disabled={copyState === "copying"} aria-label={t("Copy Info")}
+            onClick={() => void copyInfo()}>
+            <KiriIcon name={copyState === "copied" ? "checkmark" : "doc.on.doc"} size={15} />
+            <span aria-live="polite">{t(copyState === "copied" ? "Copied" : "Copy Info")}</span>
+          </button>
+          {copyState === "error" && <span className="kiri-support-copy-status" role="alert">{t("Couldn't copy info. Try again.")}</span>}
           {updateState.kind === "error" && (
             <button
               type="button"

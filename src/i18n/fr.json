@@ -745,5 +745,7 @@
   "Couldn't move these captures to Trash.": "Impossible de mettre ces captures à la corbeille.",
   "Opening Kiri checks for updates.": "Kiri vérifie les mises à jour à l’ouverture.",
   "Update available": "Mise à jour disponible",
-  "New update": "Mise à jour"
+  "New update": "Mise à jour",
+  "Copy Info": "Copier les infos",
+  "Couldn't copy info. Try again.": "Impossible de copier les infos. Réessayez."
 }

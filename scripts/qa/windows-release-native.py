@@ -329,6 +329,14 @@ def quick_capture_acceptance():
                     return {"bounds": [bounds.left, bounds.top, bounds.right, bounds.bottom], "mean_pixel_error": mean}
             return None
         visible = wait_for("pinned image above another foreground app", visible_pinned_image)
+        actual = ImageGrab.grab(bbox=tuple(visible["bounds"])).convert("RGB")
+        reference = copied.convert("RGB").resize(actual.size, Image.Resampling.LANCZOS)
+        corners = [(0, 0), (actual.width - 1, 0), (0, actual.height - 1), (actual.width - 1, actual.height - 1)]
+        contrast = [max(abs(a-b) for a,b in zip(actual.getpixel(point), reference.getpixel(point))) for point in corners]
+        if max(contrast) < 25:
+            raise RuntimeError("Pinned reference has no visible boundary against its source")
+        report["pin_outline"] = {"corner_contrast": contrast, "visible": True}
+
         ImageGrab.grab().save(output / "quick-capture-pinned.png")
         pin_window.set_focus()
         keyboard.send_keys("{ESC}")
@@ -397,6 +405,56 @@ def batch_trash_acceptance(executable):
     report["checks"].append("explicit native multi-select and Select All move captures to recoverable Trash and restore the unchanged assets")
 
 
+def tray_callback_acceptance(main_window, label):
+    # Deliver the locked tray-icon 0.24 callback through the real Win32 window.
+    # This verifies native dispatch/presentation/menu handling, not a physical
+    # taskbar mouse press or Explorer's overflow placement.
+    user32 = ctypes.windll.user32
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    handles = []
+    def visit(hwnd, _):
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        name = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, name, 256)
+        if pid.value == process.pid and name.value == "tray_icon_app":
+            handles.append(hwnd)
+        return True
+    user32.EnumWindows(callback_type(visit), 0)
+    if len(handles) != 1:
+        raise RuntimeError("Expected one native Kiri tray callback window")
+    handle = handles[0]
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.ShowWindow(main_window.handle, 0)
+    wait_for("hidden main panel", lambda: not user32.IsWindowVisible(main_window.handle))
+    if not user32.PostMessageW(handle, 6002, 0, 0x0202):  # WM_LBUTTONUP
+        raise ctypes.WinError()
+    wait_for("left tray callback restores the existing panel", lambda: user32.IsWindowVisible(main_window.handle))
+    snapshot(f"{label.split()[0]}-tray-left-restored")
+    user32.ShowWindow(main_window.handle, 0)
+    if not user32.PostMessageW(handle, 6002, 0, 0x0205):  # WM_RBUTTONUP
+        raise ctypes.WinError()
+    menu = wait_for("native right-click tray menu", lambda: next(iter(
+        Desktop(backend="win32").windows(process=process.pid, class_name="#32768", visible_only=True)), None))
+    if user32.IsWindowVisible(main_window.handle):
+        raise RuntimeError("Right tray click unexpectedly opened the main panel")
+    ImageGrab.grab().save(output / f"{label.split()[0]}-tray-right-menu.png")
+    keyboard.send_keys("{ESC}")
+    wait_for("tray menu dismissed", lambda: not Desktop(backend="win32").windows(
+        process=process.pid, class_name="#32768", visible_only=True))
+    user32.PostMessageW(handle, 6002, 0, 0x0202)
+    wait_for("left tray callback reopens after menu dismissal", lambda: user32.IsWindowVisible(main_window.handle))
+    report.setdefault("tray_callbacks", {})[label] = {
+        "left_restores_existing_panel": True, "right_opens_menu_only": True,
+        "after_menu_dismissal": True, "native_callback_messages": True,
+        "physical_taskbar_click_tested": False,
+    }
+
+
 def smoke(executable, update_button, label):
     global process
     if not executable.is_file():
@@ -412,8 +470,39 @@ def smoke(executable, update_button, label):
         snapshot(f"{label.split()[0]}-before-settings")
         settings.click_input()
         find(update_button, scroll=True)
+        find("Copy Info", scroll=True).click_input()
+        user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
+        user32.GetClipboardData.argtypes = [wintypes.UINT]
+        user32.GetClipboardData.restype = wintypes.HANDLE
+        kernel32.GlobalLock.argtypes = [wintypes.HANDLE]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [wintypes.HANDLE]
+        def support_clipboard():
+            if not user32.OpenClipboard(None):
+                return None
+            try:
+                handle = user32.GetClipboardData(13)
+                address = kernel32.GlobalLock(handle) if handle else None
+                if not address:
+                    return None
+                try:
+                    text = ctypes.wstring_at(address)
+                    return text if text.startswith("Kiri: ") else None
+                finally:
+                    kernel32.GlobalUnlock(handle)
+            finally:
+                user32.CloseClipboard()
+        info = wait_for("support info clipboard", support_clipboard)
+        package = "Windows portable" if label == "portable ZIP" else "Windows app"
+        if not all(field in info for field in ["OS: Windows ", "Architecture: x86_64", "Package: " + package, "Displays: "]):
+            raise RuntimeError("Support info omits native system/package fields: " + info)
+        if str(library).lower() in info.lower() or "APPDATA" in info or "LOCALAPPDATA" in info:
+            raise RuntimeError("Support info includes a private profile path")
+        report.setdefault("support_info", {})[label] = info
+        report["checks"].append(f"{label} copies allowlisted native support information")
         snapshot(f"{label.split()[0]}-settings")
         report["checks"].append(f"{label} launches and shows the correct update route")
+        tray_callback_acceptance(settings.top_level_parent(), label)
         keyboard.send_keys("^+a")
         find("Screenshot")
         keyboard.send_keys("{ESC}")

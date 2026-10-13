@@ -745,5 +745,7 @@
   "Couldn't move these captures to Trash.": "이 캡처를 휴지통으로 이동할 수 없습니다.",
   "Opening Kiri checks for updates.": "Kiri를 열면 업데이트를 확인합니다.",
   "Update available": "업데이트 있음",
-  "New update": "업데이트"
+  "New update": "업데이트",
+  "Copy Info": "정보 복사",
+  "Couldn't copy info. Try again.": "정보를 복사하지 못했습니다. 다시 시도하세요."
 }

@@ -745,5 +745,7 @@
   "Couldn't move these captures to Trash.": "無法將這些素材移到回收筒。",
   "Opening Kiri checks for updates.": "開啟 Kiri 時檢查更新。",
   "Update available": "有更新",
-  "New update": "有更新"
+  "New update": "有更新",
+  "Copy Info": "複製資訊",
+  "Couldn't copy info. Try again.": "無法複製資訊，請重試。"
 }

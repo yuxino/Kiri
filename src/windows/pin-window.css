@@ -1,4 +1,5 @@
 .pin-window { position: relative; width: 100vw; height: 100vh; overflow: hidden; color: var(--kiri-label); }
+.pin-window::after { content: ""; position: absolute; inset: 0; z-index: 4; border: 1px solid rgba(0, 0, 0, .5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .85); pointer-events: none; }
 .pin-window__image { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; cursor: move; }
 .pin-window__image img { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; }
 .pin-window__actions { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 4px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }

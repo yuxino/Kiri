@@ -745,5 +745,7 @@
   "Couldn't move these captures to Trash.": "Diese Aufnahmen konnten nicht in den Papierkorb verschoben werden.",
   "Opening Kiri checks for updates.": "Beim Öffnen sucht Kiri nach Updates.",
   "Update available": "Update verfügbar",
-  "New update": "Update"
+  "New update": "Update",
+  "Copy Info": "Infos kopieren",
+  "Couldn't copy info. Try again.": "Infos konnten nicht kopiert werden. Bitte erneut versuchen."
 }

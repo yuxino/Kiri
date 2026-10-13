@@ -1,6 +1,7 @@
 // Isolated real-component layout check. No native commands or user assets.
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { PinWindow } from "../../src/windows/PinWindow";
 import { LibraryWindow } from "../../src/windows/LibraryWindow";
 import { setLanguage, type KiriLanguage } from "../../src/i18n";
 import "../../src/styles/design-system.css";
@@ -85,13 +86,13 @@ Object.assign(window, {
         case "get_shortcut_status": return { status: "enabled", label: "⇧⌘A" };
         case "get_dock_visibility": return {supported:true,visible:true};
         case "platform_capabilities": return {manualUpdates:false,videoEditing:true};
-        case "plugin:app|version": return "1.6.17";
+        case "plugin:app|version": return "1.6.18";
         case "plugin:window|is_visible": return true;
         case "plugin:updater|check":
           actions.push("check-update");
           if (params.has("updateFailure")) throw new Error("Controlled offline update check");
           if (lateUpdate) await lateUpdate;
-          return params.has("update") ? {rid:7,currentVersion:"1.6.17",version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
+          return params.has("update") ? {rid:7,currentVersion:"1.6.18",version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
         case "plugin:resources|close": return null;
         case "set_capture_shortcut_editing": return null;
         case "set_capture_shortcut": return {status:"enabled",label:"⇧⌘A"};
@@ -125,6 +126,10 @@ Object.assign(window, {
           emit("library-changed", null);
           return null;
         case "get_asset_availability": return { status: "ready" };
+        case "copy_support_info":
+          actions.push(command);
+          if (params.has("copyFailure")) throw new Error("Test clipboard unavailable");
+          return null;
         case "copy_asset": actions.push(command); return null;
         case "list_pending_recordings": case "list_text_history": return [];
         case "import_media": actions.push(command); return { ids: [], failed: 0 };
@@ -139,4 +144,4 @@ Object.assign(window, {
 });
 const language = params.get("language") ?? "en";
 setLanguage((["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"].includes(language) ? language : "en") as KiriLanguage);
-createRoot(document.getElementById("root")!).render(<LibraryWindow />);
+createRoot(document.getElementById("root")!).render(params.has("pin") ? <PinWindow id="pin-fixture" /> : <LibraryWindow />);

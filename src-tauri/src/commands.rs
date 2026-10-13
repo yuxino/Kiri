@@ -3665,6 +3665,23 @@ pub fn copy_capture_color(
 }
 
 #[tauri::command]
+pub async fn copy_support_info(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    require_library_window(&window)?;
+    let displays = app.available_monitors().ok().map(|monitors| monitors.into_iter().map(|monitor| {
+        crate::support_info::DisplayInfo {
+            width: monitor.size().width, height: monitor.size().height, scale: monitor.scale_factor(),
+        }
+    }).collect::<Vec<_>>());
+    let language = crate::state::load_language(&app);
+    let language = if language.is_empty() { get_locale() } else { language };
+    let text = crate::support_info::report(
+        &app.package_info().version.to_string(), &language, displays.as_deref(),
+    );
+    // Diagnostics have no capture/session side effects and contain no library data.
+    platform::write_text_to_clipboard(&text).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub fn copy_text(app: AppHandle, window: WebviewWindow, text: String) -> Result<(), String> {
     platform::write_text_to_clipboard(&text).map_err(|e| e.to_string())?;
     // OCR runs inside a screen-covering always-on-top overlay. Tear that
