@@ -765,17 +765,14 @@
   "Could not cancel scrolling capture. Try again.": "無法取消長截圖，請重試。",
   "Could not finish scrolling capture. Adjust the scroll position and try again.": "無法完成長截圖。請調整捲動位置後重試。",
   "Captured portion": "已擷取部分",
-  "Waiting for the first frame…": "正在等待第一幀…",
   "Image dimensions": "圖片尺寸",
   "Could not update the preview.": "無法更新預覽。",
   "The last section could not be joined. Save only the captured portion?": "最後一段無法拼接。是否只儲存已擷取部分？",
   "Continue adjusting": "繼續調整",
   "Save captured portion": "儲存已擷取部分",
-  "Done copies and saves. Esc cancels.": "完成後複製並儲存，Esc 取消。",
   "Done": "完成",
   "Escape is unavailable. Close the other capture tool and try again.": "Esc 鍵無法使用。請關閉其他截圖工具後重試。",
   "Leave space beside the selection for scrolling capture controls.": "請在選取範圍旁留出空間，放置長截圖控制面板。",
   "Select a larger scrolling content area.": "請選取更大的捲動內容區域。",
-  "Scrolling capture is not available on this desktop.": "目前的桌面不支援長截圖。",
-  "Enter finishes when this panel has focus.": "面板取得焦點後，按 Enter 完成。"
+  "Scrolling capture is not available on this desktop.": "目前的桌面不支援長截圖。"
 }

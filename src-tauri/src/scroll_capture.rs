@@ -364,6 +364,7 @@ fn start_inner(
         .inner_size(frame.width, frame.height)
         .decorations(false)
         .resizable(false)
+        .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .shadow(false)

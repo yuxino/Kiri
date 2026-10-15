@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Check, ScrollText, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { api, type ScrollCaptureStatus } from "../lib/ipc";
 import { t } from "../i18n";
 import { isTextComposition } from "../annotation/text-composition.js";
@@ -32,7 +32,7 @@ export function ScrollCaptureWindow() {
   const statusRef = useRef<ScrollCaptureStatus | null>(null);
   const [action, setAction] = useState<"finish" | "cancel" | null>(null);
   const actionRef = useRef<"finish" | "cancel" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ kind: "finish" | "cancel"; message: string } | null>(null);
   const [readFailed, setReadFailed] = useState(false);
   const [retry, setRetry] = useState(0);
   const [confirmPartial, setConfirmPartial] = useState(false);
@@ -68,15 +68,17 @@ export function ScrollCaptureWindow() {
         if (requestGeneration === generation.current && !actionRef.current) {
           statusRef.current = next;
           setStatus(next);
-          if (next.phase === "capturing" ||
-              (next.phase === "failed" && next.message === "Could not save the screenshot. Try again.")) {
+          if (next.phase === "failed" && next.message === "Could not save the screenshot. Try again.") {
+            // A partial save was already explicitly accepted. Its cached
+            // output now retries through the normal completion action.
             confirmPartialRef.current = false;
             setConfirmPartial(false);
           }
-          if (next.phase === "failed" && next.message === "Could not save the screenshot. Try again.") {
-            // The status now carries the correct save remedy; an earlier
-            // generic Finish error must not tell the user to scroll again.
-            setError(null);
+          if (next.phase === "capturing" ||
+              (next.phase === "failed" && next.message === "Could not save the screenshot. Try again.")) {
+            // Recovered stitching or a specific save remedy supersedes an
+            // earlier Finish error, but never hides a failed Cancel action.
+            setError(current => current?.kind === "finish" ? null : current);
           }
         }
       } catch {
@@ -106,6 +108,7 @@ export function ScrollCaptureWindow() {
           current.phase === "finishing" || current.phase === "saving") return;
       if (!allowPartial && (current.phase === "needsOverlap" ||
           (current.phase === "failed" && current.message !== "Could not save the screenshot. Try again."))) {
+        setError(null);
         confirmPartialRef.current = true;
         setConfirmPartial(true);
         return;
@@ -122,11 +125,11 @@ export function ScrollCaptureWindow() {
       await getCurrentWindow().close();
     } catch {
       if (!mounted.current) return;
-      setError(kind === "cancel"
-        ? "Could not cancel scrolling capture. Try again."
-        : statusRef.current?.message === "Could not save the screenshot. Try again."
-          ? "Could not save the screenshot. Try again."
-          : "Could not finish scrolling capture. Adjust the scroll position and try again.");
+      setError({ kind, message: kind === "cancel"
+          ? "Could not cancel scrolling capture. Try again."
+          : statusRef.current?.message === "Could not save the screenshot. Try again."
+            ? "Could not save the screenshot. Try again."
+            : "Could not finish scrolling capture. Adjust the scroll position and try again." });
       actionRef.current = null;
       setAction(null);
     }
@@ -152,54 +155,57 @@ export function ScrollCaptureWindow() {
   const busy = action !== null || status?.phase === "finishing" || status?.phase === "saving";
   const canFinish = !!status && status.frames > 0 && status.phase !== "starting" && !busy;
   const preview = status?.preview?.startsWith("data:image/png;base64,") ? status.preview : null;
+  const feedback = error?.message ?? (readFailed ? "Could not update the preview."
+    : confirmPartial ? "The last section could not be joined. Save only the captured portion?"
+    : action === "finish" ? "Saving screenshot…" : statusLabel(status));
+  const feedbackIsAlert = !!error || readFailed || confirmPartial;
 
   return (
     <main className="kiri-scroll-capture kiri-dark" aria-label={t("Scrolling Screenshot")} aria-busy={busy}>
       <header className="kiri-scroll-capture__header">
-        <ScrollText size={17} aria-hidden="true" />
-        <h1>{t("Scrolling Screenshot")}</h1>
-        <span className="kiri-scroll-capture__live" aria-hidden="true" />
+        <div className="kiri-scroll-capture__heading">
+          <h1>{t("Scrolling Screenshot")}</h1>
+          <p className="kiri-scroll-capture__dimensions" aria-label={t("Image dimensions")}>
+            {status && status.width > 0 ? `${status.width.toLocaleString()} × ${status.height.toLocaleString()} px` : "—"}
+          </p>
+        </div>
+        <button type="button" className="kiri-scroll-capture__button kiri-scroll-capture__close" disabled={busy}
+          onClick={() => void runAction("cancel")} title={t("Cancel capture · Esc")}
+          aria-label={t("Cancel")} aria-keyshortcuts="Escape">
+          <X size={18} aria-hidden="true" />
+        </button>
       </header>
-      <p className="kiri-scroll-capture__status" role="status" aria-live="polite">
-        {t(action === "finish" ? "Saving screenshot…" : statusLabel(status))}
-      </p>
-      <div className="kiri-scroll-capture__preview" aria-label={t("Captured portion")} ref={previewRef}
-        onScroll={() => {
-          const element = previewRef.current;
-          if (element) followsPreview.current = element.scrollHeight - element.clientHeight - element.scrollTop < 24;
-        }}>
-        {preview ? <img src={preview} alt={t("Captured portion")} draggable={false} onLoad={followPreview} /> :
-          <span className="kiri-scroll-capture__placeholder">{t("Waiting for the first frame…")}</span>}
+      <div className="kiri-scroll-capture__body">
+        <div className="kiri-scroll-capture__preview" aria-label={t("Captured portion")} ref={previewRef}
+          onScroll={() => {
+            const element = previewRef.current;
+            if (element) followsPreview.current = element.scrollHeight - element.clientHeight - element.scrollTop < 24;
+          }}>
+          {preview && <img src={preview} alt={t("Captured portion")} draggable={false} onLoad={followPreview} />}
+        </div>
+        <div className="kiri-scroll-capture__feedback" data-alert={feedbackIsAlert || undefined}
+          role={feedbackIsAlert ? "alert" : "status"} aria-live={feedbackIsAlert ? "assertive" : "polite"}>
+          <p>{t(feedback)}</p>
+        </div>
       </div>
-      <p className="kiri-scroll-capture__dimensions" aria-label={t("Image dimensions")}>
-        {status && status.width > 0 ? `${status.width.toLocaleString()} × ${status.height.toLocaleString()} px` : "—"}
-      </p>
-      {readFailed && <div className="kiri-scroll-capture__error" role="alert">
-        <p>{t("Could not update the preview.")}</p>
-        <button type="button" className="kiri-scroll-capture__button" onClick={() => setRetry(value => value + 1)} disabled={busy}>{t("Retry")}</button>
-      </div>}
-      {error && <p className="kiri-scroll-capture__error" role="alert">{t(error)}</p>}
-      {confirmPartial ? <div className="kiri-scroll-capture__partial" role="alert">
-        <p>{t("The last section could not be joined. Save only the captured portion?")}</p>
-        <button type="button" className="kiri-scroll-capture__button" disabled={busy} onClick={() => {
-          confirmPartialRef.current = false;
-          setConfirmPartial(false);
-        }}>{t("Continue adjusting")}</button>
-        <button type="button" className="kiri-scroll-capture__button kiri-scroll-capture__primary" disabled={!canFinish}
-          onClick={() => void runAction("finish", true)}>{t("Save captured portion")}</button>
-      </div> : null}
       <footer className="kiri-scroll-capture__actions">
-        <button type="button" className="kiri-scroll-capture__button" disabled={busy} onClick={() => void runAction("cancel")}
-          title={t("Cancel capture · Esc")} aria-keyshortcuts="Escape">
-          <X size={15} aria-hidden="true" />{t("Cancel")}
-        </button>
-        <button type="button" className="kiri-scroll-capture__button kiri-scroll-capture__primary" disabled={!canFinish || confirmPartial}
-          onClick={() => void runAction("finish")} aria-keyshortcuts="Enter">
-          <Check size={15} aria-hidden="true" />{t("Done")}
-        </button>
+        {confirmPartial ? <>
+          <button type="button" className="kiri-scroll-capture__button" disabled={busy} onClick={() => {
+            confirmPartialRef.current = false;
+            setConfirmPartial(false);
+            if (readFailed) setRetry(value => value + 1);
+          }}>{t("Continue adjusting")}</button>
+          <button type="button" className="kiri-scroll-capture__button kiri-scroll-capture__primary" disabled={!canFinish}
+            onClick={() => void runAction("finish", true)}>{t("Save captured portion")}</button>
+        </> : <>
+          {readFailed && <button type="button" className="kiri-scroll-capture__button"
+            onClick={() => setRetry(value => value + 1)} disabled={busy}>{t("Retry")}</button>}
+          <button type="button" className="kiri-scroll-capture__button kiri-scroll-capture__primary" disabled={!canFinish}
+            onClick={() => void runAction("finish")} aria-keyshortcuts="Enter">
+            <Check size={16} aria-hidden="true" />{t("Done")}
+          </button>
+        </>}
       </footer>
-      <p className="kiri-scroll-capture__hint">{t("Done copies and saves. Esc cancels.")}<br />
-        {t("Enter finishes when this panel has focus.")}</p>
     </main>
   );
 }

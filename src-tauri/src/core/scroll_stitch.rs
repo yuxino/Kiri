@@ -63,19 +63,30 @@ impl fmt::Display for StitchError {
 impl std::error::Error for StitchError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Signature([u8; SIGNATURE_SAMPLES]);
+enum Signature {
+    Samples([u8; SIGNATURE_SAMPLES]),
+    Sparse(u64),
+}
 
 impl Signature {
     fn coarse(self) -> Self {
         // Candidate generation tolerates small native antialiasing changes;
         // full RGB/block verification below still decides whether to commit.
-        Self(self.0.map(|value| value >> 3))
+        match self {
+            Self::Samples(samples) => Self::Samples(samples.map(|value| value >> 3)),
+            Self::Sparse(_) => self,
+        }
     }
 
     fn informative(self) -> bool {
-        let minimum = self.0.iter().copied().min().unwrap_or(0);
-        let maximum = self.0.iter().copied().max().unwrap_or(0);
-        maximum.saturating_sub(minimum) >= 3
+        match self {
+            Self::Samples(samples) => {
+                let minimum = samples.iter().copied().min().unwrap_or(0);
+                let maximum = samples.iter().copied().max().unwrap_or(0);
+                maximum.saturating_sub(minimum) >= 3
+            }
+            Self::Sparse(_) => true,
+        }
     }
 }
 
@@ -402,7 +413,35 @@ fn row_signatures(frame: &RgbaImage) -> Vec<Signature> {
                     >> 8;
                 *target = (luminance >> 2) as u8;
             }
-            Signature(samples)
+            let sampled = Signature::Samples(samples);
+            if sampled.informative() {
+                return sampled;
+            }
+            // A narrow label or aligned monospace glyphs can fall entirely
+            // between the sample columns. Look at the complete row only when
+            // those columns appear blank, retaining its horizontal structure.
+            // This only proposes positions: collisions or quantization never
+            // bypass the original-pixel verification above.
+            let mut minimum = u8::MAX;
+            let mut maximum = u8::MIN;
+            let mut fingerprint = 0xcbf29ce484222325u64;
+            let row_bytes = frame.width() as usize * 4;
+            let first = y as usize * row_bytes;
+            for pixel in frame.as_raw()[first..first + row_bytes].chunks_exact(4) {
+                let luminance = ((u16::from(pixel[0]) * 77
+                    + u16::from(pixel[1]) * 150
+                    + u16::from(pixel[2]) * 29)
+                    >> 8) as u8;
+                minimum = minimum.min(luminance);
+                maximum = maximum.max(luminance);
+                fingerprint ^= u64::from(luminance >> 5);
+                fingerprint = fingerprint.wrapping_mul(0x100000001b3);
+            }
+            if maximum.saturating_sub(minimum) >= 12 {
+                Signature::Sparse(fingerprint)
+            } else {
+                sampled
+            }
         })
         .collect()
 }
@@ -427,6 +466,118 @@ mod tests {
 
     fn viewport(document: &RgbaImage, y: u32, height: u32) -> RgbaImage {
         crop_imm(document, 0, y, document.width(), height).to_image()
+    }
+
+    fn sparse_numbered_document(height: u32) -> RgbaImage {
+        const DIGITS: [[u8; 7]; 10] = [
+            [14, 17, 19, 21, 25, 17, 14], [4, 12, 4, 4, 4, 4, 14],
+            [14, 17, 1, 2, 4, 8, 31], [30, 1, 1, 14, 1, 1, 30],
+            [2, 6, 10, 18, 31, 2, 2], [31, 16, 16, 30, 1, 1, 30],
+            [14, 16, 16, 30, 17, 17, 14], [31, 1, 2, 4, 8, 8, 8],
+            [14, 17, 17, 14, 17, 17, 14], [14, 17, 17, 15, 1, 1, 14],
+        ];
+        RgbaImage::from_fn(2048, height, |x, y| {
+            // Three actual 5x7 digits at 2x scale, wholly between the sampling
+            // columns at x=32 and x=96. The surrounding selection is whitespace.
+            let ink = if (40..76).contains(&x) && (4..18).contains(&(y % 24)) {
+                let column = (x - 40) / 2;
+                let row = (y % 24 - 4) / 2;
+                let number = y / 24;
+                let digit = match column / 6 {
+                    0 => number / 100 % 10,
+                    1 => number / 10 % 10,
+                    _ => number % 10,
+                };
+                column % 6 < 5
+                    && DIGITS[digit as usize][row as usize] & (1 << (4 - column % 6)) != 0
+            } else {
+                false
+            };
+            if ink { Rgba([40, 40, 40, 255]) } else { Rgba([250, 250, 250, 255]) }
+        })
+    }
+
+    #[test]
+    fn sparse_text_between_sampling_columns_still_stitches_exactly() {
+        let source = sparse_numbered_document(960);
+        let mut stitcher = ScrollStitcher::new(2048, 240).unwrap();
+        stitcher.push(viewport(&source, 0, 240)).unwrap();
+        for position in (48..=720).step_by(48) {
+            assert_eq!(stitcher.push(viewport(&source, position, 240)).unwrap(), StitchUpdate::Appended { rows: 48 });
+        }
+        assert_eq!(stitcher.image().unwrap(), source);
+    }
+
+    #[test]
+    fn sparse_text_signature_preserves_small_native_pixel_variation() {
+        let source = sparse_numbered_document(480);
+        let mut stitcher = ScrollStitcher::new(2048, 240).unwrap();
+        stitcher.push(viewport(&source, 0, 240)).unwrap();
+        let mut frame = viewport(&source, 48, 240);
+        for pixel in frame.pixels_mut() {
+            for channel in 0..3 { pixel[channel] = pixel[channel].saturating_add(1); }
+        }
+        assert_eq!(stitcher.push(frame.clone()).unwrap(), StitchUpdate::Appended { rows: 48 });
+        let output = stitcher.image().unwrap();
+        assert_eq!(viewport(&output, 0, 240), viewport(&source, 0, 240));
+        assert_eq!(viewport(&output, 240, 48), viewport(&frame, 192, 48));
+    }
+
+    #[test]
+    fn sparse_text_recovers_after_motion_blur_and_a_jump_without_overlap() {
+        let source = sparse_numbered_document(960);
+        let mut stitcher = ScrollStitcher::new(2048, 240).unwrap();
+        let baseline = viewport(&source, 0, 240);
+        stitcher.push(baseline.clone()).unwrap();
+        let blurred = RgbaImage::from_fn(2048, 240, |x, y| {
+            let first = source.get_pixel(x, y + 48);
+            let next = source.get_pixel(x, y + 49);
+            Rgba(std::array::from_fn(|channel| {
+                ((u16::from(first[channel]) + u16::from(next[channel])) / 2) as u8
+            }))
+        });
+        assert_eq!(stitcher.push(blurred).unwrap(), StitchUpdate::NeedsOverlap);
+        assert_eq!(stitcher.image().unwrap(), baseline);
+        assert_eq!(stitcher.push(viewport(&source, 48, 240)).unwrap(), StitchUpdate::Appended { rows: 48 });
+        assert_eq!(stitcher.push(viewport(&source, 720, 240)).unwrap(), StitchUpdate::NeedsOverlap);
+        assert_eq!(stitcher.dimensions(), (2048, 288));
+        assert_eq!(stitcher.push(viewport(&source, 0, 240)).unwrap(), StitchUpdate::Repositioned);
+        assert_eq!(stitcher.push(viewport(&source, 96, 240)).unwrap(), StitchUpdate::Appended { rows: 48 });
+        assert_eq!(stitcher.image().unwrap(), viewport(&source, 0, 336));
+    }
+
+    #[test]
+    fn identical_repetition_never_invents_a_scroll_distance() {
+        let pattern = document(95, 20);
+        let frame = RgbaImage::from_fn(95, 160, |x, y| *pattern.get_pixel(x, y % 20));
+        let mut stitcher = ScrollStitcher::new(95, 160).unwrap();
+        stitcher.push(frame.clone()).unwrap();
+        for _ in 0..5 {
+            assert_eq!(stitcher.push(frame.clone()).unwrap(), StitchUpdate::Unchanged);
+        }
+        // A new tail follows indistinguishable repeated content. Several seam
+        // positions are possible, so the new pixels cannot safely be appended.
+        let tail = RgbaImage::from_fn(95, 160, |x, y| {
+            if y < 120 { *frame.get_pixel(x, y) } else { Rgba([255, 255, 255, 255]) }
+        });
+        assert_eq!(stitcher.push(tail).unwrap(), StitchUpdate::NeedsOverlap);
+        assert_eq!(stitcher.image().unwrap(), frame);
+        assert_eq!(stitcher.frame_count(), 1);
+    }
+
+    #[test]
+    fn full_height_limit_preserves_exact_pixels_and_allows_reverse_recovery() {
+        let source = document(83, MAX_SCROLL_DIMENSION + 1);
+        let mut stitcher = ScrollStitcher::new(83, 257).unwrap();
+        for position in (0..=7800).step_by(200) {
+            stitcher.push(viewport(&source, position, 257)).unwrap();
+        }
+        assert_eq!(stitcher.push(viewport(&source, 7935, 257)).unwrap(), StitchUpdate::Appended { rows: 135 });
+        assert_eq!(stitcher.push(viewport(&source, 7936, 257)).unwrap(), StitchUpdate::LimitReached);
+        assert_eq!(stitcher.push(viewport(&source, 7735, 257)).unwrap(), StitchUpdate::Repositioned);
+        assert_eq!(stitcher.push(viewport(&source, 7935, 257)).unwrap(), StitchUpdate::Repositioned);
+        assert_eq!(stitcher.push(viewport(&source, 7936, 257)).unwrap(), StitchUpdate::LimitReached);
+        assert_eq!(stitcher.image().unwrap(), viewport(&source, 0, MAX_SCROLL_DIMENSION));
     }
 
     #[test]

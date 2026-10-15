@@ -65,8 +65,7 @@ pub fn run() {
                 args.len(),
                 !cwd.is_empty()
             );
-            #[cfg(target_os = "linux")]
-            if handle_linux_action(app, &args) { return; }
+            if handle_launch_action(app, &args, "desktop-shortcut") { return; }
             if let Err(error) = show_library_window(app, "single-instance") {
                 log::error!("[single-instance] library reopen failed: {error}");
             }
@@ -141,10 +140,8 @@ pub fn run() {
             app.manage(shortcut_settings::CaptureBinding::new(
                 shortcut_settings::load(app.handle()),
             ));
-            #[cfg(target_os = "linux")]
-            let capture_launch = std::env::args().any(|argument| argument == "--capture");
-            #[cfg(not(target_os = "linux"))]
-            let capture_launch = false;
+            let launch_args = std::env::args().collect::<Vec<_>>();
+            let capture_launch = launch_action(&launch_args) == Some(LaunchAction::Capture);
             if !capture_launch {
                 show_library_window(app.handle(), "startup").map_err(anyhow::Error::msg)?;
             }
@@ -157,11 +154,7 @@ pub fn run() {
             }
             portal_shortcuts::init(app.handle());
             install_tray(app.handle())?;
-            #[cfg(target_os = "linux")]
-            {
-                let args = std::env::args().collect::<Vec<_>>();
-                handle_linux_action(app.handle(), &args);
-            }
+            handle_launch_action(app.handle(), &launch_args, "launch-capture");
             log::info!("[app] setup complete");
             Ok(())
         })
@@ -536,20 +529,71 @@ pub fn ensure_click_monitor(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// A desktop-owned shortcut can forward an action to the resident instance.
-/// This works on GNOME Wayland without modifying compositor configuration.
-#[cfg(target_os = "linux")]
-fn handle_linux_action(app: &tauri::AppHandle, args: &[String]) -> bool {
-    if args.iter().any(|value| value == "--stop-recording") {
-        linux_recording_action(app, true);
-    } else if args.iter().any(|value| value == "--toggle-recording-pause") {
-        linux_recording_action(app, false);
-    } else if args.iter().any(|value| value == "--capture") {
-        schedule_capture_start(app, "desktop-shortcut");
-    } else {
-        return false;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LaunchAction {
+    Capture,
+    #[cfg(target_os = "linux")]
+    StopRecording,
+    #[cfg(target_os = "linux")]
+    ToggleRecordingPause,
+}
+
+fn launch_action(args: &[String]) -> Option<LaunchAction> {
+    // Preserve Linux's existing recording-command priority. Other platforms
+    // only accept capture; unrelated arguments retain normal library opening.
+    #[cfg(target_os = "linux")]
+    {
+        if args.iter().any(|value| value == "--stop-recording") {
+            return Some(LaunchAction::StopRecording);
+        }
+        if args.iter().any(|value| value == "--toggle-recording-pause") {
+            return Some(LaunchAction::ToggleRecordingPause);
+        }
+    }
+    args.iter()
+        .any(|value| value == "--capture")
+        .then_some(LaunchAction::Capture)
+}
+
+/// A launcher can forward capture to the resident instance on every desktop.
+/// Both cold and warm launches reuse the tray/shortcut capture safeguards.
+fn handle_launch_action(app: &tauri::AppHandle, args: &[String], source: &'static str) -> bool {
+    match launch_action(args) {
+        Some(LaunchAction::Capture) => schedule_capture_start(app, source),
+        #[cfg(target_os = "linux")]
+        Some(LaunchAction::StopRecording) => linux_recording_action(app, true),
+        #[cfg(target_os = "linux")]
+        Some(LaunchAction::ToggleRecordingPause) => linux_recording_action(app, false),
+        None => return false,
     }
     true
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reveal_launch_capture_error(app: &tauri::AppHandle, source: &str, error: &str) {
+    if source != "launch-capture" {
+        return;
+    }
+    // A cold --capture launch intentionally keeps the library hidden. Restore
+    // an existing visible destination on failure, without interrupting a
+    // recording that may have started while the capture request was queued.
+    let state = app.state::<AppState>();
+    let recording = state.recording.lock().unwrap();
+    let recording_active = recording.is_recording
+        || recording.is_paused
+        || recording.is_transitioning
+        || recording.is_finalizing
+        || recording.is_starting;
+    drop(recording);
+    if recording_active || state.capture.lock().unwrap().session.is_some() {
+        return;
+    }
+    if let Err(open_error) = show_library_window(app, "capture-error") {
+        log::warn!("[launch-capture] could not show library: {open_error}");
+    }
+    // The normal error event can precede a cold WebView's first listener.
+    // Notices carry their message in the existing native feedback window.
+    state::emit_notice(app, error.to_string(), "exclamationmark.triangle".into());
 }
 
 #[cfg(target_os = "linux")]
@@ -726,8 +770,9 @@ fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
             // Keep the owned permit for the entire invocation. Drop
             // reopens scheduling on every success and failure path.
             let _permit = permit;
-            if let Err(error) = commands::start_capture(handle) {
+            if let Err(error) = commands::start_capture(handle.clone()) {
                 log::warn!("[{source}] capture start returned: {error}");
+                reveal_launch_capture_error(&handle, source, &error);
             }
         }) {
             log::warn!("[{source}] could not spawn capture start: {error}");
@@ -768,8 +813,9 @@ fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
             // Keep the owned permit for the entire queued invocation. Drop
             // reopens scheduling on every exit path.
             let _permit = permit;
-            if let Err(error) = commands::start_capture(handle) {
+            if let Err(error) = commands::start_capture(handle.clone()) {
                 log::warn!("[{source}] capture start returned: {error}");
+                reveal_launch_capture_error(&handle, source, &error);
             }
         }) {
             // If scheduling fails, Tauri drops the closure and its permit
@@ -803,7 +849,47 @@ fn tray_labels(language: &str) -> (&'static str, &'static str, &'static str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{tray_labels, tray_menu_entries};
+    use super::{launch_action, tray_labels, tray_menu_entries, LaunchAction};
+
+    #[test]
+    fn launch_capture_accepts_only_the_exact_action_flag() {
+        let arguments = |args: &[&str]| args.iter().map(|arg| (*arg).to_string()).collect::<Vec<_>>();
+        for args in [
+            vec!["kiri", "--capture"],
+            vec!["/Applications/Kiri.app/Contents/MacOS/kiri", "--capture"],
+            vec!["kiri", "--capture", "--capture"],
+        ] {
+            assert_eq!(launch_action(&arguments(&args)), Some(LaunchAction::Capture));
+        }
+        for args in [
+            vec![],
+            vec!["kiri"],
+            vec!["kiri", "--capture=false"],
+            vec!["kiri", "--capture-extra"],
+            vec!["kiri", "file--capture.png"],
+        ] {
+            assert_eq!(launch_action(&arguments(&args)), None);
+        }
+    }
+
+    #[test]
+    fn recording_launch_actions_remain_linux_only() {
+        let arguments = |args: &[&str]| args.iter().map(|arg| (*arg).to_string()).collect::<Vec<_>>();
+        let stop = launch_action(&arguments(&["kiri", "--capture", "--toggle-recording-pause", "--stop-recording"]));
+        let pause = launch_action(&arguments(&["kiri", "--capture", "--toggle-recording-pause"]));
+        #[cfg(target_os = "linux")]
+        {
+            assert_eq!(stop, Some(LaunchAction::StopRecording));
+            assert_eq!(pause, Some(LaunchAction::ToggleRecordingPause));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert_eq!(stop, Some(LaunchAction::Capture));
+            assert_eq!(pause, Some(LaunchAction::Capture));
+            assert_eq!(launch_action(&arguments(&["kiri", "--stop-recording"])), None);
+            assert_eq!(launch_action(&arguments(&["kiri", "--toggle-recording-pause"])), None);
+        }
+    }
 
     #[cfg(any(windows, target_os = "linux"))]
     #[test]

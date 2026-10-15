@@ -36,7 +36,7 @@ function panel(overrides = {}, options = {}) {
       "@tauri-apps/api/window": { getCurrentWindow: () => ({ close: async () => { closed++; } }) },
       "../annotation/text-composition.js": { isTextComposition },
       "./scroll-capture.css": {},
-      "lucide-react": { Check: "check", ScrollText: "scroll", X: "x" },
+      "lucide-react": { Check: "check", X: "x" },
     },
   });
   const component = harness.mount("ScrollCaptureWindow", {});
@@ -44,7 +44,8 @@ function panel(overrides = {}, options = {}) {
   const render = () => tree = component.render();
   return { reads, finishes, cancellations, timers, component, render,
     get closed() { return closed; },
-    button(label) { return nodes(render()).find(node => node?.type === "button" && nodes(node).includes(label)); },
+    button(label) { return nodes(render()).find(node => node?.type === "button" &&
+      (node.props["aria-label"] === label || nodes(node).includes(label))); },
     key(key) {
       let prevented = false;
       harness.window.dispatchEvent({ type: "keydown", key, preventDefault() { prevented = true; } });
@@ -112,6 +113,81 @@ test("a pending preview cannot replace state after Cancel and duplicate actions 
   p.component.unmount();
 });
 
+test("the compact header keeps an explicitly named cancel action during preview failure", async () => {
+  const p = panel();
+  await p.resolve();
+  p.tick();
+  p.reads.at(-1).reject(new Error("temporary read failure"));
+  await settleRequests();
+  const cancel = p.button("Cancel");
+  assert.equal(cancel.props["aria-keyshortcuts"], "Escape");
+  assert.equal(cancel.props.disabled, false);
+  assert.ok(p.button("Retry"));
+  const footer = nodes(p.render()).find(node => node?.type === "footer");
+  const feedback = nodes(p.render()).find(node => node?.props?.className === "kiri-scroll-capture__feedback");
+  assert.ok(nodes(footer).includes("Retry"), "retry stays in the fixed actions area");
+  assert.equal(nodes(feedback).some(node => node?.type === "button"), false,
+    "a short feedback scroll area must never clip the retry control");
+  cancel.props.onClick();
+  await settleRequests();
+  assert.deepEqual(p.cancellations, [[sessionId]]);
+  assert.equal(p.closed, 1);
+  p.component.unmount();
+});
+
+test("partial confirmation reuses the actions area and keeps the accepted preview", async () => {
+  const p = panel();
+  await p.resolve({ ...captured, phase: "needsOverlap" });
+  p.button("Done").props.onClick();
+  const tree = p.render();
+  const footer = nodes(tree).find(node => node?.type === "footer");
+  const actions = nodes(footer).filter(node => node?.type === "button");
+  assert.equal(actions.length, 2);
+  assert.ok(nodes(actions[0]).includes("Continue adjusting"));
+  assert.ok(nodes(actions[1]).includes("Save captured portion"));
+  assert.equal(p.button("Done"), undefined, "do not leave a duplicate disabled completion row");
+  assert.ok(nodes(tree).some(node => node?.type === "img" && node.props.src === captured.preview));
+  assert.ok(p.button("Cancel"));
+
+  p.tick();
+  await p.resolve({ ...captured, revision: 4, height: 1900 });
+  assert.ok(p.button("Save captured portion"), "a recovered frame must not replace buttons during confirmation");
+  assert.equal(p.button("Done"), undefined);
+  p.tick();
+  await p.resolve({ ...captured, phase: "needsOverlap", revision: 5, height: 1900 });
+  assert.ok(p.button("Save captured portion"));
+  p.key("Enter");
+  assert.equal(p.finishes.length, 0);
+  p.button("Continue adjusting").props.onClick();
+  assert.equal(p.button("Save captured portion"), undefined);
+  assert.equal(p.button("Done").props.disabled, false);
+  p.component.unmount();
+});
+
+test("a read failure during partial confirmation keeps two explicit actions and resumes on Continue adjusting", async () => {
+  const p = panel();
+  await p.resolve({ ...captured, phase: "needsOverlap" });
+  p.button("Done").props.onClick();
+  p.tick();
+  p.reads.at(-1).reject(new Error("preview read failed"));
+  await settleRequests();
+  const footer = nodes(p.render()).find(node => node?.type === "footer");
+  assert.equal(nodes(footer).filter(node => node?.type === "button").length, 2);
+  assert.ok(p.button("Continue adjusting"));
+  assert.ok(p.button("Save captured portion"));
+  assert.equal(p.button("Retry"), undefined, "do not add a third row beneath the partial-save choice");
+  assert.ok(nodes(p.render()).includes("Could not update the preview."));
+  const reads = p.reads.length;
+  p.button("Continue adjusting").props.onClick(); p.render();
+  assert.equal(p.reads.length, reads + 1, "continue restarts a failed preview subscription");
+  await p.resolve();
+  assert.equal(p.button("Retry"), undefined);
+  assert.equal(p.button("Save captured portion"), undefined);
+  assert.ok(nodes(p.render()).includes("Scroll down slowly to extend the screenshot."));
+  assert.equal(p.finishes.length, 0);
+  p.component.unmount();
+});
+
 test("Finish waits for native save and errors keep the accepted preview available for retry", async () => {
   const save = deferred();
   let calls = 0;
@@ -128,6 +204,39 @@ test("Finish waits for native save and errors keep the accepted preview availabl
   assert.ok(nodes(p.render()).includes("Could not finish scrolling capture. Adjust the scroll position and try again."));
   assert.ok(nodes(p.render()).some(node => node?.type === "img"));
   assert.equal(p.button("Done").props.disabled, false);
+  assert.equal(p.closed, 0);
+  p.component.unmount();
+});
+
+test("recovering native stitching clears an obsolete Finish error", async () => {
+  const p = panel({ async finishScrollCapture() { throw new Error("final frame lost overlap"); } });
+  await p.resolve();
+  p.button("Done").props.onClick();
+  await settleRequests();
+  const error = "Could not finish scrolling capture. Adjust the scroll position and try again.";
+  assert.ok(nodes(p.render()).includes(error));
+  p.tick();
+  await p.resolve({ ...captured, phase: "needsOverlap", revision: 4 });
+  assert.ok(nodes(p.render()).includes(error));
+  p.tick();
+  await p.resolve({ ...captured, revision: 5, height: 2000 });
+  assert.equal(nodes(p.render()).includes(error), false);
+  assert.ok(nodes(p.render()).includes("Scroll down slowly to extend the screenshot."));
+  assert.equal(p.button("Done").props.disabled, false);
+  p.component.unmount();
+});
+
+test("a successful preview read does not erase a failed Cancel action", async () => {
+  const p = panel({ async cancelScrollCapture() { throw new Error("native cancel failed"); } });
+  await p.resolve();
+  p.button("Cancel").props.onClick();
+  await settleRequests();
+  const error = "Could not cancel scrolling capture. Try again.";
+  assert.ok(nodes(p.render()).includes(error));
+  p.tick();
+  await p.resolve({ ...captured, revision: 4, height: 2000 });
+  assert.ok(nodes(p.render()).includes(error));
+  assert.equal(p.button("Cancel").props.disabled, false);
   assert.equal(p.closed, 0);
   p.component.unmount();
 });

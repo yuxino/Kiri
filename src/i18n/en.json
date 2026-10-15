@@ -765,17 +765,14 @@
   "Could not cancel scrolling capture. Try again.": "Could not cancel scrolling capture. Try again.",
   "Could not finish scrolling capture. Adjust the scroll position and try again.": "Could not finish scrolling capture. Adjust the scroll position and try again.",
   "Captured portion": "Captured portion",
-  "Waiting for the first frame…": "Waiting for the first frame…",
   "Image dimensions": "Image dimensions",
   "Could not update the preview.": "Could not update the preview.",
   "The last section could not be joined. Save only the captured portion?": "The last section could not be joined. Save only the captured portion?",
   "Continue adjusting": "Continue adjusting",
   "Save captured portion": "Save captured portion",
-  "Done copies and saves. Esc cancels.": "Done copies and saves. Esc cancels.",
   "Done": "Done",
   "Escape is unavailable. Close the other capture tool and try again.": "Escape is unavailable. Close the other capture tool and try again.",
   "Leave space beside the selection for scrolling capture controls.": "Leave space beside the selection for scrolling capture controls.",
   "Select a larger scrolling content area.": "Select a larger scrolling content area.",
-  "Scrolling capture is not available on this desktop.": "Scrolling capture is not available on this desktop.",
-  "Enter finishes when this panel has focus.": "Enter finishes when this panel has focus."
+  "Scrolling capture is not available on this desktop.": "Scrolling capture is not available on this desktop."
 }

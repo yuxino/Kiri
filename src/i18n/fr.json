@@ -765,17 +765,14 @@
   "Could not cancel scrolling capture. Try again.": "Impossible d’annuler la capture défilante. Réessayez.",
   "Could not finish scrolling capture. Adjust the scroll position and try again.": "Impossible de terminer la capture défilante. Ajustez le défilement et réessayez.",
   "Captured portion": "Partie capturée",
-  "Waiting for the first frame…": "En attente de la première image…",
   "Image dimensions": "Dimensions de l’image",
   "Could not update the preview.": "Impossible d’actualiser l’aperçu.",
   "The last section could not be joined. Save only the captured portion?": "La dernière section n’a pas pu être raccordée. Enregistrer uniquement la partie capturée ?",
   "Continue adjusting": "Continuer à ajuster",
   "Save captured portion": "Enregistrer la partie capturée",
-  "Done copies and saves. Esc cancels.": "Terminer copie et enregistre. Échap annule.",
   "Done": "Terminer",
   "Escape is unavailable. Close the other capture tool and try again.": "Échap est indisponible. Fermez les autres outils de capture et réessayez.",
   "Leave space beside the selection for scrolling capture controls.": "Laissez de la place à côté de la sélection pour les commandes de capture défilante.",
   "Select a larger scrolling content area.": "Sélectionnez une plus grande zone de contenu défilant.",
-  "Scrolling capture is not available on this desktop.": "La capture défilante est indisponible sur ce bureau.",
-  "Enter finishes when this panel has focus.": "Entrée termine la capture lorsque ce panneau a le focus."
+  "Scrolling capture is not available on this desktop.": "La capture défilante est indisponible sur ce bureau."
 }

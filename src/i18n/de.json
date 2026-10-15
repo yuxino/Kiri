@@ -765,17 +765,14 @@
   "Could not cancel scrolling capture. Try again.": "Scroll-Aufnahme konnte nicht abgebrochen werden. Erneut versuchen.",
   "Could not finish scrolling capture. Adjust the scroll position and try again.": "Scroll-Aufnahme konnte nicht beendet werden. Scrollposition anpassen und erneut versuchen.",
   "Captured portion": "Erfasster Teil",
-  "Waiting for the first frame…": "Warten auf das erste Bild…",
   "Image dimensions": "Bildabmessungen",
   "Could not update the preview.": "Vorschau konnte nicht aktualisiert werden.",
   "The last section could not be joined. Save only the captured portion?": "Der letzte Abschnitt konnte nicht angefügt werden. Nur den erfassten Teil speichern?",
   "Continue adjusting": "Weiter anpassen",
   "Save captured portion": "Erfassten Teil speichern",
-  "Done copies and saves. Esc cancels.": "Fertig kopiert und speichert. Esc bricht ab.",
   "Done": "Fertig",
   "Escape is unavailable. Close the other capture tool and try again.": "Esc ist nicht verfügbar. Andere Aufnahmeprogramme schließen und erneut versuchen.",
   "Leave space beside the selection for scrolling capture controls.": "Neben der Auswahl Platz für die Steuerung der Scroll-Aufnahme lassen.",
   "Select a larger scrolling content area.": "Einen größeren Bereich des scrollbaren Inhalts auswählen.",
-  "Scrolling capture is not available on this desktop.": "Scroll-Aufnahmen sind auf diesem Desktop nicht verfügbar.",
-  "Enter finishes when this panel has focus.": "Enter beendet die Aufnahme, wenn dieses Panel den Fokus hat."
+  "Scrolling capture is not available on this desktop.": "Scroll-Aufnahmen sind auf diesem Desktop nicht verfügbar."
 }

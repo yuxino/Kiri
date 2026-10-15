@@ -765,17 +765,14 @@
   "Could not cancel scrolling capture. Try again.": "スクロール撮影をキャンセルできません。もう一度お試しください。",
   "Could not finish scrolling capture. Adjust the scroll position and try again.": "スクロール撮影を完了できません。スクロール位置を調整して再試行してください。",
   "Captured portion": "撮影済み部分",
-  "Waiting for the first frame…": "最初のフレームを待機中…",
   "Image dimensions": "画像サイズ",
   "Could not update the preview.": "プレビューを更新できません。",
   "The last section could not be joined. Save only the captured portion?": "最後の部分を結合できませんでした。撮影済み部分のみ保存しますか？",
   "Continue adjusting": "調整を続ける",
   "Save captured portion": "撮影済み部分を保存",
-  "Done copies and saves. Esc cancels.": "完了でコピーして保存、Esc でキャンセル。",
   "Done": "完了",
   "Escape is unavailable. Close the other capture tool and try again.": "Esc キーを使用できません。他のキャプチャツールを閉じて再試行してください。",
   "Leave space beside the selection for scrolling capture controls.": "スクロール撮影の操作パネルを置くため、選択範囲の横に空間を空けてください。",
   "Select a larger scrolling content area.": "スクロールする内容をもう少し広く選択してください。",
-  "Scrolling capture is not available on this desktop.": "このデスクトップではスクロール撮影を利用できません。",
-  "Enter finishes when this panel has focus.": "このパネルにフォーカスがあるとき、Enter で完了します。"
+  "Scrolling capture is not available on this desktop.": "このデスクトップではスクロール撮影を利用できません。"
 }
