@@ -279,6 +279,10 @@ jobs:
         if: needs.plan.outputs.linux_x11 == 'true'
         timeout-minutes: 5
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
+      - name: Verify native scrolling screenshots and clipboard pixels
+        if: needs.plan.outputs.linux_x11 == 'true'
+        timeout-minutes: 4
+        run: bash scripts/qa/linux-scroll-native.sh /usr/bin/kiri
       - name: Verify installed X11 system audio and pause/resume with a private FIFO sink
         if: needs.plan.outputs.linux_x11 == 'true'
         timeout-minutes: 4
@@ -437,6 +441,9 @@ jobs:
       - name: Replay all original installed X11 assertions
         timeout-minutes: 4
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
+      - name: Replay native scrolling screenshots and clipboard pixels
+        timeout-minutes: 4
+        run: bash scripts/qa/linux-scroll-native.sh /usr/bin/kiri
       - name: Replay installed X11 system audio and pause/resume with a private FIFO sink
         timeout-minutes: 4
         run: |
