@@ -146,7 +146,9 @@ impl ScrollStitcher {
         self.frame_count
     }
 
-    /// Convert a padded native BGRA frame without changing its exact dimensions.
+    /// Convert a padded native BGRA/BGRX desktop frame without changing its exact
+    /// dimensions. Desktop frames are already composited: X11's unused X byte
+    /// may be zero, so it must never become transparency in the saved screenshot.
     pub fn push_bgra(
         &mut self,
         bytes: &[u8],
@@ -164,7 +166,7 @@ impl ScrollStitcher {
         for (y, target) in image.as_mut().chunks_exact_mut(row_bytes).enumerate() {
             let source = &bytes[y * stride..y * stride + row_bytes];
             for (source, target) in source.chunks_exact(4).zip(target.chunks_exact_mut(4)) {
-                target.copy_from_slice(&[source[2], source[1], source[0], source[3]]);
+                target.copy_from_slice(&[source[2], source[1], source[0], 255]);
             }
         }
         self.push(image)
@@ -573,6 +575,22 @@ mod tests {
         assert_eq!(stitcher.image().unwrap(), source);
         assert_eq!(stitcher.push_bgra(&bytes[..10], stride), Err(StitchError::InvalidBuffer));
         assert_eq!(stitcher.push_bgra(&bytes, 1), Err(StitchError::InvalidBuffer));
+    }
+
+    #[test]
+    fn native_bgrx_is_opaque_while_rgba_input_preserves_alpha() {
+        let source = RgbaImage::from_pixel(43, 67, Rgba([19, 73, 151, 0]));
+        let native_bytes: Vec<_> = source
+            .pixels()
+            .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], 0])
+            .collect();
+        let mut native = ScrollStitcher::new(43, 67).unwrap();
+        native.push_bgra(&native_bytes, 43 * 4).unwrap();
+        assert!(native.image().unwrap().pixels().all(|pixel| *pixel == Rgba([19, 73, 151, 255])));
+        assert!(native.preview(20, 30).unwrap().pixels().all(|pixel| pixel[3] == 255));
+        let mut rgba = ScrollStitcher::new(43, 67).unwrap();
+        rgba.push(source.clone()).unwrap();
+        assert_eq!(rgba.image().unwrap(), source);
     }
 
     #[test]

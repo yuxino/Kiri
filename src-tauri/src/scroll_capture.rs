@@ -376,19 +376,45 @@ fn start_inner(
             platform::configure_transient_window(&panel, TransientWindowRole::RecordingControls);
             platform::set_window_capture_excluded(&target, PANEL, true);
             #[cfg(target_os = "linux")]
+            {
+                use gtk::prelude::{GtkWindowExt, WidgetExt};
+                let native = panel.gtk_window().map_err(|error| error.to_string())?;
+                // X11 WMs can place an active fullscreen source above all
+                // managed utility windows. This undecorated, fixed-position
+                // panel bypasses WM stacking; it neither grabs input nor takes
+                // focus on map, and stays wholly outside the captured pixels.
+                native.realize();
+                let surface = native
+                    .window()
+                    .ok_or("Could not prepare scrolling capture controls.")?;
+                surface.set_override_redirect(true);
+                native.move_(frame.x.round() as i32, frame.y.round() as i32);
+                native.set_keep_above(true);
+                native.set_accept_focus(true);
+                native.set_focus_on_map(false);
+            }
+            #[cfg(target_os = "linux")]
             platform::linux::hide_window_for_capture(&owner).map_err(|error| error.to_string())?;
             #[cfg(windows)]
             platform::windows::hide_window_for_capture(&owner)
                 .map_err(|error| error.to_string())?;
             #[cfg(target_os = "macos")]
             owner.hide().map_err(|error| error.to_string())?;
+            if let Some(pid) = return_pid {
+                platform::activate_application(pid);
+            }
             platform::show_window_without_activation(
                 &target,
                 PANEL,
                 TransientWindowRole::RecordingControls,
             );
-            if let Some(pid) = return_pid {
-                platform::activate_application(pid);
+            #[cfg(target_os = "linux")]
+            {
+                use gtk::prelude::WidgetExt;
+                if let Some(surface) = panel.gtk_window().ok().and_then(|window| window.window()) {
+                    surface.raise();
+                    surface.display().sync();
+                }
             }
             Ok(())
         })()
@@ -890,6 +916,21 @@ pub fn focus_panel(app: &AppHandle) -> bool {
     if let Some(panel) = app.get_webview_window(PANEL) {
         let _ = panel.show();
         let _ = panel.set_focus();
+        #[cfg(target_os = "linux")]
+        {
+            let target = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                use gtk::prelude::WidgetExt;
+                if let Some(surface) = target
+                    .get_webview_window(PANEL)
+                    .and_then(|window| window.gtk_window().ok())
+                    .and_then(|window| window.window())
+                {
+                    surface.raise();
+                    surface.focus(0); // X11 CurrentTime, only on explicit focus.
+                }
+            });
+        }
     }
     true
 }
