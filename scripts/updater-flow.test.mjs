@@ -355,3 +355,26 @@ test('support link failures remain retryable and cannot start duplicate operatio
   pending.reject(new Error('shell unavailable'));await settleRequests();
   assert.equal(button().props.disabled,false);assert.ok(nodes(c.render()).includes("Couldn't open the project page."));c.unmount();
 });
+
+test('support menus fit the window and flip above a bottom-edge trigger without covering it', () => {
+  const source='import React from "react";\n'+read('src/settings/SupportLinks.tsx');
+  for (const [width,height,left,top] of [[980,640,478,472],[720,520,610,460],[980,720,415,120]]) {
+    const bottom=top+36;
+    const h=createLibraryHarness({},source,{
+      modules:{'lucide-react':{ChevronDown:'icon'}},
+      attachRef(node) {
+        if(node.props.ref) node.props.ref.current={getBoundingClientRect:()=>({left,top,bottom}),
+          querySelector:()=>({focus(){}}),contains:()=>false};
+      },
+    });
+    h.window.innerWidth=width;h.window.innerHeight=height;
+    const c=h.mount('SupportLinks',{isWindows:true});
+    nodes(c.render()).find(n=>n?.props?.['aria-haspopup']==='menu').props.onClick();
+    const menu=nodes(c.render()).find(n=>n?.props?.role==='menu').props.style;
+    assert.ok(menu.left>=8 && menu.left+menu.width<=width-8);
+    assert.ok(menu.top>=8 && menu.top+menu.maxHeight<=height-8);
+    assert.ok(menu.top>=bottom+6 || menu.top+menu.maxHeight<=top-6,
+      'menu must leave its trigger visible when either side has room');
+    c.unmount();
+  }
+});

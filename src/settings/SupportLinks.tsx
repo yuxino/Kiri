@@ -35,9 +35,13 @@ export function SupportLinks({ isWindows }: { isWindows: boolean }) {
       if (!rect) return;
       const width = Math.min(240, window.innerWidth - 16);
       const height = Math.min(folders.length * 40 + 14, window.innerHeight - 16);
+      const below = rect.bottom + 6;
+      const above = rect.top - height - 6;
+      const top = below + height <= window.innerHeight - 8 ? below
+        : above >= 8 ? above : Math.max(8, window.innerHeight - height - 8);
       setPosition({ position: "fixed", width, maxHeight: height,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
-        top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - height - 8)) });
+        top });
     };
     place();
     menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
