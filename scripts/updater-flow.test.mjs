@@ -315,14 +315,14 @@ test('clipboard failure keeps support copying retryable without claiming success
 
 
 test('support folder menu targets fixed locations and restores focus on Escape', async () => {
-  const calls = []; let focused = 0;
+  const calls = []; let focused = 0; let focusedLabel = '';
   const source = 'import React from "react";\n' + read('src/settings/SupportLinks.tsx');
   for (const isWindows of [false, true]) {
     const h = createLibraryHarness({openSupportFolder: async folder => calls.push(folder), openProjectPage: async () => calls.push('project')}, source, {
       modules: {'lucide-react': {ChevronDown:'icon'}},
       attachRef(node) {
         if (!node.props.ref) return;
-        node.props.ref.current = {getBoundingClientRect:()=>({left:90,bottom:100}), focus(){ focused++; }, contains:()=>false,
+        node.props.ref.current = {getBoundingClientRect:()=>({left:90,bottom:100}), focus(){ focused++; focusedLabel=nodes(node).filter(n=>typeof n==='string').join(''); }, contains:()=>false,
           querySelector:()=>({focus(){ focused++; }})};
       },
     });
@@ -332,8 +332,11 @@ test('support folder menu targets fixed locations and restores focus on Escape',
     trigger().props.onClick(); let tree=c.render();
     assert.equal(nodes(tree).filter(n=>n?.props?.role==='menuitem').length,isWindows?4:2);
     const menu=nodes(tree).find(n=>n?.props?.role==='menu');
-    menu.props.onKeyDown({key:'Escape',preventDefault(){}});
+    menu.props.onKeyDown({key:'Escape',preventDefault(){},stopPropagation(){}});
     assert.equal(trigger().props['aria-expanded'],false); assert.ok(focused>0);
+    trigger().props.onClick();
+    nodes(c.render()).find(n=>n?.props?.role==='menu').props.onKeyDown({key:'Tab',preventDefault(){},stopPropagation(){}});
+    assert.equal(trigger().props['aria-expanded'],false); assert.equal(focusedLabel,'GitHub');
     trigger().props.onClick();tree=c.render();
     nodes(tree).find(n=>n?.props?.role==='menuitem'&&nodes(n).includes('Logs Folder')).props.onClick();
     await settleRequests(); assert.equal(calls.at(-1),'logs'); assert.equal(trigger().props['aria-expanded'],false);

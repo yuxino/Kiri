@@ -15,6 +15,7 @@ export function SupportLinks({ isWindows }: { isWindows: boolean }) {
   const [position, setPosition] = useState<CSSProperties>({});
   const running = useRef(false);
   const trigger = useRef<HTMLButtonElement>(null);
+  const project = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const id = useId();
   const folders: { value: Folder; label: string }[] = [
@@ -70,13 +71,17 @@ export function SupportLinks({ isWindows }: { isWindows: boolean }) {
       }}>
       <KiriIcon name="folder" size={15} />{t("Open Folder")}<ChevronDown size={14} />
     </button>
-    <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run()}>
+    <button ref={project} type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run()}>
       GitHub<KiriIcon name="arrow.up.right" size={15} />
     </button>
     {error && <span className="kiri-support-copy-status" role="alert">{t(error)}</span>}
     {open && createPortal(<div ref={menu} id={id} className="kiri-support-menu" role="menu" aria-label={t("Open Folder")}
       style={position} onKeyDown={event => {
-        if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); close(true); return; }
+        if (event.key === "Escape" || event.key === "Tab") {
+          event.preventDefault(); event.stopPropagation(); close();
+          (event.key === "Tab" && !event.shiftKey ? project : trigger).current?.focus();
+          return;
+        }
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
         const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
