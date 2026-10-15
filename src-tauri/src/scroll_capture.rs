@@ -1089,20 +1089,26 @@ mod tests {
         let document = document();
         let (session, mut stitcher) = started_capture(&document);
         let (mut source, stops) = test_recorder(false);
-        let (sender, frames) = mpsc::channel();
+        let (sender, frames) = mpsc::sync_channel(1);
         sender.send(bgra(&viewport(&document, 0))).unwrap();
 
         let latest = bgra(&viewport(&document, 80));
-        let delayed_sender = sender.clone();
-        let delayed_frame = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(30));
-            // The old implementation sealed on the queued baseline and never
-            // consumed this already-visible last scroll position.
-            let _ = delayed_sender.send(latest);
+        let status = session.status.lock().unwrap();
+        let output = std::thread::scope(|scope| {
+            let session = &session;
+            let stitcher = &mut stitcher;
+            let source = &mut source;
+            let finishing = scope.spawn(move || {
+                prepare_output(session, stitcher, &frames, source, 83, false)
+            });
+            // The single-slot channel keeps the last viewport out until Finish
+            // consumes its queued baseline. Hold its first refresh until that
+            // send completes, rather than racing a sleeping producer against
+            // the finish deadline. An early seal still loses the last pixels.
+            sender.send(latest).unwrap();
+            drop(status);
+            finishing.join().unwrap().unwrap()
         });
-        let output =
-            prepare_output(&session, &mut stitcher, &frames, &mut source, 83, false).unwrap();
-        delayed_frame.join().unwrap();
 
         assert_eq!(output.size, (83, 237));
         assert_eq!(
