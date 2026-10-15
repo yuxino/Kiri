@@ -34,7 +34,7 @@ export function SupportLinks({ isWindows }: { isWindows: boolean }) {
       const rect = trigger.current?.getBoundingClientRect();
       if (!rect) return;
       const width = Math.min(240, window.innerWidth - 16);
-      const height = Math.min(folders.length * 40 + 12, window.innerHeight - 16);
+      const height = Math.min(folders.length * 40 + 14, window.innerHeight - 16);
       setPosition({ position: "fixed", width, maxHeight: height,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
         top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - height - 8)) });
