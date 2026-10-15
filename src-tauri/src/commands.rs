@@ -3728,7 +3728,20 @@ pub async fn open_support_folder(app: AppHandle, window: WebviewWindow, folder: 
         Ok::<_, String>(path)
     }).await.map_err(|error| error.to_string())?
         .map_err(|error| { log::warn!("Could not prepare support folder: {error}"); "Couldn't open folder".to_string() })?;
-    reveal_path_async(path).await
+    #[cfg(target_os = "macos")]
+    {
+        // Reveal selects the directory in its parent. These explicit folder
+        // actions should open the directory itself in Finder.
+        let url = objc2_foundation::NSURL::fileURLWithPath(
+            &objc2_foundation::NSString::from_str(&path.to_string_lossy()));
+        if objc2_app_kit::NSWorkspace::sharedWorkspace().openURL(&url) {
+            Ok(())
+        } else {
+            Err("Couldn't open folder".into())
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { reveal_path_async(path).await }
 }
 
 #[tauri::command]
