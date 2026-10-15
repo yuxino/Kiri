@@ -74,6 +74,8 @@ Use Select Multiple to check items or select all, then move them to Trash; ordin
 
 When reporting a problem, use Settings → About → Copy Info for app, system and display information. It excludes captures, credentials and personal paths.
 
+Settings → About also offers Open Folder for settings and logs, plus a GitHub link. On Windows, the folder menu includes error logs and the system temporary folder; opening a folder does not delete anything.
+
 ## Privacy
 
 Captures and media processing stay local. Remote OCR is optional and asks before each upload. Editable screenshots retain an original image locally, including pixels covered by annotations. Read the [privacy policy](privacy/en.md).

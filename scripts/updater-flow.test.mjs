@@ -94,6 +94,7 @@ function updaterHarness(windows = true, portable = false, linux = false, options
     import {KiriIcon} from '../components/KiriIcons';
     import { useAppUpdater, stateDetails } from '../settings/useAppUpdater';
     const t = value => value, fmt = (value, arg) => value.replace('%@', arg);
+    const SupportLinks = 'support-links';
     ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
     export function TestAbout() { return AboutSettingsSection({ updater: useAppUpdater() }); }`;
   const harness = createLibraryHarness({ check: async () => { checks++; return options.check ? options.check(update) : update; },
@@ -276,6 +277,7 @@ function supportInfoHarness(copySupportInfo) {
     import {api} from '../lib/ipc'; import {KiriIcon} from '../components/KiriIcons';
     import {stateDetails} from '../settings/useAppUpdater';
     const t=value=>value, fmt=(value,arg)=>value.replace('%@',arg);
+    const SupportLinks = 'support-links';
     ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
     export function TestAbout() { return AboutSettingsSection({ updater: {
       currentVersion:'1.6.18', isWindows:true, isPortable:false, updateState:{kind:'idle'}, hasUpdate:false,
@@ -309,4 +311,44 @@ test('clipboard failure keeps support copying retryable without claiming success
   assert.equal(copies,2);
   assert.ok(nodes(h.render()).includes('Copied'));
   assert.ok(!nodes(h.render()).includes("Couldn't copy info. Try again."));
+});
+
+
+test('support folder menu targets fixed locations and restores focus on Escape', async () => {
+  const calls = []; let focused = 0;
+  const source = 'import React from "react";\n' + read('src/settings/SupportLinks.tsx');
+  for (const isWindows of [false, true]) {
+    const h = createLibraryHarness({openSupportFolder: async folder => calls.push(folder), openProjectPage: async () => calls.push('project')}, source, {
+      modules: {'lucide-react': {ChevronDown:'icon'}},
+      attachRef(node) {
+        if (!node.props.ref) return;
+        node.props.ref.current = {getBoundingClientRect:()=>({left:90,bottom:100}), focus(){ focused++; }, contains:()=>false,
+          querySelector:()=>({focus(){ focused++; }})};
+      },
+    });
+    h.window.innerWidth=600; h.window.innerHeight=400;
+    const c=h.mount('SupportLinks',{isWindows});
+    const trigger=()=>nodes(c.render()).find(n=>n?.props?.['aria-haspopup']==='menu');
+    trigger().props.onClick(); let tree=c.render();
+    assert.equal(nodes(tree).filter(n=>n?.props?.role==='menuitem').length,isWindows?4:2);
+    const menu=nodes(tree).find(n=>n?.props?.role==='menu');
+    menu.props.onKeyDown({key:'Escape',preventDefault(){}});
+    assert.equal(trigger().props['aria-expanded'],false); assert.ok(focused>0);
+    trigger().props.onClick();tree=c.render();
+    nodes(tree).find(n=>n?.props?.role==='menuitem'&&nodes(n).includes('Logs Folder')).props.onClick();
+    await settleRequests(); assert.equal(calls.at(-1),'logs'); assert.equal(trigger().props['aria-expanded'],false);
+    nodes(c.render()).find(n=>n?.type==='button'&&nodes(n).includes('GitHub')).props.onClick();
+    await settleRequests();assert.equal(calls.at(-1),'project');c.unmount();
+  }
+});
+
+test('support link failures remain retryable and cannot start duplicate operations', async () => {
+  const pending=deferred();let calls=0;
+  const source='import React from "react";\n'+read('src/settings/SupportLinks.tsx');
+  const h=createLibraryHarness({openProjectPage:()=>{calls++;return pending.promise;}},source,{modules:{'lucide-react':{ChevronDown:'icon'}}});
+  const c=h.mount('SupportLinks',{isWindows:true});
+  const button=()=>nodes(c.render()).find(n=>n?.type==='button'&&nodes(n).includes('GitHub'));
+  button().props.onClick();button().props.onClick();assert.equal(calls,1);assert.equal(button().props.disabled,true);
+  pending.reject(new Error('shell unavailable'));await settleRequests();
+  assert.equal(button().props.disabled,false);assert.ok(nodes(c.render()).includes("Couldn't open the project page."));c.unmount();
 });

@@ -744,5 +744,10 @@
   "Loading microphones…": "마이크 불러오는 중…",
   "Unable to load microphones": "마이크 목록을 불러올 수 없습니다",
   "Selected microphone is unavailable": "선택한 마이크를 사용할 수 없습니다",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "선택한 마이크를 사용할 수 없습니다. 다른 마이크를 선택한 후 다시 시도하세요."
+  "The selected microphone is unavailable. Choose another microphone and try again.": "선택한 마이크를 사용할 수 없습니다. 다른 마이크를 선택한 후 다시 시도하세요.",
+  "Settings Folder": "설정 폴더",
+  "Logs Folder": "로그 폴더",
+  "Error Logs Folder": "오류 로그 폴더",
+  "Temporary Folder": "임시 폴더",
+  "Couldn't open the project page.": "프로젝트 페이지를 열지 못했습니다."
 }

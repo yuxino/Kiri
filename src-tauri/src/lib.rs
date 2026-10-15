@@ -30,6 +30,8 @@ mod ocr_controller;
 mod platform;
 mod protocol;
 mod media_playback;
+#[cfg(windows)]
+mod media_source_windows;
 mod record;
 mod remote_ocr;
 mod shortcut_settings;
@@ -294,6 +296,8 @@ pub fn run() {
             ocr_commands::cancel_prepared_ocr,
             commands::open_library,
             commands::copy_support_info,
+            commands::open_support_folder,
+            updates::open_project_page,
             commands::copy_text,
             commands::copy_capture_color,
             commands::start_recording_flow,

@@ -3703,6 +3703,34 @@ pub async fn copy_support_info(app: AppHandle, window: WebviewWindow) -> Result<
     platform::write_text_to_clipboard(&text).map_err(|error| error.to_string())
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SupportFolder { Settings, Logs, Errors, Temporary }
+
+#[tauri::command]
+pub async fn open_support_folder(app: AppHandle, window: WebviewWindow, folder: SupportFolder) -> Result<(), String> {
+    require_library_window(&window)?;
+    let path = match folder {
+        SupportFolder::Settings => app.path().app_config_dir().ok(),
+        SupportFolder::Logs => {
+            #[cfg(windows)]
+            { crate::diagnostics::windows_log_dir() }
+            #[cfg(not(windows))]
+            { crate::state::log_dir() }
+        },
+        SupportFolder::Errors => crate::state::log_dir(),
+        SupportFolder::Temporary => Some(std::env::temp_dir()),
+    }.ok_or_else(|| "Couldn't open folder".to_string())?;
+    // These fixed destinations never accept a path from the renderer. Create
+    // the settings/log directory on this explicit action if it is still empty.
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&path).map_err(|error| error.to_string())?;
+        Ok::<_, String>(path)
+    }).await.map_err(|error| error.to_string())?
+        .map_err(|error| { log::warn!("Could not prepare support folder: {error}"); "Couldn't open folder".to_string() })?;
+    reveal_path_async(path).await
+}
+
 #[tauri::command]
 pub fn copy_text(app: AppHandle, window: WebviewWindow, text: String) -> Result<(), String> {
     platform::write_text_to_clipboard(&text).map_err(|e| e.to_string())?;

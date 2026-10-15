@@ -455,6 +455,46 @@ fn mask_rectangle(
 mod tests {
     use super::*;
 
+    fn verify_gif_file_paths(source: &Path, directory: &Path) -> Result<()> {
+        use image::AnimationDecoder;
+        use std::io::BufReader;
+        let original = std::fs::read(source)?;
+        let root = std::fs::canonicalize(directory)?.join("素材库 test #100%")
+            .join("Kiri Library").join("Assets");
+        let mut long_root = root.clone();
+        for _ in 0..6 { long_root = long_root.join("长路径-abcdefghijklmnopqrstuvwxyz-0123456789"); }
+        let mut evidence = Vec::new();
+        for (name, folder) in [("unicode-canonical", root), ("long-canonical", long_root)] {
+            std::fs::create_dir_all(&folder)?;
+            let path = folder.join("录屏 #100%.mp4");
+            std::fs::copy(source, &path)?;
+            assert!(path.to_string_lossy().starts_with(r"\\?\"));
+            assert_eq!(crate::gif::video_dimensions(&path)?, (320, 180));
+            let (output, duration) = crate::gif::export_gif(&path, 720, 12)?;
+            let output = tempfile::TempPath::try_from_path(output)?;
+            let frames = image::codecs::gif::GifDecoder::new(BufReader::new(std::fs::File::open(&output)?))?
+                .into_frames().collect_frames()?;
+            assert!((3.8..4.3).contains(&duration), "GIF duration {duration}");
+            assert!(frames.len() >= 45);
+            assert_eq!(frames[0].buffer().dimensions(), (320, 180));
+            let first = frames[0].buffer().get_pixel(0, 0).0;
+            let last = frames.last().unwrap().buffer().get_pixel(0, 0).0;
+            assert!(first[0] > 180 && first[2] < 80);
+            assert!(last[2] > 180 && last[0] < 80);
+            assert_eq!(std::fs::read(&path)?, original);
+            evidence.push(serde_json::json!({"case":name,"path":path,"frames":frames.len(),"duration":duration,"source_preserved":true}));
+            // The complete conversion must release the source, allowing rename/delete.
+            let moved = path.with_extension("finished.mp4");
+            std::fs::rename(&path, &moved)?;
+            std::fs::remove_file(moved)?;
+        }
+        let missing = directory.join("does-not-exist.mp4");
+        assert!(crate::gif::video_dimensions(&missing).is_err());
+        assert!(!missing.exists(), "opening media must never create a file");
+        std::fs::write(directory.join("gif-file-paths.json"), serde_json::to_vec_pretty(&evidence)?)?;
+        Ok(())
+    }
+
     /// Real Windows media round-trip, using only disposable synthetic fixtures.
     /// Runs on the Windows CI runner; a missing encoder or compositor is a failure.
     #[test]
@@ -567,6 +607,10 @@ mod tests {
             TranscodeFailureReason::None,
             "synthetic source encoding failed"
         );
+
+        // Issue #159: canonical library paths must remain file paths, not be
+        // interpreted as network URLs by the Media Foundation source resolver.
+        verify_gif_file_paths(&source_path, &directory)?;
 
         // Exercise both cooperative CPU frame cancellation and the WinRT render
         // operation. The output must be released before the worker returns.

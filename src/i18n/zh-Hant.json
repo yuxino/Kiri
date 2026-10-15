@@ -744,5 +744,10 @@
   "Loading microphones…": "正在讀取麥克風…",
   "Unable to load microphones": "無法讀取麥克風清單",
   "Selected microphone is unavailable": "所選麥克風無法使用",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "所選麥克風無法使用，請選擇其他麥克風後重試。"
+  "The selected microphone is unavailable. Choose another microphone and try again.": "所選麥克風無法使用，請選擇其他麥克風後重試。",
+  "Settings Folder": "設定檔案夾",
+  "Logs Folder": "日誌檔案夾",
+  "Error Logs Folder": "錯誤日誌檔案夾",
+  "Temporary Folder": "暫存檔案夾",
+  "Couldn't open the project page.": "無法開啟專案頁面。"
 }

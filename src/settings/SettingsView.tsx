@@ -17,6 +17,7 @@ import {
 import { OcrProfileDialog } from "./OcrProfileDialog";
 import { PortalShortcutsCard } from "./PortalShortcutsCard";
 import { DockVisibilityRow } from "./DockVisibilityRow";
+import { SupportLinks } from "./SupportLinks";
 import { OcrSettingsSection } from "./OcrSettingsSection";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import "./settings.css";
@@ -321,7 +322,7 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
             </div>
           )}
         </div>
-        <div className="kiri-update-actions">
+        <div className="kiri-update-actions" role="group" aria-label={t("About")}>
           <button
             type="button"
             className={updater.hasUpdate
@@ -340,6 +341,7 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
             <span aria-live="polite">{t(copyState === "copied" ? "Copied" : "Copy Info")}</span>
           </button>
           {copyState === "error" && <span className="kiri-support-copy-status" role="alert">{t("Couldn't copy info. Try again.")}</span>}
+          <SupportLinks isWindows={isWindows} />
           {updateState.kind === "error" && (
             <button
               type="button"

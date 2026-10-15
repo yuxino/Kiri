@@ -232,6 +232,9 @@
 
 .kiri-support-copy-status { font-size: 14px; color: var(--kiri-secondary-label); }
 
+.kiri-support-menu { z-index: 1000; display: flex; flex-direction: column; padding: 6px; box-sizing: border-box; overflow-y: auto; border: 1px solid var(--kiri-surface-border); border-radius: 10px; background: var(--kiri-card); box-shadow: 0 4px 16px #00000012; }
+.kiri-support-menu .kiri-button { justify-content: flex-start; flex-shrink: 0; min-height: 40px; width: 100%; font-size: 14px; }
+
 .kiri-update-progress {
   width: min(100%, 360px);
   height: 6px;

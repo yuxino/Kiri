@@ -744,5 +744,10 @@
   "Loading microphones…": "マイクを読み込み中…",
   "Unable to load microphones": "マイク一覧を読み込めません",
   "Selected microphone is unavailable": "選択したマイクを使用できません",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "選択したマイクを使用できません。別のマイクを選択して、もう一度お試しください。"
+  "The selected microphone is unavailable. Choose another microphone and try again.": "選択したマイクを使用できません。別のマイクを選択して、もう一度お試しください。",
+  "Settings Folder": "設定フォルダ",
+  "Logs Folder": "ログフォルダ",
+  "Error Logs Folder": "エラーログフォルダ",
+  "Temporary Folder": "一時フォルダ",
+  "Couldn't open the project page.": "プロジェクトページを開けませんでした。"
 }

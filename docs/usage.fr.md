@@ -72,6 +72,8 @@ La sélection multiple permet de cocher des éléments ou de tout sélectionner 
 
 Pour signaler un problème, copiez les informations de l’application, du système et des écrans depuis Réglages → À propos. Les captures, identifiants et chemins personnels sont exclus.
 
+Dans Paramètres → À propos, vous pouvez aussi ouvrir les dossiers des paramètres et des journaux, ainsi que GitHub. Sous Windows, le menu inclut les journaux d’erreurs et le dossier temporaire du système. Aucune suppression de fichiers n’est effectuée.
+
 ## Confidentialité
 
 Les captures et le traitement des médias restent locaux. La reconnaissance distante est facultative et demande confirmation avant chaque envoi. Les captures modifiables conservent une image d’origine locale, y compris les pixels masqués par les annotations. Consultez la [politique de confidentialité](privacy/en.md).

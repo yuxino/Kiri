@@ -72,6 +72,8 @@ Mit der Mehrfachauswahl können Sie einzelne oder alle Einträge in den Papierko
 
 Für Fehlermeldungen lassen sich unter Einstellungen → Über App-, System- und Bildschirmdaten kopieren. Aufnahmen, Zugangsdaten und persönliche Pfade sind nicht enthalten.
 
+Unter Einstellungen → Über lassen sich auch die Einstellungs- und Protokollordner sowie GitHub öffnen. Unter Windows stehen zusätzlich Fehlerprotokolle und der temporäre Systemordner zur Verfügung. Dabei werden keine Dateien gelöscht.
+
 ## Datenschutz
 
 Aufnahmen und Medienverarbeitung bleiben lokal. Remote-OCR ist optional und fragt vor jedem Upload nach. Bearbeitbare Screenshots behalten das Originalbild lokal, einschließlich der durch Anmerkungen verdeckten Pixel. Lesen Sie die [Datenschutzrichtlinie](privacy/en.md).

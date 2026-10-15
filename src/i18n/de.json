@@ -744,5 +744,10 @@
   "Loading microphones…": "Mikrofone werden geladen…",
   "Unable to load microphones": "Mikrofone konnten nicht geladen werden",
   "Selected microphone is unavailable": "Das ausgewählte Mikrofon ist nicht verfügbar",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "Das ausgewählte Mikrofon ist nicht verfügbar. Wähle ein anderes Mikrofon und versuche es erneut."
+  "The selected microphone is unavailable. Choose another microphone and try again.": "Das ausgewählte Mikrofon ist nicht verfügbar. Wähle ein anderes Mikrofon und versuche es erneut.",
+  "Settings Folder": "Einstellungsordner",
+  "Logs Folder": "Protokollordner",
+  "Error Logs Folder": "Fehlerprotokollordner",
+  "Temporary Folder": "Temporärer Ordner",
+  "Couldn't open the project page.": "Die Projektseite konnte nicht geöffnet werden."
 }

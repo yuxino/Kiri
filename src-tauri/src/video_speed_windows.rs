@@ -211,8 +211,7 @@ struct PcmReader {
 
 impl PcmReader {
     fn open(source: &Path) -> Result<Self> {
-        let reader =
-            unsafe { MFCreateSourceReaderFromURL(&HSTRING::from(source.as_os_str()), None) }?;
+        let reader = crate::media_source_windows::open_reader(source, None)?;
         unsafe {
             reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)?;
             reader.SetStreamSelection(MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32, true)?;

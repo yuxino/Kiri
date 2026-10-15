@@ -744,5 +744,10 @@
   "Loading microphones…": "正在读取麦克风…",
   "Unable to load microphones": "无法读取麦克风列表",
   "Selected microphone is unavailable": "所选麦克风不可用",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "所选麦克风不可用，请选择其他麦克风后重试。"
+  "The selected microphone is unavailable. Choose another microphone and try again.": "所选麦克风不可用，请选择其他麦克风后重试。",
+  "Settings Folder": "设置文件夹",
+  "Logs Folder": "日志文件夹",
+  "Error Logs Folder": "错误日志文件夹",
+  "Temporary Folder": "临时文件夹",
+  "Couldn't open the project page.": "无法打开项目页面。"
 }

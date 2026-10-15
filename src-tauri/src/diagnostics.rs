@@ -109,11 +109,14 @@ fn init_windows_logger() {
 }
 
 #[cfg(windows)]
+pub(crate) fn windows_log_dir() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|dir| dir.join("io.yuxino.kiri").join("logs"))
+}
+
+#[cfg(windows)]
 fn open_windows_log_file() -> std::io::Result<(File, PathBuf)> {
-    let directory = dirs::data_local_dir()
-        .ok_or_else(|| std::io::Error::other("Windows local data directory is unavailable"))?
-        .join("io.yuxino.kiri")
-        .join("logs");
+    let directory = windows_log_dir()
+        .ok_or_else(|| std::io::Error::other("Windows local data directory is unavailable"))?;
     std::fs::create_dir_all(&directory)?;
     let path = directory.join("kiri.log");
     rotate_log_if_oversized(&path, WINDOWS_LOG_MAX_BYTES)?;

@@ -744,5 +744,10 @@
   "Loading microphones…": "Loading microphones…",
   "Unable to load microphones": "Unable to load microphones",
   "Selected microphone is unavailable": "Selected microphone is unavailable",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "The selected microphone is unavailable. Choose another microphone and try again."
+  "The selected microphone is unavailable. Choose another microphone and try again.": "The selected microphone is unavailable. Choose another microphone and try again.",
+  "Settings Folder": "Settings Folder",
+  "Logs Folder": "Logs Folder",
+  "Error Logs Folder": "Error Logs Folder",
+  "Temporary Folder": "Temporary Folder",
+  "Couldn't open the project page.": "Couldn't open the project page."
 }

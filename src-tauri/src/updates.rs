@@ -6,6 +6,13 @@
 const RELEASE_PAGE: &str = "https://github.com/yuxino/kiri/releases/latest";
 
 #[tauri::command]
+pub fn open_project_page(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "library" { return Err("This command is unavailable from this window.".into()); }
+    open_external_url("https://github.com/yuxino/Kiri")
+        .map_err(|error| { log::warn!("Could not open project page: {error}"); "Couldn't open the project page.".into() })
+}
+
+#[tauri::command]
 pub fn is_portable_build() -> bool {
     #[cfg(windows)]
     {

@@ -112,9 +112,8 @@ pub(crate) struct WindowsVideoReader {
 #[cfg(windows)]
 impl WindowsVideoReader {
     pub(crate) fn open(video: &Path) -> Result<Self> {
-        use windows::core::HSTRING;
         use windows::Win32::Media::MediaFoundation::{
-            MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Video,
+            MFCreateAttributes, MFCreateMediaType, MFMediaType_Video,
             MFVideoFormat_RGB32, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE,
             MF_MT_SUBTYPE, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SOURCE_READER_ALL_STREAMS,
             MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
@@ -130,9 +129,7 @@ impl WindowsVideoReader {
             attributes.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)?;
         }
 
-        let path = HSTRING::from(video.as_os_str().to_os_string());
-        let reader = unsafe { MFCreateSourceReaderFromURL(&path, &attributes) }
-            .with_context(|| format!("could not open video {}", video.display()))?;
+        let reader = crate::media_source_windows::open_reader(video, Some(&attributes))?;
         unsafe {
             reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)?;
             reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true)?;

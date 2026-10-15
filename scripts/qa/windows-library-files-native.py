@@ -48,6 +48,7 @@ process = fixture = None
 library_window = root = workspace = shell = None
 clipboard_owner = None
 app_environment = None
+support_explorers = []
 # Leave room within the ten-minute gate for process/profile/Explorer cleanup.
 deadline = time.monotonic() + 480
 preferred_drop_effect = win32clipboard.RegisterClipboardFormat("Preferred DropEffect")
@@ -261,6 +262,12 @@ def explorer_evidence(window):
 def close_own_explorers():
     if shell is None or workspace is None:
         return
+    for window in support_explorers:
+        try:
+            window.Quit()
+        except Exception:
+            pass  # It may already have been closed after its assertion.
+    support_explorers.clear()
     prefix = normalized(workspace) + os.sep
     for window, location in explorer_windows():
         if normalized(location).startswith(prefix):
@@ -437,6 +444,60 @@ def verify_copy(assets, seed_file):
     report["checks"].append("Image/GIF/video Copy File and existing GIF/video Copy replace text/MOVE with CF_HDROP/COPY; real Explorer paste preserves exact bytes and source files")
 
 
+def verify_support_folders():
+    phase("Open the fixed support folders from Settings > About")
+    focus_library()
+    find("Settings", kinds=("Button",), scope=library_window).click_input()
+    about = find("About", kinds=("Group",), scope=library_window, scroll=True)
+    find("GitHub", kinds=("Button",), scope=about)
+    destinations = [
+        ("Settings Folder", Path(app_environment["APPDATA"]) / "io.yuxino.kiri"),
+        ("Logs Folder", Path(app_environment["LOCALAPPDATA"]) / "io.yuxino.kiri" / "logs"),
+        ("Error Logs Folder", Path(app_environment["LOCALAPPDATA"]) / "kiri" / "logs"),
+        ("Temporary Folder", Path(app_environment["TEMP"])),
+    ]
+    report["support_folders"] = []
+    for label, destination in destinations:
+        focus_library()
+        find("Open Folder", kinds=("Button",), scope=about, scroll=True).click_input()
+        item = find(label, kinds=("MenuItem",), scope=library_window)
+        if not report["support_folders"]:
+            snapshot("support-folder-menu")
+        item.click_input()
+        window = explorer_for(destination)
+        support_explorers.append(window)
+        report["support_folders"].append({"label": label, **explorer_evidence(window)})
+        window.Quit()
+        support_explorers.remove(window)
+    report["checks"].append("About opens all four fixed support folders in Explorer and exposes the GitHub entry")
+    focus_library()
+    find("Library", kinds=("Button",), scope=library_window).click_input()
+
+
+def verify_gif_conversion(assets):
+    phase("Convert a renamed video from the canonical Unicode library path to GIF")
+    video = current(next(asset["id"] for asset in assets if asset["kind"] == "video"))
+    source = root / "Assets" / video["filename"]
+    original_hash = digest(source)
+    old_ids = {asset["id"] for asset in index()}
+    action(video["title"], "Convert to GIF")
+    created = wait_for("completed GIF library import", lambda: [
+        asset for asset in index() if asset["id"] not in old_ids], timeout=60)
+    if len(created) != 1 or created[0]["kind"] != "gif":
+        raise RuntimeError("GIF conversion did not create exactly one GIF asset")
+    path = root / "Assets" / created[0]["filename"]
+    with Image.open(path) as image:
+        if image.format != "GIF" or image.size != (320, 180) or image.n_frames < 45:
+            raise RuntimeError("Converted GIF has incorrect dimensions or no animation")
+        frame_count = image.n_frames
+    if digest(source) != original_hash:
+        raise RuntimeError("GIF conversion changed the original video")
+    report["gif_conversion"] = {"source_sha256": original_hash, "output_sha256": digest(path),
+                                "frames": frame_count, "source_preserved": True}
+    snapshot("gif-conversion-complete")
+    report["checks"].append("Native Convert to GIF reads a canonical Unicode library path and imports a playable animation without modifying the video")
+
+
 def verify_current_root_capture():
     global fixture
     phase("Native global shortcut captures the public Tk window into current root")
@@ -541,6 +602,9 @@ try:
         with tempfile.TemporaryDirectory(prefix="kiri-library-files-", dir=os.environ["RUNNER_TEMP"]) as temporary:
             workspace = Path(temporary)
             try:
+                own_temp = workspace / "Temporary"
+                own_temp.mkdir()
+                app_environment["TEMP"] = app_environment["TMP"] = str(own_temp)
                 assets = make_library(video_directory)
                 seed_file = workspace / "old clipboard file.txt"
                 seed_file.write_text("Old owned clipboard offer", encoding="utf-8")
@@ -557,6 +621,8 @@ try:
                 if index() != before or any(digest(root / "Assets" / asset["filename"]) != before_hashes[asset["id"]] for asset in index()):
                     raise RuntimeError("Restart changed the renamed files or persisted library metadata")
                 report["checks"].append("Restart preserves all renamed IDs, file names, hashes and current library root")
+                verify_gif_conversion(assets)
+                verify_support_folders()
                 verify_current_root_capture()
                 if report.get("reveal_errors"):
                     raise RuntimeError("Native selected-file reveal failed: " + json.dumps(report["reveal_errors"], ensure_ascii=False))

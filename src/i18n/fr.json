@@ -744,5 +744,10 @@
   "Loading microphones…": "Chargement des microphones…",
   "Unable to load microphones": "Impossible de charger les microphones",
   "Selected microphone is unavailable": "Le microphone sélectionné est indisponible",
-  "The selected microphone is unavailable. Choose another microphone and try again.": "Le microphone sélectionné est indisponible. Choisissez-en un autre et réessayez."
+  "The selected microphone is unavailable. Choose another microphone and try again.": "Le microphone sélectionné est indisponible. Choisissez-en un autre et réessayez.",
+  "Settings Folder": "Dossier des paramètres",
+  "Logs Folder": "Dossier des journaux",
+  "Error Logs Folder": "Journaux d’erreurs",
+  "Temporary Folder": "Dossier temporaire",
+  "Couldn't open the project page.": "Impossible d’ouvrir la page du projet."
 }

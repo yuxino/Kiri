@@ -1068,7 +1068,7 @@ fn append_error_log(message: &str, recovery: Option<RecoveryAction>) {
     }
 }
 
-fn log_dir() -> Option<std::path::PathBuf> {
+pub(crate) fn log_dir() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "macos")]
     {
         dirs::home_dir().map(|home| home.join("Library/Logs/io.yuxino.kiri"))
