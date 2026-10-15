@@ -50,6 +50,12 @@ Linux QA, and contribution records retain their original language.
 - [`releases/v1.4.9.md`](releases/v1.4.9.md) — first signed-updater release
   notes and one-time bootstrap instructions.
 
+## Proposed designs
+
+- [Scrolling capture / 微信式滚动长截图](adr/0109-scrolling-capture.md) — research
+  proposal for #152; architecture, algorithm choices and acceptance gates.
+  Not implemented or accepted.
+
 ## Decision records
 
 - [`adr/0003-manual-region-selection.md`](adr/0003-manual-region-selection.md)
