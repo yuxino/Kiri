@@ -44,6 +44,14 @@ Die Aufnahmevorbereitung bietet MP4 / GIF, Start und vier nebeneinanderliegende 
 
 Der kleine Pfeil neben dem Mikrofon öffnet die Auswahl der verfügbaren Eingabegeräte, ohne das Standardgerät des Systems zu ändern. Ist das gewählte Gerät nicht verfügbar oder wird es getrennt, meldet Kiri einen Fehler, statt unbemerkt zu einem anderen Mikrofon zu wechseln.
 
+## Scroll-Screenshots
+
+Wähle unter macOS, Windows oder Linux X11 einen Screenshot-Bereich und vor dem Hinzufügen von Anmerkungen **Scroll-Screenshot**. Markiere nur den vertikal scrollenden Inhalt, ohne feste Kopf-, Fuß- und Seitenleisten. Lass neben der Auswahl Platz für die Vorschau. Passt das Fenster nicht außerhalb der Auswahl, verkleinere den Bereich. Unter Wayland ist diese Funktion derzeit nicht verfügbar.
+
+Scrolle in der ursprünglichen Anwendung langsam nach unten. Die seitliche Vorschau zeigt die übernommenen Bildteile. Hält der Abgleich an, scrolle etwas in den bereits erfassten Inhalt zurück und anschließend weiter nach unten. Wiederholte Inhalte, Animationen, das Verschieben des Fensters oder eine geänderte Skalierung können eine zuverlässige Verbindung verhindern. Kiri entfernt feste Leisten nicht automatisch und scrollt nicht selbst.
+
+Mit **Fertig** wird das Bild wie ein normaler Screenshot kopiert und gespeichert. **Esc** bricht auch aus der ursprünglichen Anwendung ab. **Enter** schließt ab, wenn das Vorschaufenster fokussiert ist; drücke den eingestellten Aufnahme-Shortcut erneut, um es zu fokussieren. Lässt sich der letzte Abschnitt nicht verbinden, wähle **Weiter anpassen** oder ausdrücklich **Erfassten Teil speichern**. Die Ausgabe ist auf 8192 Pixel pro Seite und 32 MiPixels (33.554.432 Pixel) begrenzt. Beim Erreichen der Grenze bleibt der erfasste Teil zur bestätigten Speicherung erhalten.
+
 ## Screenshot-Anmerkungen
 
 Wählen Sie eine vorhandene Anmerkung aus, um ihren Stil zu ändern. Mosaik bietet Freihand, Rechteck und Ellipse sowie Pixel- und Unschärfeeffekte mit einstellbarer Stärke. Mit Wasserzeichen (W) schreiben Sie direkt ins Bild und wählen Einzel- oder Kacheldarstellung, Deckkraft, Winkel und Abstand. Gespeicherte Wasserzeichen bleiben bearbeitbar.

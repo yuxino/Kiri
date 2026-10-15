@@ -675,6 +675,27 @@ pub struct LinuxRecorder {
 }
 
 impl LinuxRecorder {
+    pub(crate) fn start_scroll(
+        display: &CapturedDisplay,
+        crop: super::scroll::PixelRegion,
+        video_tx: VideoFrameSender,
+    ) -> Result<Self> {
+        if is_wayland() {
+            bail!(
+                "Scrolling capture is not available in Wayland sessions yet. Use an X11 session."
+            );
+        }
+        let identity = display.display_identity.clone().ok_or_else(|| {
+            anyhow!("The selected display identity is unavailable. Select it again.")
+        })?;
+        super::scroll::validate_x11_display(&identity)?;
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_for_worker = Arc::clone(&stop_flag);
+        Self::spawn_worker(stop_flag, move || {
+            crate::linux_media::run_x11_scroll_capture(identity, crop, video_tx, stop_for_worker)
+        })
+    }
+
     pub fn start(
         display: DisplayIdentity,
         region: Rect,
@@ -756,6 +777,12 @@ impl PlatformRecorder for LinuxRecorder {
             bail!(error);
         }
         Ok(())
+    }
+}
+
+impl Drop for LinuxRecorder {
+    fn drop(&mut self) {
+        let _ = self.stop();
     }
 }
 

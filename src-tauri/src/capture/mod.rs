@@ -7,6 +7,8 @@ pub mod windows;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+pub mod scroll;
+
 #[cfg(target_os = "macos")]
 pub use macos as current;
 
@@ -144,10 +146,9 @@ fn logical_monitor_frame(x: i32, y: i32, width: u32, height: u32, scale: f64) ->
 pub trait PlatformRecorder: Send {
     fn stop(&mut self) -> anyhow::Result<()>;
 
-    /// Portal and pipeline failures arrive after Linux capture was requested.
-    /// The session clock observes them so a denied request cannot leave the
-    /// application stuck in recording mode until the user stops it manually.
-    #[cfg(target_os = "linux")]
+    /// Native source failures can arrive after capture starts. Session workers
+    /// observe these separately from frame delivery, including display changes
+    /// that must never be treated as valid scrolling screenshot pixels.
     fn unexpected_failure(&self) -> Option<String> {
         None
     }

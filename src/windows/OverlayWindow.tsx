@@ -16,7 +16,7 @@ import {
 } from "../lib/ipc";
 import { t } from "../i18n";
 import RecordingMicrophoneSelect from "./RecordingMicrophoneSelect";
-import { Mic, MousePointer2, MousePointerClick, Volume2 } from "lucide-react";
+import { Mic, MousePointer2, MousePointerClick, ScrollText, Volume2 } from "lucide-react";
 import { isTextComposition } from "../annotation/text-composition.js";
 import type { Point, Rect } from "../annotation/geom";
 import {
@@ -61,6 +61,17 @@ function recordingStartError(error: unknown): string {
     "Microphone access is off. Enable Kiri in System Settings to record your microphone.",
   ]) if (message.includes(known)) return known;
   return "Could not start screen recording.";
+}
+
+function scrollingStartError(error: unknown): string {
+  const message = String(error);
+  for (const known of [
+    "Escape is unavailable. Close the other capture tool and try again.",
+    "Leave space beside the selection for scrolling capture controls.",
+    "Select a larger scrolling content area.",
+    "Scrolling capture is not available on this desktop.",
+  ]) if (message.includes(known)) return known;
+  return "Could not start scrolling capture. Try a smaller selection with room for the controls.";
 }
 
 type Phase =
@@ -145,6 +156,9 @@ export function OverlayWindow() {
   const [appearance, setAppearance] = useAnnotationAppearance();
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [hasMarks, setHasMarks] = useState(false);
+  const hasMarksRef = useRef(false);
+  const [scrollCaptureSupported, setScrollCaptureSupported] = useState(false);
   const [qrScan, setQrScan] = useState<QrScanDto | null>(null);
   const [qrFailed, setQrFailed] = useState(false);
   const qrRequestRef = useRef<string | null>(null);
@@ -222,6 +236,10 @@ export function OverlayWindow() {
       });
     api.getRecordingOptions().then((options) => setRecordOptions(options)).catch(() => {});
     api.micSupported().then((supported) => setMicSupported(supported)).catch(() => {});
+    // Capabilities fail closed: never offer a capture mode the backend cannot run.
+    void Promise.resolve().then(() => api.scrollCaptureSupported()).then((supported) => {
+      if (!disposed) setScrollCaptureSupported(supported);
+    }).catch(() => {});
     api.platformCapabilities().then((caps) => {
       setPlatformCaps(caps);
       setMicSupported(caps.microphone);
@@ -444,6 +462,30 @@ export function OverlayWindow() {
     },
     [completionLock, selection],
   );
+
+  const startScrollCapture = useCallback(async () => {
+    if (!selection || !scrollCaptureSupported || completionLock.locked) return;
+    const canvas = canvasRef.current;
+    canvas?.finishAppearanceAdjustment();
+    if (canvas && !canvas.commitTextEditing()) return;
+    if (hasMarksRef.current) {
+      setAnnotationError("Finish or clear annotations before starting a scrolling screenshot.");
+      return;
+    }
+    if (!completionLock.acquire()) return;
+    setCompleting(true);
+    setAnnotationError(null);
+    try {
+      // Rust owns hiding the frozen overlay, native sampling, and focus return.
+      // Keep this owner alive until the scrolling session has finished.
+      await api.startScrollCapture(selection);
+    } catch (error) {
+      reportFrontend(`start_scroll_capture rejected: ${String(error)}`);
+      setAnnotationError(scrollingStartError(error));
+      completionLock.release();
+      setCompleting(false);
+    }
+  }, [completionLock, scrollCaptureSupported, selection]);
 
   const recognizePreparedLocal = useCallback(async () => {
     const pending = preparedOcrRef.current;
@@ -1148,9 +1190,11 @@ export function OverlayWindow() {
             calloutNumber={calloutNumber}
             onSelectionInfo={onAnnotationSelection}
             onDocumentChange={onAnnotationDocument}
-            onHistoryChange={(u, r) => {
+            onHistoryChange={(u, r, marked) => {
               setCanUndo(u);
               setCanRedo(r);
+              hasMarksRef.current = marked;
+              setHasMarks(marked);
             }}
             onCancel={cancel}
             onFinishAfterTextCommit={() => void complete()}
@@ -1354,6 +1398,8 @@ export function OverlayWindow() {
             switchMode("ocr");
           }}
           onQr={() => { if (selectionRef.current && !completionLock.locked) void runQr(selectionRef.current); }}
+          onScrollCapture={scrollCaptureSupported ? () => void startScrollCapture() : undefined}
+          scrollCaptureDisabled={hasMarks}
           onCancel={cancel}
         />
       )}
@@ -1798,6 +1844,8 @@ interface ToolbarProps {
   onPin(): void;
   onOcr(): void;
   onQr(): void;
+  onScrollCapture?(): void;
+  scrollCaptureDisabled?: boolean;
   onCancel(): void;
   onTextFontBegin?(): void;
   onTextFontLive?(value: number): void;
@@ -1895,7 +1943,7 @@ export function Toolbar(props: ToolbarProps) {
       >
         <div ref={mainRef} className="kiri-hud kiri-annotation-tool-row" style={toolbarRowStyle}>
           <div className="kiri-annotation-tool-group">
-            <ToolButton icon="xmark" title={t("Cancel capture · Esc")} onClick={onCancel}/>
+            <ToolButton icon="xmark" title={t("Cancel capture · Esc")} disabled={disabled} onClick={onCancel}/>
             {button(TOOLS[0])}
           </div>
           <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>{TOOLS.slice(1, 5).map(button)}</div>
@@ -1906,6 +1954,11 @@ export function Toolbar(props: ToolbarProps) {
             <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo}/>
             <ToolButton icon="text.viewfinder" title={t("Recognize Text")} disabled={disabled} onClick={onOcr}/>
             <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr}/>
+            {props.onScrollCapture && <button type="button" className="kiri-toolbar-button"
+              title={t(props.scrollCaptureDisabled ? "Finish or clear annotations before starting a scrolling screenshot." : "Scrolling Screenshot")}
+              aria-label={t("Scrolling Screenshot")} disabled={disabled || props.scrollCaptureDisabled}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
+              onClick={props.onScrollCapture}><ScrollText size={15} /></button>}
             <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "Tool options")}
               active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
               onClick={() => canSetSize ? onToggleSize() : setDetailsOpen(open => !open)}/>

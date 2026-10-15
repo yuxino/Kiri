@@ -91,6 +91,12 @@ See [Linux setup and acceptance](linux.md) for installation and verification det
 
 ## Later
 
+- [x] [Manual scrolling screenshot candidate](adr/0109-scrolling-capture.md) —
+  fixed native SCK/WGC/X11 streams, conservative Rust stitching, side preview,
+  session Escape cancellation, and explicit clipboard/library completion (#152).
+- [ ] Scrolling screenshot packaged/native acceptance on macOS, Windows, and X11;
+  mixed-scale hardware and end-to-end clipboard/editor limits remain to verify.
+- [ ] Wayland scrolling capture, automatic fixed-bar handling, and automatic scrolling.
 - [ ] Blur annotation
 - [ ] Full-display recording
 - [x] Thumbnail video timeline with draggable clip edges, split/delete, undo/redo, and non-destructive library copies

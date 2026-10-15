@@ -36,6 +36,7 @@ modules.
 | --- | --- |
 | `library` | Capture library and Settings |
 | `overlay` | Active-display capture, selection, annotation, and OCR consent |
+| `scroll-capture` | Scrolling screenshot preview, explicit completion, and cancellation |
 | `countdown` | Recording countdown |
 | `control-panel` | Recording pause/resume/stop controls |
 | `recording-region` | Passive, capture-excluded recording region outline |
@@ -169,6 +170,20 @@ reads after a newer change. See ADR 0079.
    window on the originating display. The preview does not take focus; a copy
    failure is reported without discarding the saved asset, and a save failure
    never presents a preview for an asset that does not exist.
+
+The unmarked screenshot selection can hand off to a scrolling-capture session
+(ADR 0109). `capture/scroll.rs` fixes the display and exact pixel region and
+starts an encoder-free SCK, WGC, or X11 ximagesrc stream; Wayland is gated off.
+`core/scroll_stitch.rs` validates unique integer positions against original
+pixels, stores accepted strips, and supports reverse recovery without duplicate
+rows. `scroll_capture.rs` owns the worker, temporary global Escape registration,
+owner/session checks, bounded preview and native-result saving. The helper must
+fit entirely outside the selected region or startup is rejected. The original
+app keeps scrolling input; the capture shortcut focuses the helper, where Enter
+finishes. Unverified tails require explicit partial saving. Output is limited to
+8192 pixels per side and 32 MiPixels; fixed bars are excluded by selection rather
+than automatically removed. The normal screenshot PNG checks remain intact.
+This is an implemented candidate with packaged/native acceptance still pending.
 
 Escape cancels the active session and releases its frozen image. There is no
 runtime synthetic-desktop or temporary-library mode in development or
