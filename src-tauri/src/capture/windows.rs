@@ -471,7 +471,7 @@ fn resolve_recording_monitor(expected: &DisplayIdentity) -> Result<Monitor> {
 // ---------------------------------------------------------------------------
 
 struct WinHandlerState {
-    video_tx: Option<super::VideoFrameSender>,
+    video_tx: Option<super::NativeFrameSender>,
     region_px: PixelRegion,
     dropped_frames: u64,
     capture_health: Arc<CaptureHealth>,
@@ -771,7 +771,7 @@ impl WindowsRecorder {
     pub(crate) fn start_scroll(
         display: &CapturedDisplay,
         crop: super::scroll::PixelRegion,
-        video_tx: super::VideoFrameSender,
+        video_tx: super::frame_sink::ScrollFrameSender,
     ) -> Result<Self> {
         let identity = display.display_identity.as_ref().ok_or_else(|| {
             anyhow!("The selected display identity is unavailable. Select it again.")
@@ -780,7 +780,7 @@ impl WindowsRecorder {
         let paused = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let capture_health = Arc::new(CaptureHealth::default());
         let state = Arc::new(Mutex::new(WinHandlerState {
-            video_tx: Some(video_tx),
+            video_tx: Some(video_tx.into()),
             region_px: PixelRegion {
                 x: crop.x as usize,
                 y: crop.y as usize,
@@ -857,7 +857,7 @@ impl WindowsRecorder {
 
         let capture_health = Arc::new(CaptureHealth::default());
         let state_slot = Arc::new(Mutex::new(WinHandlerState {
-            video_tx: Some(video_tx),
+            video_tx: Some(video_tx.into()),
             region_px,
             dropped_frames: 0,
             capture_health: Arc::clone(&capture_health),

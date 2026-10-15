@@ -6,7 +6,8 @@ use anyhow::{bail, Result};
 
 use crate::core::geometry::Rect;
 
-use super::{CapturedDisplay, PlatformRecorder, VideoFrameSender};
+use super::frame_sink::ScrollFrameSender;
+use super::{CapturedDisplay, PlatformRecorder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PixelRegion {
@@ -91,10 +92,10 @@ pub(crate) fn pixel_region(display: &CapturedDisplay, region: Rect) -> Result<Pi
     Ok(crop)
 }
 
-pub fn start(
+pub(crate) fn start(
     display: &CapturedDisplay,
     region: Rect,
-    tx: VideoFrameSender,
+    tx: ScrollFrameSender,
 ) -> Result<Box<dyn PlatformRecorder>> {
     let crop = pixel_region(display, region)?;
     #[cfg(target_os = "macos")]

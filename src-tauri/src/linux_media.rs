@@ -234,7 +234,7 @@ pub async fn run_pipewire_region_capture(
                 pipeline,
                 (display.physical_width, display.physical_height),
                 crop,
-                video_tx,
+                video_tx.into(),
                 stop_for_pump,
                 None,
             );
@@ -352,25 +352,25 @@ fn run_x11_region_capture(
         display.physical_width,
         display.physical_height,
     )?;
-    run_x11_capture_crop(display, crop, shows_cursor, video_tx, stop_flag, false)
+    run_x11_capture_crop(display, crop, shows_cursor, video_tx.into(), stop_flag, false)
 }
 
 pub(crate) fn run_x11_scroll_capture(
     display: DisplayIdentity,
     crop: crate::capture::scroll::PixelRegion,
-    video_tx: crate::capture::VideoFrameSender,
+    video_tx: crate::capture::frame_sink::ScrollFrameSender,
     stop_flag: Arc<AtomicBool>,
 ) -> Result<()> {
     crate::capture::scroll::validate_x11_display(&display)?;
     run_x11_capture_crop(display, PixelCrop { x: crop.x, y: crop.y,
-        width: crop.width, height: crop.height }, false, video_tx, stop_flag, true)
+        width: crop.width, height: crop.height }, false, video_tx.into(), stop_flag, true)
 }
 
 fn run_x11_capture_crop(
     display: DisplayIdentity,
     crop: PixelCrop,
     shows_cursor: bool,
-    video_tx: crate::capture::VideoFrameSender,
+    video_tx: crate::capture::NativeFrameSender,
     stop_flag: Arc<AtomicBool>,
     strict_display: bool,
 ) -> Result<()> {
@@ -401,7 +401,7 @@ fn pump_capture_frames(
     pipeline: PipelineGuard,
     expected: (u32, u32),
     crop: PixelCrop,
-    video_tx: crate::capture::VideoFrameSender,
+    video_tx: crate::capture::NativeFrameSender,
     stop: Arc<AtomicBool>,
     strict_display: Option<DisplayIdentity>,
 ) -> Result<()> {

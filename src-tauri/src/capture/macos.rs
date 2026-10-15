@@ -701,7 +701,7 @@ pub struct AudioFormat {
 }
 
 struct DelegateSenders {
-    video_tx: super::VideoFrameSender,
+    video_tx: super::NativeFrameSender,
     audio_tx: Option<AudioChunkSender>,
     mic_tx: Option<AudioChunkSender>,
 }
@@ -767,7 +767,7 @@ impl MacRecordingSession {
     pub(crate) fn start_scroll(
         display: &CapturedDisplay,
         crop: super::scroll::PixelRegion,
-        video_tx: super::VideoFrameSender,
+        video_tx: super::frame_sink::ScrollFrameSender,
     ) -> Result<Self> {
         let scale = display.backing_scale;
         let region = Rect::new(
@@ -790,7 +790,7 @@ impl MacRecordingSession {
             scale,
             options,
             &[],
-            video_tx,
+            video_tx.into(),
             None,
             None,
             Some((crop.width, crop.height)),
@@ -816,7 +816,7 @@ impl MacRecordingSession {
             backing_scale,
             options,
             excepted_window_ids,
-            video_tx,
+            video_tx.into(),
             audio_tx,
             mic_tx,
             None,
@@ -831,7 +831,7 @@ impl MacRecordingSession {
         backing_scale: f64,
         options: RecordingOptions,
         excepted_window_ids: &[u32],
-        video_tx: super::VideoFrameSender,
+        video_tx: super::NativeFrameSender,
         audio_tx: Option<AudioChunkSender>,
         mic_tx: Option<AudioChunkSender>,
         exact_dimensions: Option<(u32, u32)>,
@@ -1469,7 +1469,7 @@ mod recording_lifetime_tests {
     fn native_delegate_owns_callback_state_and_frame_senders() {
         let (video_tx, video_rx) = mpsc::sync_channel(crate::capture::VIDEO_FRAME_QUEUE_CAPACITY);
         let senders = Arc::new(DelegateSenders {
-            video_tx,
+            video_tx: video_tx.into(),
             audio_tx: None,
             mic_tx: None,
         });

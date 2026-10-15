@@ -12,10 +12,11 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut};
 
+use crate::capture::frame_sink::{scroll_frame_channel, ScrollFrameReceiver};
 use crate::capture::{CapturedDisplay, PlatformRecorder};
 use crate::commands::RectDto;
 use crate::core::geometry::Rect;
-use crate::core::scroll_stitch::{ScrollStitcher, StitchUpdate};
+use crate::core::scroll_stitch::{ScrollStitcher, StitchUpdate, MAX_SCROLL_DIMENSION};
 use crate::platform::{self, TransientWindowRole};
 use crate::state::AppState;
 
@@ -497,7 +498,9 @@ fn refresh(session: &Session, stitcher: &ScrollStitcher, update: StitchUpdate) {
         update,
         StitchUpdate::Started | StitchUpdate::Appended { .. }
     ) {
-        if let Some(image) = stitcher.preview(248, 360) {
+        // Keep readable width as the screenshot grows; the panel scrolls the
+        // bounded preview instead of squeezing the entire image into its height.
+        if let Some(image) = stitcher.preview(248, MAX_SCROLL_DIMENSION) {
             if let Ok(bytes) = png(&image) {
                 status.preview = Some(format!(
                     "data:image/png;base64,{}",
@@ -534,7 +537,7 @@ fn run_worker(
             return;
         }
     };
-    let (tx, frames) = mpsc::sync_channel(crate::capture::VIDEO_FRAME_QUEUE_CAPACITY);
+    let (tx, frames) = scroll_frame_channel();
     let mut source = match crate::capture::scroll::start(&display, region, tx) {
         Ok(source) => Some(source),
         Err(error) => {
@@ -632,7 +635,7 @@ fn run_worker(
 fn prepare_output(
     session: &Session,
     stitcher: &mut ScrollStitcher,
-    frames: &mpsc::Receiver<Vec<u8>>,
+    frames: &ScrollFrameReceiver,
     source: &mut Option<Box<dyn PlatformRecorder>>,
     width: u32,
     allow_partial: bool,
@@ -1085,30 +1088,22 @@ mod tests {
     }
 
     #[test]
-    fn finishing_waits_for_the_latest_viewport_after_a_queued_unchanged_frame() {
+    fn finishing_keeps_the_last_viewport_when_the_native_queue_was_full() {
         let document = document();
         let (session, mut stitcher) = started_capture(&document);
         let (mut source, stops) = test_recorder(false);
-        let (sender, frames) = mpsc::sync_channel(1);
-        sender.send(bgra(&viewport(&document, 0))).unwrap();
-
-        let latest = bgra(&viewport(&document, 80));
-        let status = session.status.lock().unwrap();
-        let output = std::thread::scope(|scope| {
-            let session = &session;
-            let stitcher = &mut stitcher;
-            let source = &mut source;
-            let finishing = scope.spawn(move || {
-                prepare_output(session, stitcher, &frames, source, 83, false)
-            });
-            // The single-slot channel keeps the last viewport out until Finish
-            // consumes its queued baseline. Hold its first refresh until that
-            // send completes, rather than racing a sleeping producer against
-            // the finish deadline. An early seal still loses the last pixels.
-            sender.send(latest).unwrap();
-            drop(status);
-            finishing.join().unwrap().unwrap()
-        });
+        let (sender, frames) = scroll_frame_channel();
+        let sender = crate::capture::NativeFrameSender::from(sender);
+        // Match the real native callback: all sends are nonblocking, the queue
+        // fills before Finish starts, and the final viewport arrives last.
+        // An old drop-newest video queue loses y=80 and saves stale pixels.
+        for y in [0, 40, 60, 80] {
+            sender.try_send(bgra(&viewport(&document, y))).unwrap();
+        }
+        // Keep the sender alive but send nothing else, as a settled native
+        // display can stop delivering frames after the final wheel update.
+        let output =
+            prepare_output(&session, &mut stitcher, &frames, &mut source, 83, false).unwrap();
 
         assert_eq!(output.size, (83, 237));
         assert_eq!(
@@ -1120,6 +1115,40 @@ mod tests {
     }
 
     #[test]
+    fn a_dropped_intermediate_overlap_requires_explicit_partial_saving() {
+        let document = document();
+        let (session, mut stitcher) = started_capture(&document);
+        let (mut source, stops) = test_recorder(false);
+        let (sender, frames) = scroll_frame_channel();
+        let sender = crate::capture::NativeFrameSender::from(sender);
+        for y in [0, 80, 160, 240, 400] {
+            sender.try_send(bgra(&viewport(&document, y))).unwrap();
+        }
+        assert!(prepare_output(&session, &mut stitcher, &frames, &mut source, 83, false).is_err());
+        assert_eq!(session.status.lock().unwrap().phase, "needsOverlap");
+        assert_eq!(stitcher.image().unwrap(), viewport(&document, 0));
+        assert!(source.is_some());
+        assert_eq!(stops.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn long_previews_keep_their_width_instead_of_shrinking_the_entire_image() {
+        let (session, _) = started_capture(&document());
+        let document = RgbaImage::new(496, 1200);
+        let mut stitcher = ScrollStitcher::new(496, 1200).unwrap();
+        let update = stitcher.push(document).unwrap();
+        refresh(&session, &stitcher, update);
+        let status = session.status.lock().unwrap();
+        let encoded = status.preview.as_ref().unwrap()
+            .strip_prefix("data:image/png;base64,").unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
+        assert_eq!(
+            image::load_from_memory(&bytes).unwrap().to_rgba8().dimensions(),
+            (248, 600),
+        );
+    }
+
+    #[test]
     fn a_missing_overlap_keeps_capture_live_until_a_recovered_viewport_arrives() {
         let document = document();
         let (session, mut stitcher) = started_capture(&document);
@@ -1127,14 +1156,14 @@ mod tests {
         assert_eq!(update, StitchUpdate::NeedsOverlap);
         refresh(&session, &stitcher, update);
         let (mut source, stops) = test_recorder(false);
-        let (sender, frames) = mpsc::channel();
+        let (sender, frames) = scroll_frame_channel();
 
         assert!(prepare_output(&session, &mut stitcher, &frames, &mut source, 83, false).is_err());
         assert!(source.is_some());
         assert_eq!(stops.load(Ordering::Acquire), 0);
         assert_eq!(stitcher.dimensions(), (83, 157));
 
-        sender.send(bgra(&viewport(&document, 80))).unwrap();
+        sender.try_send(bgra(&viewport(&document, 80))).unwrap();
         let output =
             prepare_output(&session, &mut stitcher, &frames, &mut source, 83, false).unwrap();
         assert_eq!(
@@ -1150,7 +1179,7 @@ mod tests {
         let document = document();
         let (session, mut stitcher) = started_capture(&document);
         let (mut source, stops) = test_recorder(true);
-        let (_sender, frames) = mpsc::channel();
+        let (_sender, frames) = scroll_frame_channel();
 
         let result = prepare_output(&session, &mut stitcher, &frames, &mut source, 83, false);
         assert!(result.is_err());
@@ -1169,8 +1198,8 @@ mod tests {
         let document = document();
         let (session, mut stitcher) = started_capture(&document);
         let (mut source, stops) = test_recorder(false);
-        let (sender, frames) = mpsc::channel();
-        sender.send(bgra(&viewport(&document, 80))).unwrap();
+        let (sender, frames) = scroll_frame_channel();
+        sender.try_send(bgra(&viewport(&document, 80))).unwrap();
         session.cancelled.store(true, Ordering::Release);
 
         let result = prepare_output(&session, &mut stitcher, &frames, &mut source, 83, true);

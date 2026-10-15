@@ -8,6 +8,8 @@ pub mod windows;
 pub mod linux;
 
 pub mod scroll;
+pub(crate) mod frame_sink;
+pub(crate) use frame_sink::NativeFrameSender;
 
 #[cfg(target_os = "macos")]
 pub use macos as current;

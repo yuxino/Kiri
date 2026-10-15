@@ -346,11 +346,8 @@ impl ScrollStitcher {
     fn verify(&self, frame: &RgbaImage, origin: u32) -> bool {
         let overlap = self.frame_height.min(self.height - origin);
         let pixels = u64::from(self.width) * u64::from(overlap);
-        let mut blocks = [(0u64, 0u64, 0u64); 16];
+        let mut blocks = [(0u64, 0u64); 16];
         let mut difference = 0u64;
-        let mut mismatches = 0u64;
-        let mut textured_pixels = 0u64;
-        let mut textured_mismatches = 0u64;
         let row_bytes = self.width as usize * 4;
         for y in 0..overlap {
             let old = self.row(origin + y);
@@ -360,44 +357,34 @@ impl ScrollStitcher {
             for x in 0..self.width as usize {
                 let pixel = x * 4;
                 let mut delta = 0u64;
-                let mut changed = false;
-                let mut textured = false;
                 for channel in 0..3 {
                     let value = old[pixel + channel].abs_diff(new[pixel + channel]);
-                    delta += u64::from(value);
-                    changed |= value > 10;
-                    if x > 0 {
-                        textured |= old[pixel + channel].abs_diff(old[pixel + channel - 4]) > 12
-                            || new[pixel + channel].abs_diff(new[pixel + channel - 4]) > 12;
+                    // Allow small native rendering differences, but never
+                    // average a changed word or identifier into a large area
+                    // of matching content. Even a tiny high-contrast change
+                    // can distinguish two otherwise identical list entries.
+                    if value > 10 {
+                        return false;
                     }
+                    delta += u64::from(value);
                 }
-                textured_pixels += u64::from(textured);
-                textured_mismatches += u64::from(textured && changed);
                 let block_x = (x * 4 / self.width as usize).min(3);
                 let block = &mut blocks[block_y * 4 + block_x];
                 block.0 += 1;
                 block.1 += delta;
-                block.2 += u64::from(changed);
                 difference += delta;
-                mismatches += u64::from(changed);
             }
             // A candidate that already exceeds the *whole overlap's* budget
             // cannot recover on later rows. This is especially valuable on text
             // pages whose repeated line shapes propose several wrong offsets.
-            if difference * 2 > pixels * 3 * 5 || mismatches * 80 > pixels {
+            if difference * 2 > pixels * 3 * 5 {
                 return false;
             }
         }
         // Global consistency plus local blocks prevent a static sidebar, header,
         // or a small matching patch from determining the page's displacement.
         difference * 2 <= pixels * 3 * 5
-            && mismatches * 80 <= pixels
-            // Repeated white space must not hide changed line numbers or words.
-            // Compare foreground edges independently of the background area.
-            && textured_mismatches * 50 <= textured_pixels
-            && blocks.iter().all(|(count, delta, changed)| {
-                *delta <= count * 3 * 6 && *changed * 100 <= count * 6
-            })
+            && blocks.iter().all(|(count, delta)| *delta <= count * 3 * 6)
     }
 }
 
@@ -626,6 +613,70 @@ mod tests {
         let output = stitcher.image().unwrap();
         assert_eq!(viewport(&output, 0, 160), viewport(&source, 0, 160));
         assert_eq!(viewport(&output, 160, 80), viewport(&frame, 80, 80));
+    }
+
+    #[test]
+    fn repeated_cards_with_small_changed_labels_reject_skips_and_recover() {
+        let pattern = RgbaImage::from_fn(760, 240, |x, y| {
+            let line = y / 24;
+            let column = x / 9;
+            let glyph = (line + 1).wrapping_mul(column + 11).wrapping_mul(0x45d9f3b);
+            let ink = (8..19).contains(&(y % 24))
+                && (36..700).contains(&x)
+                && x % 9 < 6
+                && (glyph.rotate_left(y % 24) >> (x % 9)) & 1 != 0;
+            if ink { Rgba([40, 40, 40, 255]) } else { Rgba([250, 250, 250, 255]) }
+        });
+        let source = RgbaImage::from_fn(760, 720, |x, y| {
+            // A small, high-contrast label distinguishes otherwise repeated
+            // cards. Its 48 pixels must not disappear into an area-wide budget.
+            if (8..14).contains(&x) && (70..78).contains(&(y % 240)) {
+                if y / 240 == 0 { Rgba([40, 40, 40, 255]) } else { Rgba([220, 220, 220, 255]) }
+            } else {
+                *pattern.get_pixel(x, y % 240)
+            }
+        });
+        let mut stitcher = ScrollStitcher::new(760, 240).unwrap();
+        let baseline = viewport(&source, 0, 240);
+        stitcher.push(baseline.clone()).unwrap();
+
+        // The real jump is greater than one viewport, but the repeated body
+        // proposes a false 48-row advance. Never commit that guessed position.
+        assert_eq!(stitcher.push(viewport(&source, 288, 240)).unwrap(), StitchUpdate::NeedsOverlap);
+        assert_eq!(stitcher.image().unwrap(), baseline);
+        assert_eq!(stitcher.frame_count(), 1);
+
+        // Returning to known content can then continue with no missing rows.
+        for position in [48, 96, 144, 192, 240] {
+            assert_eq!(stitcher.push(viewport(&source, position, 240)).unwrap(), StitchUpdate::Appended { rows: 48 });
+        }
+        assert_eq!(stitcher.image().unwrap(), viewport(&source, 0, 480));
+    }
+
+    #[test]
+    fn long_preview_keeps_its_width_and_samples_every_committed_strip() {
+        let source = document(496, 2400);
+        let mut stitcher = ScrollStitcher::new(496, 600).unwrap();
+        for position in [0, 450, 900, 1350, 1800] {
+            stitcher.push(viewport(&source, position, 600)).unwrap();
+        }
+        let preview = stitcher.preview(248, MAX_SCROLL_DIMENSION).unwrap();
+        assert_eq!(preview.dimensions(), (248, 1200));
+        assert_eq!(preview.as_raw().len(), 248 * 1200 * 4);
+        for (x, y, pixel) in preview.enumerate_pixels() {
+            assert_eq!(pixel, source.get_pixel(x * 2, y * 2));
+        }
+
+        // Full-height results stay within the thumbnail budget, including its
+        // maximum area; narrower results are never upscaled to fill the width.
+        for width in [73, 248] {
+            let source = document(width, MAX_SCROLL_DIMENSION);
+            let mut stitcher = ScrollStitcher::new(width, MAX_SCROLL_DIMENSION).unwrap();
+            stitcher.push(source.clone()).unwrap();
+            let preview = stitcher.preview(248, MAX_SCROLL_DIMENSION).unwrap();
+            assert_eq!(preview, source);
+            assert!(preview.as_raw().len() <= 248 * MAX_SCROLL_DIMENSION as usize * 4);
+        }
     }
 
     #[test]

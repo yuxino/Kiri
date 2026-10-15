@@ -678,7 +678,7 @@ impl LinuxRecorder {
     pub(crate) fn start_scroll(
         display: &CapturedDisplay,
         crop: super::scroll::PixelRegion,
-        video_tx: VideoFrameSender,
+        video_tx: super::frame_sink::ScrollFrameSender,
     ) -> Result<Self> {
         if is_wayland() {
             bail!(
