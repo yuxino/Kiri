@@ -160,8 +160,12 @@ jobs:
           workspaces: src-tauri
           cache-on-failure: true
           save-if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+      # Native checks use Cargo/Python only; frontend checks run in fast-checks.
+      # Install the frontend toolchain here only for the Tauri package build.
       - uses: pnpm/action-setup@v6
+        if: needs.plan.outputs.package_linux == 'true'
       - uses: actions/setup-node@v7
+        if: needs.plan.outputs.package_linux == 'true'
         with:
           node-version: 22
       - name: Install Linux build and desktop-test dependencies
@@ -204,6 +208,7 @@ jobs:
             python3-gi python3-pyatspi at-spi2-core \
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0
       - run: pnpm install --frozen-lockfile
+        if: needs.plan.outputs.package_linux == 'true'
       - name: Check Linux IPC ownership and disposed callbacks
         run: |
           python3 scripts/qa/ipc-lifetime/check-source.py
