@@ -401,6 +401,9 @@ fn start_inner(
             #[cfg(target_os = "macos")]
             owner.hide().map_err(|error| error.to_string())?;
             if let Some(pid) = return_pid {
+                #[cfg(target_os = "linux")]
+                platform::linux::activate_scrolling_source(pid);
+                #[cfg(not(target_os = "linux"))]
                 platform::activate_application(pid);
             }
             platform::show_window_without_activation(
@@ -910,29 +913,67 @@ pub fn handle_escape(app: &AppHandle, shortcut: &Shortcut) -> bool {
 }
 
 pub fn focus_panel(app: &AppHandle) -> bool {
-    if !active(app) {
+    let Some(session) = current(app) else {
         return false;
-    }
-    if let Some(panel) = app.get_webview_window(PANEL) {
-        let _ = panel.show();
-        let _ = panel.set_focus();
-        #[cfg(target_os = "linux")]
-        {
-            let target = app.clone();
-            let _ = app.run_on_main_thread(move || {
-                use gtk::prelude::WidgetExt;
-                if let Some(surface) = target
-                    .get_webview_window(PANEL)
-                    .and_then(|window| window.gtk_window().ok())
-                    .and_then(|window| window.window())
-                {
-                    surface.raise();
-                    surface.focus(0); // X11 CurrentTime, only on explicit focus.
+    };
+    #[cfg(target_os = "linux")]
+    {
+        let target = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if !current(&target).is_some_and(|active| active.id == session.id) {
+                return;
+            }
+            if let Some(panel) = target.get_webview_window(PANEL) {
+                if let Err(error) = focus_x11_panel(&panel) {
+                    log::warn!("Could not focus scrolling controls: {error}");
                 }
-            });
+            }
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = session;
+        if let Some(panel) = app.get_webview_window(PANEL) {
+            let _ = panel.show();
+            let _ = panel.set_focus();
         }
     }
     true
+}
+
+#[cfg(target_os = "linux")]
+fn focus_x11_panel(panel: &WebviewWindow) -> Result<(), String> {
+    use gtk::{glib::translate::ToGlibPtr, prelude::WidgetExt};
+    use x11rb::{
+        connection::Connection,
+        protocol::xproto::{ConnectionExt, InputFocus},
+    };
+    // GDK's normal toplevel focus request goes through the WM. Our X11-only
+    // controls deliberately bypass WM management, so focus this exact owned
+    // native XID directly, only after the user's explicit capture shortcut.
+    extern "C" {
+        fn gdk_x11_window_get_xid(window: *mut gtk::gdk::ffi::GdkWindow) -> std::os::raw::c_ulong;
+    }
+    let native = panel.gtk_window().map_err(|error| error.to_string())?;
+    let surface = native
+        .window()
+        .ok_or("The scrolling capture controls are unavailable.")?;
+    let xid = unsafe { gdk_x11_window_get_xid(surface.to_glib_none().0) };
+    let xid = u32::try_from(xid).map_err(|error| error.to_string())?;
+    surface.raise();
+    let (connection, _) = x11rb::connect(None).map_err(|error| error.to_string())?;
+    connection
+        .set_input_focus(InputFocus::PARENT, xid, x11rb::CURRENT_TIME)
+        .map_err(|error| error.to_string())?
+        .check()
+        .map_err(|error| error.to_string())?;
+    connection.flush().map_err(|error| error.to_string())?;
+    panel
+        .with_webview(|webview| {
+            webview.inner().grab_focus();
+        })
+        .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 pub fn window_destroyed(app: &AppHandle, label: &str) {
