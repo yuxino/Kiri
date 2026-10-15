@@ -57,6 +57,38 @@ test("full crop is a no-op at Retina scale", () => {
   });
 });
 
+test("fractional-scale edge crops use each source axis and rebase marks to snapped pixels", () => {
+  // Actual source dimensions can yield different axis ratios at fractional
+  // scale. Reusing the horizontal factor starts this crop one row too high.
+  const mark = { kind: "rectangle", id: 1,
+    rect: { x: 620, y: 420, width: 100, height: 80 }, color: "violet", width: 3 };
+  const document = {
+    schemaVersion: 1,
+    canvas: { width: 800, height: 600 },
+    sourcePixels: { width: 1001, height: 751 },
+    marks: [mark],
+  };
+  for (const selection of [
+    { x: 599.6, y: 399.2, width: 200.4, height: 200.8 },
+    { x: 800, y: 600, width: -200.4, height: -200.8 },
+  ]) {
+    const result = cropAnnotationDocument(document, selection);
+    assert.deepEqual(result.cropPixels, { x: 750, y: 500, width: 251, height: 251 });
+    assert.deepEqual(result.document.sourcePixels, { width: 251, height: 251 });
+    // The snapped origin is (750 * 800 / 1001, 500 * 600 / 751),
+    // rather than the unsnapped drag origin (599.6, 399.2).
+    assert.ok(Math.abs(result.document.canvas.width - 200800 / 1001) < 1e-10);
+    assert.ok(Math.abs(result.document.canvas.height - 150600 / 751) < 1e-10);
+    assert.equal(result.document.marks.length, 1);
+    const croppedMark = result.document.marks[0];
+    assert.equal(croppedMark.id, mark.id);
+    assert.equal(croppedMark.rect.width, mark.rect.width);
+    assert.equal(croppedMark.rect.height, mark.rect.height);
+    assert.ok(Math.abs(croppedMark.rect.x - (620 - 600000 / 1001)) < 1e-10);
+    assert.ok(Math.abs(croppedMark.rect.y - (420 - 300000 / 751)) < 1e-10);
+  }
+});
+
 test("crop snaps to source pixels, translates intersections, and drops outside marks", () => {
   const result = cropAnnotationDocument(documentWithMarks(), {
     x: 100.2,
