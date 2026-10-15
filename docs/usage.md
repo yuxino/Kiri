@@ -46,6 +46,14 @@ Use the small arrow beside the microphone to select an actual input device witho
 
 On macOS and Windows, recording controls follow the selection and adapt near display edges. Dragging moves the current panel; the next capture positions it from the new selection again. Pause keeps the recorded elapsed time, and resume continues it. Older Windows versions may still show the system’s full-display capture border. Linux continues to use tray actions or commands.
 
+## Scrolling screenshots
+
+On macOS, Windows, or Linux X11, select a screenshot region and choose **Scrolling Screenshot** before adding annotations. Select only the vertically scrolling content, excluding fixed headers, footers, and sidebars. Leave room beside the selection for the preview panel; if it cannot fit outside the selection, make the selection smaller. Wayland scrolling capture is currently unavailable.
+
+Scroll down slowly in the original application while the side panel previews the accepted image. If matching pauses, scroll back slightly into already captured content, then continue down. Repeated content, animation, moving the window, or changing scale can prevent a reliable join. Kiri does not remove fixed bars automatically or scroll for you.
+
+Click **Done** to copy and save through the normal screenshot completion flow. **Esc** cancels from the original application; **Enter** finishes when the preview panel has focus. Press your configured capture shortcut again to focus that panel. If the last section cannot be joined, choose **Continue adjusting** or explicitly **Save captured portion**. Output is limited to 8192 pixels per side and 32 MiPixels (33,554,432 pixels); reaching a limit preserves the accepted portion for explicit saving.
+
 ## Screenshot annotations
 
 Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type directly on the image, then choose a single mark or a tiled pattern and adjust opacity, angle, and spacing. Watermarks remain editable after saving.

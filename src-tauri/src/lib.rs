@@ -33,6 +33,7 @@ mod media_playback;
 #[cfg(windows)]
 mod media_source_windows;
 mod record;
+mod scroll_capture;
 mod remote_ocr;
 mod shortcut_settings;
 mod portal_shortcuts;
@@ -75,6 +76,11 @@ pub fn run() {
                 .with_handler(|app, shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state() == ShortcutState::Pressed
+                        && scroll_capture::handle_escape(app, shortcut)
+                    {
+                        return;
+                    }
+                    if event.state() == ShortcutState::Pressed
                         && app
                             .try_state::<shortcut_settings::CaptureBinding>()
                             .is_some_and(|binding| binding.matches(shortcut))
@@ -93,6 +99,7 @@ pub fn run() {
                 .build(),
         )
         .manage(protocol::ProtocolStore::new())
+        .manage(scroll_capture::ScrollCaptureState::default())
         .register_asynchronous_uri_scheme_protocol("kiri", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             // WebKit starts custom-scheme tasks on the application thread on
@@ -162,9 +169,14 @@ pub fn run() {
             // The library window hides instead of closing (single-instance
             // Dock/taskbar app); capture sessions close it programmatically.
             match event {
-                tauri::WindowEvent::CloseRequested { .. } => {}
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    if scroll_capture::close_requested(window.app_handle(), window.label()) {
+                        api.prevent_close();
+                    }
+                }
                 tauri::WindowEvent::Destroyed => {
                     log::info!("[window] destroyed label={}", window.label());
+                    scroll_capture::window_destroyed(window.app_handle(), window.label());
                     if let Some(state) = window.app_handle().try_state::<AppState>() {
                         let label = window.label();
                         state.qr_requests.clear(label);
@@ -271,6 +283,11 @@ pub fn run() {
             commands::cancel_capture,
             commands::prepare_capture_annotation,
             commands::confirm_capture,
+            scroll_capture::scroll_capture_supported,
+            scroll_capture::start_scroll_capture,
+            scroll_capture::scroll_capture_status,
+            scroll_capture::finish_scroll_capture,
+            scroll_capture::cancel_scroll_capture,
             commands::save_file_dialog,
             commands::get_asset_annotation_project,
             commands::prepare_asset_annotation,
@@ -339,6 +356,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(&event, tauri::RunEvent::Exit) {
+                scroll_capture::shutdown(app);
                 #[cfg(target_os = "linux")]
                 if let Some(server) = app.try_state::<media_playback::MediaPlaybackServer>() {
                     server.stop();
@@ -374,6 +392,9 @@ fn show_library_window(app: &tauri::AppHandle, reason: &str) -> Result<(), Strin
 }
 
 fn show_library_window_inner(app: &tauri::AppHandle, reason: &str) -> Result<(), String> {
+    if scroll_capture::focus_panel(app) {
+        return Ok(());
+    }
     let window = match app.get_webview_window("library") {
         Some(window) => window,
         None => {
@@ -681,6 +702,9 @@ fn tray_click_opens_library(event: &tauri::tray::TrayIconEvent) -> bool {
 }
 
 fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
+    if scroll_capture::focus_panel(app) {
+        return;
+    }
     let Some(state) = app.try_state::<AppState>() else {
         log::warn!("[{source}] capture start ignored before app state was ready");
         return;

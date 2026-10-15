@@ -702,6 +702,9 @@ pub fn show_confirm_dialog(
 /// every notice, including after Kiri moves between displays.
 #[cfg(target_os = "linux")]
 fn linux_recording_hides_feedback(app: &AppHandle) -> bool {
+    if crate::scroll_capture::active(app) {
+        return true;
+    }
     app.try_state::<AppState>().is_some_and(|state| {
         // A caller may already own this lock. In that case omit feedback
         // rather than deadlocking or recording one of Kiri's own windows.

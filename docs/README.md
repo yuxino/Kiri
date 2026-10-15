@@ -50,11 +50,11 @@ Linux QA, and contribution records retain their original language.
 - [`releases/v1.4.9.md`](releases/v1.4.9.md) — first signed-updater release
   notes and one-time bootstrap instructions.
 
-## Proposed designs
+## Implementation candidates
 
-- [Scrolling capture / 微信式滚动长截图](adr/0109-scrolling-capture.md) — research
-  proposal for #152; architecture, algorithm choices and acceptance gates.
-  Not implemented or accepted.
+- [Scrolling capture / 微信式滚动长截图](adr/0109-scrolling-capture.md) — native
+  fixed-region streams, Rust stitching and a side preview for #152. Implemented
+  candidate with explicit platform limits; packaged/native acceptance remains open.
 
 ## Decision records
 
