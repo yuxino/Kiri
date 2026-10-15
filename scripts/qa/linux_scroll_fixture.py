@@ -5,6 +5,7 @@ deterministic pixels and scrolls only in response to ordinary desktop input.
 """
 
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -44,7 +45,11 @@ def serve(output):
     state = {"offset": 0, "fixed": False}
     window = Gtk.Window(title="Kiri QA public scrolling page")
     window.set_default_size(1280, 800)
-    window.fullscreen()
+    if os.environ.get("KIRI_SCROLL_FIXTURE_FULLSCREEN", "1") == "1":
+        window.fullscreen()
+    else:
+        window.set_decorated(False)
+        window.move(0, 0)
     fixed = Gtk.Fixed()
     fixed.override_background_color(Gtk.StateFlags.NORMAL, Gdk.RGBA(0.13, 0.15, 0.18, 1))
     window.add(fixed)
