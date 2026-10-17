@@ -4,28 +4,16 @@
   overflow-y: auto;
   background: var(--kiri-canvas);
   color: var(--kiri-label);
-  padding: 24px var(--kiri-space-page) 44px;
+  padding: 28px var(--kiri-space-page) 40px;
   box-sizing: border-box;
-  container-type: inline-size;
-  container-name: settings-page;
 }
 
 .kiri-settings__content {
-  width: 100%;
-  margin: 0;
+  width: min(100%, 780px);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.kiri-settings__columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; gap: 28px; }
-.kiri-settings__ocr-column { min-width: 0; display: flex; flex-direction: column; gap: 24px; }
-.kiri-settings__columns .kiri-settings-section__heading { min-height: 36px; align-items: flex-start; box-sizing: border-box; }
-.kiri-settings-section.kiri-settings-section--about { display: flex; flex-direction: column; gap: 14px; border-bottom: 1px solid var(--kiri-surface-border); padding-bottom: 24px; }
-.kiri-settings-section--about .kiri-version-row { flex-direction: column; align-items: stretch; gap: 16px; border: 0; border-radius: 0; background: transparent; padding: 0; min-height: 0; }
-@container settings-page (max-width: 940px) {
-  .kiri-settings__columns { grid-template-columns: 1fr; gap: 28px; }
-  .kiri-settings__columns .kiri-settings-section__heading { min-height: 0; }
+  gap: 28px;
 }
 
 .kiri-shortcut-actions, .kiri-storage-actions { max-width: 64%; }
@@ -49,14 +37,16 @@
 
 .kiri-settings-section__heading {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--kiri-space-standard);
 }
 
 .kiri-settings-section__heading h2 {
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.3;
+  color: var(--kiri-secondary-label);
 }
 
 .kiri-settings-card {
@@ -71,8 +61,8 @@
 .kiri-version-row,
 .kiri-shortcut-row,
 .kiri-storage-row {
-  min-height: 68px;
-  padding: 14px 16px;
+  min-height: 64px;
+  padding: 14px 18px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -96,8 +86,9 @@
 .kiri-shortcut-row strong,
 .kiri-storage-row strong,
 .ocr-engine-copy strong {
-  font-size: 14px;
-  line-height: 1.25;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .kiri-language-row span,
@@ -107,8 +98,8 @@
 .kiri-storage-copy > span,
 .ocr-engine-copy > span:not(.ocr-engine-title-row) {
   color: var(--kiri-secondary-label);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .kiri-storage-copy {
@@ -195,12 +186,12 @@
 }
 
 .kiri-shortcut-actions .kiri-button {
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 10px;
 }
 
 .kiri-storage-actions .kiri-button {
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 10px;
   white-space: nowrap;
 }
@@ -290,17 +281,17 @@
 }
 
 .ocr-engine-row[data-active] {
-  background: var(--kiri-accent-soft-alpha-10);
+  background: transparent;
 }
 
 .ocr-engine-choice {
   flex: 1;
   min-width: 0;
-  min-height: 82px;
+  min-height: 74px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 15px 16px;
+  padding: 16px 18px;
   border: 0;
   background: transparent;
   color: var(--kiri-label);
@@ -377,13 +368,13 @@
   border-radius: var(--kiri-radius-badge);
   background: var(--kiri-group-fill);
   color: var(--kiri-secondary-label);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .kiri-settings-badge--local {
-  background: var(--kiri-accent-soft-alpha-10);
-  color: var(--kiri-accent-strong);
+  background: var(--kiri-group-fill);
+  color: var(--kiri-secondary-label);
 }
 
 .ocr-engine-key-state {
@@ -414,7 +405,7 @@
 
 .ocr-profile-empty {
   min-height: 0;
-  padding: 14px 16px;
+  padding: 12px 18px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -430,7 +421,7 @@
 .kiri-settings-key-note {
   margin: 0;
   color: var(--kiri-secondary-label);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -686,13 +677,13 @@
 .kiri-language-select {
   max-width: 100%;
   min-width: 150px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid var(--kiri-surface-border);
   border-radius: 7px;
-  background: var(--kiri-group-fill);
+  background: var(--kiri-card);
   color: inherit;
-  font: 14px var(--kiri-font-ui);
-  min-height: 36px;
+  font: 12.5px var(--kiri-font-ui);
+  min-height: 32px;
 }
 
 @container settings-section (max-width: 480px) {
@@ -708,10 +699,54 @@
 .kiri-language-menu .kiri-choice-option:focus-visible,
 .kiri-language-menu .kiri-choice-option[aria-selected=true] { background: var(--kiri-group-fill); }
 
-.kiri-settings-section--about .kiri-version-title strong { font-size: 18px; }
-.kiri-settings-section--about .kiri-settings-badge { background: transparent; padding: 0; border-radius: 0; font-size: 14px; font-weight: 400; }
-.kiri-settings-section--about .kiri-update-copy > span { font-size: 14px; line-height: 1.6; }
-.kiri-settings-section--about .kiri-update-actions { justify-content: flex-start; }
-.kiri-settings-section--about .kiri-update-notes { border: 0; border-radius: 0; background: transparent; padding: 0; font-size: 14px; }
-.kiri-settings-section--about .kiri-update-notes strong { font-size: 14px; }
-.kiri-settings-section--about .kiri-update-notes p { font-size: 14px; line-height: 1.65; }
+/* Version/update is the main row; support actions form a quieter footer. */
+.kiri-settings-section--about .kiri-version-row {
+  flex-wrap: wrap;
+  gap: 14px 18px;
+}
+
+.kiri-settings-section--about .kiri-update-copy {
+  flex: 1 1 240px;
+}
+
+.kiri-settings-section--about .kiri-version-title strong { font-size: 16px; }
+.kiri-settings-section--about .kiri-version-title .kiri-settings-badge {
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.kiri-support-actions {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--kiri-surface-border);
+}
+
+.kiri-settings .kiri-button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.kiri-support-actions .kiri-button--secondary {
+  background: transparent;
+  border-color: transparent;
+  color: var(--kiri-secondary-label);
+}
+
+.kiri-support-actions .kiri-button--secondary:hover:not(:disabled) {
+  background: var(--kiri-group-fill);
+  color: var(--kiri-label);
+}
+
+@media (max-width: 560px) {
+  .kiri-settings-section--about .kiri-update-copy,
+  .kiri-support-actions { flex-basis: auto; }
+  .kiri-shortcut-actions, .kiri-storage-actions { max-width: none; }
+}

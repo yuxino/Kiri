@@ -1,5 +1,6 @@
 // Isolated real-component layout check. No native commands or user assets.
 import React from "react";
+import { version } from "../../package.json";
 import { createRoot } from "react-dom/client";
 import { ToastWindow } from "../../src/windows/ToastWindow";
 import { PinWindow } from "../../src/windows/PinWindow";
@@ -87,13 +88,13 @@ Object.assign(window, {
         case "get_shortcut_status": return { status: "enabled", label: "⇧⌘A" };
         case "get_dock_visibility": return {supported:true,visible:true};
         case "platform_capabilities": return {manualUpdates:false,videoEditing:true};
-        case "plugin:app|version": return "1.6.18";
+        case "plugin:app|version": return version;
         case "plugin:window|is_visible": return true;
         case "plugin:updater|check":
           actions.push("check-update");
           if (params.has("updateFailure")) throw new Error("Controlled offline update check");
           if (lateUpdate) await lateUpdate;
-          return params.has("update") ? {rid:7,currentVersion:"1.6.18",version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
+          return params.has("update") ? {rid:7,currentVersion:version,version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
         case "plugin:resources|close": return null;
         case "set_capture_shortcut_editing": return null;
         case "set_capture_shortcut": return {status:"enabled",label:"⇧⌘A"};

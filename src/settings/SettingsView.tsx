@@ -100,10 +100,7 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
   return (
     <main className="kiri-settings" aria-label={t("Settings")}>
       <div className="kiri-settings__content">
-        <div className="kiri-settings__columns">
-          <GeneralSettingsSection />
-          <div className="kiri-settings__ocr-column">
-            <AboutSettingsSection updater={updater} />
+        <GeneralSettingsSection />
         {operationError && (
           <div className="kiri-settings-alert kiri-settings-alert--error" role="alert">
             {t(operationError)}
@@ -148,8 +145,7 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
           />
         )}
 
-          </div>
-        </div>
+        <AboutSettingsSection updater={updater} />
       </div>
 
       {editingProfile !== undefined && (
@@ -330,6 +326,8 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
           >
             {buttonLabel}
           </button>
+        </div>
+        <div className="kiri-support-actions" role="group" aria-label={t("About")}>
           <button type="button" className="kiri-button kiri-button--secondary"
             disabled={copyState === "copying"} aria-label={t("Copy Info")}
             onClick={() => void copyInfo()}>
