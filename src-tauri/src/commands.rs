@@ -2929,6 +2929,46 @@ fn confirm_capture_inner(
     })
 }
 
+/// Scrolling pixels originate in the native stitcher, never in an unbounded
+/// renderer payload. Preserve ordinary capture PNG validation and share only
+/// its clipboard/library completion behavior.
+pub(crate) fn commit_scroll_capture(
+    app: &AppHandle,
+    capture_id: uuid::Uuid,
+    png: &[u8],
+    size: (u32, u32),
+) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let _transition = state.library_transition.lock().unwrap();
+    if state.pending_capture_completion.lock().unwrap().is_some() {
+        return Err("The previous capture is still completing.".into());
+    }
+    let session = {
+        let mut capture = state.capture.lock().unwrap();
+        if !capture.session.as_ref().is_some_and(|session| session.capture_id == capture_id) {
+            return Err("This scrolling capture is no longer active.".into());
+        }
+        capture.session.take().unwrap()
+    };
+    let result = confirm_capture_inner(app, &state, &session, png,
+        (i64::from(size.0), i64::from(size.1)), None);
+    match result {
+        Ok(feedback) => {
+            invalidate_capture_resources(app, &session);
+            *state.pending_capture_completion.lock().unwrap() = Some(PendingCaptureCompletion {
+                session, preview: feedback.preview, monitor: feedback.monitor, pin_on_top: false,
+            });
+            Ok(())
+        }
+        Err(error) => {
+            // A failed import remains retryable in the same session. No asset
+            // is announced until its library transaction has completed.
+            state.capture.lock().unwrap().session = Some(session);
+            Err(error.message)
+        }
+    }
+}
+
 /// Finalizes a successful capture only after its owner WebView has gone away.
 /// This callback runs outside the synchronous confirmation IPC, so creating
 /// the completion preview cannot prevent WebView2 from delivering that IPC
@@ -3771,6 +3811,9 @@ pub async fn start_recording_flow(
     app: AppHandle,
     request: StartRecordingRequest,
 ) -> Result<(), String> {
+    if crate::scroll_capture::active(&app) {
+        return Err("Finish the current capture before starting a recording.".into());
+    }
     // Do not trigger a privacy prompt for stale/direct IPC without a live
     // user-initiated capture session.
     {
@@ -5794,7 +5837,7 @@ fn require_known_frontend_window(window: &WebviewWindow) -> Result<(), String> {
     let label = window.label();
     if matches!(
         label,
-        "library" | "overlay" | "countdown" | "control-panel" | "recording-region" | "ripple" | "confirm" | "toast"
+        "library" | "overlay" | "countdown" | "control-panel" | "recording-region" | "ripple" | "confirm" | "toast" | "scroll-capture"
     ) || ["viewer-", "editor-"]
         .iter()
         .any(|prefix| label.starts_with(prefix))

@@ -26,8 +26,9 @@ const floating = { x: 350, y: 310, width: 480, height: 120 };
 // Only native/data-loading boundaries and unrelated child surfaces are stubbed;
 // the selection state, geometry, phase changes and rendered outlines stay real.
 async function overlay(t, { windowRects = [floating, normal, background], scale = 2,
-  devicePixelRatio = scale, width = 1512, height = 982 } = {}) {
+  devicePixelRatio = scale, width = 1512, height = 982, scrolling = false, scrollFailures = [] } = {}) {
   const errors = [];
+  const scrollSelections = [];
   let cancelled = 0;
   const context = { displayWidth: width, displayHeight: height, scale,
     pixelWidth: Math.round(width * scale), pixelHeight: Math.round(height * scale),
@@ -47,6 +48,12 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
         getRecordingOptions: async () => recordingOptions,
         micSupported: async () => true,
         platformCapabilities: async () => ({ recording: true, microphone: true, systemAudio: true, clickHighlights: true }),
+        scrollCaptureSupported: async () => scrolling,
+        startScrollCapture: async selection => {
+          scrollSelections.push(selection);
+          const failure = scrollFailures[scrollSelections.length - 1];
+          if (failure !== undefined) throw failure;
+        },
         cancelCapture: async () => { cancelled++; },
       } },
       "../annotation/geom": geometry.exports,
@@ -68,7 +75,11 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
   });
   Object.assign(harness.window, { innerWidth: width, innerHeight: height, devicePixelRatio });
   const component = harness.mount("OverlayWindow", {});
-  t.after(() => { component.unmount(); assert.deepEqual(errors, []); assert.equal(cancelled, 0); });
+  t.after(() => {
+    component.unmount();
+    assert.deepEqual(errors, scrollFailures.map(error => ({ message: `start_scroll_capture rejected: ${String(error)}` })));
+    assert.equal(cancelled, 0);
+  });
   let tree = component.render();
   await settleRequests();
   tree = component.render();
@@ -91,6 +102,13 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
     render();
   };
   return { region, hoverRect,
+    scrollSelections,
+    text: () => nodes(render()),
+    toolbar: () => nodes(tree).find(node => node?.type?.name === "Toolbar")?.props,
+    history(hasMarks) {
+      nodes(tree).find(node => node?.type === "annotation-canvas").props.onHistoryChange(hasMarks, false, hasMarks);
+      render();
+    },
     hover: (x, y) => pointer("onPointerMove", x, y),
     click(x, y) { pointer("onPointerDown", x, y); pointer("onPointerUp", x, y); },
     drag(from, move, release) {
@@ -105,6 +123,54 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
     },
   };
 }
+
+test("scrolling screenshot entry is capability gated and refuses to discard annotations", async t => {
+  const supported = await overlay(t, { scrolling: true });
+  supported.click(250, 200);
+  assert.equal(typeof supported.toolbar().onScrollCapture, "function");
+  supported.history(true);
+  assert.equal(supported.toolbar().scrollCaptureDisabled, true);
+  supported.toolbar().onScrollCapture();
+  await settleRequests();
+  assert.deepEqual(supported.scrollSelections, [], "calling the disabled action also preserves annotation data");
+  supported.history(false);
+  assert.equal(supported.toolbar().scrollCaptureDisabled, false);
+  supported.toolbar().onScrollCapture();
+  supported.toolbar().onScrollCapture();
+  await settleRequests();
+  assert.deepEqual(supported.scrollSelections, [normal], "the session starts once with unchanged logical selection coordinates");
+
+  const unsupported = await overlay(t);
+  unsupported.click(250, 200);
+  assert.equal(unsupported.toolbar().onScrollCapture, undefined);
+});
+
+test("scroll startup errors preserve the specific remedy and leave the selection ready for retry", async t => {
+  const known = [
+    "Escape is unavailable. Close the other capture tool and try again.",
+    "Leave space beside the selection for scrolling capture controls.",
+    "Select a larger scrolling content area.",
+    "Scrolling capture is not available on this desktop.",
+  ];
+  const fallback = "Could not start scrolling capture. Try a smaller selection with room for the controls.";
+  const scrollFailures = [...known.map(message => new Error(message)), new Error("private native detail")];
+  const h = await overlay(t, { scrolling: true, scrollFailures });
+  h.click(250, 200);
+  for (const [index, expected] of [...known, fallback].entries()) {
+    h.toolbar().onScrollCapture();
+    await settleRequests();
+    assert.ok(h.text().includes(expected));
+    assert.equal(h.text().includes("private native detail"), false);
+    assert.equal(h.toolbar().disabled, false, "a rejected startup releases the completion lock");
+    assert.deepEqual(h.region(), normal, "the original selection remains available");
+    assert.equal(h.scrollSelections.length, index + 1);
+  }
+  h.toolbar().onScrollCapture();
+  await settleRequests();
+  h.text();
+  assert.equal(h.scrollSelections.length, scrollFailures.length + 1, "retry can start the native session after the error");
+  assert.equal(h.toolbar().disabled, true);
+});
 
 for (const [scale, devicePixelRatio] of [[1, 1], [2, 2], [2, 2.5]]) {
   test(`hover and click agree for overlapping app and floating windows at scale ${scale}, DPR ${devicePixelRatio}`, async t => {

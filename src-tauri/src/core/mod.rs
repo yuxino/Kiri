@@ -10,5 +10,6 @@ pub mod pin_placement;
 pub mod policy;
 pub mod recording_controls;
 pub mod recording_recovery;
+pub mod scroll_stitch;
 pub mod shortcut;
 pub mod video_project;

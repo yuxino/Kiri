@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-15T11:43:58.843031+00:00",
+  "source_commit": "e0bacf6a6895dddd8b725651f070234ddb527fc0",
+  "runtime_tree_matches_commit": true,
+  "runtime_source_sha256": {
+    "src-tauri/src/core/scroll_stitch.rs": "3ab0a56500d01a3788e362f5c8a1c933c5030231b8cc7d2c4471bb75895cf5ef",
+    "src-tauri/src/scroll_capture.rs": "aa64efaff2db3c758885b751374197bddfed3e6b1f3721c963a228cc121fe537",
+    "src-tauri/src/capture/scroll.rs": "dc27b32d9fb89234a1d0ef28386605e3c69926ea74273c40300f73f7b24e1f41",
+    "src-tauri/src/platform/linux.rs": "1fda4fefe51c200202646c2887cfe78c7b1d9f45b401a9f1867735fbd0efcb15",
+    "src-tauri/src/lib.rs": "3c10ac1dbcbde0425f19c2295362090c8f1f88f24c43b451e407306b511197e7",
+    "src/windows/ScrollCaptureWindow.tsx": "15d8e85ccb3571deea51873f7fcf4721a1ea381caf688f115506330a4b0e7f4e",
+    "src/windows/OverlayWindow.tsx": "10e106afe221f0bcad59f5e0b95382e23d6649fbc0650017895c901984511ac7",
+    "src/lib/ipc.ts": "b76bf14e412e64c2e5da403503db57a614b326b885c3b836e2597e825456a70a"
+  },
+  "harness": {
+    "commit": null,
+    "status": "Pending separate harness/evidence commit; content hashes avoid a circular reference.",
+    "sha256": {
+      "scripts/qa/linux-scroll-native.sh": "437828a144b4fe2999d5978e988a4edb452848d426b7174b1972ecef378f44f4",
+      "scripts/qa/linux-scroll-native.py": "934abc3d6036cd61aa68c1530813fda416e70f9690952e6e18580eb6f86bbc28",
+      "scripts/qa/linux_scroll_fixture.py": "c8be396609f48e7ccded3c505f2bf7483f4837ff690a63097c4e7f465b84fb26"
+    }
+  },
+  "build": {
+    "profile": "debug",
+    "target": "x86_64-unknown-linux-gnu",
+    "rustc": "1.99.0 (b940084d7 2026-09-28)",
+    "command": "pnpm tauri build --debug --bundles deb --config src-tauri/tauri.linux.conf.json",
+    "package": "src-tauri/target/debug/bundle/deb/kiri_1.6.20_amd64.deb",
+    "package_sha256": "28bf9c841f2e3b310e7b3e38ad844a47dd37c0bb7fc862906aaef72c91d87aa4",
+    "packaged_binary_sha256": "d016707d7608cc7883ec31e45e7dfbc7c850b42ddc546245c4045f1bc4bb8e22",
+    "installed_binary": "/usr/bin/kiri",
+    "installed_binary_sha256": "d016707d7608cc7883ec31e45e7dfbc7c850b42ddc546245c4045f1bc4bb8e22",
+    "packaged_and_installed_binary_match": true,
+    "binary_hash_source": "Executable bytes read directly from the Debian package, independently compared with the installed executable."
+  },
+  "environment": {
+    "os": "Ubuntu 24.04 container",
+    "desktop": "X11 / Xvfb / Openbox",
+    "screen_pixels": [
+      1280,
+      800
+    ],
+    "scale": 1,
+    "source": "Separate fullscreen GTK window with generated public source pixels",
+    "library": "Disposable isolated HOME/XDG profile; no user library used",
+    "rendering": "Software GL; WebKit compositing disabled only in the QA process tree"
+  },
+  "verification": {
+    "scroll_native": {
+      "passed": true,
+      "check_count": 7,
+      "report": "report.json",
+      "comparison": "Exact RGB pixel equality; native PNG alpha must be fully opaque"
+    },
+    "cargo_test": {
+      "passed": 416,
+      "failed": 0,
+      "ignored": 10,
+      "command": "cargo test --locked --manifest-path src-tauri/Cargo.toml",
+      "log_name": "kiri-cargo-test-final.log"
+    },
+    "cargo_check": {
+      "passed": true,
+      "command": "cargo check --locked --manifest-path src-tauri/Cargo.toml --all-targets",
+      "log_name": "kiri-cargo-check-final.log"
+    },
+    "frontend_build": {
+      "passed": true,
+      "command": "pnpm build",
+      "log_name": "kiri-deb-build-latest.log",
+      "note": "Executed by Tauri before packaging."
+    }
+  },
+  "preceding_linux_desktop_regression": {
+    "passed": true,
+    "check_count": 17,
+    "scope": "Preceding installed debug candidate with opaque frames, override-redirect controls and direct panel focus; before the final scrolling source-focus preservation helper. Final scrolling acceptance checks the final helper.",
+    "checks": [
+      "installed app paints an accessible Settings control in the visible library of an empty isolated profile",
+      "public source repaints an X11 Expose while its driver is blocked",
+      "native global shortcut opens capture three times; Escape cancels without saving",
+      "capture overlay matches the root display at first observed visible map, painted readiness, and five stability samples before interaction",
+      "three captures cover the full display with an unchanged 27px top dock strut; Escape cancels",
+      "real focused WebKitGTK textarea Undo/Redo owns text; two-stage Escape preserves prior canvas history",
+      "region drag and Return save the exact pixels from the real X11 desktop",
+      "clipboard contains the captured PNG",
+      "real OCR mode recognizes public desktop text; Copy writes it to the clipboard and Text History",
+      "real MP4 recording starts in the GUI and pauses, resumes, and stops through public CLI controls",
+      "system GStreamer fully decodes the 680x380 MP4 and verifies requested audio; active frames match the desktop, with no paused frames or Kiri controls",
+      "saved screenshot, OCR history, and recording persist after restarting the installed app",
+      "WebKitGTK video viewer loads metadata, advances real playback, pauses and seeks through local HTTP media delivery",
+      "screenshot returns focus to the external source while restoring the previously visible library without activation",
+      "visible countdown takes native keyboard focus; Escape cancels without a later recorder or saved asset",
+      "actual annotated toolbar pin appears after overlay destruction; native X11 above stacking, image drag, proportional resize and hover Close work",
+      "explicit native multi-select and Select All move captures to recoverable Trash and restore unchanged assets"
+    ],
+    "log_name": "kiri-linux-native.log"
+  },
+  "artifacts": {
+    "scroll-initial.png": {
+      "sha256": "7538d8a076fc4d66c62c71a8a737352cf4ae55cf4610c994def035ace65b254a",
+      "bytes": 107885,
+      "mode": "RGB",
+      "dimensions": [
+        1280,
+        800
+      ]
+    },
+    "scroll-extended.png": {
+      "sha256": "e9ad772738158a985f2c4df47e7cdf62cf7ad5c948ce32a116f07d926f897fd1",
+      "bytes": 133103,
+      "mode": "RGB",
+      "dimensions": [
+        1280,
+        800
+      ]
+    },
+    "fixed-header-rejected.png": {
+      "sha256": "66ba5dc4ca0153f3e3412c50fe570e0e081372387ac251d71e91776ffa3c8a8d",
+      "bytes": 103148,
+      "mode": "RGB",
+      "dimensions": [
+        1280,
+        800
+      ]
+    },
+    "saved-scroll.png": {
+      "sha256": "9985482249ad268d97da51adc4357ad305e3bce64cbfbd89137458931666b60e",
+      "bytes": 139170,
+      "mode": "RGBA",
+      "dimensions": [
+        760,
+        960
+      ],
+      "alpha_extrema": [
+        255,
+        255
+      ]
+    },
+    "report.json": {
+      "sha256": "e2593a3af201aa07065d879dcdaacfa99b149af2b6093641cced8d1fb5a4a237"
+    }
+  },
+  "not_established": [
+    "macOS native capture, permissions and focus",
+    "Windows native capture and focus",
+    "GNOME Wayland portals; scrolling capture remains unavailable on Wayland",
+    "Physical desktop/compositor behavior",
+    "Fractional scaling",
+    "Mixed-scale multiple displays"
+  ]
+}

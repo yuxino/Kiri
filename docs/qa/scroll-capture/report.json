@@ -1,0 +1,265 @@
+{
+  "success": true,
+  "checks": [
+    "global Escape cancels from the external source without saving",
+    "five real wheel scrolls append exactly 480 rows; reverse and reconnect introduce no duplicated or missing source pixels",
+    "native clipboard PNG matches the saved long screenshot",
+    "fixed header prevents uncertain joining; Done requires partial confirmation; Continue adjusting and Cancel preserve the library",
+    "explicit Save captured portion exports exactly the last verified pixels without appending the uncertain frame",
+    "capture shortcut focuses the floating panel; Enter saves the verified initial viewport",
+    "Done, partial saving, keyboard completion and cancellation restore the exact external source window focus"
+  ],
+  "clicks": [
+    {
+      "control": "Scrolling Screenshot",
+      "bounds": [
+        663,
+        617,
+        32,
+        32
+      ]
+    },
+    {
+      "control": "Scrolling Screenshot",
+      "bounds": [
+        663,
+        617,
+        32,
+        32
+      ]
+    },
+    {
+      "control": "Done",
+      "bounds": [
+        988,
+        530,
+        116,
+        34
+      ]
+    },
+    {
+      "control": "Scrolling Screenshot",
+      "bounds": [
+        663,
+        617,
+        32,
+        32
+      ]
+    },
+    {
+      "control": "Done",
+      "bounds": [
+        988,
+        530,
+        116,
+        34
+      ]
+    },
+    {
+      "control": "Continue adjusting",
+      "bounds": [
+        864,
+        444,
+        240,
+        34
+      ]
+    },
+    {
+      "control": "Cancel",
+      "bounds": [
+        864,
+        530,
+        116,
+        34
+      ]
+    },
+    {
+      "control": "Scrolling Screenshot",
+      "bounds": [
+        663,
+        617,
+        32,
+        32
+      ]
+    },
+    {
+      "control": "Done",
+      "bounds": [
+        988,
+        530,
+        116,
+        34
+      ]
+    },
+    {
+      "control": "Save captured portion",
+      "bounds": [
+        864,
+        486,
+        240,
+        34
+      ]
+    },
+    {
+      "control": "Scrolling Screenshot",
+      "bounds": [
+        663,
+        617,
+        32,
+        32
+      ]
+    }
+  ],
+  "session": "Ubuntu X11 / Xvfb / Openbox / 1280x800 / scale 1",
+  "rendering": "software GL; WebKit compositing disabled only in this QA process tree",
+  "not_tested": [
+    "GNOME Wayland portals",
+    "macOS",
+    "Windows",
+    "mixed scale and multiple monitors"
+  ],
+  "previews": [
+    {
+      "bounds": [
+        865,
+        210,
+        238,
+        150
+      ],
+      "mean": 221.74,
+      "stddev": 42.209
+    },
+    {
+      "bounds": [
+        865,
+        210,
+        238,
+        150
+      ],
+      "mean": 221.74,
+      "stddev": 42.209
+    },
+    {
+      "bounds": [
+        865,
+        210,
+        238,
+        150
+      ],
+      "mean": 207.893,
+      "stddev": 64.337
+    },
+    {
+      "bounds": [
+        865,
+        210,
+        238,
+        150
+      ],
+      "mean": 207.893,
+      "stddev": 64.337
+    },
+    {
+      "bounds": [
+        865,
+        210,
+        238,
+        150
+      ],
+      "mean": 221.74,
+      "stddev": 42.209
+    }
+  ],
+  "exported_pngs": {
+    "saved-scroll.png": {
+      "mode": "RGBA",
+      "dimensions": [
+        760,
+        960
+      ],
+      "alpha_extrema": [
+        255,
+        255
+      ]
+    },
+    "clipboard-scroll.png": {
+      "mode": "RGBA",
+      "dimensions": [
+        760,
+        960
+      ],
+      "alpha_extrema": [
+        255,
+        255
+      ]
+    },
+    "saved-partial.png": {
+      "mode": "RGBA",
+      "dimensions": [
+        760,
+        480
+      ],
+      "alpha_extrema": [
+        255,
+        255
+      ]
+    },
+    "saved-keyboard.png": {
+      "mode": "RGBA",
+      "dimensions": [
+        760,
+        480
+      ],
+      "alpha_extrema": [
+        255,
+        255
+      ]
+    }
+  },
+  "saved_dimensions": [
+    760,
+    960
+  ],
+  "pixel_hashes": {
+    "native stitched image": {
+      "actual_rgb_sha256": "b6e267d9ef24ed338428c48fe4c66bdc26c2e88845615186d0de3683ef435832",
+      "expected_rgb_sha256": "b6e267d9ef24ed338428c48fe4c66bdc26c2e88845615186d0de3683ef435832",
+      "dimensions": [
+        760,
+        960
+      ],
+      "exact": true
+    },
+    "native clipboard roundtrip": {
+      "actual_rgb_sha256": "b6e267d9ef24ed338428c48fe4c66bdc26c2e88845615186d0de3683ef435832",
+      "expected_rgb_sha256": "b6e267d9ef24ed338428c48fe4c66bdc26c2e88845615186d0de3683ef435832",
+      "dimensions": [
+        760,
+        960
+      ],
+      "exact": true
+    },
+    "explicit partial screenshot": {
+      "actual_rgb_sha256": "9b4b788ec07d46ec5320f9bd127ca7a82691ce9707af3d6eafbbedee7869ea90",
+      "expected_rgb_sha256": "9b4b788ec07d46ec5320f9bd127ca7a82691ce9707af3d6eafbbedee7869ea90",
+      "dimensions": [
+        760,
+        480
+      ],
+      "exact": true
+    },
+    "keyboard-completed screenshot": {
+      "actual_rgb_sha256": "5994f7e5fb1efe3d811c34b041624969037cbb9f0684fe7a0ed9e061ee823cae",
+      "expected_rgb_sha256": "5994f7e5fb1efe3d811c34b041624969037cbb9f0684fe7a0ed9e061ee823cae",
+      "dimensions": [
+        760,
+        480
+      ],
+      "exact": true
+    }
+  },
+  "native_pixel_error": 0.0,
+  "clipboard_pixel_error": 0.0,
+  "partial_pixel_error": 0.0,
+  "keyboard_pixel_error": 0.0
+}

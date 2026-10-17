@@ -44,6 +44,14 @@ Le panneau de préparation propose MP4 / GIF, Démarrer et quatre icônes côte 
 
 La petite flèche à côté du microphone permet de choisir un périphérique d’entrée réel sans modifier celui par défaut du système. Si le périphérique choisi est indisponible ou déconnecté, Kiri affiche une erreur au lieu de changer de microphone silencieusement.
 
+## Captures défilantes
+
+Sur macOS, Windows ou Linux X11, sélectionnez une zone de capture puis **Capture défilante**, avant d'ajouter des annotations. Sélectionnez uniquement le contenu qui défile verticalement, sans les en-têtes, pieds de page et barres latérales fixes. Laissez de la place pour le panneau d'aperçu à côté de la sélection. S'il ne peut pas rester en dehors, réduisez la zone. Cette fonction est actuellement indisponible sous Wayland.
+
+Faites défiler lentement vers le bas dans l'application d'origine. Le panneau latéral affiche les parties dont le raccord a été validé. Si l'assemblage s'arrête, remontez légèrement dans le contenu déjà capturé, puis reprenez vers le bas. Des contenus répétitifs, des animations, un déplacement de fenêtre ou un changement d'échelle peuvent empêcher un raccord fiable. Kiri ne retire pas automatiquement les barres fixes et ne fait pas défiler à votre place.
+
+Cliquez sur **Terminer** pour copier et enregistrer comme une capture habituelle. **Échap** annule aussi depuis l'application d'origine. **Entrée** termine lorsque le panneau d'aperçu a le focus ; appuyez à nouveau sur votre raccourci de capture pour lui donner le focus. Si la dernière partie ne peut pas être raccordée, choisissez **Continuer à ajuster** ou explicitement **Enregistrer la partie capturée**. La sortie est limitée à 8192 pixels par côté et à 32 MiPixels (33 554 432 pixels). À la limite, la partie validée est conservée pour un enregistrement explicite.
+
 ## Annotations de capture
 
 Sélectionnez une annotation existante pour modifier son style. La mosaïque propose le dessin libre, le rectangle et l’ellipse, avec pixellisation ou flou et intensité réglable. Filigrane (W) permet de saisir du texte directement sur l’image, puis de choisir un affichage unique ou répété et de régler l’opacité, l’angle et l’espacement. Les filigranes restent modifiables après enregistrement.
