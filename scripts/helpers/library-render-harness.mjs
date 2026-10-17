@@ -192,7 +192,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
   const module = { exports: {} };
   if (componentSource == null) {
     librarySource ??= readFileSync(new URL("../../src/windows/LibraryWindow.tsx", import.meta.url), "utf8") +
-      "\nexport { AssetCard, RecordingSaveCard };";
+      "\nexport { AssetCard, RecordingSaveCard, BatchActionBar };";
     componentSource = librarySource;
   }
   const globals = environment.globals ?? {};

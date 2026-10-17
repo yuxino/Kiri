@@ -820,3 +820,66 @@ test("local trash confirmation isolates shortcuts and Escape never dispatches de
   assert.equal(closed, 1); assert.equal(calls, 0);
   ui.mounted.unmount();
 });
+
+for (const kind of ["image", "video", "gif"]) {
+  for (const trashed of [false, true]) {
+    test(`${kind} ${trashed ? "Trash" : "Library"} menu confirms permanent deletion before mutating`, async () => {
+      const confirmations = [];
+      const harness = createLibraryHarness({
+        listAssets: async () => [{ ...testAsset, kind }],
+        showConfirmDialog: async (...args) => { confirmations.push(args); },
+        permanentlyDelete: () => { throw new Error("must wait for confirmation"); },
+        moveToTrash: () => { throw new Error("must not move to Trash first"); },
+      });
+      const library = harness.mount("LibraryWindow", {});
+      library.render();
+      await settleRequests();
+      if (trashed) {
+        nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(3);
+        library.render();
+        await settleRequests();
+      }
+      const card = nodes(library.render()).find(node => node?.type?.name === "AssetCard");
+      card.props.onMenu(100, 100);
+      const updated = nodes(library.render()).find(node => node?.type?.name === "AssetCard");
+      const menu = nodes(updated.props.menu);
+      const remove = menu.find(node => node?.props?.label === "Delete Permanently");
+      assert.ok(remove);
+      assert.equal(remove.props.destructive, true);
+      assert.equal(menu.some(node => node?.props?.label === "Move to Trash"), !trashed);
+      assert.equal(menu.some(node => node?.props?.label === "Restore"), trashed);
+      remove.props.onClick();
+      assert.deepEqual(confirmations, [[
+        `delete:${testAsset.id}`, "Delete this capture permanently?", "This cannot be undone.", "Delete Permanently", undefined, true,
+      ]]);
+      library.unmount();
+    });
+  }
+}
+
+test("selected Library captures confirm direct permanent deletion with the exact ID snapshot", async () => {
+  const confirmations = [];
+  const assets = [testAsset, { ...testAsset, id: "00000000-0000-4000-8000-000000000002" }];
+  const harness = createLibraryHarness({
+    listAssets: async () => assets,
+    showConfirmDialog: async (...args) => { confirmations.push(args); },
+    batchPermanentlyDelete: () => { throw new Error("must wait for confirmation"); },
+    batchMoveToTrash: () => { throw new Error("must not move to Trash first"); },
+  });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  selectButton(library.render()).props.onClick();
+  for (const card of assetCards(library.render())) card.props.onToggleSelection();
+  const batch = batchBar(library.render());
+  assert.equal(batch.props.count, 2);
+  const bar = harness.mount("BatchActionBar", batch.props);
+  const actions = nodes(bar.render());
+  assert.ok(actions.some(node => node?.props?.label === "Move to Trash (2)" && !node.props.destructive));
+  assert.ok(actions.some(node => node?.props?.label === "Export Selected"));
+  actions.find(node => node?.props?.label === "Delete Permanently (N)").props.onClick();
+  assert.deepEqual(confirmations, [[
+    "batchDelete", "Delete these captures permanently?", "This cannot be undone.", "Delete Permanently (N)", assets.map(asset => asset.id), true,
+  ]]);
+  assert.equal(batchBar(library.render()).props.count, 2, "requesting confirmation preserves selection");
+  bar.unmount(); library.unmount();
+});

@@ -22,6 +22,13 @@ Updates: macOS and Windows installer builds check when you open the main panel. 
 
 macOS Dock: Settings → Show in Dock controls the Dock icon immediately and remembers your choice. The tray and capture shortcut remain available when it is hidden.
 
+## Permanently delete captures
+
+In a capture’s menu, choose **Delete Permanently**, or select captures and use
+**Delete Permanently (count)** in the toolbar above the grid. The red action asks
+for confirmation and cannot be undone. **Move to Trash** remains available for
+recoverable deletion; you do not need to empty Trash to delete selected captures.
+
 ## Language
 
 Settings → General → Language offers English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, and Français. Your choice applies to every open Kiri window and survives relaunches. On first launch, Kiri follows the system language. UI language choices do not change installed Linux OCR language data.

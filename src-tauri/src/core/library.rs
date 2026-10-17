@@ -3610,6 +3610,48 @@ mod tests {
     }
 
     #[test]
+    fn direct_permanent_deletion_preserves_other_library_and_trash_assets() {
+        for batch in [false, true] {
+            let (_dir, root) = temp_root();
+            let mut library = AssetLibrary::open(root.clone()).unwrap();
+            let assets = import_test_assets(&mut library, 4);
+            library.move_to_trash(&assets[3].id).unwrap();
+            let count = if batch { 2 } else { 1 };
+            let selected = &assets[..count];
+            for asset in selected {
+                save_test_project(&library, asset, "direct-delete");
+            }
+            let projects: Vec<_> = selected
+                .iter()
+                .map(|asset| library.load_annotation_project(&asset.id).unwrap().unwrap())
+                .collect();
+            library.persist_count.set(0);
+            if batch {
+                let ids: Vec<_> = selected.iter().map(|asset| asset.id).collect();
+                library.batch_permanently_delete(&ids).unwrap();
+            } else {
+                library.permanently_delete(&selected[0].id).unwrap();
+            }
+            assert_eq!(library.persist_count.get(), 1);
+            for asset in selected {
+                assert!(library.asset_by_id(&asset.id).is_none());
+                assert!(!library.asset_url(asset).exists());
+            }
+            for project in projects {
+                assert!(!project.document_url.exists());
+                assert!(!project.source_url.exists());
+            }
+            let reopened = AssetLibrary::open(root).unwrap();
+            assert_eq!(reopened.all_assets(false).len(), 3 - count);
+            assert_eq!(reopened.all_assets(true).len(), 1);
+            for asset in &assets[count..] {
+                assert!(reopened.asset_by_id(&asset.id).is_some());
+                assert!(reopened.asset_url(asset).exists());
+            }
+        }
+    }
+
+    #[test]
     fn permanent_delete_keeps_index_and_file_when_persist_fails() {
         let (_dir, root) = temp_root();
         let mut library = AssetLibrary::open(root.clone()).unwrap();

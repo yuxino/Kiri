@@ -1264,6 +1264,11 @@ button:active:not(:disabled) {
 
 .kiri-menu-row[data-destructive] {
   color: var(--kiri-coral);
+  background: rgba(200, 62, 54, 0.14);
+}
+
+.kiri-menu-row[data-destructive]:hover:not(:disabled) {
+  background: rgba(200, 62, 54, 0.24);
 }
 
 .kiri-menu-row:disabled {

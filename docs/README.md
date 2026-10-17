@@ -214,3 +214,5 @@ development.
 - [ADR 0106: macOS floating panels participate in capture hover selection](adr/0106-floating-window-hover.md) — include eligible floating panels while preserving frontmost-window selection.
 
 - [ADR 0108: Support folder and project links](adr/0108-support-folder-and-project-links.md) — explicit shortcuts to existing folders and the GitHub project from About.
+
+- [ADR 0109: Direct library permanent deletion](adr/0109-direct-library-permanent-deletion.md) — confirmed single and batch deletion without a Trash detour.

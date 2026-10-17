@@ -858,28 +858,11 @@ export function LibraryWindow() {
         )}
         <div style={{ height: 1, background: "var(--kiri-surface-border)", margin: "5px 8px", opacity: 0.8 }} />
         {showingTrash ? (
-          <>
-            <MenuRow
-              icon="arrow.uturn.backward"
-              label={t("Restore")}
-              onClick={run(() => void api.restoreAsset(asset.id).catch(() => {}))}
-            />
-            <MenuRow
-              icon="trash.fill"
-              label={t("Delete Permanently")}
-              destructive
-              onClick={run(() =>
-                showConfirmDialog(
-                  `delete:${asset.id}`,
-                  "Delete this capture permanently?",
-                  "This cannot be undone.",
-                  "Delete Permanently",
-                  undefined,
-                  true,
-                ),
-              )}
-            />
-          </>
+          <MenuRow
+            icon="arrow.uturn.backward"
+            label={t("Restore")}
+            onClick={run(() => void api.restoreAsset(asset.id).catch(() => {}))}
+          />
         ) : (
           <MenuRow
             icon="trash.fill"
@@ -887,6 +870,21 @@ export function LibraryWindow() {
             onClick={run(() => void api.moveToTrash(asset.id).catch(() => {}))}
           />
         )}
+        <MenuRow
+          icon="trash.fill"
+          label={t("Delete Permanently")}
+          destructive
+          onClick={run(() =>
+            showConfirmDialog(
+              `delete:${asset.id}`,
+              "Delete this capture permanently?",
+              "This cannot be undone.",
+              "Delete Permanently",
+              undefined,
+              true,
+            ),
+          )}
+        />
       </div>
     ),
     [
@@ -2433,14 +2431,11 @@ function BatchActionBar(props: {
       </span>
       <div style={{ width: 1, height: 22, background: "var(--kiri-surface-border)" }} />
       {showingTrash ? (
-        <>
-          <BatchBarButton icon="arrow.uturn.backward" label={t("Restore (N)").replace("{n}", String(count))} disabled={busy} onClick={onRestore} />
-          <BatchBarButton icon="trash.fill" label={t("Delete Permanently (N)").replace("{n}", String(count))} disabled={busy} destructive onClick={onDelete} />
-        </>
+        <BatchBarButton icon="arrow.uturn.backward" label={t("Restore (N)").replace("{n}", String(count))} disabled={busy} onClick={onRestore} />
       ) : (
         <>
           <BatchBarButton icon="folder" label={t("Export Selected")} onClick={onExport} disabled={busy} />
-          <BatchBarButton icon="trash" label={t("Move to Trash ({n})").replace("{n}", String(count))} disabled={busy} destructive onClick={onMoveToTrash} />
+          <BatchBarButton icon="trash" label={t("Move to Trash ({n})").replace("{n}", String(count))} disabled={busy} onClick={onMoveToTrash} />
           <BatchBarButton
             icon={allFavorites ? "star.fill" : "star"}
             label={allFavorites ? t("Remove from Favorites") : t("Add to Favorites")}
@@ -2451,6 +2446,7 @@ function BatchActionBar(props: {
         </>
       )}
       <div style={{ width: 1, height: 22, background: "var(--kiri-surface-border)" }} />
+      <BatchBarButton icon="trash.fill" label={t("Delete Permanently (N)").replace("{n}", String(count))} disabled={busy} destructive onClick={onDelete} />
       <BatchBarButton icon="xmark" label={t("Cancel")} disabled={busy} onClick={onClear} />
     </div>
   );
