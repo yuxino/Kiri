@@ -234,8 +234,9 @@ pub async fn run_pipewire_region_capture(
                 pipeline,
                 (display.physical_width, display.physical_height),
                 crop,
-                video_tx,
+                video_tx.into(),
                 stop_for_pump,
+                None,
             );
             // The authorized remote must outlive every PipeWire element.
             drop(fd);
@@ -351,6 +352,28 @@ fn run_x11_region_capture(
         display.physical_width,
         display.physical_height,
     )?;
+    run_x11_capture_crop(display, crop, shows_cursor, video_tx.into(), stop_flag, false)
+}
+
+pub(crate) fn run_x11_scroll_capture(
+    display: DisplayIdentity,
+    crop: crate::capture::scroll::PixelRegion,
+    video_tx: crate::capture::frame_sink::ScrollFrameSender,
+    stop_flag: Arc<AtomicBool>,
+) -> Result<()> {
+    crate::capture::scroll::validate_x11_display(&display)?;
+    run_x11_capture_crop(display, PixelCrop { x: crop.x, y: crop.y,
+        width: crop.width, height: crop.height }, false, video_tx.into(), stop_flag, true)
+}
+
+fn run_x11_capture_crop(
+    display: DisplayIdentity,
+    crop: PixelCrop,
+    shows_cursor: bool,
+    video_tx: crate::capture::NativeFrameSender,
+    stop_flag: Arc<AtomicBool>,
+    strict_display: bool,
+) -> Result<()> {
     let x = i64::from(display.physical_x) + i64::from(crop.x);
     let y = i64::from(display.physical_y) + i64::from(crop.y);
     if x < 0 || y < 0 {
@@ -370,6 +393,7 @@ fn run_x11_region_capture(
         PixelCrop { x: 0, y: 0, ..crop },
         video_tx,
         stop_flag,
+        strict_display.then_some(display),
     )
 }
 
@@ -377,8 +401,9 @@ fn pump_capture_frames(
     pipeline: PipelineGuard,
     expected: (u32, u32),
     crop: PixelCrop,
-    video_tx: crate::capture::VideoFrameSender,
+    video_tx: crate::capture::NativeFrameSender,
     stop: Arc<AtomicBool>,
+    strict_display: Option<DisplayIdentity>,
 ) -> Result<()> {
     let sink = pipeline
         .by_name("sink")
@@ -397,6 +422,11 @@ fn pump_capture_frames(
     let mut dropped = 0u64;
     while !stop.load(Ordering::Acquire) {
         check_pipeline(&bus, "Linux screen capture")?;
+        if let Some(display) = &strict_display {
+            // This branch is only used by lossless still stitching. A changed
+            // monitor position or scale must not silently supply other pixels.
+            crate::capture::scroll::validate_x11_display(display)?;
+        }
         let Some(sample) = sink.try_pull_sample(clock_time(INPUT_POLL)) else {
             if sink.is_eos() {
                 bail!("The screen sharing session ended unexpectedly.");

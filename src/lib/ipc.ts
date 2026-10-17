@@ -120,6 +120,18 @@ export interface RecordingState {
   elapsedLabel: string;
 }
 
+/** Only accepted image content is included in the bounded PNG preview. */
+export interface ScrollCaptureStatus {
+  sessionId: string;
+  phase: "starting" | "capturing" | "needsOverlap" | "finishing" | "saving" | "failed";
+  width: number;
+  height: number;
+  frames: number;
+  revision: number;
+  message: string | null;
+  preview: string | null;
+}
+
 export interface NoticeDto {
   id: string;
   title: string;
@@ -323,6 +335,13 @@ export const api = {
   convertToGif: (id: string) => invoke<void>("convert_to_gif", { id }),
 
   startCapture: () => invoke<CaptureContextDto>("start_capture"),
+  scrollCaptureSupported: () => invoke<boolean>("scroll_capture_supported"),
+  startScrollCapture: (selection: RectDto) =>
+    invoke<ScrollCaptureStatus>("start_scroll_capture", { selection }),
+  scrollCaptureStatus: (sessionId: string) => invoke<ScrollCaptureStatus>("scroll_capture_status", { sessionId }),
+  finishScrollCapture: (sessionId: string, allowPartial = false) =>
+    invoke<void>("finish_scroll_capture", { sessionId, allowPartial }),
+  cancelScrollCapture: (sessionId: string) => invoke<void>("cancel_scroll_capture", { sessionId }),
   cancelCapture: () => invoke<void>("cancel_capture"),
   confirmCapture: async (
     png: Uint8Array,

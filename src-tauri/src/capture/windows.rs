@@ -471,11 +471,13 @@ fn resolve_recording_monitor(expected: &DisplayIdentity) -> Result<Monitor> {
 // ---------------------------------------------------------------------------
 
 struct WinHandlerState {
-    video_tx: Option<super::VideoFrameSender>,
+    video_tx: Option<super::NativeFrameSender>,
     region_px: PixelRegion,
     dropped_frames: u64,
     capture_health: Arc<CaptureHealth>,
     paused: Arc<std::sync::atomic::AtomicBool>,
+    scroll_display: Option<DisplayIdentity>,
+    display_checked_at: Instant,
 }
 
 #[derive(Clone, Copy)]
@@ -507,13 +509,67 @@ impl GraphicsCaptureApiHandler for WinCaptureHandler {
         if state.paused.load(std::sync::atomic::Ordering::Acquire) {
             return Ok(());
         }
-        let Some(tx) = state.video_tx.as_ref() else {
-            return Ok(());
-        };
         let width = frame.width() as usize;
         let height = frame.height() as usize;
-        let mut frame_buffer = frame.buffer()?;
+        if let Some(expected) = &state.scroll_display {
+            let validation = if (width, height)
+                != (
+                    expected.physical_width as usize,
+                    expected.physical_height as usize,
+                ) {
+                Err(anyhow!(
+                    "The selected display size changed. Start a new scrolling capture."
+                ))
+            } else if state.display_checked_at.elapsed() >= Duration::from_millis(250) {
+                current_display_identities().and_then(|current| {
+                    unique_display_identity_index(expected, &current).map(|_| ())
+                        .ok_or_else(|| anyhow!("The selected display geometry changed. Start a new scrolling capture."))
+                })
+            } else {
+                Ok(())
+            };
+            if let Err(error) = validation {
+                state
+                    .capture_health
+                    .report_unexpected_stop(error.to_string());
+                state.video_tx.take();
+                return Err(std::io::Error::other(error.to_string()).into());
+            }
+            if state.display_checked_at.elapsed() >= Duration::from_millis(250) {
+                state.display_checked_at = Instant::now();
+            }
+        }
+        if state.video_tx.is_none() {
+            return Ok(());
+        }
+        let mut frame_buffer = match frame.buffer() {
+            Ok(buffer) => buffer,
+            Err(error) => {
+                if state.scroll_display.is_some() {
+                    state
+                        .capture_health
+                        .report_unexpected_stop(error.to_string());
+                    state.video_tx.take();
+                }
+                return Err(error.into());
+            }
+        };
         let row_pitch = frame_buffer.row_pitch() as usize;
+        if state.scroll_display.is_some()
+            && !exact_frame_layout(
+                frame_buffer.as_raw_buffer(),
+                width,
+                height,
+                row_pitch,
+                state.region_px,
+            )
+        {
+            let message =
+                "The native frame no longer contains the complete scrolling capture region.";
+            state.capture_health.report_unexpected_stop(message.into());
+            state.video_tx.take();
+            return Err(std::io::Error::other(message).into());
+        }
         let out = crop_rgba_to_bgra(
             frame_buffer.as_raw_buffer(),
             width,
@@ -522,6 +578,9 @@ impl GraphicsCaptureApiHandler for WinCaptureHandler {
             state.region_px,
         );
         drop(frame_buffer);
+        let Some(tx) = state.video_tx.as_ref() else {
+            return Ok(());
+        };
         if let Err(mpsc::TrySendError::Full(_)) = tx.try_send(out) {
             state.dropped_frames += 1;
             if state.dropped_frames == 1 || state.dropped_frames.is_multiple_of(30) {
@@ -535,12 +594,39 @@ impl GraphicsCaptureApiHandler for WinCaptureHandler {
     }
 
     fn on_closed(&mut self) -> std::result::Result<(), Self::Error> {
-        let health = Arc::clone(&self.slot.lock().unwrap().capture_health);
+        let mut state = self.slot.lock().unwrap();
+        state.video_tx.take();
+        let health = Arc::clone(&state.capture_health);
         if health.report_unexpected_stop("Windows Graphics Capture closed the session.".into()) {
             log::error!("WindowsRecorder: graphics capture closed unexpectedly");
         }
         Ok(())
     }
+}
+
+fn exact_frame_layout(
+    raw: &[u8],
+    width: usize,
+    height: usize,
+    row_pitch: usize,
+    region: PixelRegion,
+) -> bool {
+    width.checked_mul(4).is_some_and(|row| row_pitch >= row)
+        && region.width > 0
+        && region.height > 0
+        && region
+            .x
+            .checked_add(region.width)
+            .is_some_and(|right| right <= width)
+        && region
+            .y
+            .checked_add(region.height)
+            .is_some_and(|bottom| bottom <= height)
+        && height
+            .checked_sub(1)
+            .and_then(|last| last.checked_mul(row_pitch))
+            .and_then(|last| width.checked_mul(4).and_then(|row| last.checked_add(row)))
+            .is_some_and(|required| raw.len() >= required)
 }
 
 fn crop_rgba_to_bgra(
@@ -682,6 +768,53 @@ pub struct WindowsRecorder {
 }
 
 impl WindowsRecorder {
+    pub(crate) fn start_scroll(
+        display: &CapturedDisplay,
+        crop: super::scroll::PixelRegion,
+        video_tx: super::frame_sink::ScrollFrameSender,
+    ) -> Result<Self> {
+        let identity = display.display_identity.as_ref().ok_or_else(|| {
+            anyhow!("The selected display identity is unavailable. Select it again.")
+        })?;
+        let monitor = resolve_recording_monitor(identity)?;
+        let paused = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let capture_health = Arc::new(CaptureHealth::default());
+        let state = Arc::new(Mutex::new(WinHandlerState {
+            video_tx: Some(video_tx.into()),
+            region_px: PixelRegion {
+                x: crop.x as usize,
+                y: crop.y as usize,
+                width: crop.width as usize,
+                height: crop.height as usize,
+            },
+            dropped_frames: 0,
+            capture_health: Arc::clone(&capture_health),
+            paused: Arc::clone(&paused),
+            scroll_display: Some(identity.clone()),
+            display_checked_at: Instant::now(),
+        }));
+        let settings = Settings::new(
+            monitor,
+            CursorCaptureSettings::WithoutCursor,
+            recording_draw_border_settings(),
+            SecondaryWindowSettings::Default,
+            recording_minimum_update_interval(),
+            DirtyRegionSettings::Default,
+            ColorFormat::Rgba8,
+            state,
+        );
+        let control =
+            WinCaptureHandler::start_free_threaded(settings).map_err(|error| anyhow!("{error}"))?;
+        Ok(Self {
+            control: Some(control),
+            _audio_streams: vec![],
+            system_audio_spec: None,
+            microphone_spec: None,
+            capture_health,
+            paused,
+        })
+    }
+
     pub fn start(
         display_identity: &DisplayIdentity,
         region: Rect,
@@ -724,11 +857,13 @@ impl WindowsRecorder {
 
         let capture_health = Arc::new(CaptureHealth::default());
         let state_slot = Arc::new(Mutex::new(WinHandlerState {
-            video_tx: Some(video_tx),
+            video_tx: Some(video_tx.into()),
             region_px,
             dropped_frames: 0,
             capture_health: Arc::clone(&capture_health),
             paused: Arc::clone(&paused),
+            scroll_display: None,
+            display_checked_at: Instant::now(),
         }));
 
         let settings = Settings::new(
@@ -765,6 +900,10 @@ impl WindowsRecorder {
 }
 
 impl PlatformRecorder for WindowsRecorder {
+    fn unexpected_failure(&self) -> Option<String> {
+        self.capture_health.unexpected_failure()
+    }
+
     fn stop(&mut self) -> Result<()> {
         // `CaptureControl::stop` consumes itself, so take it out of the slot
         // and drop it after the capture thread has been joined.
@@ -788,6 +927,12 @@ impl PlatformRecorder for WindowsRecorder {
         self.paused
             .store(false, std::sync::atomic::Ordering::Release);
         Ok(())
+    }
+}
+
+impl Drop for WindowsRecorder {
+    fn drop(&mut self) {
+        let _ = self.stop();
     }
 }
 
@@ -1282,5 +1427,22 @@ mod tests {
         assert_eq!(cropped.len(), 2 * 2 * 4);
         assert_eq!(&cropped[0..4], &[12, 11, 10, 255]);
         assert!(cropped[4..].iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn scrolling_frames_reject_padding_missing_rows_and_out_of_bounds_regions() {
+        let region = PixelRegion {
+            x: 1,
+            y: 1,
+            width: 3,
+            height: 3,
+        };
+        let raw = vec![0; 5 * 24];
+        assert!(exact_frame_layout(&raw, 5, 5, 24, region));
+        assert!(!exact_frame_layout(&raw, 5, 5, 16, region));
+        assert!(!exact_frame_layout(&raw[..100], 5, 5, 24, region));
+        assert!(!exact_frame_layout(&raw, 3, 3, 24, region));
+        let cropped = crop_rgba_to_bgra(&raw, 5, 5, 24, region);
+        assert_eq!(cropped.len(), 3 * 3 * 4);
     }
 }

@@ -201,7 +201,7 @@ jobs:
             tesseract-ocr-jpn \
             xvfb openbox xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
             pulseaudio pulseaudio-utils \
-            python3-gi python3-pyatspi at-spi2-core \
+            python3-gi python3-gi-cairo python3-pyatspi at-spi2-core \
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0
       - run: pnpm install --frozen-lockfile
       - name: Check Linux IPC ownership and disposed callbacks
@@ -279,6 +279,10 @@ jobs:
         if: needs.plan.outputs.linux_x11 == 'true'
         timeout-minutes: 5
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
+      - name: Verify native scrolling screenshots and clipboard pixels
+        if: needs.plan.outputs.linux_x11 == 'true'
+        timeout-minutes: 4
+        run: bash scripts/qa/linux-scroll-native.sh /usr/bin/kiri
       - name: Verify installed X11 system audio and pause/resume with a private FIFO sink
         if: needs.plan.outputs.linux_x11 == 'true'
         timeout-minutes: 4
@@ -426,7 +430,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends "${packages[0]}" \
             xvfb openbox xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
             pulseaudio pulseaudio-utils \
-            python3-gi python3-pyatspi at-spi2-core \
+            python3-gi python3-gi-cairo python3-pyatspi at-spi2-core \
             gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
@@ -437,6 +441,9 @@ jobs:
       - name: Replay all original installed X11 assertions
         timeout-minutes: 4
         run: bash scripts/qa/linux-native.sh /usr/bin/kiri
+      - name: Replay native scrolling screenshots and clipboard pixels
+        timeout-minutes: 4
+        run: bash scripts/qa/linux-scroll-native.sh /usr/bin/kiri
       - name: Replay installed X11 system audio and pause/resume with a private FIFO sink
         timeout-minutes: 4
         run: |

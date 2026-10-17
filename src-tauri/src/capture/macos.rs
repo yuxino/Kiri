@@ -15,14 +15,17 @@ use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker};
 use objc2_app_kit::{NSBitmapImageRep, NSEvent, NSScreen};
 use objc2_core_foundation::{CFRetained, CGPoint, CGRect, CGSize};
-use objc2_core_graphics::{CGDirectDisplayID, CGDisplayBounds, CGImage, CGMainDisplayID};
+use objc2_core_graphics::{
+    CGDirectDisplayID, CGDisplayBounds, CGDisplayPixelsHigh, CGDisplayPixelsWide, CGImage,
+    CGMainDisplayID,
+};
 use objc2_core_media::{
     CMAudioFormatDescriptionGetStreamBasicDescription, CMBlockBuffer, CMFormatDescription,
     CMSampleBuffer, CMTime,
 };
 use objc2_core_video::{
     CVPixelBuffer, CVPixelBufferGetBaseAddress, CVPixelBufferGetBytesPerRow,
-    CVPixelBufferGetHeight, CVPixelBufferGetWidth, CVPixelBufferLockBaseAddress,
+    CVPixelBufferGetHeight, CVPixelBufferGetWidth, CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
     CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
 };
 use objc2_foundation::{NSArray, NSDictionary, NSError, NSNumber, NSObject, NSString};
@@ -494,8 +497,7 @@ fn recording_filter_pointer(
                             .filter_map(|screen| screen_geometry(&screen).ok())
                             .find(|screen| screen.display_id == display_id)
                             .ok_or_else(|| {
-                                "The selected display is no longer available. Start a new capture."
-                                    .to_string()
+                                "The selected display is no longer available. Start a new capture.".to_string()
                             })?;
                         validate_recording_geometry(
                             expected_frame,
@@ -699,7 +701,7 @@ pub struct AudioFormat {
 }
 
 struct DelegateSenders {
-    video_tx: super::VideoFrameSender,
+    video_tx: super::NativeFrameSender,
     audio_tx: Option<AudioChunkSender>,
     mic_tx: Option<AudioChunkSender>,
 }
@@ -719,6 +721,35 @@ struct DelegateState {
     dropped_frames: std::sync::atomic::AtomicU64,
     dropped_audio_chunks: std::sync::atomic::AtomicU64,
     dropped_mic_chunks: std::sync::atomic::AtomicU64,
+    scroll_geometry: Option<ScrollFrameGeometry>,
+}
+
+struct ScrollFrameGeometry {
+    display_id: u32,
+    display_bounds: Rect,
+    display_pixels: (usize, usize),
+    frame_size: (usize, usize),
+}
+
+impl ScrollFrameGeometry {
+    fn validate(&self) -> Result<()> {
+        let bounds = CGDisplayBounds(self.display_id);
+        let current = Rect::new(
+            bounds.origin.x,
+            bounds.origin.y,
+            bounds.size.width,
+            bounds.size.height,
+        );
+        if current != self.display_bounds
+            || (
+                CGDisplayPixelsWide(self.display_id),
+                CGDisplayPixelsHigh(self.display_id),
+            ) != self.display_pixels
+        {
+            bail!("The selected display geometry changed. Start a new scrolling capture.");
+        }
+        Ok(())
+    }
 }
 
 /// A recording session running the SCK stream on a dedicated thread.
@@ -733,6 +764,39 @@ pub struct MacRecordingSession {
 }
 
 impl MacRecordingSession {
+    pub(crate) fn start_scroll(
+        display: &CapturedDisplay,
+        crop: super::scroll::PixelRegion,
+        video_tx: super::frame_sink::ScrollFrameSender,
+    ) -> Result<Self> {
+        let scale = display.backing_scale;
+        let region = Rect::new(
+            f64::from(crop.x) / scale,
+            f64::from(crop.y) / scale,
+            f64::from(crop.width) / scale,
+            f64::from(crop.height) / scale,
+        );
+        let options = RecordingOptions {
+            shows_cursor: false,
+            captures_system_audio: false,
+            captures_microphone: false,
+            highlights_clicks: false,
+            ..RecordingOptions::default()
+        };
+        Self::start_capture(
+            display.display_id,
+            display.screen_frame,
+            region,
+            scale,
+            options,
+            &[],
+            video_tx.into(),
+            None,
+            None,
+            Some((crop.width, crop.height)),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn start(
         display_id: u32,
@@ -745,7 +809,34 @@ impl MacRecordingSession {
         audio_tx: Option<AudioChunkSender>,
         mic_tx: Option<AudioChunkSender>,
     ) -> Result<MacRecordingSession> {
-        if region.width < 2.0 || region.height < 2.0 {
+        Self::start_capture(
+            display_id,
+            screen_frame,
+            region,
+            backing_scale,
+            options,
+            excepted_window_ids,
+            video_tx.into(),
+            audio_tx,
+            mic_tx,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_capture(
+        display_id: u32,
+        screen_frame: Rect,
+        region: Rect,
+        backing_scale: f64,
+        options: RecordingOptions,
+        excepted_window_ids: &[u32],
+        video_tx: super::NativeFrameSender,
+        audio_tx: Option<AudioChunkSender>,
+        mic_tx: Option<AudioChunkSender>,
+        exact_dimensions: Option<(u32, u32)>,
+    ) -> Result<MacRecordingSession> {
+        if exact_dimensions.is_none() && (region.width < 2.0 || region.height < 2.0) {
             bail!("The recording region is too small.");
         }
         if options.captures_microphone && !crate::platform::mic_supported() {
@@ -782,10 +873,37 @@ impl MacRecordingSession {
         )?;
         log::info!("MacRecordingSession: filter created");
 
-        let width =
-            crate::core::policy::RecordingPolicy::pixel_dimension(region.width, backing_scale);
-        let height =
-            crate::core::policy::RecordingPolicy::pixel_dimension(region.height, backing_scale);
+        let (width, height) = exact_dimensions
+            .map(|(width, height)| (i64::from(width), i64::from(height)))
+            .unwrap_or_else(|| {
+                (
+                    crate::core::policy::RecordingPolicy::pixel_dimension(
+                        region.width,
+                        backing_scale,
+                    ),
+                    crate::core::policy::RecordingPolicy::pixel_dimension(
+                        region.height,
+                        backing_scale,
+                    ),
+                )
+            });
+        let scroll_geometry = exact_dimensions.map(|(width, height)| {
+            let bounds = CGDisplayBounds(display_id);
+            ScrollFrameGeometry {
+                display_id,
+                display_bounds: Rect::new(
+                    bounds.origin.x,
+                    bounds.origin.y,
+                    bounds.size.width,
+                    bounds.size.height,
+                ),
+                display_pixels: (
+                    CGDisplayPixelsWide(display_id),
+                    CGDisplayPixelsHigh(display_id),
+                ),
+                frame_size: (width as usize, height as usize),
+            }
+        });
 
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
         let (result_tx, result_rx) = mpsc::channel::<Result<()>>();
@@ -860,6 +978,7 @@ impl MacRecordingSession {
                 dropped_frames: std::sync::atomic::AtomicU64::new(0),
                 dropped_audio_chunks: std::sync::atomic::AtomicU64::new(0),
                 dropped_mic_chunks: std::sync::atomic::AtomicU64::new(0),
+                scroll_geometry,
             });
 
             let delegate = KiriStreamDelegate::with_state(state);
@@ -1030,6 +1149,10 @@ impl MacRecordingSession {
 }
 
 impl super::PlatformRecorder for MacRecordingSession {
+    fn unexpected_failure(&self) -> Option<String> {
+        self.capture_health.unexpected_failure()
+    }
+
     fn stop(&mut self) -> Result<()> {
         self.request_stop()
     }
@@ -1100,28 +1223,52 @@ fn audio_format_from(buffer: &CMSampleBuffer) -> Option<AudioFormat> {
     })
 }
 
-fn copy_pixel_buffer(buffer: &CMSampleBuffer) -> Option<Vec<u8>> {
-    let pixel_buffer: CFRetained<CVPixelBuffer> = unsafe { buffer.image_buffer() }?;
+fn copy_pixel_buffer(
+    buffer: &CMSampleBuffer,
+    expected_size: Option<(usize, usize)>,
+) -> Result<Option<Vec<u8>>> {
+    let Some(pixel_buffer): Option<CFRetained<CVPixelBuffer>> = (unsafe { buffer.image_buffer() })
+    else {
+        return Ok(None);
+    };
     let pixel_buffer_ref: &CVPixelBuffer = &pixel_buffer;
-    unsafe { CVPixelBufferLockBaseAddress(pixel_buffer_ref, CVPixelBufferLockFlags::ReadOnly) };
-    let result = unsafe {
+    let width = CVPixelBufferGetWidth(pixel_buffer_ref);
+    let height = CVPixelBufferGetHeight(pixel_buffer_ref);
+    if expected_size.is_some_and(|expected| expected != (width, height)) {
+        bail!("The native scrolling capture frame size changed.");
+    }
+    if expected_size.is_some() && CVPixelBufferGetPixelFormatType(pixel_buffer_ref) != 0x4247_5241 {
+        bail!("The native scrolling capture frame is not BGRA.");
+    }
+    let row_bytes = width
+        .checked_mul(4)
+        .ok_or_else(|| anyhow!("The capture frame is too large."))?;
+    let output_len = row_bytes
+        .checked_mul(height)
+        .ok_or_else(|| anyhow!("The capture frame is too large."))?;
+    let bytes_per_row = CVPixelBufferGetBytesPerRow(pixel_buffer_ref);
+    if width == 0 || height == 0 || bytes_per_row < row_bytes {
+        bail!("The native capture frame has an invalid stride or size.");
+    }
+    if unsafe { CVPixelBufferLockBaseAddress(pixel_buffer_ref, CVPixelBufferLockFlags::ReadOnly) }
+        != 0
+    {
+        bail!("The native capture frame could not be read.");
+    }
+    let result = (|| unsafe {
         let base = CVPixelBufferGetBaseAddress(pixel_buffer_ref);
         if base.is_null() {
-            CVPixelBufferUnlockBaseAddress(pixel_buffer_ref, CVPixelBufferLockFlags::ReadOnly);
-            return None;
+            bail!("The native capture frame has no pixels.");
         }
-        let bytes_per_row = CVPixelBufferGetBytesPerRow(pixel_buffer_ref);
-        let height = CVPixelBufferGetHeight(pixel_buffer_ref);
-        let row_bytes = CVPixelBufferGetWidth(pixel_buffer_ref) * 4;
-        let mut out = Vec::with_capacity(row_bytes * height);
+        let mut out = Vec::with_capacity(output_len);
         for row in 0..height {
             let src = base.add(row * bytes_per_row) as *const u8;
             out.extend_from_slice(std::slice::from_raw_parts(src, row_bytes));
         }
-        CVPixelBufferUnlockBaseAddress(pixel_buffer_ref, CVPixelBufferLockFlags::ReadOnly);
-        out
-    };
-    Some(result)
+        Ok(Some(out))
+    })();
+    unsafe { CVPixelBufferUnlockBaseAddress(pixel_buffer_ref, CVPixelBufferLockFlags::ReadOnly) };
+    result
 }
 
 fn copy_audio_buffer(buffer: &CMSampleBuffer) -> Option<Vec<u8>> {
@@ -1201,7 +1348,31 @@ objc2::define_class!(
                 return;
             };
             if of_type == SCStreamOutputType::Screen {
-                if let Some(frame) = copy_pixel_buffer(buffer) {
+                let frame = (|| {
+                    if let Some(geometry) = &state.scroll_geometry {
+                        geometry.validate()?;
+                    }
+                    copy_pixel_buffer(
+                        buffer,
+                        state
+                            .scroll_geometry
+                            .as_ref()
+                            .map(|geometry| geometry.frame_size),
+                    )
+                })();
+                let frame = match frame {
+                    Ok(frame) => frame,
+                    Err(error) => {
+                        state
+                            .capture_health
+                            .report_unexpected_stop(error.to_string());
+                        state
+                            .stopped
+                            .store(true, std::sync::atomic::Ordering::Release);
+                        return;
+                    }
+                };
+                if let Some(frame) = frame {
                     let count = state
                         .frames
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -1225,7 +1396,12 @@ objc2::define_class!(
                 if let Some(tx) = &senders.mic_tx {
                     match state.mic_normalizer.lock().unwrap().convert(buffer) {
                         Ok(payload) if !payload.is_empty() => {
-                            forward_audio_chunk(tx, payload, &state.dropped_mic_chunks, "microphone");
+                            forward_audio_chunk(
+                                tx,
+                                payload,
+                                &state.dropped_mic_chunks,
+                                "microphone",
+                            );
                         }
                         Ok(_) => {}
                         Err(error) => {
@@ -1293,7 +1469,7 @@ mod recording_lifetime_tests {
     fn native_delegate_owns_callback_state_and_frame_senders() {
         let (video_tx, video_rx) = mpsc::sync_channel(crate::capture::VIDEO_FRAME_QUEUE_CAPACITY);
         let senders = Arc::new(DelegateSenders {
-            video_tx,
+            video_tx: video_tx.into(),
             audio_tx: None,
             mic_tx: None,
         });
@@ -1307,6 +1483,7 @@ mod recording_lifetime_tests {
             dropped_frames: std::sync::atomic::AtomicU64::new(0),
             dropped_audio_chunks: std::sync::atomic::AtomicU64::new(0),
             dropped_mic_chunks: std::sync::atomic::AtomicU64::new(0),
+            scroll_geometry: None,
         });
         let weak_state = Arc::downgrade(&state);
         let delegate = KiriStreamDelegate::with_state(state.clone());

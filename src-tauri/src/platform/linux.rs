@@ -417,6 +417,19 @@ pub fn activate_application(pid: u32) {
     }
 }
 
+/// Scrolling capture returns focus once to let the source receive wheel input,
+/// then again on completion/cancel. Preserve the exact, PID-validated target
+/// for the existing terminal restoration rather than consuming it at startup.
+pub(crate) fn activate_scrolling_source(pid: u32) {
+    let target = CAPTURE_FOCUS_TARGET.lock().unwrap()
+        .as_ref().filter(|target| target.pid == pid).copied();
+    if let Some(target) = target.filter(|_| !is_wayland_session()) {
+        if let Err(error) = activate_x11_window(target) {
+            log::debug!("The window manager could not activate the scrolling source: {error}");
+        }
+    }
+}
+
 fn activate_x11_window(target: X11FocusTarget) -> Result<()> {
     let (connection, screen) = x11rb::connect(None)?;
     // X11 identifiers may be reused after a client exits. Do not focus a new
