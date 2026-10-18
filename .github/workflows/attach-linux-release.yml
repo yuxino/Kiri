@@ -1,0 +1,69 @@
+name: Attach verified Linux release package
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing draft release tag (vMAJOR.MINOR.PATCH)
+        required: true
+        type: string
+      candidate_run_id:
+        description: Successful build.yml run containing kiri-linux-deb
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: attach-linux-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  attach:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      # Attachment tooling is newer than the release tag. Keep it separate
+      # from the exact tagged source used to validate the original package.
+      - name: Checkout reviewed attachment tooling
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: release-tools
+          persist-credentials: false
+      - name: Validate inputs and attachment guards
+        run: |
+          python3 release-tools/scripts/qa/test_attach_linux_release.py
+          python3 release-tools/scripts/qa/attach-linux-release.py \
+            --tag "$RELEASE_TAG" --run "$CANDIDATE_RUN_ID" --validate-inputs-only
+      - name: Checkout the exact release tag
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          path: source
+          persist-credentials: false
+      - name: Download the original Linux candidate
+        uses: actions/download-artifact@v8
+        with:
+          name: kiri-linux-deb
+          path: ${{ runner.temp }}/kiri-linux-deb
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run_id }}
+          digest-mismatch: error
+      - name: Verify source, package and existing draft before attaching
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 release-tools/scripts/qa/attach-linux-release.py \
+            --tag "$RELEASE_TAG" --run "$CANDIDATE_RUN_ID" \
+            --source-dir "$GITHUB_WORKSPACE/source" \
+            --package-dir "$RUNNER_TEMP/kiri-linux-deb" \
+            --evidence "$RUNNER_TEMP/linux-attachment-verification.json"
