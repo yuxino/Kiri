@@ -1054,10 +1054,13 @@ pub async fn restore_missing_asset(app: AppHandle, id: String) -> Result<bool, S
         {
             return Err("The capture file is not missing.".into());
         }
-        let (label, extension) = match asset.kind {
-            CaptureKind::Image => ("PNG image", "png"),
-            CaptureKind::Video => ("MP4 video", "mp4"),
-            CaptureKind::Gif => ("GIF image", "gif"),
+        let extension = crate::core::library::replacement_file_extension(&asset)
+            .map_err(|error| error.to_string())?;
+        let label = match asset.kind {
+            CaptureKind::Image => "PNG image",
+            CaptureKind::Video if extension == "mov" => "MOV video",
+            CaptureKind::Video => "MP4 video",
+            CaptureKind::Gif => "GIF image",
         };
         (label, extension, asset)
     };
@@ -1079,7 +1082,7 @@ pub async fn restore_missing_asset(app: AppHandle, id: String) -> Result<bool, S
     let validation_asset = expected_asset.clone();
     let proof = tauri::async_runtime::spawn_blocking(move || {
         let proof =
-            crate::core::library::replacement_file_proof(&validation_path, validation_asset.kind)
+            crate::core::library::replacement_file_proof(&validation_path, &validation_asset)
                 .map_err(|error| error.to_string())?;
         validate_replacement_metadata(&validation_asset, &validation_path)?;
         Ok::<_, String>(proof)

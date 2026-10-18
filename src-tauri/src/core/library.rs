@@ -327,7 +327,7 @@ impl AssetLibrary {
         if self.asset_availability(id)? != AssetAvailability::Missing {
             return Err(AssetLibraryError::AssetFileStillPresent);
         }
-        if proof.kind != asset.kind {
+        if proof.kind != asset.kind || proof.extension != replacement_file_extension(&asset)? {
             return Err(AssetLibraryError::InvalidReplacementFile);
         }
         atomic_copy_missing(source, &self.asset_url(&asset), Some(proof))?;
@@ -1653,20 +1653,14 @@ fn asset_file_availability(path: &Path) -> AssetAvailability {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReplacementFileProof {
     kind: CaptureKind,
+    extension: &'static str,
     byte_len: u64,
     sha256: [u8; 32],
 }
 
-pub(crate) fn replacement_file_proof(
-    path: &Path,
-    kind: CaptureKind,
-) -> Result<ReplacementFileProof> {
+pub(crate) fn replacement_file_proof(path: &Path, asset: &CaptureAsset) -> Result<ReplacementFileProof> {
     ensure_regular_file(path)?;
-    let expected_extension = match kind {
-        CaptureKind::Image => "png",
-        CaptureKind::Video => "mp4",
-        CaptureKind::Gif => "gif",
-    };
+    let expected_extension = replacement_file_extension(asset)?;
     if !path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -1677,8 +1671,18 @@ pub(crate) fn replacement_file_proof(
     let mut prefix = [0_u8; 12];
     let mut source = std::fs::File::open(path)?;
     let read = std::io::Read::read(&mut source, &mut prefix)?;
-    let matches_kind = match kind {
+    let matches_kind = match asset.kind {
         CaptureKind::Image => read >= 8 && prefix[..8] == *b"\x89PNG\r\n\x1a\n",
+        CaptureKind::Video if expected_extension == "mov" => {
+            // Older QuickTime files can begin directly with an atom rather
+            // than an ISO file-type box. Native metadata validation still
+            // checks that the selected file is a decodable matching video.
+            read >= 8
+                && matches!(
+                    &prefix[4..8],
+                    b"ftyp" | b"moov" | b"mdat" | b"wide" | b"free" | b"skip"
+                )
+        }
         CaptureKind::Video => read >= 8 && prefix[4..8] == *b"ftyp",
         CaptureKind::Gif => read >= 6 && (prefix[..6] == *b"GIF87a" || prefix[..6] == *b"GIF89a"),
     };
@@ -1687,10 +1691,27 @@ pub(crate) fn replacement_file_proof(
     }
     let metadata = std::fs::symlink_metadata(path)?;
     Ok(ReplacementFileProof {
-        kind,
+        kind: asset.kind,
+        extension: expected_extension,
         byte_len: metadata.len(),
         sha256: sha256_file(path)?,
     })
+}
+
+/// Missing-file recovery preserves the indexed container, just like import.
+pub(crate) fn replacement_file_extension(asset: &CaptureAsset) -> Result<&'static str> {
+    match asset.kind {
+        CaptureKind::Image => Ok("png"),
+        CaptureKind::Gif => Ok("gif"),
+        CaptureKind::Video => match Path::new(&asset.filename)
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
+            Some(extension) if extension.eq_ignore_ascii_case("mp4") => Ok("mp4"),
+            Some(extension) if extension.eq_ignore_ascii_case("mov") => Ok("mov"),
+            _ => Err(AssetLibraryError::InvalidReplacementFile),
+        },
+    }
 }
 
 fn atomic_copy_missing(
@@ -2637,7 +2658,7 @@ mod tests {
         );
         let replacement = root.join("replacement.png");
         std::fs::write(&replacement, b"\x89PNG\r\n\x1a\nrestored").unwrap();
-        let proof = replacement_file_proof(&replacement, CaptureKind::Image).unwrap();
+        let proof = replacement_file_proof(&replacement, &asset).unwrap();
 
         let restored = library
             .restore_missing_asset(&asset.id, &replacement, &proof)
@@ -2655,6 +2676,68 @@ mod tests {
             library.remove_missing_asset(&asset.id),
             Err(AssetLibraryError::AssetFileStillPresent)
         ));
+    }
+
+    #[test]
+    fn missing_video_recovery_preserves_mp4_and_mov_containers() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        for (extension, bytes) in [
+            ("mp4", b"\0\0\0\x14ftypisomvideo".as_slice()),
+            ("mov", b"\0\0\0\x14ftypqt  video".as_slice()),
+            ("MOV", b"\0\0\0\x08widevideo".as_slice()),
+        ] {
+            let asset = library
+                .import_data(
+                    bytes,
+                    CaptureKind::Video,
+                    extension,
+                    10,
+                    20,
+                    Some(1.0),
+                    None,
+                    None,
+                )
+                .unwrap();
+            std::fs::remove_file(library.asset_url(&asset)).unwrap();
+            let replacement = root.join(format!("replacement.{extension}"));
+            std::fs::write(&replacement, bytes).unwrap();
+            let proof = replacement_file_proof(&replacement, &asset).unwrap();
+            assert_eq!(proof.extension, extension.to_ascii_lowercase());
+            assert_eq!(
+                library.restore_missing_asset(&asset.id, &replacement, &proof).unwrap(),
+                asset
+            );
+            assert_eq!(std::fs::read(library.asset_url(&asset)).unwrap(), bytes);
+
+            let other_extension = if proof.extension == "mp4" {
+                "mov"
+            } else {
+                "mp4"
+            };
+            let other = library
+                .import_data(
+                    bytes,
+                    CaptureKind::Video,
+                    other_extension,
+                    10,
+                    20,
+                    Some(1.0),
+                    None,
+                    None,
+                )
+                .unwrap();
+            std::fs::remove_file(library.asset_url(&other)).unwrap();
+            assert!(matches!(
+                replacement_file_proof(&replacement, &other),
+                Err(AssetLibraryError::InvalidReplacementFile)
+            ));
+            assert!(matches!(
+                library.restore_missing_asset(&other.id, &replacement, &proof),
+                Err(AssetLibraryError::InvalidReplacementFile)
+            ));
+            assert!(!library.asset_url(&other).exists());
+        }
     }
 
     #[test]

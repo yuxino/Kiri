@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
@@ -337,7 +337,7 @@ pub fn handle(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Response<Ve
     if route == "media" {
         let rest = &path.trim_end_matches('/');
         if let Ok(id) = uuid::Uuid::parse_str(rest) {
-            let (kind, file) = {
+            let (content_type, file) = {
                 let mut context = state.library.lock().unwrap();
                 let Ok(library) = context.library() else {
                     return not_found();
@@ -347,8 +347,8 @@ pub fn handle(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Response<Ve
                         // Acquire the handle while library mutations are locked.
                         // Renaming may remove this path once the lock is released,
                         // but an open handle keeps the current request readable.
-                        Ok(path) => match std::fs::File::open(path) {
-                            Ok(file) => (asset.kind, file),
+                        Ok(path) => match std::fs::File::open(&path) {
+                            Ok(file) => (media_content_type(asset.kind, &path), file),
                             Err(_) => return not_found(),
                         },
                         Err(_) => return not_found(),
@@ -356,17 +356,30 @@ pub fn handle(app: &tauri::AppHandle, request: &Request<Vec<u8>>) -> Response<Ve
                     None => return not_found(),
                 }
             };
-            let content_type = match kind {
-                CaptureKind::Image => "image/png",
-                CaptureKind::Gif => "image/gif",
-                CaptureKind::Video => "video/mp4",
-            };
             return respond_media(request, file, content_type).unwrap_or_else(not_found);
         }
         return not_found();
     }
 
     not_found()
+}
+
+fn media_content_type(kind: CaptureKind, path: &Path) -> &'static str {
+    match kind {
+        CaptureKind::Image => "image/png",
+        CaptureKind::Gif => "image/gif",
+        CaptureKind::Video => {
+            if path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("mov"))
+            {
+                "video/quicktime"
+            } else {
+                "video/mp4"
+            }
+        }
+    }
 }
 
 /// Resolve the current library path *after* acquiring the mutation barrier.
@@ -541,7 +554,7 @@ fn respond_media(
     // allocation. WebView video players issue byte ranges; a client that does
     // not must retry with a valid single range instead of receiving the full
     // MP4 representation.
-    if content_type == "video/mp4" && matches!(range, MediaRangeDecision::Full) {
+    if content_type.starts_with("video/") && matches!(range, MediaRangeDecision::Full) {
         return Some(range_not_satisfiable(total));
     }
 
@@ -1126,25 +1139,58 @@ mod tests {
         let data = b"complete representation";
         std::fs::write(file.path(), data).unwrap();
 
-        for range in [
-            None,
-            Some("items=0-1"),
-            Some("bytes=0-1,4-5"),
-            Some("bytes=5-4"),
-        ] {
-            let mut request = Request::builder().uri("kiri://media/test");
-            if let Some(range) = range {
-                request = request.header("Range", range);
-            }
-            let request = request.body(Vec::new()).unwrap();
-            let response = respond_media(&request, file.reopen().unwrap(), "video/mp4").unwrap();
+        for content_type in ["video/mp4", "video/quicktime"] {
+            for range in [
+                None,
+                Some("items=0-1"),
+                Some("bytes=0-1,4-5"),
+                Some("bytes=5-4"),
+            ] {
+                let mut request = Request::builder().uri("kiri://media/test");
+                if let Some(range) = range {
+                    request = request.header("Range", range);
+                }
+                let request = request.body(Vec::new()).unwrap();
+                let response = respond_media(&request, file.reopen().unwrap(), content_type).unwrap();
 
-            assert_eq!(
-                response.status(),
-                StatusCode::RANGE_NOT_SATISFIABLE,
-                "range {range:?}"
-            );
-            assert!(response.body().is_empty(), "range {range:?}");
+                assert_eq!(
+                    response.status(),
+                    StatusCode::RANGE_NOT_SATISFIABLE,
+                    "{content_type}, range {range:?}"
+                );
+                assert!(response.body().is_empty(), "{content_type}, range {range:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn media_response_preserves_imported_video_content_types() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), b"0123456789").unwrap();
+        for (filename, content_type) in [
+            ("recording.mp4", "video/mp4"),
+            ("imported.mov", "video/quicktime"),
+            ("renamed.MOV", "video/quicktime"),
+        ] {
+            let mime = media_content_type(CaptureKind::Video, Path::new(filename));
+            assert_eq!(mime, content_type);
+            for method in [Method::GET, Method::HEAD] {
+                let request = Request::builder()
+                    .method(method.clone())
+                    .uri("kiri://media/test")
+                    .header("Range", "bytes=2-5")
+                    .body(Vec::new())
+                    .unwrap();
+                let response = respond_media(&request, file.reopen().unwrap(), mime).unwrap();
+                assert_eq!(response.headers().get("Content-Type").unwrap(), content_type);
+                if method == Method::HEAD {
+                    assert_eq!(response.status(), StatusCode::OK);
+                    assert!(response.body().is_empty());
+                } else {
+                    assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+                    assert_eq!(response.body(), b"2345");
+                }
+            }
         }
     }
 
