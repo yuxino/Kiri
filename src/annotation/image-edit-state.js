@@ -7,7 +7,9 @@ export function hasPendingImageTextChange(marks, draft) {
   if (previous.kind !== draft.mark.kind) return true;
   const fields = draft.mark.kind === "watermark"
     ? ["text","color","fontSize","opacity","rotation","mode","spacing"]
-    : ["text", "color", "background", "fontSize"];
+    : draft.mark.kind === "callout"
+      ? ["text", "color", "fontSize", "number", "size", "style"]
+      : ["text", "color", "background", "fontSize", "labelDirection"];
   return fields.some(key => previous[key] !== draft.mark[key]);
 }
 

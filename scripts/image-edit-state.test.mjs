@@ -31,6 +31,29 @@ test("crop changes stay dirty until the library baseline is updated by Save", ()
   assert.equal(hasUnsavedImageChanges(nextSaved, saved.marks, null, null), true);
 });
 
+test("flipping a directional label during text editing requires saving", () => {
+  const label = { ...text, labelDirection: "left" };
+  const baseline = { marks: [label], crop: null };
+  const draft = { editing: true, previousId: label.id, mark: { ...label, labelDirection: "right" } };
+  assert.equal(hasUnsavedImageChanges(baseline, baseline.marks, null, draft), true);
+  draft.mark.labelDirection = "left";
+  assert.equal(hasUnsavedImageChanges(baseline, baseline.marks, null, draft), false);
+});
+
+test("callout draft appearance changes require saving without flagging editor layout", () => {
+  const callout = { kind: "callout", id: 3, text: "note", color: "cherry", fontSize: 18,
+    center: { x: 20, y: 20 }, number: 1, size: 32, style: "filled",
+    labelRect: { x: 40, y: 5, width: 80, height: 24 } };
+  const baseline = { marks: [callout], crop: null };
+  const draft = { editing: true, previousId: callout.id,
+    mark: { ...callout, labelRect: { ...callout.labelRect, height: 25 } } };
+  assert.equal(hasUnsavedImageChanges(baseline, baseline.marks, null, draft), false);
+  for (const patch of [{ number: 2 }, { size: 48 }, { style: "outline" }, { text: "changed" }, { color: "blue" }, { fontSize: 24 }]) {
+    assert.equal(hasUnsavedImageChanges(baseline, baseline.marks, null,
+      { ...draft, mark: { ...draft.mark, ...patch } }), true);
+  }
+});
+
 test("watermark drafts protect content and every appearance field while editor layout stays clean",()=>{
   const watermark={kind:"watermark",id:9,text:"© Kiri",rect:{x:8,y:5,width:80,height:24},color:"black",
     fontSize:24,opacity:.2,rotation:-30,mode:"tiled",spacing:80};

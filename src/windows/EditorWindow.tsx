@@ -28,7 +28,7 @@ import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { parseAnnotationDocument } from "../annotation/project.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
-import { hasUnsavedImageChanges, type ImageEditSnapshot, type ImageTextDraft } from "../annotation/image-edit-state.js";
+import { hasPendingImageTextChange, hasUnsavedImageChanges, type ImageEditSnapshot, type ImageTextDraft } from "../annotation/image-edit-state.js";
 import { ImageCloseGuard, type ImageCloseGuardHandle } from "./ImageCloseGuard";
 
 type EditorTool = Tool | "crop";
@@ -126,7 +126,13 @@ export function EditorWindow(props: { id: string }) {
     setTextDraft({ mark, previousId, editing });
   }, []);
   const effectiveCrop = document && cropSelection && !isFullCrop(document, cropSelection) ? cropSelection : null;
-  const dirty = hasUnsavedImageChanges(savedSnapshot, currentMarks, effectiveCrop, textDraft);
+  // Typing and selection updates do not change the committed document. Avoid
+  // serializing every saved brush point again for each inline text keystroke.
+  const documentDirty = useMemo(
+    () => hasUnsavedImageChanges(savedSnapshot, currentMarks, effectiveCrop, null),
+    [savedSnapshot, currentMarks, effectiveCrop],
+  );
+  const dirty = documentDirty || hasPendingImageTextChange(currentMarks, textDraft);
 
   useEffect(() => {
     let disposed = false;
