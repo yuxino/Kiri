@@ -103,6 +103,7 @@ export function TextHistory() {
   const [mutationError, setMutationError] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editBase, setEditBase] = useState<{ id: string; text: string } | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState(false);
@@ -135,12 +136,16 @@ export function TextHistory() {
     return () => window.removeEventListener("keydown", keydown);
   }, []);
   const selected = records.find((item) => item.id === selectedId);
-  useEffect(() => { setEditing(false); setEditError(false); }, [selectedId]);
+  useEffect(() => { setEditing(false); setEditBase(null); setEditError(false); }, [selectedId]);
   const saveCorrection = async (replacement: string | null) => {
     if (!selected || saving || !selected.ocrText) return;
+    // A live library refresh must not silently rebase an in-progress draft over
+    // another window's correction. Keep the text the user began editing.
+    if (replacement !== null && editBase?.id !== selected.id) return;
+    const expectedText = replacement === null ? selected.ocrText : editBase!.text;
     setSaving(true); setEditError(false);
     try {
-      const updated = await api.updateOcrHistoryText(selected.id, selected.ocrText, replacement);
+      const updated = await api.updateOcrHistoryText(selected.id, expectedText, replacement);
       setRecords((current) => current.map((item) => item.id === updated.id ? updated : item));
       setEditing(false);
     } catch { setEditError(true); }
@@ -183,7 +188,7 @@ export function TextHistory() {
                 <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}>{t("Save")}</button>
               </> : <>
                 {selected.ocrOriginalText != null && <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => void saveCorrection(null)}>{t("Restore Original Text")}</button>}
-                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => { setDraft(selected.ocrText ?? ""); setEditing(true); setEditError(false); }}>{t("Edit Text")}</button>
+                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => { setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "" }); setEditing(true); setEditError(false); }}>{t("Edit Text")}</button>
                 <button type="button" className="kiri-icon-button" disabled={deleting || loading || saving} onClick={() => void remove()} title={t("Move to Trash")} aria-label={t("Move to Trash")}><KiriIcon name="trash" size={16} /></button>
               </>}
             editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} onChange={(event) => setDraft(event.target.value)}

@@ -159,3 +159,33 @@ test("OCR history saves a correction, restores the original, and cancels an edit
   assert.equal(changes.length, 2);
   component.unmount();
 });
+
+test("a library refresh cannot rebase an open correction over another window's edit", async () => {
+  let current = record("ocr-1", "original");
+  const changes = [];
+  const harness = createLibraryHarness({
+    listOcrRecords: async () => [current],
+    updateOcrHistoryText: async (id, expectedText, replacement) => {
+      changes.push([id, expectedText, replacement]);
+      if (expectedText !== current.ocrText) throw new Error("OCR text changed");
+      current = { ...current, ocrText: replacement };
+      return current;
+    },
+  }, source);
+  const component = harness.mount("TextHistory");
+  component.render(); await pause(5); await settleRequests();
+  button(component.render(), "Edit Text").props.onClick();
+  const editor = tree => nodes(tree).find(node => node?.props?.editor?.type === "textarea")?.props.editor;
+  editor(component.render()).props.onChange({ target: { value: "my correction" } });
+  component.render();
+  current = record("ocr-1", "other window's correction");
+  harness.emit("libraryChanged"); component.render();
+  await pause(5); await settleRequests();
+  button(component.render(), "Save").props.onClick(); await settleRequests();
+  const tree = component.render();
+  assert.deepEqual(changes, [["ocr-1", "original", "my correction"]]);
+  assert.equal(current.ocrText, "other window's correction");
+  assert.equal(editor(tree).props.value, "my correction");
+  assert.equal(hasText(tree, "Couldn't save the text. Reload Text History and try again."), true);
+  component.unmount();
+});
