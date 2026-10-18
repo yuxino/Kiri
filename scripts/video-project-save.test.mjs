@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
 import {createVideoProjectSaveQueue,sameVideoProjectValue} from '../src/windows/video-project-save.js';
 import {installVideoProjectShortcuts} from '../src/windows/video-project-shortcuts.js';
+import {createLibraryHarness,settleRequests} from './helpers/library-render-harness.mjs';
+
+const projectSource=readFileSync(new URL('../src/windows/video-project.ts',import.meta.url),'utf8');
+const projectModule=await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(projectSource,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText).toString('base64')}`);
+const projectHookSource=readFileSync(new URL('../src/windows/useVideoProject.ts',import.meta.url),'utf8');
 
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return{promise,resolve,reject};};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -12,6 +19,36 @@ function fixture(t,options={}){
     save:(revision,project)=>{const pending=deferred();calls.push({revision,project,...pending});return pending.promise;},...options});
   t.after(()=>queue.dispose());return{queue,calls};
 }
+
+test('choosing an export preset on an untrimmed recording saves and restores the project',async t=>{
+  for(const preset of ['share','small']){
+    const writes=[];
+    let snapshot={schemaVersion:1,sourceSize:{width:160,height:90},sourceDuration:10,
+      edit:{segments:[{start:0,end:10}],effects:[],annotations:[],stickers:[]},preset:'original',playhead:0};
+    const saved=()=>({state:'valid',revision:'saved-preset',project:snapshot});
+    const options={id:'video',enabled:true,duration:10,getProject:()=>snapshot,restore:async()=>{}};
+    const harness=createLibraryHarness({
+      loadVideoProject:async()=>({state:'none',revision:'base',project:null}),
+      saveVideoProject:async(id,revision,project)=>{writes.push({id,revision,project});return saved();},
+    },projectHookSource,{modules:{'./video-project':projectModule,'./video-project-save.js':{createVideoProjectSaveQueue}}});
+    const hook=harness.mount('useVideoProject',options);t.after(()=>hook.unmount());
+    hook.render();await settleRequests();
+    const controller=hook.render();assert.equal(controller.ready,true);
+    await controller.flush();assert.equal(writes.length,0,'opening an untouched recording must remain read-only');
+    snapshot={...snapshot,preset};controller.schedule();
+    assert.equal(await controller.flush(),true);
+    assert.equal(writes.length,1,'a chosen preset must survive a normal close');
+    assert.equal(writes[0].revision,'base');assert.equal(writes[0].project.preset,preset);
+    hook.unmount();
+
+    const restored=[];
+    const reopenedHarness=createLibraryHarness({loadVideoProject:async()=>saved()},projectHookSource,
+      {modules:{'./video-project':projectModule,'./video-project-save.js':{createVideoProjectSaveQueue}}});
+    const reopened=reopenedHarness.mount('useVideoProject',{...options,restore:async project=>{restored.push(project);}});
+    t.after(()=>reopened.unmount());reopened.render();await settleRequests();
+    assert.equal(reopened.render().ready,true);assert.equal(restored[0].preset,preset);
+  }
+});
 
 test('closing an untouched edit does not write an empty project',async t=>{
   const {queue,calls}=fixture(t,{project:null});

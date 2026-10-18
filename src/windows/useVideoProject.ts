@@ -50,7 +50,8 @@ export function useVideoProject(options:Options) {
     const controller=queue.current;if(!controller)return;
     const project=latest.current.getProject();
     // Opening or playing an untouched recording should not create an empty project.
-    if(!hasProject.current&&!hasVideoEdits(project.edit,project.sourceDuration)&&controller.discardUnwritten())return;
+    // A chosen export preset is intentional state even without timeline edits.
+    if(!hasProject.current&&project.preset==="original"&&!hasVideoEdits(project.edit,project.sourceDuration)&&controller.discardUnwritten())return;
     controller.enqueue(project);
   },[]);
   const flush=useCallback(async()=>{
