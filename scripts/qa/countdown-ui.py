@@ -26,12 +26,13 @@ transformCallback:fn=>{callbacks.set(++serial,fn);return serial},unregisterCallb
 convertFileSrc:p=>p,invoke:async(c,a={})=>{
 window.calls.push({command:c,args:a});
 if(c==='get_language'||c==='get_locale')return 'en';
+if(c==='get_shortcut_settings')return [];
 if(c==='recording_countdown_ready'){
  if(window.failReady)throw Error('controlled readiness failure');
  while(!window.ready)await new Promise(r=>setTimeout(r,10));return;
 }
 if(c==='cancel_recording_flow'&&window.failCancel){window.failCancel=false;throw Error('controlled cancellation failure')}
-if(c==='get_recording_state')return {isStarting:true,isRecording:false,isPaused:false,isTransitioning:false,isFinalizing:false,elapsed:0,elapsedLabel:'00:00'};
+if(c==='get_recording_state')return window.recordingState||{isStarting:true,isRecording:false,isPaused:false,isTransitioning:false,isFinalizing:false,elapsed:0,elapsedLabel:'00:00'};
 // The controls stay hidden until native placement returns the available CSS width.
 if(c==='position_recording_controls')return {maxWidth:window.innerWidth};
 if(c==='plugin:event|listen')return ++serial;
@@ -202,7 +203,7 @@ async def main(record=False):
             assert await count(w,'cancel_recording_flow') == 1 and await count(w,'begin_recording') == 0
             results.append('readiness error remains visible and cancellable')
             await c.close()
-            for key in ['click','Escape']:
+            for key in ['click','Enter','Space']:
                 c,w = await page('control-panel')
                 action = w.get_by_role('button',name='Cancel',exact=True)
                 await action.wait_for()
@@ -215,10 +216,38 @@ async def main(record=False):
                 if key == 'click':
                     await action.click()
                 else:
-                    await w.keyboard.press('Escape')
+                    await action.focus()
+                    assert await action.evaluate('(e)=>document.activeElement===e')
+                    await w.keyboard.press(key)
                 await w.wait_for_function("calls.filter(c=>c.command==='stop_recording').length===1")
                 assert await count(w,'begin_recording') == await count(w,'pause_recording') == 0
-                results.append('late control panel hydrates a visible, enabled cancel action; '+key+' stops the starting session')
+                results.append('late control panel hydrates a visible, enabled cancel action; explicit '+key+' activation stops the starting session')
+                await c.close()
+            for state in ['starting','recording']:
+                extra = '' if state == 'starting' else "window.recordingState={isStarting:false,isRecording:true,isPaused:false,isTransitioning:false,isFinalizing:false,elapsed:1,elapsedLabel:'00:01'};"
+                c,w = await page('control-panel', extra=extra)
+                await w.get_by_role('button', name='Cancel' if state == 'starting' else 'Stop and Save Recording', exact=True).wait_for()
+                # Bare keys must stay inert even outside text inputs, where a
+                # future panel-wide listener might otherwise intercept them.
+                await w.evaluate("document.body.tabIndex=-1;document.body.focus()")
+                assert await w.evaluate("document.activeElement===document.body")
+                await w.keyboard.press('Escape')
+                await w.keyboard.press('Space')
+                await w.wait_for_timeout(100)
+                for command in ['stop_recording','pause_recording','resume_recording','cancel_recording_flow']:
+                    assert await count(w,command) == 0, (state,'body',command)
+                # An unrelated focused field also keeps normal typing behavior.
+                await w.evaluate("""() => {
+                    const input=document.createElement('input');
+                    input.id='unrelated-field';document.body.append(input);input.focus();
+                }""")
+                await w.keyboard.press('Escape')
+                await w.keyboard.press('Space')
+                assert await w.locator('#unrelated-field').input_value() == ' '
+                await w.wait_for_timeout(100)
+                for command in ['stop_recording','pause_recording','resume_recording','cancel_recording_flow']:
+                    assert await count(w,command) == 0, (state,command)
+                results.append('bare Escape and Space with body or unrelated field focus do not control the '+state+' session')
                 await c.close()
             for viewport,size in [({'width':320,'height':320},112),({'width':280,'height':220},88)]:
                 c,w = await page(viewport=viewport,reduced_motion='reduce')
