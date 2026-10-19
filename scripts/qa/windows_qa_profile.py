@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 import ctypes
 from ctypes import wintypes
+import json
 import os
 from pathlib import Path
 import shutil
@@ -32,31 +33,75 @@ def remove_generated_directory(path):
             time.sleep(0.2)
 
 
+def rename_profile_directory(source, destination):
+    """Move the whole profile atomically; never fall back to copying live files."""
+    deadline = time.monotonic() + 20
+    while True:
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(f"Refusing to replace a profile directory: {destination}")
+        try:
+            source.rename(destination)
+            return
+        except OSError as error:
+            # A closing WebView may briefly keep a directory handle open.
+            # Access denied is also returned for such handles on Windows;
+            # permanent ACL errors still fail without touching the source.
+            if getattr(error, "winerror", None) not in (5, 32, 33) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.2)
+
+
 @contextmanager
 def isolated_app_directories(paths, backup_root):
+    paths = tuple(paths)
     for path in paths:
         if (path.is_symlink() or getattr(path, "is_junction", lambda: False)()
                 or (path.exists() and not path.is_dir())):
             raise RuntimeError(f"Refusing an unexpected Kiri profile path: {path}")
+    resolved = [path.resolve() for path in paths]
+    for index, path in enumerate(resolved):
+        if (backup_root.resolve().is_relative_to(path)
+                or any(path.is_relative_to(other) or other.is_relative_to(path)
+                       for other in resolved[index + 1:])):
+            raise RuntimeError("Profile isolation paths and recovery metadata must not overlap")
     active = []
     try:
         for index, path in enumerate(paths):
-            backup = backup_root / f"original-{index}" if path.exists() else None
-            if backup is not None:
-                shutil.move(str(path), str(backup))
-            active.append((path, backup))
+            entry = {"path": path, "holder": None, "backup": None,
+                     "journal": None, "saved": False, "created": False}
+            active.append(entry)
+            if path.exists():
+                # RUNNER_TEMP can be on D: while AppData is on C:. A sibling
+                # holder keeps this rename on the profile's own volume, even
+                # when nested QA contexts isolate the same paths again.
+                holder = Path(tempfile.mkdtemp(prefix=f".{path.name}-kiri-qa-", dir=path.parent))
+                backup = holder / "original"
+                journal = backup_root / f"original-{index}-{holder.name}.json"
+                entry.update(holder=holder, backup=backup, journal=journal)
+                journal.write_text(json.dumps({"path": str(path), "backup": str(backup)}), encoding="utf-8")
+                rename_profile_directory(path, backup)
+                entry["saved"] = True
             path.mkdir(parents=True)
+            entry["created"] = True
         yield
     finally:
         errors = []
-        for path, backup in reversed(active):
+        for entry in reversed(active):
+            path, backup = entry["path"], entry["backup"]
             try:
-                if path.exists():
+                # Only remove directories this context actually created. A
+                # failed setup must never delete the untouched original or a
+                # directory another process created before our mkdir.
+                if entry["created"] and path.exists():
                     remove_generated_directory(path)
-                if backup is not None:
-                    shutil.move(str(backup), str(path))
+                if entry["saved"]:
+                    rename_profile_directory(backup, path)
+                if entry["holder"] is not None:
+                    entry["holder"].rmdir()
+                if entry["journal"] is not None:
+                    entry["journal"].unlink(missing_ok=True)
             except Exception as error:
-                errors.append(str(error))
+                errors.append(f"{path} (backup: {backup}): {error}")
         if errors:
             # Preserve remaining backups for diagnosis instead of deleting them.
             raise RuntimeError("Could not restore CI Kiri directories: " + "; ".join(errors))

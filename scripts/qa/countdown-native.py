@@ -160,6 +160,64 @@ def cancelled():
  if exists('Pause Recording') or exists('Cancel Countdown'):raise RuntimeError('Cancelled flow remains active')
  if not user32.IsZoomed(source_window.handle):raise RuntimeError('Cancelling capture changed the source maximized state')
  report.setdefault('source_state_after_cancel',[]).append({'maximized':True,'rect':window_rect(source_window.handle)})
+def assert_source_foreground(label):
+ foreground=user32.GetAncestor(user32.GetForegroundWindow(),2)
+ if foreground!=source_window.handle:raise RuntimeError(label+' did not preserve the source foreground window')
+ return int(foreground)
+def recording_shortcut(keys,state,verify_state):
+ before=assert_source_foreground('Before '+state)
+ requested=time.monotonic();keyboard.send_keys(keys)
+ verify_state();confirmed=time.monotonic()
+ after=assert_source_foreground('After '+state)
+ report.setdefault('active_recording_shortcuts',[]).append({'keys':keys,'state':state,
+     'requested':requested,'confirmed':confirmed,'foreground_before':before,'foreground_after':after})
+ return requested,confirmed
+def exercise_recording_controls(recording_windows):
+ # Retain real button pause/resume coverage before testing global dispatch.
+ time.sleep(3);pause_requested=time.monotonic();find('Pause Recording').click_input()
+ find('Resume Recording');pause_confirmed=time.monotonic();time.sleep(5)
+ resume_requested=time.monotonic();find('Resume Recording').click_input()
+ find('Pause Recording');resume_confirmed=time.monotonic()
+ pauses=[{'pause_requested':pause_requested,'pause_confirmed':pause_confirmed,
+          'resume_requested':resume_requested,'resume_confirmed':resume_confirmed,'source':'buttons'}]
+ time.sleep(3);source_window.set_focus()
+ pause_requested,pause_confirmed=recording_shortcut('^%+p','paused',lambda:find('Resume Recording'))
+ time.sleep(5)
+ resume_requested,resume_confirmed=recording_shortcut('^%+p','recording',lambda:find('Pause Recording'))
+ pauses.append({'pause_requested':pause_requested,'pause_confirmed':pause_confirmed,
+                'resume_requested':resume_requested,'resume_confirmed':resume_confirmed,'source':'global shortcut'})
+ time.sleep(1)
+ stop_requested,_=recording_shortcut('^%+s','stopped',lambda:assert_closed(recording_windows))
+ return pauses,stop_requested
+def active_recording_bounds(duration,observed_start,stop_requested,pauses):
+ # State acknowledgements bracket each transition. The minimum/maximum pause
+ # intervals retain UIA latency rather than assuming the sleep is the pause.
+ if len(pauses)!=2:raise RuntimeError('Expected both button and global-shortcut pause intervals')
+ minimum_pause=maximum_pause=0;minimum_intervals=[];previous_end=observed_start
+ for pause in pauses:
+  a,b,c,d=[pause[key] for key in ['pause_requested','pause_confirmed','resume_requested','resume_confirmed']]
+  if not previous_end<=a<=b<=c<=d<=stop_requested:raise RuntimeError('Recording transition timestamps are out of order')
+  minimum_pause+=c-b;maximum_pause+=d-a;minimum_intervals.append(c-b);previous_end=d
+ elapsed=stop_requested-observed_start
+ lower=max(0,elapsed-maximum_pause-.1)
+ # Preserve the former 2.5-second allowance for the post-countdown observation
+ # delay and native stop finalization; never let it absorb the deliberate pauses.
+ upper=elapsed-minimum_pause+2.5
+ if upper-lower>=min(minimum_intervals):
+  raise RuntimeError('Pause observation is too short to prove each pause is excluded from saved media')
+ if not lower<=duration<=upper:raise RuntimeError(f'Static recording duration {duration} is outside active elapsed bounds [{lower}, {upper}]')
+ return {'measured_wall_seconds':elapsed,'minimum_paused_seconds':minimum_pause,
+         'maximum_paused_seconds':maximum_pause,'media_duration_bounds':[lower,upper],'pause_intervals':pauses}
+def saved_video(library,before_ids):
+ items=json.loads((library/'library.json').read_text(encoding='utf-8'))
+ created=[a for a in items if a['id'] not in before_ids and a['kind']=='video']
+ if len(created)!=1:raise RuntimeError('Recording did not save exactly one new video')
+ asset=created[0];path=library/'Assets'/asset['filename']
+ shell=win32com.client.Dispatch('Shell.Application')
+ item=shell.NameSpace(str(path.parent)).ParseName(path.name)
+ duration=float(item.ExtendedProperty('System.Media.Duration'))/10_000_000
+ if duration<=0 or path.stat().st_size<=0:raise RuntimeError('Saved recording has no valid duration or bytes')
+ return asset,path,duration,items
 try:
  find('Settings',timeout=35)
  sample=Path(os.environ['RUNNER_TEMP'])/'kiri-countdown-check.txt'
@@ -201,27 +259,36 @@ try:
  save_safe_desktop('recording-active-desktop.png')
  qa_active_seconds=time.monotonic()-qa_started
  # Static source: WGC callbacks need not arrive at the configured frame rate.
- time.sleep(3);pause.click_input();time.sleep(2)
- find('Resume Recording').click_input();time.sleep(3)
- find('Stop and Save Recording').click_input();time.sleep(5)
+ pauses,stop_requested=exercise_recording_controls(recording_windows);time.sleep(5)
  assert_closed(recording_windows)
- report['checks'].append('recording region and control HWNDs both close after stopping')
+ report['checks'].append('recording region and control HWNDs both close after global stop')
  save_safe_desktop('recording-stopped-desktop.png')
- items=json.loads((library/'library.json').read_text(encoding='utf-8'))
- created=[a for a in items if a['id'] not in before_ids and a['kind']=='video']
- if len(created)!=1:raise RuntimeError('Static recording did not save exactly one video')
- asset=created[0];path=library/'Assets'/asset['filename']
- shell=win32com.client.Dispatch('Shell.Application')
- item=shell.NameSpace(str(path.parent)).ParseName(path.name)
- duration=float(item.ExtendedProperty('System.Media.Duration'))/10_000_000
- # Six measured active seconds, the measured geometry/screenshot checks, and
- # up to the initial post-countdown second.
- # The deliberate two-second pause must not appear in the saved media.
- if not 6.0+qa_active_seconds <= duration <= 8.5+qa_active_seconds:raise RuntimeError(f'Static recording duration {duration} is outside active elapsed bounds')
- report['static_recording']={'media_duration':duration,'paused_seconds':2,
-     'measured_active_seconds':6,'native_geometry_qa_seconds':qa_active_seconds,'file_size':path.stat().st_size}
- report['checks'].append('static desktop MP4 preserves active elapsed time and excludes its deliberate pause')
- report['checks'].append('countdown completed; recording started, paused, resumed and stopped')
+ asset,path,duration,items=saved_video(library,before_ids)
+ report['static_recording']={'asset_id':asset['id'],'media_duration':duration,
+     'native_geometry_qa_seconds':qa_active_seconds,'file_size':path.stat().st_size,
+     'observed_start':qa_started,'stop_requested':stop_requested,'pause_intervals':pauses}
+ report['static_recording'].update(active_recording_bounds(duration,qa_started,stop_requested,pauses))
+ report['checks'].append('global Ctrl+Alt+Shift+P pauses and resumes from the source foreground; Ctrl+Alt+Shift+S stops and saves without stealing focus')
+ report['checks'].append('static desktop MP4 preserves measured active time and excludes both button and global-shortcut pauses')
+ # Keep Stop and Save Recording button acceptance in a second short capture,
+ # without repeating countdown cancellation or the geometry matrix.
+ second_before={a['id'] for a in items}
+ _,second_selection=begin();find('Pause Recording',timeout=35)
+ second_stop=find('Stop and Save Recording');second_panel=second_stop.top_level_parent()
+ second_windows=[w['hwnd'] for w in native_windows() if w['hwnd']==second_panel.handle
+                 or all(abs(a-b)<=2 for a,b in zip(w['rect'],second_selection))]
+ if len(second_windows)!=2:raise RuntimeError('Second recording has no unique region and controls')
+ second_started=time.monotonic();time.sleep(2)
+ second_stop_requested=time.monotonic();second_stop.click_input();assert_closed(second_windows);time.sleep(5)
+ second_asset,second_path,second_duration,final_items=saved_video(library,second_before)
+ if not 2<=second_duration<=second_stop_requested-second_started+2.5:
+  raise RuntimeError('Button-stopped recording duration is outside its short active interval')
+ if len([a for a in final_items if a['id'] not in before_ids and a['kind']=='video'])!=2:
+  raise RuntimeError('Two recording completions did not save exactly two videos')
+ report['button_stop_recording']={'asset_id':second_asset['id'],'media_duration':second_duration,
+     'measured_active_seconds':second_stop_requested-second_started,'file_size':second_path.stat().st_size}
+ report['checks'].append('Stop and Save Recording button closes both native windows and saves exactly one separate short MP4')
+ report['checks'].append('countdown completed; button and active global shortcut pause/resume/stop paths are independently exercised')
  report['success']=True
 except Exception as error:
  report['error']=str(error)[:1500];report.update(collect_crash_details(OUT,proc));report['windows']=[]

@@ -581,6 +581,7 @@ def smoke(executable, update_button, label):
         settings = find("Settings")
         snapshot(f"{label.split()[0]}-before-settings")
         settings.click_input()
+        find("About", control_type="TabItem").click_input()
         find(update_button, scroll=True)
         find("Copy Info", scroll=True).click_input()
         user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32

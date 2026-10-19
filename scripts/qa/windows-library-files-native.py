@@ -329,6 +329,8 @@ def verify_folder_and_rename(assets):
     phase("Open Folder on extended-length custom library root")
     focus_library()
     find("Settings", kinds=("Button",), scope=library_window).click_input()
+    # An available update can open Settings on About instead of General.
+    find("General", kinds=("TabItem",), scope=library_window).click_input()
     find("Open Folder", kinds=("Button",), scope=library_window, scroll=True).click_input()
     window = explorer_for(root)
     report["open_folder"] = explorer_evidence(window)
@@ -448,8 +450,10 @@ def verify_support_folders():
     phase("Open the fixed support folders from Settings > About")
     focus_library()
     find("Settings", kinds=("Button",), scope=library_window).click_input()
-    about = find("About", kinds=("Group",), scope=library_window, scroll=True)
-    find("GitHub", kinds=("Button",), scope=about, scroll=True)
+    find("About", kinds=("TabItem",), scope=library_window).click_input()
+    # Update and support actions are separate groups both named About. The
+    # active tab has one GitHub button and one support-folder button.
+    find("GitHub", kinds=("Button",), scope=library_window, scroll=True)
     destinations = [
         ("Settings Folder", Path(app_environment["APPDATA"]) / "io.yuxino.kiri"),
         ("Logs Folder", Path(app_environment["LOCALAPPDATA"]) / "io.yuxino.kiri" / "logs"),
@@ -459,7 +463,7 @@ def verify_support_folders():
     report["support_folders"] = []
     for label, destination in destinations:
         focus_library()
-        find("Open Folder", kinds=("Button",), scope=about, scroll=True).click_input()
+        find("Open Folder", kinds=("Button",), scope=library_window, scroll=True).click_input()
         item = find(label, kinds=("MenuItem",), scope=library_window)
         if not report["support_folders"]:
             snapshot("support-folder-menu")

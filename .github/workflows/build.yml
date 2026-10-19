@@ -82,6 +82,7 @@ jobs:
           python3 scripts/qa/test_linux_audio_tone.py
           python3 scripts/qa/test_pin_native_checks.py
           python3 scripts/qa/test_windows_native_candidate.py
+          python3 scripts/qa/test_countdown_native.py
       - name: Verify the formal release tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/release-version.mjs "$GITHUB_REF_NAME"

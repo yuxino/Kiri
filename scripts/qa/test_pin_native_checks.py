@@ -3,6 +3,7 @@ from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import shutil
+import json
 
 from pin_native_checks import borderless_geometry_evidence, capture_origin_evidence, pin_content_evidence, pin_lifecycle_evidence, pin_open_log_marker, pin_outline_evidence, proportional_resize_evidence
 from windows_qa_profile import isolated_app_directories, isolated_windows_profile
@@ -74,6 +75,11 @@ class NativePinPixelChecks(unittest.TestCase):
 
 class NativePinChecks(unittest.TestCase):
     asset = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+    def saved_backup(self, recovery):
+        journals = list(recovery.glob("original-*.json"))
+        self.assertEqual(len(journals), 1)
+        return Path(json.loads(journals[0].read_text())["backup"])
 
     def test_pin_must_match_capture_origin_and_size(self):
         selected = (470, 160, 1150, 420)
@@ -180,6 +186,184 @@ class NativePinChecks(unittest.TestCase):
             self.assertEqual((prior / "prior.txt").read_text(), "prior QA data")
             self.assertEqual(list(backup.iterdir()), [])
 
+    def test_backup_uses_same_parent_volume_without_copy_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "AppData/kiri", root / "RUNNER_TEMP/recovery"
+            original.mkdir(parents=True); recovery.mkdir(parents=True)
+            (original / "prior.txt").write_text("prior QA data")
+            with patch("windows_qa_profile.shutil.move", side_effect=AssertionError("copy fallback forbidden")), patch("windows_qa_profile.shutil.copytree", side_effect=AssertionError("live profile copy forbidden")):
+                with isolated_app_directories((original,), recovery):
+                    saved = self.saved_backup(recovery)
+                    self.assertEqual(saved.parent.parent, original.parent)
+                    self.assertEqual((saved / "prior.txt").read_text(), "prior QA data")
+                    self.assertEqual(list(original.iterdir()), [])
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertFalse(saved.parent.exists())
+            self.assertEqual(list(recovery.iterdir()), [])
+
+    def test_overlapping_profiles_or_recovery_directory_fail_before_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "profile", root / "recovery"
+            original.mkdir(); recovery.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            for paths, metadata in (((original, original), recovery),
+                                    ((original, original / "nested"), recovery),
+                                    ((original,), original / "recovery")):
+                with self.subTest(paths=paths, metadata=metadata), self.assertRaisesRegex(RuntimeError, "must not overlap"):
+                    with isolated_app_directories(paths, metadata):
+                        self.fail("Overlapping directories must not run QA")
+                self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertEqual(list(recovery.iterdir()), [])
+
+    def test_atomic_backup_and_restore_retry_only_bounded_windows_handle_errors(self):
+        for winerror in (5, 32, 33):
+            with self.subTest(winerror=winerror), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                original, recovery = root / "original", root / "recovery"
+                original.mkdir(); recovery.mkdir()
+                (original / "prior.txt").write_text("prior QA data")
+                rename = Path.rename
+                attempts = {}
+
+                def delayed_rename(source, destination):
+                    key = (source, destination)
+                    attempts[key] = attempts.get(key, 0) + 1
+                    if attempts[key] == 1:
+                        error = PermissionError("WebView handle is closing")
+                        error.winerror = winerror
+                        raise error
+                    return rename(source, destination)
+
+                with patch.object(Path, "rename", autospec=True, side_effect=delayed_rename), patch("windows_qa_profile.time.sleep"):
+                    with isolated_app_directories((original,), recovery):
+                        (original / "generated.txt").write_text("generated")
+                self.assertEqual(list(attempts.values()), [2, 2])
+                self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+                self.assertEqual(list(recovery.iterdir()), [])
+
+    def test_failed_second_backup_preserves_it_and_restores_the_first_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first, second, recovery = root / "first", root / "second", root / "recovery"
+            for path in (first, second, recovery): path.mkdir()
+            for path in (first, second): (path / "prior.txt").write_text(path.name)
+            rename = Path.rename
+
+            def fail_second(source, destination):
+                if source == second:
+                    error = OSError("different disk drive")
+                    error.winerror = 17
+                    raise error
+                return rename(source, destination)
+
+            with patch.object(Path, "rename", autospec=True, side_effect=fail_second), patch("windows_qa_profile.time.sleep") as sleep:
+                with self.assertRaisesRegex(OSError, "different disk drive"):
+                    with isolated_app_directories((first, second), recovery):
+                        self.fail("An incomplete setup must not run QA")
+                sleep.assert_not_called()
+            self.assertEqual((first / "prior.txt").read_text(), "first")
+            self.assertEqual((second / "prior.txt").read_text(), "second")
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["first", "recovery", "second"])
+
+    def test_setup_mkdir_failure_restores_the_already_saved_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "original", root / "recovery"
+            original.mkdir(); recovery.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            mkdir = Path.mkdir
+
+            def fail_generated(path, *args, **kwargs):
+                if path == original:
+                    raise PermissionError("cannot create QA directory")
+                return mkdir(path, *args, **kwargs)
+
+            with patch.object(Path, "mkdir", autospec=True, side_effect=fail_generated):
+                with self.assertRaisesRegex(PermissionError, "cannot create QA directory"):
+                    with isolated_app_directories((original,), recovery):
+                        self.fail("An incomplete setup must not run QA")
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertEqual(list(recovery.iterdir()), [])
+
+    def test_permanent_backup_lock_fails_without_touching_prior_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "original", root / "recovery"
+            original.mkdir(); recovery.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            error = PermissionError("persistent sharing violation")
+            error.winerror = 32
+            with patch.object(Path, "rename", side_effect=error), patch("windows_qa_profile.time.monotonic", side_effect=[0, 21]):
+                with self.assertRaisesRegex(PermissionError, "persistent sharing violation"):
+                    with isolated_app_directories((original,), recovery):
+                        self.fail("Locked profiles must not run QA")
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["original", "recovery"])
+            self.assertEqual(list(recovery.iterdir()), [])
+
+    def test_failed_restore_keeps_complete_backup_and_recovery_location(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "profile", root / "recovery"
+            original.mkdir(); recovery.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            rename = Path.rename
+
+            def fail_restore(source, destination):
+                if destination == original:
+                    raise OSError("restore failed")
+                return rename(source, destination)
+
+            with patch.object(Path, "rename", autospec=True, side_effect=fail_restore):
+                with self.assertRaisesRegex(RuntimeError, "Could not restore") as error:
+                    with isolated_app_directories((original,), recovery):
+                        (original / "generated.txt").write_text("generated")
+            saved = self.saved_backup(recovery)
+            self.assertEqual((saved / "prior.txt").read_text(), "prior QA data")
+            self.assertIn(str(saved), str(error.exception))
+            self.assertFalse(original.exists())
+
+    def test_setup_cannot_delete_a_directory_recreated_by_another_process(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "original", root / "recovery"
+            original.mkdir(); recovery.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            mkdir = Path.mkdir
+
+            def recreate_before_mkdir(path, *args, **kwargs):
+                if path == original:
+                    mkdir(path)
+                    (path / "other.txt").write_text("other process")
+                return mkdir(path, *args, **kwargs)
+
+            with patch.object(Path, "mkdir", autospec=True, side_effect=recreate_before_mkdir):
+                with self.assertRaisesRegex(RuntimeError, "Could not restore"):
+                    with isolated_app_directories((original,), recovery):
+                        self.fail("An occupied directory must not run QA")
+            self.assertEqual((original / "other.txt").read_text(), "other process")
+            self.assertEqual((self.saved_backup(recovery) / "prior.txt").read_text(), "prior QA data")
+
+    def test_nested_isolation_restores_each_owner_without_backup_collisions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original, recovery = root / "profile", root / "recovery"
+            original.mkdir(); recovery.mkdir()
+            (original / "prior.txt").write_text("prior QA data")
+            with isolated_app_directories((original,), recovery):
+                (original / "outer.txt").write_text("outer QA data")
+                with isolated_app_directories((original,), recovery):
+                    self.assertEqual(list(original.iterdir()), [])
+                    self.assertEqual(len(list(recovery.glob("original-*.json"))), 2)
+                    (original / "inner.txt").write_text("inner QA data")
+                self.assertEqual((original / "outer.txt").read_text(), "outer QA data")
+                self.assertFalse((original / "inner.txt").exists())
+            self.assertEqual((original / "prior.txt").read_text(), "prior QA data")
+            self.assertFalse((original / "outer.txt").exists())
+            self.assertEqual(list(recovery.iterdir()), [])
+
     def test_webview_sharing_lock_retry_still_restores_prior_data(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -212,7 +396,7 @@ class NativePinChecks(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Could not restore"):
                     with isolated_app_directories((original,), backup):
                         pass
-            self.assertEqual((backup / "original-0/prior.txt").read_text(), "prior QA data")
+            self.assertEqual((self.saved_backup(backup) / "prior.txt").read_text(), "prior QA data")
 
     def test_disappearing_webview_cache_file_still_removes_tree_and_restores_backup(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -259,11 +443,11 @@ class NativePinChecks(unittest.TestCase):
             original, backup = root / "original", root / "backup"
             original.mkdir(); backup.mkdir()
             (original / "prior.txt").write_text("prior QA data")
-            with patch("windows_qa_profile.shutil.rmtree", side_effect=FileNotFoundError("cache race")), patch("windows_qa_profile.time.monotonic", side_effect=[0, 21]):
+            with patch("windows_qa_profile.shutil.rmtree", side_effect=FileNotFoundError("cache race")), patch("windows_qa_profile.time.monotonic", side_effect=[0, 0, 21]):
                 with self.assertRaisesRegex(RuntimeError, "Could not restore"):
                     with isolated_app_directories((original,), backup):
                         (original / "generated.txt").write_text("generated")
-            self.assertEqual((backup / "original-0/prior.txt").read_text(), "prior QA data")
+            self.assertEqual((self.saved_backup(backup) / "prior.txt").read_text(), "prior QA data")
             self.assertTrue((original / "generated.txt").exists())
 
 

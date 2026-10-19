@@ -262,6 +262,121 @@ class ConfirmationExecutableTests(unittest.TestCase):
                 self.result(GITHUB_SHA=sha)
 
 
+class NativeSettingsRouteTests(unittest.TestCase):
+    def test_package_support_checks_open_the_about_tab_before_finding_its_controls(self):
+        source = Path(__file__).with_name("windows-release-native.py").read_text()
+        smoke = next(node for node in ast.parse(source).body
+                     if isinstance(node, ast.FunctionDef) and node.name == "smoke")
+        body = next(node for node in smoke.body if isinstance(node, ast.Try)).body
+        # Execute the real navigation prefix without importing Windows-only UIA
+        # or invoking native clipboard APIs on this host.
+        clipboard_start = next(index for index, node in enumerate(body)
+                               if isinstance(node, ast.Assign)
+                               and isinstance(node.targets[0], ast.Tuple)
+                               and [target.id for target in node.targets[0].elts] == ["user32", "kernel32"])
+        navigation = ast.Module(body=body[:clipboard_start], type_ignores=[])
+        for label, update_button in (("portable ZIP", "Open Releases Page"),
+                                     ("NSIS installation", "Check for Updates")):
+            with self.subTest(package=label):
+                page = "library"
+                clicks = []
+                lookups = []
+                focused = []
+
+                def find(name, *, control_type="Button", scroll=False):
+                    nonlocal page
+                    lookups.append((name, control_type, scroll))
+                    expected_page = "library" if name == "Settings" else "general" if name == "About" else "about"
+                    self.assertEqual(page, expected_page, f"{name} requested from {page}")
+                    self.assertEqual(control_type, "TabItem" if name == "About" else "Button")
+                    control = Mock()
+                    control.top_level_parent.return_value.set_focus.side_effect = lambda: focused.append(True)
+
+                    def click():
+                        nonlocal page
+                        clicks.append(name)
+                        if name == "Settings":
+                            page = "general"
+                        elif name == "About":
+                            page = "about"
+
+                    control.click_input.side_effect = click
+                    return control
+
+                namespace = {"find": find, "snapshot": Mock(), "label": label, "update_button": update_button}
+                exec(compile(navigation, "native-settings-navigation", "exec"), namespace)
+                self.assertEqual(clicks, ["Settings", "About", "Copy Info"])
+                self.assertEqual(focused, [True])
+                self.assertIn((update_button, "Button", True), lookups)
+
+
+class LibrarySettingsRouteTests(unittest.TestCase):
+    def navigation(self, function_name, stop_assignment, initial_tab):
+        path = Path(__file__).with_name("windows-library-files-native.py")
+        source = ast.parse(path.read_text(), filename=str(path))
+        function = next(node for node in source.body
+                        if isinstance(node, ast.FunctionDef) and node.name == function_name)
+        end = next(index for index, node in enumerate(function.body)
+                   if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+                   and node.targets[0].id == stop_assignment)
+        navigation = ast.Module(body=function.body[:end], type_ignores=[])
+        window = object()
+        page = "library"
+        clicks = []
+        destinations = []
+        lookups = []
+
+        def find(name, *, kinds, scope, scroll=False):
+            nonlocal page
+            self.assertIs(scope, window)
+            lookups.append((name, kinds, scroll))
+            if name == "Settings":
+                self.assertEqual((page, kinds), ("library", ("Button",)))
+            elif kinds == ("TabItem",):
+                self.assertIn(page, ("general", "about"))
+                self.assertIn(name, ("General", "About"))
+            elif name == "GitHub":
+                self.assertEqual((page, kinds), ("about", ("Button",)))
+            elif name == "Open Folder":
+                self.assertIn(page, ("general", "about"))
+                self.assertEqual(kinds, ("Button",))
+            else:
+                self.fail(f"Obsolete or ambiguous settings lookup: {name} {kinds}")
+            control = Mock()
+
+            def click():
+                nonlocal page
+                clicks.append(name)
+                if name == "Settings":
+                    page = initial_tab
+                elif kinds == ("TabItem",):
+                    page = name.lower()
+                elif name == "Open Folder":
+                    destinations.append("current library" if page == "general" else "support menu")
+
+            control.click_input.side_effect = click
+            return control
+
+        namespace = {"find": find, "phase": Mock(), "focus_library": Mock(), "library_window": window}
+        exec(compile(navigation, str(path), "exec"), namespace)
+        return clicks, destinations, lookups
+
+    def test_library_folder_opens_general_even_when_an_update_selects_about(self):
+        for initial_tab in ("general", "about"):
+            with self.subTest(initial_tab=initial_tab):
+                clicks, destinations, _ = self.navigation("verify_folder_and_rename", "window", initial_tab)
+                self.assertEqual(clicks, ["Settings", "General", "Open Folder"])
+                self.assertEqual(destinations, ["current library"])
+
+    def test_support_folders_open_about_without_ambiguous_same_name_groups(self):
+        for initial_tab in ("general", "about"):
+            with self.subTest(initial_tab=initial_tab):
+                clicks, destinations, lookups = self.navigation("verify_support_folders", "destinations", initial_tab)
+                self.assertEqual(clicks, ["Settings", "About"])
+                self.assertEqual(destinations, [])
+                self.assertIn(("GitHub", ("Button",), True), lookups)
+
+
 class NativePollingTests(unittest.TestCase):
     def setUp(self):
         source = Path(__file__).with_name("windows-release-native.py").read_text()
