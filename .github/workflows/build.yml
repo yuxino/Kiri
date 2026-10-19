@@ -138,11 +138,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Test native shortcut harness
+        run: node --test scripts/qa/shortcut-native-unit.test.mjs
+      - name: Test native shortcut mappings and registration rollback
+        run: node scripts/qa/shortcut-native-unit.mjs
 
   build-linux:
     name: Build, test and package Linux (Ubuntu 24.04 / X11)
@@ -215,6 +222,10 @@ jobs:
         env:
           KIRI_LINUX_MEDIA_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review
           KIRI_LINUX_VIDEO_QA_DIR: ${{ runner.temp }}/kiri-linux-media-review/video-export
+      - name: Test native shortcut harness
+        run: node --test scripts/qa/shortcut-native-unit.test.mjs
+      - name: Test native shortcut mappings and registration rollback
+        run: node scripts/qa/shortcut-native-unit.mjs
       - name: Repeat Linux audio fixture and reordered export regressions
         run: |
           for pass in 1 2 3 4 5; do
@@ -515,6 +526,10 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
         env:
           KIRI_VIDEO_QA_DIR: ${{ runner.temp }}/kiri-video-export-review
+      - name: Test native shortcut harness
+        run: node --test scripts/qa/shortcut-native-unit.test.mjs
+      - name: Test native shortcut mappings and registration rollback
+        run: node scripts/qa/shortcut-native-unit.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:

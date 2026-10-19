@@ -327,6 +327,10 @@ fn events_processor(thread_rx: Receiver<ThreadMessage>) -> Result<(), String> {
     }
 }
 
+pub(crate) fn is_key_supported(key: Code) -> bool {
+    keycode_to_x11_keysym(key).is_some()
+}
+
 fn keycode_to_x11_keysym(key: Code) -> Option<RawKeysym> {
     Some(match key {
         Code::KeyA => xkeysym::key::A,
@@ -409,7 +413,7 @@ fn keycode_to_x11_keysym(key: Code) -> Option<RawKeysym> {
         Code::Escape => xkeysym::key::Escape,
         Code::PrintScreen => xkeysym::key::Print,
         Code::ScrollLock => xkeysym::key::Scroll_Lock,
-        Code::NumLock => xkeysym::key::F1,
+        Code::NumLock => xkeysym::key::Num_Lock,
         Code::F1 => xkeysym::key::F1,
         Code::F2 => xkeysym::key::F2,
         Code::F3 => xkeysym::key::F3,
@@ -462,6 +466,17 @@ fn modifiers_to_x11_mods(modifiers: Modifiers) -> ModMask {
         x11mods |= ModMask::CONTROL;
     }
     x11mods
+}
+
+#[cfg(test)]
+mod key_mapping_tests {
+    use super::*;
+
+    #[test]
+    fn num_lock_does_not_register_f1() {
+        assert_eq!(keycode_to_x11_keysym(Code::NumLock), Some(xkeysym::key::Num_Lock));
+        assert_ne!(keycode_to_x11_keysym(Code::NumLock), keycode_to_x11_keysym(Code::F1));
+    }
 }
 
 fn keysym_to_keycode(conn: &RustConnection, keysym: RawKeysym) -> Result<Option<Keycode>, String> {

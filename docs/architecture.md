@@ -110,8 +110,22 @@ reads after a newer change. See ADR 0079.
 1. The native global shortcut asks Rust to start a capture session and records
    the previously focused application. Registration needs no TCC permission;
    a conflicting binding leaves Kiri running and is surfaced in Settings for
-   retry or replacement. Settings can record a modified letter or digit and
-   restore the default. The candidate is registered before the old binding is
+   retry or replacement. Settings records native-library-supported physical key
+   codes with optional modifiers and can restore the default. F1–F24, media keys,
+   and Control/Alt/Meta combinations save directly; other bare or Shift-only keys
+   remain row-owned candidates until explicit confirmation. Browser and native
+   recorded events share this policy, while IME/repeat/modifier-only events are
+   ignored. Cancelling or failed registration preserves the saved key (ADR 0111).
+   The Shortcuts settings page manages capture, Record,
+   OCR, and main-window bindings independently. It also configures Pause/Resume
+   Recording and Stop and Save Recording. Those native bindings register only
+   during recording (including pauses), remain registered through pause/resume
+   transitions, and release when stopping enters finalization or recording fails.
+   They stay inactive during region selection and countdown. A registration
+   conflict reports an error without aborting recording; other control paths remain
+   available. Record and OCR carry their
+   initial mode in the capture session; the overlay reads that mode alongside
+   its frozen display context. The candidate is registered before the old binding is
    released; the native preference is atomically persisted and loaded on launch.
    Shortcut and tray requests acquire an owned scheduling permit before
    dispatch, so key repeat cannot leave a burst of stale capture starts behind
@@ -125,7 +139,10 @@ reads after a newer change. See ADR 0079.
    offer explicit GlobalShortcuts Portal setup in Settings, with actual returned
    bindings and a dedicated identity-registered session actor (ADR 0075).
    Command guidance remains available on every Wayland desktop. Single-instance dispatch
-   routes that command to the running app without opening its library.
+   routes capture commands to the running app without opening its library.
+   `--record` and `--ocr` choose the corresponding selection mode, while
+   `--library` presents the main window. See ADR 0110 for configuration migration,
+   duplicate protection, and shortcut-recorder ownership.
 2. macOS freezes the active display with ScreenCaptureKit. Windows frozen
    stills use the GDI path exposed through `xcap`; Windows Graphics Capture
    remains the recording backend. Linux X11 uses `xcap` for the monitor under
@@ -262,6 +279,16 @@ Changes are debounced as field-level patches, merged under the native preference
 lock, and broadcast to open windows. The active tool, selection, crop,
 and document content are never persisted as appearance preferences.
 
+The screenshot annotation toolbar and property panel have separate drag handles
+with keyboard adjustments. Manual positions belong to the current capture and
+survive selection, tool, and property changes. The main toolbar stays within the
+screen and avoids the mode selector; properties also avoid the main toolbar and
+make room when it moves over them. Automatic property placement additionally
+avoids the selected or edited mark. The property handle and explicit hide action
+share its existing heading. Hiding persists until the main toolbar reopens the
+panel. These layout states preserve annotation editing and IME composition
+(ADR 0110).
+
 Text (T), Numbered callout (N), and Label bubble (B) each have a direct button
 in the capture and saved-image toolbars. Their annotation groups wrap at narrow
 widths while keeping every tool reachable; keyboard shortcuts remain unchanged.
@@ -338,10 +365,11 @@ The main window uses a persistent destination sidebar and a shared workspace
 header for Library, Text History, QR Favorites, Trash and Settings. Contextual
 capture filters and search share a toolbar; batch actions occupy an in-flow row
 above the scrolling grid. Text and QR details consolidate actions with record
-metadata. Settings uses General and OCR columns when space allows, with About
-below OCR, and stacks those sections in narrow windows. Container queries follow
-the actual content/section width instead of the overall native window width
-(ADR 0098). This layout does not change capture, editor or native IPC policies.
+metadata. Settings has General, Shortcuts, Text Recognition, and About tabs;
+the tab row stays visible while the selected page scrolls (ADR 0110). Container
+queries follow the actual content/section width instead of the overall native
+window width (ADR 0098). This layout does not change capture, editor or native
+IPC policies.
 
 Library and Trash expose explicit Select captures, individual checkboxes and
 filtered Select All, alongside rubber-band selection. Normal card clicks retain
@@ -555,9 +583,19 @@ cleanup ownership and imported as a partial recording. AVFoundation validates
 and losslessly exports macOS segments as one MP4. Kiri control windows are excluded from exported frames,
 while an enabled click-ripple window is intentionally included.
 
-Linux uses tray pause/resume/stop actions or the explicit
-`--toggle-recording-pause` and `--stop-recording` commands. Its floating control
-panel is suppressed because portal capture cannot exclude it reliably. Optional
+The macOS and Windows recording control panel is shown without taking keyboard
+focus and has no window-level bare Space/Escape recording listener. Explicitly
+focused buttons retain standard Space/Enter activation. Escape still cancels the
+capture overlay and countdown. The configured recording shortcuts provide global
+pause/resume and stop-and-save while a recording is active, including a bare key
+that the user explicitly confirms in Settings (ADR 0111).
+
+Linux uses the same recording-scoped native shortcuts on X11, desktop-managed
+Wayland bindings, tray pause/resume/stop actions, or the explicit
+`--toggle-recording-pause` and `--stop-recording` commands. Wayland command and
+Portal keys may remain reserved by the desktop while Kiri is idle; Kiri only
+guards whether a recording action can execute. Its floating control panel is
+suppressed because portal capture cannot exclude it reliably. Optional
 system audio and microphone recording use the local PulseAudio-compatible
 service; click highlights remain unavailable.
 

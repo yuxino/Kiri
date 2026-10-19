@@ -163,8 +163,17 @@ impl CaptureFlow {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CaptureMode {
+    Screenshot,
+    Record,
+    Ocr,
+}
+
 pub struct CaptureSession {
     pub capture_id: uuid::Uuid,
+    pub initial_mode: CaptureMode,
     pub display: CapturedDisplay,
     pub source_application: Option<String>,
     /// PID of the application that was frontmost before capture started.
@@ -228,6 +237,7 @@ impl Default for RecordingFlow {
             active: None,
             completion_monitor: None,
             session_id: uuid::Uuid::nil(),
+            controls_presented: false,
         }
     }
 }
@@ -238,6 +248,9 @@ pub struct RecordingFlow {
     /// PID of the app that was frontmost before capture (focus restoration).
     pub return_pid: Option<u32>,
     pub was_kiri_frontmost: bool,
+    /// Native non-activating show does not update Tao's visibility on Windows.
+    /// Track presentation per recording rather than repeatedly showing on resize.
+    pub controls_presented: bool,
     pub is_starting: bool,
     pub is_recording: bool,
     pub is_paused: bool,
@@ -258,6 +271,34 @@ pub struct RecordingFlow {
 }
 
 impl RecordingFlow {
+    pub fn shortcuts_active(&self) -> bool {
+        !self.is_starting && !self.is_finalizing
+            && (self.is_recording || self.is_paused || self.is_transitioning)
+    }
+
+    /// Check at the command's mutation lock, not only when its event is queued.
+    /// A delayed shortcut must never act on a replacement recording/countdown.
+    pub fn accepts_recording_action(&self, expected_session: Option<uuid::Uuid>) -> bool {
+        expected_session.map_or(true, |id| self.session_id == id && self.shortcuts_active())
+    }
+
+    pub fn claim_controls_presentation(&mut self, session_id: uuid::Uuid) -> bool {
+        if self.session_id != session_id || self.configuration.is_none()
+            || self.is_finalizing || self.controls_presented {
+            return false;
+        }
+        self.controls_presented = true;
+        true
+    }
+
+    pub fn recording_origin_to_restore(&self, frontmost_pid: Option<u32>) -> Option<u32> {
+        if !self.was_kiri_frontmost && frontmost_pid == Some(std::process::id()) {
+            self.return_pid
+        } else {
+            None
+        }
+    }
+
     /// A stale countdown must never start/cancel a replacement or active recording.
     pub fn pending_start_is_current(&self, session_id: uuid::Uuid) -> bool {
         self.session_id == session_id
@@ -1109,6 +1150,7 @@ pub fn recording_state(state: &RecordingFlow) -> RecordingStateDto {
 }
 
 pub fn emit_recording_state(app: &AppHandle, state: &RecordingFlow) {
+    crate::shortcut_settings::update_recording_scope(app, state.shortcuts_active());
     let _ = app.emit("recording-state", recording_state(state));
 }
 
@@ -1345,6 +1387,7 @@ mod tests {
         let mut flow = CaptureFlow {
             session: Some(CaptureSession {
                 capture_id,
+                initial_mode: super::CaptureMode::Screenshot,
                 display: CapturedDisplay {
                     png_data: vec![1].into(),
                     pixel_width: 1,
@@ -1372,6 +1415,74 @@ mod tests {
         let ended = ended.expect("last overlay must consume the session");
         assert_eq!(ended.capture_id, capture_id);
         assert!(flow.session.is_none());
+    }
+
+    #[test]
+    fn recording_shortcuts_follow_live_session_not_countdown_or_finalization() {
+        let mut flow = RecordingFlow::default();
+        assert!(!flow.shortcuts_active());
+        flow.is_starting = true;
+        assert!(!flow.shortcuts_active());
+        flow.is_starting = false;
+        flow.is_recording = true;
+        assert!(flow.shortcuts_active());
+        flow.is_recording = false;
+        flow.is_transitioning = true;
+        assert!(flow.shortcuts_active(), "keep keys owned through pause/resume transitions");
+        flow.is_transitioning = false;
+        flow.is_paused = true;
+        assert!(flow.shortcuts_active());
+        flow.is_paused = false;
+        flow.is_finalizing = true;
+        assert!(!flow.shortcuts_active());
+        flow.take_and_reset();
+        assert!(!flow.shortcuts_active());
+    }
+
+    #[test]
+    fn delayed_recording_action_cannot_mutate_a_replacement_session() {
+        let old_session = uuid::Uuid::new_v4();
+        let mut flow = RecordingFlow { session_id: old_session, is_recording: true, ..Default::default() };
+        assert!(flow.accepts_recording_action(Some(old_session)));
+        flow.take_and_reset();
+        flow.session_id = uuid::Uuid::new_v4();
+        flow.is_starting = true;
+        assert!(!flow.accepts_recording_action(Some(old_session)), "old Stop must not cancel a replacement countdown");
+        assert!(!flow.accepts_recording_action(Some(flow.session_id)), "global Stop is inactive until recording begins");
+        assert!(flow.accepts_recording_action(None), "the explicit Cancel button can still cancel startup");
+        flow.is_starting = false;
+        flow.is_recording = true;
+        assert!(!flow.accepts_recording_action(Some(old_session)));
+        assert!(flow.accepts_recording_action(Some(flow.session_id)));
+    }
+
+    #[test]
+    fn recording_controls_present_once_per_live_session_and_respect_focus_choice() {
+        let session_id = uuid::Uuid::new_v4();
+        let mut flow = RecordingFlow {
+            session_id,
+            return_pid: Some(12345),
+            configuration: Some(RecordingConfiguration {
+                display_id: 7,
+                display_identity: None,
+                region: Rect::new(10.0, 20.0, 640.0, 360.0),
+                screen_frame: Rect::new(0.0, 0.0, 1440.0, 900.0),
+                backing_scale: 2.0,
+                options: RecordingOptions::default(),
+            }),
+            ..Default::default()
+        };
+        assert!(!flow.claim_controls_presentation(uuid::Uuid::new_v4()));
+        assert!(flow.claim_controls_presentation(session_id));
+        assert!(!flow.claim_controls_presentation(session_id));
+        assert_eq!(flow.recording_origin_to_restore(Some(std::process::id())), Some(12345));
+        assert_eq!(flow.recording_origin_to_restore(Some(45678)), None);
+        assert_eq!(flow.recording_origin_to_restore(None), None);
+        flow.was_kiri_frontmost = true;
+        assert_eq!(flow.recording_origin_to_restore(Some(std::process::id())), None);
+        flow.take_and_reset();
+        assert!(!flow.controls_presented);
+        assert!(!flow.claim_controls_presentation(session_id));
     }
 
     #[test]

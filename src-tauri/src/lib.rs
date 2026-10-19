@@ -74,21 +74,22 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
-                    if event.state() == ShortcutState::Pressed
-                        && app
-                            .try_state::<shortcut_settings::CaptureBinding>()
-                            .is_some_and(|binding| binding.matches(shortcut))
-                    {
-                        let binding = app.state::<shortcut_settings::CaptureBinding>();
-                        if binding.is_editing() {
-                            // Keep the native registration owned while recording
-                            // a replacement; the current key confirms itself.
-                            let _ = app.emit_to("library", "capture-shortcut-confirmed", ());
-                            return;
-                        }
-                        log::info!("[shortcut] pressed: {:?}", shortcut);
-                        schedule_capture_start(app, "shortcut");
+                    let Some(bindings) = app.try_state::<shortcut_settings::ShortcutBindings>() else { return; };
+                    if event.state() == ShortcutState::Released {
+                        bindings.release(shortcut);
+                        return;
                     }
+                    let Some(action) = bindings.press(shortcut) else { return; };
+                    if bindings.is_editing() {
+                        // Keep all native registrations owned during editing. A
+                        // registered action reports its key instead of running.
+                        let _ = app.emit_to("library", "shortcut-recorded", serde_json::json!({
+                            "shortcut": shortcut.to_string(), "action": action,
+                        }));
+                        return;
+                    }
+                    log::info!("[shortcut] pressed action={action:?}");
+                    dispatch_shortcut_action(app, action, "shortcut");
                 })
                 .build(),
         )
@@ -131,11 +132,11 @@ pub fn run() {
             app.manage(state);
             #[cfg(target_os = "linux")]
             app.manage(media_playback::MediaPlaybackServer::start(app.handle())?);
-            app.manage(shortcut_settings::CaptureBinding::new(
+            app.manage(shortcut_settings::ShortcutBindings::new(
                 shortcut_settings::load(app.handle()),
             ));
             #[cfg(target_os = "linux")]
-            let capture_launch = std::env::args().any(|argument| argument == "--capture");
+            let capture_launch = std::env::args().any(|argument| matches!(argument.as_str(), "--capture" | "--record" | "--ocr"));
             #[cfg(not(target_os = "linux"))]
             let capture_launch = false;
             if !capture_launch {
@@ -145,9 +146,7 @@ pub fn run() {
             // A conflicting system-wide shortcut must not prevent Kiri from
             // opening. Settings surfaces the unavailable binding and lets the
             // user retry after releasing the conflict.
-            if let Err(error) = register_shortcut(app.handle()) {
-                log::warn!("[shortcut] registration failed: {error}");
-            }
+            shortcut_settings::register_all(app.handle());
             portal_shortcuts::init(app.handle());
             install_tray(app.handle())?;
             #[cfg(target_os = "linux")]
@@ -199,6 +198,11 @@ pub fn run() {
                 _ => {}
             }
             if window.label() == "library" {
+                if let tauri::WindowEvent::Focused(focused) = event {
+                    if let Some(bindings) = window.try_state::<shortcut_settings::ShortcutBindings>() {
+                        bindings.set_library_focused(*focused);
+                    }
+                }
                 // Closing hides the resident window, so React does not unmount.
                 // Cancel approval on dismissal, but never on focus loss to the
                 // desktop's own permission/configuration dialog.
@@ -211,8 +215,8 @@ pub fn run() {
                         | tauri::WindowEvent::CloseRequested { .. }
                         | tauri::WindowEvent::Destroyed
                 ) {
-                    if let Some(binding) = window.try_state::<shortcut_settings::CaptureBinding>() {
-                        binding.set_editing(false);
+                    if let Some(bindings) = window.try_state::<shortcut_settings::ShortcutBindings>() {
+                        bindings.set_library_focused(false);
                     }
                 }
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -326,6 +330,11 @@ pub fn run() {
             commands::retry_shortcut,
             commands::set_capture_shortcut,
             commands::set_capture_shortcut_editing,
+            commands::get_shortcut_settings,
+            commands::set_action_shortcut,
+            commands::reset_action_shortcut,
+            commands::retry_action_shortcut,
+            commands::set_shortcut_editing,
             commands::open_settings,
             commands::quit_app,
             commands::get_recording_options,
@@ -429,28 +438,6 @@ fn install_macos_app_icon() -> std::io::Result<()> {
     Ok(())
 }
 
-pub(crate) fn register_shortcut(app: &tauri::AppHandle) -> tauri::Result<()> {
-    #[cfg(target_os = "linux")]
-    if capture::linux::is_wayland() { return Ok(()); }
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    let shortcut = shortcut_settings::current(app);
-    app.global_shortcut()
-        .register(shortcut)
-        .map_err(|e| tauri::Error::Anyhow(e.into()))?;
-    log::info!(
-        "[shortcut] registered {}",
-        shortcut_settings::label(shortcut)
-    );
-    Ok(())
-}
-
-pub(crate) fn capture_shortcut_is_registered(app: &tauri::AppHandle) -> bool {
-    #[cfg(target_os = "linux")]
-    if capture::linux::is_wayland() { return false; }
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    app.global_shortcut().is_registered(shortcut_settings::current(app))
-}
-
 /// Installs the global click monitor for the click ripple. The monitor uses
 /// NSEvent.addGlobalMonitorForEventsMatchingMask, which requires the Input
 /// Monitoring permission — so it is installed ON DEMAND (only while
@@ -523,31 +510,40 @@ fn handle_linux_action(app: &tauri::AppHandle, args: &[String]) -> bool {
         linux_recording_action(app, true);
     } else if args.iter().any(|value| value == "--toggle-recording-pause") {
         linux_recording_action(app, false);
-    } else if args.iter().any(|value| value == "--capture") {
-        schedule_capture_start(app, "desktop-shortcut");
+    } else if let Some(action) = desktop_shortcut_action(args) {
+        dispatch_shortcut_action(app, action, "desktop-shortcut");
     } else {
         return false;
     }
     true
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn desktop_shortcut_action(args: &[String]) -> Option<shortcut_settings::ShortcutAction> {
+    use shortcut_settings::ShortcutAction;
+    [("--capture", ShortcutAction::Capture), ("--record", ShortcutAction::Record),
+        ("--ocr", ShortcutAction::Ocr), ("--library", ShortcutAction::Library)]
+        .into_iter().find_map(|(flag, action)| args.iter().any(|argument| argument == flag).then_some(action))
+}
+
 #[cfg(target_os = "linux")]
 fn linux_recording_action(app: &tauri::AppHandle, stop: bool) {
+    let epoch = app.state::<shortcut_settings::ShortcutBindings>().recording_epoch();
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let (active, paused) = {
+        let (session_id, paused) = {
             let state = app.state::<AppState>();
             let recording = state.recording.lock().unwrap();
-            (recording.configuration.is_some(), recording.is_paused)
+            if app.state::<shortcut_settings::ShortcutBindings>().recording_epoch() != epoch
+                || !recording.shortcuts_active() || recording.is_transitioning { return; }
+            (recording.session_id, recording.is_paused)
         };
-        if !active { return; }
-        let result = if stop {
-            commands::stop_recording(app.clone()).await
-        } else if paused {
-            commands::resume_recording(app.clone()).await
+        let action = if stop {
+            shortcut_settings::ShortcutAction::RecordingStop
         } else {
-            commands::pause_recording(app.clone()).await
+            shortcut_settings::ShortcutAction::RecordingPauseResume
         };
+        let result = commands::perform_recording_shortcut(app.clone(), session_id, action, paused).await;
         if let Err(error) = result {
             state::emit_error(&app, error, None);
         }
@@ -681,6 +677,49 @@ fn tray_click_opens_library(event: &tauri::tray::TrayIconEvent) -> bool {
 }
 
 fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
+    schedule_capture_mode(app, source, state::CaptureMode::Screenshot);
+}
+
+fn dispatch_shortcut_action(app: &tauri::AppHandle, action: shortcut_settings::ShortcutAction, source: &'static str) {
+    use shortcut_settings::ShortcutAction;
+    match action {
+        ShortcutAction::Capture => schedule_capture_start(app, source),
+        ShortcutAction::Record => schedule_capture_mode(app, source, state::CaptureMode::Record),
+        ShortcutAction::Ocr => schedule_capture_mode(app, source, state::CaptureMode::Ocr),
+        ShortcutAction::RecordingPauseResume | ShortcutAction::RecordingStop => {
+            let epoch = app.state::<shortcut_settings::ShortcutBindings>().recording_epoch();
+            let app = app.clone();
+            std::mem::drop(tauri::async_runtime::spawn(async move {
+                let (session_id, paused) = {
+                    let state = app.state::<AppState>();
+                    let recording = state.recording.lock().unwrap();
+                    let bindings = app.state::<shortcut_settings::ShortcutBindings>();
+                    if bindings.recording_epoch() != epoch || !recording.shortcuts_active()
+                        || recording.is_transitioning {
+                        return;
+                    }
+                    (recording.session_id, recording.is_paused)
+                };
+                let result = commands::perform_recording_shortcut(app, session_id, action, paused).await;
+                if let Err(error) = result {
+                    log::warn!("[{source}] recording shortcut failed: {error}");
+                }
+            }));
+        }
+        ShortcutAction::Library => {
+            // Leave the native shortcut registration callback before presenting
+            // a window, which may run frontend code that queries registration.
+            let target = app.clone();
+            if let Err(error) = app.run_on_main_thread(move || {
+                if let Err(error) = show_library_window(&target, source) {
+                    log::warn!("[{source}] library open failed: {error}");
+                }
+            }) { log::warn!("[{source}] could not schedule library open: {error}"); }
+        }
+    }
+}
+
+fn schedule_capture_mode(app: &tauri::AppHandle, source: &'static str, mode: state::CaptureMode) {
     let Some(state) = app.try_state::<AppState>() else {
         log::warn!("[{source}] capture start ignored before app state was ready");
         return;
@@ -702,7 +741,7 @@ fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
             // Keep the owned permit for the entire invocation. Drop
             // reopens scheduling on every success and failure path.
             let _permit = permit;
-            if let Err(error) = commands::start_capture(handle) {
+            if let Err(error) = commands::start_capture_with_mode(handle, mode) {
                 log::warn!("[{source}] capture start returned: {error}");
             }
         }) {
@@ -717,7 +756,7 @@ fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
         // window request runs against an unrealized GdkWindow.
         if let Err(error) = spawn_capture_start(move || {
             let _permit = permit;
-            if let Err(error) = commands::start_linux_capture_from_shortcut(handle.clone()) {
+            if let Err(error) = commands::start_linux_capture_from_shortcut(handle.clone(), mode) {
                 log::warn!("[{source}] capture start returned: {error}");
                 let target = handle.clone();
                 let _ = handle.run_on_main_thread(move || {
@@ -744,7 +783,7 @@ fn schedule_capture_start(app: &tauri::AppHandle, source: &'static str) {
             // Keep the owned permit for the entire queued invocation. Drop
             // reopens scheduling on every exit path.
             let _permit = permit;
-            if let Err(error) = commands::start_capture(handle) {
+            if let Err(error) = commands::start_capture_with_mode(handle, mode) {
                 log::warn!("[{source}] capture start returned: {error}");
             }
         }) {
@@ -840,6 +879,17 @@ mod tests {
             tray_labels("unknown"),
             ("Open Library", "Capture", "Quit Kiri")
         );
+    }
+
+    #[test]
+    fn desktop_commands_dispatch_only_explicit_supported_actions() {
+        use crate::shortcut_settings::ShortcutAction;
+        for (flag, action) in [("--capture", ShortcutAction::Capture), ("--record", ShortcutAction::Record),
+            ("--ocr", ShortcutAction::Ocr), ("--library", ShortcutAction::Library)] {
+            assert_eq!(super::desktop_shortcut_action(&["kiri".into(), flag.into()]), Some(action));
+        }
+        assert_eq!(super::desktop_shortcut_action(&["kiri".into(), "--unknown".into()]), None);
+        assert_eq!(super::desktop_shortcut_action(&["kiri".into(), "notes--record".into()]), None);
     }
 
     #[test]

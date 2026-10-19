@@ -21,6 +21,7 @@
 - Record MP4 with optional system audio and microphone, or save a silent GIF.
 - Trim and reorder clips from one video, then export a new MP4.
 - Search, tag, favorite and export local captures, with Trash for accidental deletions.
+- Customize, disable or restore default global shortcuts in Settings; shortcuts to pause/resume or stop and save work only during recording ([Wayland uses desktop settings](../linux.md)).
 
 ## Get started
 

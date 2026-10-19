@@ -138,13 +138,7 @@ impl GlobalHotKeyManager {
                 .insert(hotkey.id(), HotKeyWrapper { ptr, hotkey });
             Ok(())
         } else if is_media_key(hotkey.key) {
-            {
-                let mut media_hotkeys = self.media_hotkeys.lock().unwrap();
-                if !media_hotkeys.insert(hotkey) {
-                    return Err(crate::Error::AlreadyRegistered(hotkey));
-                }
-            }
-            self.start_watching_media_keys()
+            register_media_hotkey(&self.media_hotkeys, hotkey, || self.start_watching_media_keys())
         } else {
             Err(crate::Error::FailedToRegister(format!(
                 "Unknown scancode for {}",
@@ -247,6 +241,47 @@ impl GlobalHotKeyManager {
                 CFRelease(event_tap as *const c_void);
             }
         }
+    }
+}
+
+pub(crate) fn is_key_supported(key: Code) -> bool {
+    key_to_scancode(key).is_some() || is_media_key(key)
+}
+
+fn register_media_hotkey(
+    media_hotkeys: &Mutex<HashSet<HotKey>>,
+    hotkey: HotKey,
+    start_watching: impl FnOnce() -> crate::Result<()>,
+) -> crate::Result<()> {
+    if !media_hotkeys.lock().unwrap().insert(hotkey) {
+        return Err(crate::Error::AlreadyRegistered(hotkey));
+    }
+    if let Err(error) = start_watching() {
+        // A failed tap must not leave a phantom registration that blocks retry.
+        media_hotkeys.lock().unwrap().remove(&hotkey);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod media_registration_tests {
+    use super::*;
+
+    #[test]
+    fn failed_media_listener_preserves_other_keys_and_allows_retry() {
+        let previous = HotKey::new(None, Code::MediaTrackNext);
+        let candidate = HotKey::new(None, Code::MediaPlayPause);
+        let keys = Mutex::new(HashSet::from([previous]));
+        assert!(register_media_hotkey(&keys, candidate, || {
+            Err(crate::Error::FailedToWatchMediaKeyEvent)
+        }).is_err());
+        assert_eq!(*keys.lock().unwrap(), HashSet::from([previous]));
+        assert!(register_media_hotkey(&keys, candidate, || Ok(())).is_ok());
+        assert_eq!(*keys.lock().unwrap(), HashSet::from([previous, candidate]));
+        assert!(register_media_hotkey(&keys, candidate, || {
+            panic!("a duplicate must not start another listener")
+        }).is_err());
     }
 }
 

@@ -63,7 +63,7 @@ pub fn shortcut_descriptions(language: &str) -> [&'static str; 3] {
         "ja" => ["キャプチャ", "録画を一時停止／再開", "録画を停止"],
         "de" => [
             "Aufnehmen",
-            "Aufnahme pausieren/fortsetzen",
+            "Aufnahme pausieren / fortsetzen",
             "Aufnahme beenden",
         ],
         "ko" => ["캡처", "녹화 일시 정지/재개", "녹화 중지"],

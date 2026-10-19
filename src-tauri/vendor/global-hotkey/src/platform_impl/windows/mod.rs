@@ -201,6 +201,10 @@ pub fn get_instance_handle() -> windows_sys::Win32::Foundation::HMODULE {
 }
 
 // used to build accelerators table from Key
+pub(crate) fn is_key_supported(key: Code) -> bool {
+    key_to_vk(&key).is_some()
+}
+
 fn key_to_vk(key: &Code) -> Option<VIRTUAL_KEY> {
     Some(match key {
         Code::KeyA => VK_A,
@@ -305,8 +309,10 @@ fn key_to_vk(key: &Code) -> Option<VIRTUAL_KEY> {
         Code::NumpadAdd => VK_ADD,
         Code::NumpadDecimal => VK_DECIMAL,
         Code::NumpadDivide => VK_DIVIDE,
-        Code::NumpadEnter => VK_RETURN,
-        Code::NumpadEqual => VK_E,
+        // RegisterHotKey cannot distinguish keypad Enter from ordinary Enter.
+        // Reject it instead of silently registering a different physical key.
+        Code::NumpadEnter => return None,
+        Code::NumpadEqual => VK_OEM_NEC_EQUAL,
         Code::NumpadMultiply => VK_MULTIPLY,
         Code::NumpadSubtract => VK_SUBTRACT,
         Code::ScrollLock => VK_SCROLL,
@@ -314,7 +320,8 @@ fn key_to_vk(key: &Code) -> Option<VIRTUAL_KEY> {
         Code::AudioVolumeUp => VK_VOLUME_UP,
         Code::AudioVolumeMute => VK_VOLUME_MUTE,
         Code::MediaPlay => VK_PLAY,
-        Code::MediaPause => VK_PAUSE,
+        // VK_PAUSE is Pause/Break, not a standalone media-pause key.
+        Code::MediaPause => return None,
         Code::MediaPlayPause => VK_MEDIA_PLAY_PAUSE,
         Code::MediaStop => VK_MEDIA_STOP,
         Code::MediaTrackNext => VK_MEDIA_NEXT_TRACK,
@@ -322,4 +329,26 @@ fn key_to_vk(key: &Code) -> Option<VIRTUAL_KEY> {
         Code::Pause => VK_PAUSE,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod key_mapping_tests {
+    use super::*;
+
+    #[test]
+    fn keypad_equal_does_not_register_the_letter_e() {
+        assert_eq!(key_to_vk(&Code::NumpadEqual), Some(VK_OEM_NEC_EQUAL));
+        assert_ne!(key_to_vk(&Code::NumpadEqual), key_to_vk(&Code::KeyE));
+    }
+
+    #[test]
+    fn unsupported_distinct_keys_do_not_alias_ordinary_enter_or_pause() {
+        for key in [Code::NumpadEnter, Code::MediaPause] {
+            assert_eq!(key_to_vk(&key), None);
+            assert!(!is_key_supported(key));
+        }
+        assert_eq!(key_to_vk(&Code::Enter), Some(VK_RETURN));
+        assert_eq!(key_to_vk(&Code::Pause), Some(VK_PAUSE));
+        assert_eq!(key_to_vk(&Code::MediaPlayPause), Some(VK_MEDIA_PLAY_PAUSE));
+    }
 }

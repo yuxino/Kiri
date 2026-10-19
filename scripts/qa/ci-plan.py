@@ -67,6 +67,9 @@ def plan(event, ref, inputs, paths, labels=()):
             selected[f"native_{target}"] = True
     else:
         for path in paths:
+            if path in {"scripts/qa/shortcut-native-unit.mjs", "scripts/qa/shortcut-native-unit.test.mjs"}:
+                for target in TARGET_PREFIXES:
+                    selected[f"native_{target}"] = True
             if path.startswith("scripts/qa/ipc-lifetime/"):
                 selected["native_linux"] = True
             if (path.startswith("src/") or path in {"package.json", "pnpm-lock.yaml", "index.html"}

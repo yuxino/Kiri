@@ -80,6 +80,45 @@ test("watermark reads independent color and percentage, preserving saved large v
   assert.match(controls({...watermark, mode: "tiled"}), /value="700"/);
 });
 
+test("selected text actions stay in the heading, with a named quiet delete and contextual help", () => {
+  const html = controls({kind: "callout", id: 5, number: 2, text: "说明", color: "cherry", size: 36, fontSize: 18, style: "filled"}, {onDelete() {}});
+  const heading = html.slice(0, html.indexOf('class="kiri-annotation-control-fields"'));
+  assert.match(heading, /Edit text/);
+  assert.match(heading, /aria-label="Delete annotation" title="Delete annotation"/);
+  assert.match(heading, /class="kiri-annotation-help"/);
+  assert.match(heading, /role="tooltip"/);
+  assert.doesNotMatch(heading, /Selected object/);
+  assert.doesNotMatch(html.slice(heading.length), /Edit text|Double-click/);
+});
+
+test("the selected color has both a pressed state and a visible check", () => {
+  const html = controls({kind: "rectangle", id: 6, color: "white", width: 4});
+  assert.match(html, /aria-label="White" aria-pressed="true"[^>]*>[\s\S]*?lucide-check/);
+  assert.match(html, /kiri-annotation-choice-label">Color/);
+  assert.equal((html.match(/lucide-check/g) ?? []).length, 1);
+});
+
+test("heading actions preserve text focus and isolate Return/Space from capture shortcuts", () => {
+  const source = 'import React from "react";\n' + readFileSync(resolve(root, "src/annotation/AnnotationStyleControls.tsx"), "utf8");
+  const h = createLibraryHarness({}, source, {modules: {
+    "./AnnotationControlFields": {AnnotationChoices: "choices", AnnotationColors: "colors", AnnotationNumberControl: "number"},
+    "./MosaicControls": {MosaicControls: "mosaic"}, "./WatermarkControls": {WatermarkControls: "watermark"},
+    "./annotation-controls.css": {},
+  }});
+  let edits = 0, deletes = 0, prevented = 0, stopped = 0;
+  const props = {tool: "select", selected: {kind: "text", id: 2, color: "white", fontSize: 20, background: "transparent"},
+    appearance: DEFAULT_APPEARANCE, nextNumber: 1, onEditText() {edits++;}, onDelete() {deletes++;}};
+  const component = h.mount("AnnotationStyleControls", props);
+  const buttons = nodes(component.render()).filter(node => node.type === "button" && node.props.className?.includes("kiri-annotation-action"));
+  assert.equal(buttons.length, 2);
+  buttons[0].props.onPointerDown({preventDefault() {prevented++;}});
+  buttons[0].props.onClick(); buttons[1].props.onClick();
+  for (const key of ["Enter", " "]) for (const button of buttons) button.props.onKeyDown({key, stopPropagation() {stopped++;}});
+  assert.deepEqual({edits, deletes, prevented, stopped}, {edits: 1, deletes: 1, prevented: 1, stopped: 4});
+  const help = nodes(component.render({...props, disabled: true})).find(node => node.type === "button" && node.props.className === "kiri-annotation-help-button");
+  assert.equal(help.props.disabled, true);
+});
+
 function numberControl(overrides = {}) {
   const changes = [], finishes = [];
   const source = 'import React from "react";\n' + readFileSync(resolve(root, "src/annotation/AnnotationControlFields.tsx"), "utf8");
@@ -146,4 +185,13 @@ test("a keyboard number edit tolerates an empty draft and commits on leaving the
     currentTarget: {blur() {h.input("number").props.onBlur();}}});
   assert.equal(stopped, 1); assert.equal(prevented, 1); assert.equal(h.finishes.length, 1);
   assert.equal(h.input("number").props.value, "35");
+});
+
+
+test("overlay panel chrome shares the existing heading without adding another options title", () => {
+  const html = controls(null, {tool: "text", panelChrome: React.createElement("button", {"aria-label": "Hide tool options"}, "chrome")});
+  const heading = html.slice(0, html.indexOf('class="kiri-annotation-control-fields"'));
+  assert.ok(heading.includes('aria-label="Hide tool options"'));
+  assert.equal((html.match(/kiri-annotation-controls-heading/g) ?? []).length, 1);
+  assert.doesNotMatch(controls(null, {tool: "text"}), /Hide tool options/);
 });

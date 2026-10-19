@@ -27,24 +27,25 @@ import { resolveInitialEditorDocument } from "../annotation/editor-document.js";
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { parseAnnotationDocument } from "../annotation/project.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
+import { AnnotationToolbarButton } from "../components/AnnotationToolbarButton";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
 import { hasPendingImageTextChange, hasUnsavedImageChanges, type ImageEditSnapshot, type ImageTextDraft } from "../annotation/image-edit-state.js";
 import { ImageCloseGuard, type ImageCloseGuardHandle } from "./ImageCloseGuard";
 
 type EditorTool = Tool | "crop";
 
-const TOOLS: { tool: EditorTool; icon: IconName; title: string }[] = [
-  { tool: "select", icon: "cursorarrow", title: "Select (V)" },
-  { tool: "crop", icon: "crop", title: "Crop (C)" },
-  { tool: "pen", icon: "pencil.tip", title: "Pen (P)" },
-  { tool: "rectangle", icon: "rectangle.dashed", title: "Rectangle (R)" },
-  { tool: "line", icon: "line.diagonal", title: "Line (L)" },
-  { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
-  { tool: "text", icon: "textformat", title: "Text (T)" },
-  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)" },
-  { tool: "label", icon: "tag", title: "Label bubble (B)" },
-  { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)" },
-  { tool: "watermark", icon: "watermark", title: "Watermark (W)" },
+const TOOLS: { tool: EditorTool; icon: IconName; title: string; shortcut: string }[] = [
+  { tool: "select", icon: "cursorarrow", title: "Select (V)", shortcut: "V" },
+  { tool: "crop", icon: "crop", title: "Crop (C)", shortcut: "C" },
+  { tool: "pen", icon: "pencil.tip", title: "Pen (P)", shortcut: "P" },
+  { tool: "rectangle", icon: "rectangle.dashed", title: "Rectangle (R)", shortcut: "R" },
+  { tool: "line", icon: "line.diagonal", title: "Line (L)", shortcut: "L" },
+  { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)", shortcut: "A" },
+  { tool: "text", icon: "textformat", title: "Text (T)", shortcut: "T" },
+  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)", shortcut: "N" },
+  { tool: "label", icon: "tag", title: "Label bubble (B)", shortcut: "B" },
+  { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)", shortcut: "M" },
+  { tool: "watermark", icon: "watermark", title: "Watermark (W)", shortcut: "W" },
 ];
 
 export function EditorWindow(props: { id: string }) {
@@ -485,23 +486,23 @@ export function EditorWindow(props: { id: string }) {
       <div className="kiri-image-editor-toolbar" style={{opacity: completing ? 0.62 : 1}}>
         {!readOnly && <div className="kiri-image-editor-tools" inert={qrActive}>
           <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(0, 2).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+            {TOOLS.slice(0, 2).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
           <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>
-            {TOOLS.slice(2, 6).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+            {TOOLS.slice(2, 6).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
           <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(6, 9).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+            {TOOLS.slice(6, 9).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
           <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(9).map(({tool: value, icon, title}) => <EditorToolButton key={value} icon={icon} title={t(title)} active={tool === value} onClick={() => selectTool(value)}/>)}
+            {TOOLS.slice(9).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
           </div>
           <div className="kiri-annotation-tool-group">
-            <EditorToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={tool === "crop" ? cropUndo.length === 0 : !canUndo}
+            <EditorToolButton icon="arrow.uturn.backward" title={t("Undo")} shortcut="Mod+Z" disabled={tool === "crop" ? cropUndo.length === 0 : !canUndo}
               onClick={() => tool === "crop" ? undoCrop() : canvasRef.current?.undo()}/>
-            <EditorToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={tool === "crop" ? cropRedo.length === 0 : !canRedo}
+            <EditorToolButton icon="arrow.uturn.forward" title={t("Redo")} shortcut="Mod+Shift+Z" disabled={tool === "crop" ? cropRedo.length === 0 : !canRedo}
               onClick={() => tool === "crop" ? redoCrop() : canvasRef.current?.redo()}/>
-            <EditorToolButton icon="xmark" title={t("Clear Annotations")} disabled={tool === "crop" || !hasMarks} onClick={() => canvasRef.current?.clearAnnotations()}/>
+            <EditorToolButton icon="trash" title={t("Clear Annotations")} disabled={tool === "crop" || !hasMarks} onClick={() => canvasRef.current?.clearAnnotations()}/>
           </div>
         </div>}
         <div className="kiri-image-editor-actions">
@@ -510,9 +511,9 @@ export function EditorWindow(props: { id: string }) {
           {!readOnly && <EditorToolButton icon="text.viewfinder" title={t("Recognize Saved Image Locally")} disabled={!image || completing || qrActive}
             onClick={() => { void api.getAsset(props.id).then(setOcrAsset).catch(() => setActionError(t("Can't read this file."))); }}/>}
           {!readOnly && <EditorToolButton icon="doc.on.doc" title={t("Save As…")} disabled={qrActive} onClick={() => void complete("saveAs")}/>}
-          <EditorToolButton icon="xmark" title={t(readOnly ? "Close" : "Cancel (Esc)")} onClick={() => qrRequestRef.current ? closeQr() : closeWindow()}/>
-          {!readOnly && <button type="button" className="kiri-primary-button" disabled={qrActive} style={{minHeight: 32, borderRadius: 10}}
-            onClick={() => void complete("save")}>{t("Save")}</button>}
+          <EditorToolButton icon="xmark" title={t(readOnly ? "Close" : "Cancel (Esc)")} shortcut="Escape" onClick={() => qrRequestRef.current ? closeQr() : closeWindow()}/>
+          {!readOnly && <EditorToolButton icon="checkmark" title={t("Save")} shortcut="Enter" primary disabled={qrActive}
+            onClick={() => void complete("save")}/>}
         </div>
       </div>
       {!readOnly && <div className="kiri-image-editor-properties" inert={qrActive}>
@@ -637,28 +638,4 @@ function sameRect(left: Rect, right: Rect): boolean {
     left.width === right.width && left.height === right.height;
 }
 
-function EditorToolButton(props: {
-  icon: IconName;
-  title: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick(): void;
-}) {
-  return (
-    <button
-      type="button"
-      className="kiri-toolbar-button"
-      data-active={props.active || undefined}
-      title={props.title}
-      aria-label={props.title}
-      aria-pressed={props.active}
-      onKeyDown={event => {
-        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
-      }}
-      onClick={props.onClick}
-      disabled={props.disabled}
-    >
-      <KiriIcon name={props.icon} size={15} />
-    </button>
-  );
-}
+const EditorToolButton = AnnotationToolbarButton;

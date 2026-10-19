@@ -1,0 +1,36 @@
+.kiri-capture-tool-options .kiri-annotation-controls-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--kiri-elevated-dark);
+}
+.kiri-capture-options-chrome { display: flex; justify-content: flex-end; gap: 4px; padding: 4px 8px 0; }
+.kiri-capture-options-move,
+.kiri-capture-toolbar-move,
+.kiri-capture-options-hide {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--kiri-secondary-label-dark);
+  cursor: pointer;
+}
+.kiri-capture-toolbar-move { flex-basis: 18px; width: 18px; height: 32px; }
+.kiri-capture-toolbar-move,
+.kiri-capture-options-move { cursor: grab; touch-action: none; user-select: none; }
+.kiri-capture-toolbar-move[data-dragging],
+.kiri-capture-options-move[data-dragging] { cursor: grabbing; }
+.kiri-capture-toolbar-move:hover:not(:disabled),
+.kiri-capture-options-move:hover:not(:disabled),
+.kiri-capture-options-hide:hover:not(:disabled) { color: var(--kiri-label-dark); background: var(--kiri-group-fill-dark); }
+.kiri-capture-toolbar-move:disabled,
+.kiri-capture-options-move:disabled,
+.kiri-capture-options-hide:disabled { opacity: .45; cursor: default; }
+.kiri-capture-toolbar-move:focus-visible,
+.kiri-capture-options-move:focus-visible,
+.kiri-capture-options-hide:focus-visible { outline: 1px solid var(--kiri-secondary-label-dark); outline-offset: 1px; }

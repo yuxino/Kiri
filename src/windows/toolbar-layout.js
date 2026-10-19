@@ -1,5 +1,5 @@
 /** Overlay-local logical coordinates; the measured toolbar includes its border. */
-export function captureToolbarPosition(selection, bounds, size, sizeControlsOpen = false, modeSelector = null) {
+export function captureToolbarPosition(selection, bounds, size, sizeControlsOpen = false, modeSelector = null, preferredPosition = null) {
   const margin = 8;
   const gap = 10;
   const minLeft = bounds.x + margin;
@@ -19,6 +19,21 @@ export function captureToolbarPosition(selection, bounds, size, sizeControlsOpen
     { ...position, left: modeSelector.x - size.width - gap },
     { ...position, left: modeSelector.x + modeSelector.width + gap },
   ] : [position];
+
+  if (preferredPosition) {
+    const desired = {left: clamp(preferredPosition.x, minLeft, maxLeft), top: clamp(preferredPosition.y, minTop, maxTop)};
+    if (clearMode(desired)) return desired;
+    const candidates = [
+      {...desired, left: modeSelector.x - size.width - gap},
+      {...desired, left: modeSelector.x + modeSelector.width + gap},
+      {...desired, top: modeSelector.y - size.height - gap},
+      {...desired, top: modeSelector.y + modeSelector.height + gap},
+      {left: minLeft, top: minTop}, {left: maxLeft, top: minTop},
+      {left: minLeft, top: maxTop}, {left: maxLeft, top: maxTop},
+    ].filter(position => onScreen(position) && clearMode(position));
+    candidates.sort((a, b) => Math.hypot(a.left - desired.left, a.top - desired.top) - Math.hypot(b.left - desired.left, b.top - desired.top));
+    return candidates[0] ?? desired;
+  }
 
   // Place the whole measured stack outside the selection. Clamping only its
   // top used to leave later settings rows across the selection's upper edge.
@@ -104,6 +119,60 @@ export function capturePanelLayout(selection, bounds, size, modeSelector = null,
   const height = Math.min(size.height, maxHeight);
   return { ...captureToolbarPosition(selection, bounds, { width, height }, sizeControlsOpen, modeSelector),
     width, maxHeight };
+}
+
+/** Tool properties adapt around an already positioned main row. Growing or
+ * switching properties must never choose a new anchor for that main row. */
+export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = null, avoidBounds = [], preferredPosition = null) {
+  const margin = 8, gap = 6;
+  const screen = { x: bounds.x + margin, y: bounds.y + margin,
+    width: Math.max(0, bounds.width - margin * 2), height: Math.max(0, bounds.height - margin * 2) };
+  const width = Math.min(size.width, screen.width);
+  const clamp = (value, low, high) => Math.min(Math.max(value, low), Math.max(low, high));
+  const exclude = (spaces, obstacle, clearance) => {
+    const left = obstacle.x - clearance, right = obstacle.x + obstacle.width + clearance;
+    const top = obstacle.y - clearance, bottom = obstacle.y + obstacle.height + clearance;
+    return spaces.flatMap(rect => {
+      const endX = rect.x + rect.width, endY = rect.y + rect.height;
+      if (right <= rect.x || left >= endX || bottom <= rect.y || top >= endY) return [rect];
+      return [
+        { ...rect, width: Math.max(0, Math.min(left, endX) - rect.x) },
+        { ...rect, x: Math.max(right, rect.x), width: Math.max(0, endX - Math.max(right, rect.x)) },
+        { ...rect, height: Math.max(0, Math.min(top, endY) - rect.y) },
+        { ...rect, y: Math.max(bottom, rect.y), height: Math.max(0, endY - Math.max(bottom, rect.y)) },
+      ];
+    }).filter(rect => rect.width >= width && rect.height > 0);
+  };
+  let free = exclude([screen], toolbar, gap);
+  if (modeSelector) free = exclude(free, modeSelector, 10);
+  // A user-chosen position wins over automatic annotation avoidance. Retain it
+  // when content grows by scrolling in place, rather than snapping the panel.
+  const minimumHeight = Math.min(size.height, 80);
+  if (!preferredPosition && avoidBounds.length) {
+    let clear = free;
+    for (const rect of avoidBounds) clear = exclude(clear, rect, 10);
+    const usable = clear.filter(rect => rect.height >= minimumHeight);
+    if (usable.length) free = usable;
+  }
+  const centeredLeft = toolbar.x + (toolbar.width - width) / 2;
+  const below = toolbar.y + toolbar.height + gap;
+  const candidates = free.map(space => {
+    const height = Math.min(size.height, space.height);
+    const left = clamp(preferredPosition?.x ?? centeredLeft, space.x, space.x + space.width - width);
+    const top = preferredPosition
+      ? clamp(preferredPosition.y, space.y, space.y + space.height - Math.min(height, minimumHeight))
+      : space.y + space.height <= toolbar.y - gap
+        ? space.y + space.height - height
+        : clamp(below, space.y, space.y + space.height - height);
+    return { left, top, width, maxHeight: preferredPosition ? space.y + space.height - top : space.height,
+      distance: Math.hypot(left - (preferredPosition?.x ?? centeredLeft), top - (preferredPosition?.y ?? below)) };
+  });
+  const complete = candidates.filter(candidate => candidate.maxHeight >= size.height);
+  const choices = preferredPosition ? candidates : complete.length ? complete : candidates;
+  choices.sort((a, b) => preferredPosition || complete.length ? a.distance - b.distance : b.maxHeight - a.maxHeight || a.distance - b.distance);
+  const best = choices[0];
+  return best ? { left: best.left, top: best.top, width, maxHeight: best.maxHeight }
+    : { left: clamp(centeredLeft, screen.x, screen.x + screen.width - width), top: screen.y, width, maxHeight: 0 };
 }
 
 /** Recording setup follows its region: roomy selections contain it; small ones

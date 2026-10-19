@@ -17,7 +17,7 @@
 
 .kiri-video-annotation-tools--hosted {position:relative;inset:auto;border:0;border-bottom:1px solid var(--kiri-surface-border);border-radius:0;padding:6px 12px;}
 
-.kiri-video-annotation-tools--hosted {height:44px;box-sizing:border-box;align-content:flex-start;overflow:auto;overflow-anchor:none;}
+.kiri-video-annotation-tools--hosted {min-height:64px;height:auto;box-sizing:border-box;align-content:center;overflow:visible;overflow-anchor:none;}
 .kiri-video-annotation-appearance {flex-wrap:nowrap;min-height:30px;}
 .kiri-video-annotation-appearance>* {flex-shrink:0;}
 
@@ -39,3 +39,11 @@
 .kiri-video-property>span {font-size:11px;color:var(--kiri-secondary-label);}
 .kiri-video-property>.kiri-choice-trigger {min-width:95px;justify-content:space-between;}
 .kiri-video-annotation-inspector>.kiri-button {width:100%;margin-top:12px;}
+
+/* The hosted toolbar grows only when another complete row is needed. */
+.kiri-video-annotation-toolbar-host:has(.kiri-annotation-toolbar-button) {height:auto;min-height:64px;overflow:visible;}
+.kiri-video-annotation-tools:has(.kiri-annotation-toolbar-button) {gap:8px 12px;padding:7px 10px;background:#101010;color:#f7f7f7;}
+.kiri-video-annotation-tool-group {display:flex;flex-wrap:wrap;gap:3px;max-width:100%;}
+.kiri-video-annotation-extra-tools {display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-left:10px;border-left:1px solid #3e3e3e;}
+.kiri-video-annotation-extra-tools .kiri-video-annotation-tool {width:40px;height:48px;border-radius:7px;color:#f7f7f7;align-content:start;padding-top:7px;}
+.kiri-video-annotation-extra-tools .kiri-video-effect-tool {min-height:36px;color:#f7f7f7;border-color:#4b4b4b;}

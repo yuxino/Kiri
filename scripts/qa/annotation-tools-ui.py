@@ -76,7 +76,7 @@ async def editor_cases(browser, report):
                 await assert_properties(page)
                 await page.get_by_role("button", name=dictionary["Watermark (W)"], exact=True).click()
                 assert await editor.input_value() == "Watermark abcdef"
-                assert await page.get_by_role("button", name=dictionary["Undo (⌘Z)"], exact=True).is_disabled(), "Repeated tool entry must keep the uncommitted native draft"
+                assert await page.get_by_role("button", name=dictionary["Undo"], exact=True).is_disabled(), "Repeated tool entry must keep the uncommitted native draft"
                 await page.get_by_role("button", name=dictionary["Edit watermark"], exact=True).click()
                 assert await editor.input_value() == "Watermark abcdef"
                 assert await page.evaluate("document.activeElement === document.querySelector('textarea')")
@@ -258,11 +258,11 @@ async def callout_pointer_case(browser, report):
         assert badge_moved["labelRect"] == description_moved["labelRect"]
         assert abs(badge_moved["center"]["x"] - center["x"] - 35 / scale) < 1
         assert abs(badge_moved["center"]["y"] - center["y"] - 15 / scale) < 1
-        await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+        await page.get_by_role("button", name="Undo", exact=True).click()
         await save.click()
         await page.wait_for_function("__annotationToolsQa.exports.length===4")
         assert await page.evaluate("__annotationToolsQa.document.marks[0]") == description_moved
-        await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+        await page.get_by_role("button", name="Redo", exact=True).click()
         await save.click()
         await page.wait_for_function("__annotationToolsQa.exports.length===5")
         assert await page.evaluate("__annotationToolsQa.document.marks[0]") == badge_moved
@@ -463,17 +463,17 @@ async def placement_text_case(page, surface, tool, title, source_hash, empty_has
     # Text and labels append only when their native input is committed.
     entries = 2 if tool == "callout" else 1
     for _ in range(entries):
-        await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+        await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == committed
     for _ in range(entries):
-        await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+        await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == empty_hash, "Consumed clicks must not add empty marks or history"
-    assert await page.get_by_role("button", name="Undo (⌘Z)", exact=True).is_disabled()
+    assert await page.get_by_role("button", name="Undo", exact=True).is_disabled()
     for _ in range(entries):
-        await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+        await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == committed
     for _ in range(entries):
-        await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+        await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == two_pixels
     await placement_finished(page, title, source_hash)
     case["phase"] = "export finished notes"
@@ -508,14 +508,14 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
     await placement_finished(page, title, source_hash)
     two_pixels = await placement_canvas_hash(page)
     assert two_pixels != first_pixels
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == first_pixels
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == empty_hash, "The entire first blank drag must be consumed"
-    assert await page.get_by_role("button", name="Undo (⌘Z)", exact=True).is_disabled()
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    assert await page.get_by_role("button", name="Undo", exact=True).is_disabled()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == first_pixels
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == two_pixels
     case["phase"] = "own existing shape moves on its first drag"
     middle = {"x": (start["x"] + end["x"]) / 2, "y": (start["y"] + end["y"]) / 2}
@@ -525,9 +525,9 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
     await placement_finished(page, title, source_hash)
     moved_pixels = await placement_canvas_hash(page)
     assert moved_pixels != two_pixels
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == two_pixels, "A direct move must be a single undo step"
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == moved_pixels
     box = await page.locator("canvas").bounding_box()
     case["phase"] = "export moved and newly placed shapes"
@@ -566,15 +566,15 @@ async def placement_continuous_case(page, surface, tool, title, source_hash, emp
     two_pixels = await placement_canvas_hash(page)
     assert two_pixels != empty_hash
     case["phase"] = "undo verifies exactly two stroke entries"
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     first_pixels = await placement_canvas_hash(page)
     assert first_pixels != two_pixels and first_pixels != empty_hash
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == empty_hash
-    assert await page.get_by_role("button", name="Undo (⌘Z)", exact=True).is_disabled()
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    assert await page.get_by_role("button", name="Undo", exact=True).is_disabled()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == first_pixels
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == two_pixels
     await page.get_by_role("button", name=title, exact=True).click()
     await placement_finished(page, title, source_hash)
@@ -632,14 +632,14 @@ async def placement_watermark_case(page, surface, target, source_hash, empty_has
     await placement_finished(page, title, source_hash)
     second_pixels = await placement_canvas_hash(page)
     assert second_pixels != first_pixels
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == first_pixels
-    await page.get_by_role("button", name="Undo (⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Undo", exact=True).click()
     assert await placement_canvas_hash(page) == empty_hash
-    assert await page.get_by_role("button", name="Undo (⌘Z)", exact=True).is_disabled()
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    assert await page.get_by_role("button", name="Undo", exact=True).is_disabled()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == first_pixels
-    await page.get_by_role("button", name="Redo (⇧⌘Z)", exact=True).click()
+    await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == second_pixels
     case["phase"] = "export exactly one reedited watermark"
     marks = (await placement_export(page, surface, source_hash))["marks"]

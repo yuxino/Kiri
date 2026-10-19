@@ -104,6 +104,12 @@ impl HotKey {
         self.id
     }
 
+    /// Whether this platform has a native mapping for the key. This does not
+    /// register a shortcut, request access, or determine OS conflicts.
+    pub fn is_supported_on_current_platform(&self) -> bool {
+        crate::platform_impl::is_key_supported(self.key)
+    }
+
     /// Returns `true` if this [`Code`] and [`Modifiers`] matches this hotkey.
     pub fn matches(&self, modifiers: impl Borrow<Modifiers>, key: impl Borrow<Code>) -> bool {
         // Should be a const but const bit_or doesn't work here.
@@ -472,4 +478,24 @@ fn test_equality() {
             && h4.id() == h5.id()
             && h5.id() != h6.id()
     );
+}
+
+#[test]
+fn platform_support_uses_native_mapping_without_registering() {
+    for key in [Code::KeyA, Code::Space, Code::ArrowLeft, Code::Equal, Code::F1, Code::Numpad7] {
+        assert!(HotKey::new(None, key).is_supported_on_current_platform(), "{key:?}");
+    }
+    assert!(!HotKey::new(None, Code::Unidentified).is_supported_on_current_platform());
+    #[cfg(target_os = "macos")]
+    {
+        assert!(HotKey::new(None, Code::MediaPlayPause).is_supported_on_current_platform());
+        assert!(!HotKey::new(None, Code::F24).is_supported_on_current_platform());
+    }
+    #[cfg(target_os = "windows")]
+    assert!(HotKey::new(None, Code::NumpadEqual).is_supported_on_current_platform());
+    #[cfg(target_os = "linux")]
+    {
+        assert!(HotKey::new(None, Code::NumLock).is_supported_on_current_platform());
+        assert!(!HotKey::new(None, Code::NumpadEnter).is_supported_on_current_platform());
+    }
 }

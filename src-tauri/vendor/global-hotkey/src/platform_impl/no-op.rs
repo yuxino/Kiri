@@ -7,6 +7,10 @@
 
 use crate::hotkey::HotKey;
 
+pub(crate) fn is_key_supported(_key: crate::hotkey::Code) -> bool {
+    false
+}
+
 pub struct GlobalHotKeyManager {}
 
 impl GlobalHotKeyManager {

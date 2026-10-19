@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { AnnotationInteractionLock } from "../src/annotation/interaction-lock.js";
-import { capturePanelLayout, captureToolbarPosition } from "../src/windows/toolbar-layout.js";
+import { capturePanelLayout, captureToolOptionsLayout, captureToolbarPosition } from "../src/windows/toolbar-layout.js";
 import { createLibraryHarness, deferred, nodes, settleRequests } from "./helpers/library-render-harness.mjs";
 
 const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/PinWindow.tsx", import.meta.url), "utf8");
@@ -339,7 +339,8 @@ test("the toolbar exposes direct pin, disables it while completing, and isolates
   const toolbar = overlaySource.slice(overlaySource.indexOf("const TOOLS:"));
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}; export {ToolButton};`);
+    import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}; export {ToolButton};`);
   let pins = 0, saves = 0;
   const props = { selection:{x:100,y:100,width:140,height:160}, bounds:{x:0,y:0,width:800,height:600},
     tool:"select", appearance:{}, canSetSize:true, disabled:false,
@@ -350,7 +351,7 @@ test("the toolbar exposes direct pin, disables it while completing, and isolates
   pin.props.onClick();
   assert.equal(pins, 1);
   assert.equal(saves, 0);
-  const button = harness.mount("ToolButton", pin.props).render();
+  const button = nodes(harness.mount("ToolButton", pin.props).render()).find(node => node?.type === "button");
   let stopped = 0;
   button.props.onKeyDown({ key:"Enter", stopPropagation:()=>stopped++ });
   assert.equal(stopped, 1, "Enter on Pin must not bubble into normal screenshot completion");

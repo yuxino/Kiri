@@ -1,3 +1,5 @@
+import type {ReactNode} from "react";
+import {CircleHelp, Pencil, Trash2} from "lucide-react";
 import {t} from "../i18n";
 import type {AnnotationMark, AppearanceSettings, CalloutMark, Tool} from "./model";
 import {AnnotationChoices, AnnotationColors, AnnotationNumberControl} from "./AnnotationControlFields";
@@ -23,29 +25,51 @@ export function AnnotationStyleControls(props: {
   nextNumber: number; onNextNumber(value: number): void; onCalloutEdit(patch: Partial<CalloutMark>, transient: boolean): void;
   onChange(patch: Partial<AppearanceSettings>, transient?: boolean): void; onFinish(): void; onEditText(): void; onEditWatermark(): void;
   onDelete?(): void;
+  panelChrome?: ReactNode;
 }) {
   const a = selectedAnnotationAppearance(props.appearance, props.selected);
   const kind = props.selected?.kind === "text" && props.selected.labelDirection ? "label" : props.selected?.kind ?? props.tool;
   const label = t(kind === "watermark" ? "Watermark" : kind === "callout" ? "Numbered callout" : kind === "label" ? "Label bubble" :
     kind === "mosaic" ? "Mosaic" : kind === "pen" ? "Pen" : kind === "rectangle" ? "Rectangle" : kind === "arrow" ? "Arrow" : kind === "line" ? "Line" : kind === "text" ? "Text" : "Select");
   const selectedCallout = props.selected?.kind === "callout" ? props.selected : null;
+  const hasText = kind === "text" || kind === "label" || kind === "callout";
+  const hint = kind === "mosaic" ? t("Brush over private details, or drag a rectangle or ellipse.") :
+    hasText ? t("Drag to move or resize. Double-click to edit the text.") : null;
   return <fieldset disabled={props.disabled} className="kiri-annotation-controls" aria-label={t("Tool options")} data-tool={kind}>
     <div className="kiri-annotation-controls-heading">
-      <div className="kiri-annotation-controls-title"><strong>{label}</strong>{props.selected && <span>{t("Selected object")}</span>}</div>
-      {props.selected && props.onDelete && <button type="button" className="kiri-annotation-action"
-        onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
-        onClick={props.onDelete}>{t("Delete annotation")}</button>}
+      <strong className="kiri-annotation-controls-title">{label}</strong>
+      {hint && <span className="kiri-annotation-help">
+        <button type="button" className="kiri-annotation-help-button" aria-label={hint} disabled={props.disabled}
+          onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}>
+          <CircleHelp size={14} aria-hidden="true"/>
+        </button>
+        <span className="kiri-annotation-hint" role="tooltip">{hint}</span>
+      </span>}
+      <div className="kiri-annotation-heading-actions">
+        {((hasText && props.selected) || kind === "watermark") && <button type="button" className="kiri-annotation-action"
+          onPointerDown={event => event.preventDefault()}
+          onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+          onClick={kind === "watermark" ? props.onEditWatermark : props.onEditText}>
+          <Pencil size={13} aria-hidden="true"/>{t(kind === "watermark" ? "Edit watermark" : "Edit text")}
+        </button>}
+        {props.selected && props.onDelete && <button type="button" className="kiri-annotation-action kiri-annotation-delete"
+          aria-label={t("Delete annotation")} title={t("Delete annotation")}
+          onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+          onClick={props.onDelete}><Trash2 size={14} aria-hidden="true"/></button>}
+        {props.panelChrome}
+      </div>
     </div>
     <div className="kiri-annotation-control-fields">
       {kind === "select" ? <span className="kiri-annotation-hint">{t("Click an object to edit it. Drag its handles to resize.")}</span> :
-        kind === "watermark" ? <WatermarkControls appearance={a} onChange={props.onChange} onFinish={props.onFinish} onEdit={props.onEditWatermark}/> :
+        kind === "watermark" ? <WatermarkControls appearance={a} onChange={props.onChange} onFinish={props.onFinish}/> :
         kind === "mosaic" ? <MosaicControls appearance={a} onChange={props.onChange} onFinish={props.onFinish}/> : <>
-          {(kind === "text" || kind === "label" || kind === "callout") && props.selected && <button type="button" className="kiri-annotation-action"
-            onKeyDown={event => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }} onClick={props.onEditText}>{t("Edit text")}</button>}
           {kind === "callout" && <>
-            <label className="kiri-annotation-number kiri-annotation-callout-number"><span>{t("Number")}</span>
+            <label className="kiri-annotation-callout-number"><span>{t("Number")}</span>
               <input type="number" aria-label={t("Number")} className="kiri-annotation-number-value" min={1} max={999} value={selectedCallout?.number ?? props.nextNumber}
-                onKeyDown={event => event.stopPropagation()} onChange={event => {
+                onKeyDown={event => {
+                  event.stopPropagation();
+                  if (event.key === "Escape") { event.preventDefault(); event.currentTarget.blur(); }
+                }} onChange={event => {
                   const value = Number(event.target.value); if (!Number.isInteger(value) || value < 1 || value > 999) return;
                   selectedCallout ? props.onCalloutEdit({number: value}, true) : props.onNextNumber(value);
                 }} onBlur={props.onFinish}/>
@@ -66,7 +90,5 @@ export function AnnotationStyleControls(props: {
           <AnnotationColors value={a.colorPreset} onChange={colorPreset => props.onChange({colorPreset})}/>
         </>}
     </div>
-    {kind === "mosaic" && <p className="kiri-annotation-hint">{t("Brush over private details, or drag a rectangle or ellipse.")}</p>}
-    {(kind === "text" || kind === "label" || kind === "callout") && <p className="kiri-annotation-hint">{t("Drag to move or resize. Double-click to edit the text.")}</p>}
   </fieldset>;
 }

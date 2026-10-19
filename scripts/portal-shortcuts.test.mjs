@@ -85,7 +85,9 @@ test("leaving Settings cancels only an in-progress setup and disposes the subscr
 test("native shortcut path remains separate and packaging matches the portal app ID", () => {
   const root = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   const lib = root("src-tauri/src/lib.rs");
-  assert.ok(lib.includes("if capture::linux::is_wayland() { return Ok(()); }"));
+  const shortcuts = root("src-tauri/src/shortcut_settings.rs");
+  assert.match(shortcuts, /pub fn system_managed\(\)[\s\S]*?crate::capture::linux::is_wayland\(\)/);
+  assert.match(shortcuts, /pub fn retry\([\s\S]*?if system_managed\(\)\s*\{\s*return Ok\(\(\)\);/);
   assert.ok(lib.includes('tauri_plugin_single_instance::init'));
   const config = JSON.parse(root("src-tauri/tauri.conf.json"));
   const linux = JSON.parse(root("src-tauri/tauri.linux.conf.json"));
@@ -98,7 +100,8 @@ test("native shortcut path remains separate and packaging matches the portal app
 test("hiding the resident library cancels pending setup without cancelling on portal focus transfer", () => {
   const lib = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
   const callback = lib.slice(lib.indexOf('if window.label() == "library" {'), lib.indexOf('.invoke_handler('));
-  const cancellation = callback.slice(0, callback.indexOf('portal_shortcuts::cancel_setup'));
+  const portalCall = callback.indexOf('portal_shortcuts::cancel_setup');
+  const cancellation = callback.slice(callback.lastIndexOf('if matches!(', portalCall), portalCall);
   assert.ok(cancellation.includes('WindowEvent::CloseRequested'));
   assert.ok(cancellation.includes('WindowEvent::Destroyed'));
   assert.ok(!cancellation.includes('WindowEvent::Focused'));

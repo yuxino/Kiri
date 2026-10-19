@@ -5,7 +5,8 @@ import {ChoiceSelect} from "../components/ChoiceSelect";
 import AnnotationCanvas, {type AnnotationCanvasHandle} from "../annotation/AnnotationCanvas";
 import {isTextComposition} from "../annotation/text-composition.js";
 import {COLOR_HEX, COLOR_LABELS, COLOR_PRESETS, type AnnotationMark, type AppearanceSettings, type MosaicShape, type Tool} from "../annotation/model";
-import {KiriIcon, type IconName} from "../components/KiriIcons";
+import {type IconName} from "../components/KiriIcons";
+import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
 import {t} from "../i18n";
 import "./VideoAnnotationsEditor.css";
 import {useAnnotationAppearance} from "../annotation/useAnnotationAppearance";
@@ -116,8 +117,10 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
     </>:editingTool!=="select"&&<div className="kiri-video-annotation-colors" role="group" aria-label={t("Color")}>{COLOR_PRESETS.map(color=><button type="button" className="kiri-video-annotation-swatch" key={color} style={{background:COLOR_HEX[color]}} title={t(COLOR_LABELS[color])} aria-label={t(COLOR_LABELS[color])} aria-pressed={values.colorPreset===color} onClick={()=>changeAppearance({colorPreset:color})}/>)}</div>}
   </div>;
   const toolbar=<fieldset disabled={props.disabled} className={`kiri-video-annotation-tools${props.toolbarHost?" kiri-video-annotation-tools--hosted":""}`} aria-label={t("Annotations")}>
-    {tools.map(item=><button type="button" key={item.tool} className="kiri-video-annotation-tool" title={t(item.label)} aria-label={t(item.label)} aria-pressed={props.active&&tool===item.tool} onClick={()=>selectTool(item.tool)}><KiriIcon name={item.icon} size={17}/></button>)}
-    {props.extraTools}
+    <div className="kiri-video-annotation-tool-group" role="group" aria-label={t("Annotations")}>
+      {tools.map(item=><AnnotationToolbarButton key={item.tool} icon={item.icon} title={t(item.label)} shortcut={item.key.toUpperCase()} active={props.active&&tool===item.tool} disabled={props.disabled} onClick={()=>selectTool(item.tool)}/>)}
+    </div>
+    {props.extraTools&&<div className="kiri-video-annotation-extra-tools">{props.extraTools}</div>}
     {!props.appearanceHost&&controls}
   </fieldset>;
   return <div className="kiri-video-annotations-editor">

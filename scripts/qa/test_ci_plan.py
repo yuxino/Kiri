@@ -48,6 +48,15 @@ class PlanTests(unittest.TestCase):
                 for other in policy.TARGET_PREFIXES:
                     self.assertEqual(result[f"native_{other}"], str(other == target).lower())
 
+    def test_native_shortcut_harness_checks_all_platforms_without_packaging(self):
+        for path in ("scripts/qa/shortcut-native-unit.mjs", "scripts/qa/shortcut-native-unit.test.mjs"):
+            with self.subTest(path=path):
+                result = self.auto(path)
+                for target in policy.TARGET_PREFIXES:
+                    self.assertEqual(result[f"native_{target}"], "true")
+                    self.assertEqual(result[f"package_{target}"], "false")
+                self.assertEqual(result["renderer"], "false")
+
     def test_ipc_lifetime_harness_runs_linux_without_packages(self):
         for path in ("scripts/qa/ipc-lifetime/src/lib.rs", "scripts/qa/ipc-lifetime/check-source.py",
                      "scripts/qa/ipc-lifetime/Cargo.lock"):

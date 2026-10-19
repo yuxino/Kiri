@@ -22,8 +22,10 @@ Linux. Preserve these decisions:
 
 - The default global capture shortcut is `⇧⌘A` on macOS and `Shift+Ctrl+A` on
   Windows and Linux X11. These use native global-hotkey registration; the shortcut does
-  not require Input Monitoring permission. Settings may replace the binding
-  with a modified letter or digit and restore this default (ADR 0046).
+  not require Input Monitoring permission. Settings accepts native-library-supported
+  keys with optional modifiers and can restore this default. Bare typing/navigation
+  keys and Shift-only choices need explicit confirmation; function/media keys or
+  combinations containing Control, Alt, or Meta save directly (ADR 0111).
   On Wayland, the user configures `kiri --capture` in desktop settings, or opts
   in to GlobalShortcuts Portal setup where the actual interface is available.
   Preserve command guidance and truthful session/binding state (ADR 0075). Never
@@ -175,6 +177,18 @@ the separate checklist in `docs/linux.md` and report those limits explicitly.
   region drag, move, and all eight resize handles.
 - Verify Escape and Return behavior and original-app focus restoration.
 - Verify the toolbar at narrow regions and near every display edge.
+- For settings layout changes, render the owning component with real styles at
+  narrow/default/wide content widths, including long localized labels, long key
+  combinations, and editing/error states. Check actual element geometry and
+  overflow, and compare row positions and scroll offset before, during, and after
+  editing so routine mode changes do not make the page jump. Review actual-scale
+  visual hierarchy, density, alignment, and action clarity separately; geometry
+  and interaction passes do not establish aesthetic acceptance. Browser platform
+  emulation does not establish native Windows/Linux DPI, focus, or global-shortcut
+  acceptance.
+- For shortcut recording, verify native/browser input parity, pending-key
+  confirmation, Escape/Tab navigation, IME/repeat/modifier guards, and cancellation
+  or failed registration preserving the previous binding (ADR 0111).
 - Verify text creation, IME input, second edit, live font sizing, and
   background styles.
 - Verify mosaic brush diameter/intensity and editing of existing annotations.

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { createLibraryHarness, nodes } from './helpers/library-render-harness.mjs';
-import { capturePanelLayout, captureToolbarPosition } from '../src/windows/toolbar-layout.js';
+import { capturePanelLayout, captureToolOptionsLayout, captureToolbarPosition } from '../src/windows/toolbar-layout.js';
 const source=readFileSync(new URL('../src/windows/OverlayWindow.tsx',import.meta.url),'utf8');
 const tree=ts.createSourceFile('OverlayWindow.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 
@@ -41,7 +41,8 @@ test('toolbar OCR is explicit, disabled while completing and independent of scre
  const toolbar=source.slice(source.indexOf('const TOOLS:'));
  const harness=createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
   import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-  const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}`);
+  import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+  const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`);
  let recognitions=0,captures=0;
  const component=harness.mount('Toolbar',{selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},
   tool:'select',appearance:{},canUndo:false,canRedo:false,canSetSize:false,disabled:false,

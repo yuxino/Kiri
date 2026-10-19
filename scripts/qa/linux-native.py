@@ -193,15 +193,16 @@ def show_fixture():
     ))
 
 
-def open_capture():
+def open_capture(mode="Screenshot"):
+    shortcut = {"Screenshot": "ctrl+shift+a", "Record": "ctrl+alt+shift+r", "OCR": "ctrl+alt+shift+o"}[mode]
     source = ImageGrab.grab().convert("RGB")
     # linux-native.sh creates one Xvfb monitor at the root origin and scale 1;
     # its real captured desktop dimensions are the required overlay bounds.
     evidence = {"attempt": len(report["capture_overlay_geometry"]) + 1,
                 "expected": {"x": 0, "y": 0, "width": source.width, "height": source.height},
-                "started": time.monotonic(), "samples": []}
+                "mode": mode, "shortcut": shortcut, "started": time.monotonic(), "samples": []}
     report["capture_overlay_geometry"].append(evidence)
-    command("xdotool", "key", "--clearmodifiers", "ctrl+shift+a")
+    command("xdotool", "key", "--clearmodifiers", shortcut)
     window = wait_for("mapped full-display capture overlay", overlay)
     evidence["window"] = window
     check_overlay_geometry(window, evidence, "first observed visible map")
@@ -772,6 +773,14 @@ try:
     report["checks"].append("installed app paints an accessible Settings control in the visible library of an empty isolated profile")
 
     show_fixture()
+    command("xdotool", "key", "--clearmodifiers", "ctrl+alt+shift+l")
+    wait_for("main-window shortcut restores and focuses the minimized library", lambda:
+             command("xdotool", "getactivewindow").stdout.strip() in windows())
+    wait_for_control("Settings")
+    if overlay() is not None or assets():
+        raise RuntimeError("Main-window shortcut unexpectedly started capture or saved an asset")
+    report["checks"].append("native Show main window shortcut restores and focuses the minimized resident library")
+    show_fixture()
     source_before_probe = screenshot("source-independent-before.png")
     fixture.request("probe_expose")
     # Deliberately do not pump controller events: the ordinary source app must
@@ -855,7 +864,7 @@ try:
     screenshot("text-after-redo.png")
     command("xdotool", "key", "--clearmodifiers", "Escape")
     wait_for("Escape exits only text editing", lambda: inline_text_editor() is None and overlay() is not None)
-    undo_control = wait_for_control("Undo (⌘Z)")[0]
+    undo_control = wait_for_control("Undo")[0]
     if not undo_control.get_state_set().contains(Atspi.StateType.ENABLED):
         raise RuntimeError("Cancelling text editing lost the earlier rectangle history")
     command("xdotool", "key", "--clearmodifiers", "Escape")
@@ -897,8 +906,7 @@ try:
     report["checks"].append("clipboard contains the captured PNG")
 
     show_fixture()
-    open_capture()
-    click_control("OCR")
+    open_capture("OCR")
     drag_region((220, 240, 900, 350))
     wait_for("OCR result Copy button", lambda: visible_control("Copy"), timeout=35)
     screenshot("ocr-recognized-text.png")
@@ -914,14 +922,13 @@ try:
     if len(history) != 1 or len(assets()) != 2:
         raise RuntimeError("OCR must save exactly one local text-history source image")
     report["ocr_text"] = normalized(recognized)
-    report["checks"].append("real OCR mode recognizes public desktop text; Copy writes it to the clipboard and Text History")
+    report["checks"].append("native OCR shortcut opens OCR directly; region selection recognizes public desktop text and Copy writes it to clipboard and Text History")
 
     wait_for_feedback_to_close()
     show_fixture()
     draw_recording_pattern("initial")
     references = {"initial": screenshot("recording-source-initial.png").crop(recording_region)}
-    open_capture()
-    click_control("Record")
+    open_capture("Record")
     drag_region(recording_region)
     click_control("MP4")
     screenshot("recording-options.png")
@@ -947,9 +954,9 @@ try:
     hold_without_controls(3.0)
     screenshot("recording-running.png")
     pause_requested = time.monotonic()
-    command(str(args.executable.resolve()), "--toggle-recording-pause")
+    command("xdotool", "key", "--clearmodifiers", "ctrl+alt+shift+p")
     # A finished native segment is atomically published only after the
-    # production encoder drains and validates it. CLI return alone is not an
+    # production encoder drains and validates it. Key injection alone is not
     # acknowledgement that the asynchronous pause has finished.
     first_segment = wait_for("pause finalizes the first native segment", lambda: next(iter(
         recording_files("kiri-recording-*.mp4")), None), timeout=25)
@@ -963,14 +970,14 @@ try:
     draw_recording_pattern("resumed")
     references["resumed"] = screenshot("recording-source-resumed.png").crop(recording_region)
     staged_before_resume = recording_files(".kiri-media-*.mp4")
-    command(str(args.executable.resolve()), "--toggle-recording-pause")
+    command("xdotool", "key", "--clearmodifiers", "ctrl+alt+shift+p")
     wait_for("resume starts a second native segment", lambda:
              recording_files(".kiri-media-*.mp4") - staged_before_resume, timeout=25)
     second_started = time.monotonic()
     hold_without_controls(3.0)
     screenshot("recording-resumed.png")
     stop_requested = time.monotonic()
-    command(str(args.executable.resolve()), "--stop-recording")
+    command("xdotool", "key", "--clearmodifiers", "ctrl+alt+shift+s")
     videos = wait_for("stop imports the completed MP4", lambda:
                       [item for item in assets() if item["kind"] == "video"], timeout=40)
     if len(videos) != 1 or len(assets()) != 3:
@@ -992,7 +999,7 @@ try:
         )
     if abs(video.get("duration", 0) - report["recording"]["duration_seconds"]) > 0.2:
         raise RuntimeError("Saved video duration metadata does not match the actual MP4")
-    report["checks"].append("real MP4 recording starts in the GUI and pauses, resumes, and stops through public CLI controls")
+    report["checks"].append("native Record shortcut opens region selection; MP4 starts explicitly in the GUI and recording-only global shortcuts pause, resume, and stop")
     report["checks"].append("system GStreamer fully decodes the 680x380 MP4 and verifies requested audio; active frames match the desktop, with no paused frames or Kiri controls")
     saved = assets()
 

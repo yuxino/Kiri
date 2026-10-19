@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from "react";
+import {Check} from "lucide-react";
 import {t} from "../i18n";
 import {COLOR_HEX, COLOR_LABELS, COLOR_PRESETS, type ColorPreset} from "./model";
 
@@ -26,7 +27,7 @@ export function AnnotationNumberControl(props: {
     const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left - 6) / Math.max(1, rect.width - 12)));
     props.onChange(Math.max(min, Math.min(max, min + Math.round(fraction * (max - min) / step) * step)), true);
   }
-  return <label className="kiri-annotation-number">
+  return <div className="kiri-annotation-number" role="group" aria-label={props.label}>
     <span>{props.label}</span>
     <input type="range" className="kiri-range" aria-label={props.label} min={min} max={max} step={step} value={props.value}
       onPointerDown={event => {
@@ -39,23 +40,28 @@ export function AnnotationNumberControl(props: {
       }}
       onPointerMove={event => { if (dragging.current) point(event); }}
       onChange={event => props.onChange(Number(event.target.value), true)}
-      onKeyDown={event => event.stopPropagation()}
-      onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={() => { if (dragging.current) finish(); }}
-      onKeyUp={props.onFinish} onBlur={props.onFinish}/>
-    <input type="number" className="kiri-annotation-number-value" aria-label={props.label} min={min} max={max} step={step} value={draft}
-      onFocus={() => { editing.current = true; }}
-      onChange={event => {
-        const text = event.target.value; setDraft(text);
-        if (text.trim() === "") return;
-        const value = Number(text);
-        if (Number.isFinite(value) && value >= min && value <= max) props.onChange(value, true);
-      }}
       onKeyDown={event => {
         event.stopPropagation();
-        if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.currentTarget.blur(); }
-      }} onBlur={finish}/>
-    {props.unit && <span className="kiri-annotation-unit">{props.unit}</span>}
-  </label>;
+        if (event.key === "Escape") { event.preventDefault(); finish(); event.currentTarget.blur(); }
+      }}
+      onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={() => { if (dragging.current) finish(); }}
+      onKeyUp={props.onFinish} onBlur={props.onFinish}/>
+    <span className="kiri-annotation-value">
+      <input type="number" className="kiri-annotation-number-value" aria-label={props.label} min={min} max={max} step={step} value={draft}
+        onFocus={() => { editing.current = true; }}
+        onChange={event => {
+          const text = event.target.value; setDraft(text);
+          if (text.trim() === "") return;
+          const value = Number(text);
+          if (Number.isFinite(value) && value >= min && value <= max) props.onChange(value, true);
+        }}
+        onKeyDown={event => {
+          event.stopPropagation();
+          if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.currentTarget.blur(); }
+        }} onBlur={finish}/>
+      {props.unit && <span className="kiri-annotation-unit" aria-hidden="true">{props.unit}</span>}
+    </span>
+  </div>;
 }
 
 export function AnnotationChoices<T extends string>(props: {
@@ -74,9 +80,14 @@ export function AnnotationChoices<T extends string>(props: {
 
 export function AnnotationColors(props: {value: ColorPreset; onChange(value: ColorPreset): void}) {
   return <div className="kiri-annotation-colors" role="group" aria-label={t("Color")}>
-    {COLOR_PRESETS.map(color => <button type="button" key={color} className="kiri-annotation-swatch"
-      title={t(COLOR_LABELS[color])} aria-label={t(COLOR_LABELS[color])} aria-pressed={props.value === color}
-      onKeyDown={event => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
-      onClick={() => props.onChange(color)} style={{"--swatch": COLOR_HEX[color]} as React.CSSProperties}/>)}
+    <span className="kiri-annotation-choice-label">{t("Color")}</span>
+    <div className="kiri-annotation-palette">
+      {COLOR_PRESETS.map(color => <button type="button" key={color} className="kiri-annotation-swatch"
+        title={t(COLOR_LABELS[color])} aria-label={t(COLOR_LABELS[color])} aria-pressed={props.value === color}
+        onKeyDown={event => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
+        onClick={() => props.onChange(color)} style={{"--swatch": COLOR_HEX[color], "--swatch-ink": ["white", "yellow", "orange", "mint"].includes(color) ? "#101010" : "#fff"} as React.CSSProperties}>
+        {props.value === color && <Check size={12} strokeWidth={2.5} aria-hidden="true"/>}
+      </button>)}
+    </div>
   </div>;
 }

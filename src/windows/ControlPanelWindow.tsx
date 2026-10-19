@@ -1,15 +1,14 @@
 // Content-sized recording controls anchored to the current capture region.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { GripVertical } from "lucide-react";
-import { api, onRecordingState, type RecordingState } from "../lib/ipc";
+import { api, onRecordingState, onShortcutSettingsChanged, type RecordingState, type ShortcutAction, type ShortcutSettingDto } from "../lib/ipc";
 import { t } from "../i18n";
 import { KiriIcon } from "../components/KiriIcons";
 import { useRecordingControlsLayout } from "./useRecordingControlsLayout";
 
 export function ControlPanelWindow() {
   const [state, setState] = useState<RecordingState | null>(null);
-  const stateRef = useRef<RecordingState | null>(null);
-  stateRef.current = state;
+  const [shortcuts, setShortcuts] = useState<ShortcutSettingDto[]>([]);
   const sessionId = new URLSearchParams(window.location.search).get("session") ?? "";
   const { surface, ...dragHandlers } = useRecordingControlsLayout(sessionId);
 
@@ -31,31 +30,22 @@ export function ControlPanelWindow() {
     };
   }, []);
 
-  // These shortcuts stay scoped to the focused control panel.
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const s = stateRef.current;
-      if (!s) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (
-          (s.isStarting || s.isRecording || s.isPaused) &&
-          !s.isTransitioning && !s.isFinalizing
-        ) {
-          void api.stopRecording().catch(() => {});
-        }
-        return;
-      }
-      if (e.code === "Space") {
-        // Prevent Space's native button click as well, including key repeats.
-        e.preventDefault();
-        if (e.repeat || s.isStarting || s.isTransitioning || s.isFinalizing) return;
-        if (s.isPaused) void api.resumeRecording().catch(() => {});
-        else if (s.isRecording) void api.pauseRecording().catch(() => {});
-      }
+    let disposed = false;
+    let receivedEvent = false;
+    const unlisten = onShortcutSettingsChanged((next) => {
+      receivedEvent = true;
+      if (!disposed) setShortcuts(next);
+    });
+    void unlisten.then(async () => {
+      if (disposed) return;
+      const snapshot = await api.getShortcutSettings();
+      if (!disposed && !receivedEvent) setShortcuts(snapshot);
+    }).catch(() => {});
+    return () => {
+      disposed = true;
+      void unlisten.then((dispose) => dispose()).catch(() => {});
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const busy = Boolean(state?.isStarting || state?.isTransitioning || state?.isFinalizing);
@@ -63,6 +53,12 @@ export function ControlPanelWindow() {
   const hasSession = Boolean(state?.isRecording || state?.isPaused);
   const canStop = Boolean(state?.isStarting || hasSession);
   const pauseLabel = paused ? t("Resume Recording") : t("Pause Recording");
+  const shortcutTitle = (label: string, action: ShortcutAction) => {
+    const shortcut = !busy && hasSession
+      ? shortcuts.find((entry) => entry.action === action && entry.status === "enabled")?.label
+      : null;
+    return shortcut ? `${label} · ${shortcut}` : label;
+  };
 
   return (
     <div ref={surface} className="kiri-record-controls-window">
@@ -73,10 +69,9 @@ export function ControlPanelWindow() {
         <button
           type="button"
           className="kiri-record-control-button"
-          title={busy ? t("Preparing recording") : pauseLabel}
+          title={busy ? t("Preparing recording") : shortcutTitle(pauseLabel, "recordingPauseResume")}
           aria-label={pauseLabel}
           aria-pressed={paused}
-          aria-keyshortcuts="Space"
           disabled={busy || !hasSession}
           onClick={() => {
             if (paused) void api.resumeRecording().catch(() => {});
@@ -98,9 +93,8 @@ export function ControlPanelWindow() {
         <button
           type="button"
           className="kiri-record-control-button kiri-record-control-button--stop"
-          title={state?.isStarting ? t("Cancel") : t("Stop and Save Recording")}
+          title={state?.isStarting ? t("Cancel") : shortcutTitle(t("Stop and Save Recording"), "recordingStop")}
           aria-label={state?.isStarting ? t("Cancel") : t("Stop and Save Recording")}
-          aria-keyshortcuts="Escape"
           disabled={Boolean(state?.isTransitioning || state?.isFinalizing || !canStop)}
           onClick={() => void api.stopRecording().catch(() => {})}
         >

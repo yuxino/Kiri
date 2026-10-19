@@ -22,6 +22,9 @@ use crate::core::library_location::{
 use crate::core::policy::{RecordingOptions, RecordingOutputFormat};
 use crate::core::recording_recovery::PendingRecording;
 use crate::platform;
+use crate::shortcut_settings::{
+    RegistrationStatus as ShortcutRegistrationStatus, ShortcutAction, ShortcutSettingDto,
+};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::state::RecoveryAction;
 use crate::state::{
@@ -85,6 +88,7 @@ impl From<&Rect> for RectDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureContextDto {
+    pub initial_mode: crate::state::CaptureMode,
     pub display_width: f64,
     pub display_height: f64,
     pub scale: f64,
@@ -1898,6 +1902,7 @@ fn export_gif_file(
 fn capture_context(session: &CaptureSession) -> CaptureContextDto {
     let display = &session.display;
     CaptureContextDto {
+        initial_mode: session.initial_mode,
         display_width: display.screen_frame.width,
         display_height: display.screen_frame.height,
         scale: display.backing_scale,
@@ -1911,6 +1916,14 @@ fn capture_context(session: &CaptureSession) -> CaptureContextDto {
 #[cfg(not(target_os = "linux"))]
 #[tauri::command]
 pub fn start_capture(app: AppHandle) -> Result<CaptureContextDto, String> {
+    start_capture_with_mode(app, crate::state::CaptureMode::Screenshot)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn start_capture_with_mode(
+    app: AppHandle,
+    initial_mode: crate::state::CaptureMode,
+) -> Result<CaptureContextDto, String> {
     log::info!("start_capture: beginning capture flow");
     let state = app.state::<AppState>();
     let _start_permit = match state.capture_start.try_begin() {
@@ -2013,15 +2026,19 @@ pub fn start_capture(app: AppHandle) -> Result<CaptureContextDto, String> {
         display.backing_scale
     );
 
-    finish_frozen_capture(&app, display, pid, name, was_kiri_frontmost, hidden_windows)
+    finish_frozen_capture(
+        &app, display, pid, name, was_kiri_frontmost, hidden_windows, initial_mode,
+    )
 }
 
 #[cfg(target_os = "linux")]
 #[tauri::command]
 pub async fn start_capture(app: AppHandle) -> Result<CaptureContextDto, String> {
-    tauri::async_runtime::spawn_blocking(move || start_linux_capture_from_shortcut(app))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        start_linux_capture_from_shortcut(app, crate::state::CaptureMode::Screenshot)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[cfg(target_os = "linux")]
@@ -2037,6 +2054,7 @@ struct LinuxCapturePrep {
 #[cfg(target_os = "linux")]
 pub(crate) fn start_linux_capture_from_shortcut(
     app: AppHandle,
+    initial_mode: crate::state::CaptureMode,
 ) -> Result<CaptureContextDto, String> {
     log::info!("start_linux_capture_from_shortcut: beginning capture flow");
     let state = app.state::<AppState>();
@@ -2079,7 +2097,7 @@ pub(crate) fn start_linux_capture_from_shortcut(
     };
     linux_run_on_main(&app, {
         let app = app.clone();
-        move || linux_capture_commit(&app, prep, display)
+        move || linux_capture_commit(&app, prep, display, initial_mode)
     })
 }
 
@@ -2144,6 +2162,7 @@ fn linux_capture_commit(
     app: &AppHandle,
     prep: LinuxCapturePrep,
     display: crate::capture::CapturedDisplay,
+    initial_mode: crate::state::CaptureMode,
 ) -> Result<CaptureContextDto, String> {
     let state = app.state::<AppState>();
     let _transition = state.library_transition.lock().unwrap();
@@ -2199,6 +2218,7 @@ fn linux_capture_commit(
         prep.name,
         prep.was_kiri_frontmost,
         prep.hidden_windows,
+        initial_mode,
     )
 }
 
@@ -2209,6 +2229,7 @@ fn finish_frozen_capture(
     name: Option<String>,
     was_kiri_frontmost: bool,
     hidden_windows: Vec<String>,
+    initial_mode: crate::state::CaptureMode,
 ) -> Result<CaptureContextDto, String> {
     log::info!(
         "start_capture: display frozen logical={}x{} pixels={}x{} scale={}",
@@ -2220,6 +2241,7 @@ fn finish_frozen_capture(
     );
 
     let context = CaptureContextDto {
+        initial_mode,
         display_width: display.screen_frame.width,
         display_height: display.screen_frame.height,
         scale: display.backing_scale,
@@ -2246,6 +2268,7 @@ fn finish_frozen_capture(
         let mut capture = state.capture.lock().unwrap();
         capture.session = Some(CaptureSession {
             capture_id,
+            initial_mode,
             display,
             source_application: name,
             return_pid: pid,
@@ -3835,8 +3858,6 @@ pub async fn start_recording_flow(
     let (
         screen_frame,
         backing_scale,
-        return_pid,
-        was_kiri_frontmost,
         overlay_labels,
         recording_session_id,
     ) = {
@@ -3883,8 +3904,6 @@ pub async fn start_recording_flow(
         (
             session.display.screen_frame,
             session.display.backing_scale,
-            session.return_pid,
-            session.was_kiri_frontmost,
             session.overlay_labels,
             recording.session_id,
         )
@@ -3933,15 +3952,6 @@ pub async fn start_recording_flow(
     }
     #[cfg(not(target_os = "linux"))]
     present_recording_ui()?;
-
-    // Linux defers source restoration until its countdown has been hidden.
-    // Other platforms retain their existing recording-control focus policy.
-    let restore_origin_now = !cfg!(target_os = "linux") || !options.uses_countdown;
-    if restore_origin_now && !was_kiri_frontmost {
-        if let Some(pid) = return_pid {
-            platform::activate_application(pid);
-        }
-    }
 
     crate::state::save_recording_options(&app, &saved_options);
 
@@ -4327,10 +4337,14 @@ pub fn position_recording_controls(
         window.set_size(tauri::PhysicalSize::new((frame.width * scale).round() as u32,
             (frame.height * scale).round() as u32)).map_err(|error| error.to_string())?;
     }
-    if !window.is_visible().map_err(|error| error.to_string())? {
-        platform::configure_transient_window(&window, platform::TransientWindowRole::RecordingControls);
-        window.show().map_err(|error| error.to_string())?;
-        window.set_focus().map_err(|error| error.to_string())?;
+    let present = {
+        let state = app.state::<AppState>();
+        let mut recording = state.recording.lock().unwrap();
+        recording.claim_controls_presentation(session_id)
+    };
+    if present {
+        platform::show_window_without_activation(&app, "control-panel",
+            platform::TransientWindowRole::RecordingControls);
     }
     let margin = 8.0_f64.min(work_area.width / 4.0).min(work_area.height / 4.0);
     Ok(RecordingControlsLayout {
@@ -4819,19 +4833,22 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
         }
         return Ok(());
     }
-    #[cfg(target_os = "linux")]
     {
         // Countdown owns Escape until it has been hidden. Restoring the source
-        // during countdown creation can race its ready/focus command.
-        let (was_kiri_frontmost, return_pid) = {
+        // during countdown creation can race its ready/focus command. Respect
+        // any application the user deliberately switched to during countdown.
+        let frontmost_pid = platform::frontmost_application().map(|(pid, _)| pid);
+        let return_pid = {
             let state = app.state::<AppState>();
             let recording = state.recording.lock().unwrap();
-            (recording.was_kiri_frontmost, recording.return_pid)
-        };
-        if !was_kiri_frontmost {
-            if let Some(pid) = return_pid {
-                platform::activate_application(pid);
+            if recording.session_id == session_id && recording.startup_is_current(startup_token) {
+                recording.recording_origin_to_restore(frontmost_pid)
+            } else {
+                None
             }
+        };
+        if let Some(pid) = return_pid {
+            platform::activate_application(pid);
         }
     }
     if configuration.options.highlights_clicks {
@@ -4931,10 +4948,6 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
         return Ok(());
     }
 
-    // Focus stays on the control panel while recording so the hotkeys work
-    // (Space = pause/resume, Esc = stop); stop_recording hands focus back to
-    // the original application afterwards.
-
     // A single session-owned clock survives pause/resume and refreshes the
     // control panel without counting paused time.
     spawn_recording_clock(&app, session_id);
@@ -4949,11 +4962,16 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
 
 #[tauri::command]
 pub async fn pause_recording(app: AppHandle) -> Result<(), String> {
+    pause_recording_session(app, None).await
+}
+
+async fn pause_recording_session(app: AppHandle, expected_session: Option<uuid::Uuid>) -> Result<(), String> {
     log::info!("pause_recording: called");
     let active = {
         let state = app.state::<AppState>();
         let mut recording = state.recording.lock().unwrap();
-        if !recording.is_recording || recording.is_transitioning {
+        if !recording.accepts_recording_action(expected_session)
+            || !recording.is_recording || recording.is_transitioning {
             return Ok(());
         }
         recording.elapsed_before_segment = crate::state::recording_state(&recording).elapsed;
@@ -5059,10 +5077,15 @@ pub async fn pause_recording(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
+    resume_recording_session(app, None).await
+}
+
+async fn resume_recording_session(app: AppHandle, expected_session: Option<uuid::Uuid>) -> Result<(), String> {
     log::info!("resume_recording: called");
     let resumed_native = {
         let state = app.state::<AppState>();
         let mut recording = state.recording.lock().unwrap();
+        if !recording.accepts_recording_action(expected_session) { return Ok(()); }
         let is_native = recording
             .active
             .as_ref()
@@ -5091,9 +5114,6 @@ pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
         }
     };
     if resumed_native {
-        if let Some(window) = app.get_webview_window("control-panel") {
-            let _ = window.set_focus();
-        }
         emit_notice(&app, "Recording Resumed".into(), "play.circle.fill".into());
         return Ok(());
     }
@@ -5101,7 +5121,8 @@ pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
     let configuration = {
         let state = app.state::<AppState>();
         let mut recording = state.recording.lock().unwrap();
-        if !recording.is_paused || recording.is_transitioning {
+        if !recording.accepts_recording_action(expected_session)
+            || !recording.is_paused || recording.is_transitioning {
             return Ok(());
         }
         let Some(configuration) = recording.configuration.clone() else {
@@ -5171,26 +5192,35 @@ pub async fn resume_recording(app: AppHandle) -> Result<(), String> {
         });
         emit_recording_state(&app, &recording);
     }
-    if let Some(window) = app.get_webview_window("control-panel") {
-        let _ = window.set_focus();
-    }
     emit_notice(&app, "Recording Resumed".into(), "play.circle.fill".into());
     Ok(())
 }
 
 #[tauri::command]
 pub async fn stop_recording(app: AppHandle) -> Result<(), String> {
-    stop_recording_session(app, None)
+    stop_recording_session(app, None, None)
+}
+
+pub(crate) async fn perform_recording_shortcut(
+    app: AppHandle, session_id: uuid::Uuid, action: ShortcutAction, paused: bool,
+) -> Result<(), String> {
+    match action {
+        ShortcutAction::RecordingStop => stop_recording_session(app, None, Some(session_id)),
+        ShortcutAction::RecordingPauseResume if paused => resume_recording_session(app, Some(session_id)).await,
+        ShortcutAction::RecordingPauseResume => pause_recording_session(app, Some(session_id)).await,
+        _ => Ok(()),
+    }
 }
 
 #[cfg(target_os = "linux")]
 fn stop_failed_linux_recording(app: &AppHandle, session_id: uuid::Uuid) -> Result<(), String> {
-    stop_recording_session(app.clone(), Some(session_id))
+    stop_recording_session(app.clone(), Some(session_id), Some(session_id))
 }
 
 fn stop_recording_session(
     app: AppHandle,
     failed_session: Option<uuid::Uuid>,
+    expected_session: Option<uuid::Uuid>,
 ) -> Result<(), String> {
     if failed_session.is_none() {
         log::info!("stop_recording: called");
@@ -5198,6 +5228,7 @@ fn stop_recording_session(
     let abandoned_startup = {
         let state = app.state::<AppState>();
         let mut recording = state.recording.lock().unwrap();
+        if !recording.accepts_recording_action(expected_session) { return Ok(()); }
         if failed_session.is_none()
             && recording.is_starting
             && !recording.is_recording
@@ -5228,6 +5259,7 @@ fn stop_recording_session(
     ) = {
         let state = app.state::<AppState>();
         let mut recording = state.recording.lock().unwrap();
+        if !recording.accepts_recording_action(expected_session) { return Ok(()); }
         #[cfg(target_os = "linux")]
         if let Some(expected_session) = failed_session {
             if recording.session_id != expected_session
@@ -5941,15 +5973,6 @@ pub fn get_locale() -> String {
         .into()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ShortcutRegistrationStatus {
-    Enabled,
-    Occupied,
-    #[cfg(target_os = "linux")]
-    SystemManaged,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShortcutStatusDto {
@@ -5958,19 +5981,22 @@ pub struct ShortcutStatusDto {
 }
 
 fn shortcut_status(
-    binding: tauri_plugin_global_shortcut::Shortcut,
+    binding: Option<tauri_plugin_global_shortcut::Shortcut>,
     registered: bool,
 ) -> ShortcutStatusDto {
-    #[cfg(target_os = "linux")]
-    if crate::capture::linux::is_wayland() {
+    if crate::shortcut_settings::system_managed() {
         return ShortcutStatusDto {
             label: "kiri --capture".into(),
             status: ShortcutRegistrationStatus::SystemManaged,
         };
     }
     ShortcutStatusDto {
-        label: crate::shortcut_settings::label(binding),
-        status: if registered {
+        label: binding
+            .map(crate::shortcut_settings::label)
+            .unwrap_or_default(),
+        status: if binding.is_none() {
+            ShortcutRegistrationStatus::Disabled
+        } else if registered {
             ShortcutRegistrationStatus::Enabled
         } else {
             ShortcutRegistrationStatus::Occupied
@@ -5990,8 +6016,8 @@ fn require_library_window(window: &WebviewWindow) -> Result<(), String> {
 pub fn get_shortcut_status(window: WebviewWindow) -> Result<ShortcutStatusDto, String> {
     require_library_window(&window)?;
     Ok(shortcut_status(
-        crate::shortcut_settings::current(window.app_handle()),
-        crate::capture_shortcut_is_registered(window.app_handle()),
+        crate::shortcut_settings::current(window.app_handle(), ShortcutAction::Capture),
+        crate::shortcut_settings::is_registered(window.app_handle(), ShortcutAction::Capture),
     ))
 }
 
@@ -5999,26 +6025,31 @@ pub fn get_shortcut_status(window: WebviewWindow) -> Result<ShortcutStatusDto, S
 pub fn retry_shortcut(window: WebviewWindow) -> Result<ShortcutStatusDto, String> {
     require_library_window(&window)?;
     let app = window.app_handle();
-    if !crate::capture_shortcut_is_registered(app) {
-        if let Err(error) = crate::register_shortcut(app) {
-            log::warn!("[shortcut] retry failed: {error}");
-        }
+    if let Err(error) = crate::shortcut_settings::retry(app, ShortcutAction::Capture) {
+        log::warn!("[shortcut] retry failed: {error}");
     }
     Ok(shortcut_status(
-        crate::shortcut_settings::current(app),
-        crate::capture_shortcut_is_registered(app),
+        crate::shortcut_settings::current(app, ShortcutAction::Capture),
+        crate::shortcut_settings::is_registered(app, ShortcutAction::Capture),
     ))
 }
 
 #[tauri::command]
 pub fn set_capture_shortcut_editing(window: WebviewWindow, editing: bool) -> Result<(), String> {
+    set_shortcut_editing(window, editing)
+}
+
+#[tauri::command]
+pub fn set_shortcut_editing(window: WebviewWindow, editing: bool) -> Result<(), String> {
     require_library_window(&window)?;
     if editing && !window.is_focused().unwrap_or(false) {
-        return Err("Could not change the capture shortcut.".into());
+        return Err("Could not change the shortcut.".into());
     }
-    window
-        .state::<crate::shortcut_settings::CaptureBinding>()
-        .set_editing(editing);
+    let bindings = window.state::<crate::shortcut_settings::ShortcutBindings>();
+    if editing {
+        bindings.set_library_focused(true);
+    }
+    bindings.set_editing(editing);
     Ok(())
 }
 
@@ -6028,8 +6059,55 @@ pub fn set_capture_shortcut(
     shortcut: Option<String>,
 ) -> Result<ShortcutStatusDto, String> {
     require_library_window(&window)?;
-    crate::shortcut_settings::replace(window.app_handle(), shortcut.as_deref())?;
+    // Compatibility: the former capture-only API used null to restore default.
+    let shortcut = shortcut.unwrap_or_else(|| crate::shortcut_settings::default_binding().to_string());
+    crate::shortcut_settings::replace(window.app_handle(), ShortcutAction::Capture, Some(&shortcut))?;
     get_shortcut_status(window)
+}
+
+#[tauri::command]
+pub fn get_shortcut_settings(window: WebviewWindow) -> Result<Vec<ShortcutSettingDto>, String> {
+    if !shortcut_settings_read_allowed(window.label()) {
+        return Err("This command is unavailable from this window.".into());
+    }
+    Ok(crate::shortcut_settings::settings(window.app_handle()))
+}
+
+fn shortcut_settings_read_allowed(label: &str) -> bool {
+    // The control panel has a fixed native label; its recording session is a
+    // query parameter. Only its read access is shared with Settings.
+    matches!(label, "library" | "control-panel")
+}
+
+#[tauri::command]
+pub fn set_action_shortcut(
+    window: WebviewWindow,
+    action: ShortcutAction,
+    shortcut: Option<String>,
+) -> Result<Vec<ShortcutSettingDto>, String> {
+    require_library_window(&window)?;
+    crate::shortcut_settings::replace(window.app_handle(), action, shortcut.as_deref())?;
+    get_shortcut_settings(window)
+}
+
+#[tauri::command]
+pub fn reset_action_shortcut(
+    window: WebviewWindow,
+    action: ShortcutAction,
+) -> Result<Vec<ShortcutSettingDto>, String> {
+    set_action_shortcut(window, action, Some(action.default_binding().to_string()))
+}
+
+#[tauri::command]
+pub fn retry_action_shortcut(
+    window: WebviewWindow,
+    action: ShortcutAction,
+) -> Result<Vec<ShortcutSettingDto>, String> {
+    require_library_window(&window)?;
+    // The UI reloads the row after failure and keeps its saved binding. Preserve
+    // the reason (including media-key permission errors) instead of hiding it.
+    crate::shortcut_settings::retry(window.app_handle(), action)?;
+    get_shortcut_settings(window)
 }
 
 #[tauri::command]
@@ -6129,6 +6207,16 @@ mod command_security_tests {
     use std::io::Cursor;
     use std::path::PathBuf;
     use std::sync::mpsc::TrySendError;
+
+    #[test]
+    fn shortcut_settings_read_access_only_allows_library_and_fixed_control_panel() {
+        for label in ["library", "control-panel"] {
+            assert!(super::shortcut_settings_read_allowed(label));
+        }
+        for label in ["", "overlay", "countdown", "editor", "control-panel-stale", "library-other"] {
+            assert!(!super::shortcut_settings_read_allowed(label), "{label}");
+        }
+    }
 
     #[test]
     fn recording_notice_keeps_unknown_native_details_private() {
@@ -6249,7 +6337,7 @@ mod command_security_tests {
 
     #[test]
     fn shortcut_status_reflects_native_registration() {
-        let enabled = super::shortcut_status(crate::shortcut_settings::default_binding(), true);
+        let enabled = super::shortcut_status(Some(crate::shortcut_settings::default_binding()), true);
         assert_eq!(
             enabled.label,
             crate::core::shortcut::KIRI_CAPTURE.display_label()
@@ -6257,7 +6345,7 @@ mod command_security_tests {
         assert_eq!(enabled.status, ShortcutRegistrationStatus::Enabled);
         assert_eq!(serde_json::to_value(&enabled).unwrap()["status"], "enabled");
 
-        let occupied = super::shortcut_status(crate::shortcut_settings::default_binding(), false);
+        let occupied = super::shortcut_status(Some(crate::shortcut_settings::default_binding()), false);
         assert_eq!(
             occupied.label,
             crate::core::shortcut::KIRI_CAPTURE.display_label()
@@ -6267,6 +6355,10 @@ mod command_security_tests {
             serde_json::to_value(&occupied).unwrap()["status"],
             "occupied"
         );
+        let disabled = super::shortcut_status(None, false);
+        assert!(disabled.label.is_empty());
+        assert_eq!(disabled.status, ShortcutRegistrationStatus::Disabled);
+        assert_eq!(serde_json::to_value(&disabled).unwrap()["status"], "disabled");
     }
 
     #[test]

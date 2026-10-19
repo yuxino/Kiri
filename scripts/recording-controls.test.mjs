@@ -5,7 +5,7 @@ import { createLibraryHarness, deferred, nodes, settleRequests } from "./helpers
 
 const read = name => readFileSync(new URL(`../src/windows/${name}`, import.meta.url), "utf8");
 function controlsSource(layout, panel) {
-  return 'import React from "react";\n' + layout
+  return 'import React, { useRef } from "react";\n' + layout
     .replace(/^import .* from "react";\r?\n/m, "")
     .replace(/^import .* from "..\/lib\/ipc";\r?\n/m, "") + panel
     .replace(/^import .* from "\.\/useRecordingControlsLayout";\r?\n/m, "");
@@ -34,7 +34,8 @@ function controls(options = {}) {
       return { width: Number.isFinite(limit) ? Math.min(width, limit) : width, height: size.height };
     },
   };
-  let sequence = 0, observe, scaleChanged, recordingChanged, languageChanged;
+  let sequence = 0, observe, scaleChanged, recordingChanged, languageChanged, shortcutsChanged;
+  let shortcutReads = 0, shortcutDisposals = 0;
   let paused = 0, resumed = 0, stopped = 0;
   const native = {
     outerPosition: options.outerPosition ?? (async () => ({ x: -400, y: 100 })),
@@ -68,6 +69,10 @@ function controls(options = {}) {
       "../lib/ipc": {
         api: {
           getRecordingState: async () => recording,
+          getShortcutSettings: async () => {
+            shortcutReads++;
+            return options.getShortcutSettings ? options.getShortcutSettings() : [];
+          },
           positionRecordingControls(request) {
             const result = deferred();
             layouts.push({ request, ...result, resolve: (value = { maxWidth: options.maxWidth ?? 1000 }) => result.resolve(value) });
@@ -79,6 +84,14 @@ function controls(options = {}) {
         },
         onRecordingState: async callback => {
           recordingChanged = callback; return () => { recordingChanged = null; };
+        },
+        onShortcutSettingsChanged: async callback => {
+          shortcutsChanged = callback;
+          if (options.shortcutSubscription) await options.shortcutSubscription;
+          return () => {
+            shortcutDisposals++;
+            if (shortcutsChanged === callback) shortcutsChanged = null;
+          };
         },
       },
       "lucide-react": { GripVertical: "grip" },
@@ -98,11 +111,17 @@ function controls(options = {}) {
   return { component, layouts, positions, window: h.window, size, flush, attributes,
     resize: () => observe(), scale: () => scaleChanged(), state: value => recordingChanged(value),
     language: () => languageChanged(),
+    shortcuts: value => shortcutsChanged?.(value),
+    shortcutListener: () => shortcutsChanged,
+    shortcutStats: () => ({ reads: shortcutReads, disposals: shortcutDisposals }),
     calls: () => ({ paused, resumed, stopped }),
     async ready() { await flush(); layouts.at(-1).resolve(); await flush(); },
   };
 }
 const surface = h => nodes(h.component.render()).find(node => node?.props?.className === "kiri-record-controls");
+const controlButton = (h, label) => nodes(h.component.render()).find(node => node?.props?.["aria-label"] === label);
+const shortcut = (action, label, status = "enabled") => ({ action, scope: "recording", label, status,
+  defaultLabel: label, isDefault: true });
 const pointer = (x, y, button = false) => ({ pointerId: 1, button: 0, screenX: x, screenY: y,
   target: { closest: () => button }, preventDefault() {}, currentTarget: { setPointerCapture() {} } });
 
@@ -226,17 +245,75 @@ test("paused controls preserve elapsed time and expose Resume and explicit Stop"
   h.component.unmount();
 });
 
-test("focused Space prevents native button activation even on repeat; starting Escape can cancel", async () => {
+test("ordinary typing and modified keys never pause or stop through the floating panel", async () => {
   const h = controls(); await h.ready(); h.component.render();
   let prevented = 0;
-  h.window.dispatchEvent({ type: "keydown", code: "Space", repeat: false, preventDefault() { prevented++; } });
-  h.window.dispatchEvent({ type: "keydown", code: "Space", repeat: true, preventDefault() { prevented++; } });
-  assert.equal(prevented, 2); assert.equal(h.calls().paused, 1);
-  h.state({ ...recording, isRecording: false, isStarting: true }); h.component.render();
-  h.window.dispatchEvent({ type: "keydown", code: "Space", preventDefault() {} });
-  h.window.dispatchEvent({ type: "keydown", key: "Escape", preventDefault() {} });
-  assert.deepEqual(h.calls(), { paused: 1, resumed: 0, stopped: 1 });
+  for (const state of [recording, { ...recording, isRecording: false, isPaused: true },
+    { ...recording, isRecording: false, isStarting: true }]) {
+    h.state(state); h.component.render();
+    for (const key of [" ", "Enter", "Escape"]) {
+      for (const extra of [{}, { repeat: true }, { isComposing: true },
+        { ctrlKey: true }, { metaKey: true }, { altKey: true }, { shiftKey: true }]) {
+        h.window.dispatchEvent({ type: "keydown", key, code: key === " " ? "Space" : key,
+          ...extra, preventDefault() { prevented++; } });
+      }
+    }
+  }
+  assert.equal(prevented, 0, "native focused-button keyboard activation remains available");
+  assert.deepEqual(h.calls(), { paused: 0, resumed: 0, stopped: 0 });
+  const cancel = nodes(h.component.render()).find(node => node?.props?.["aria-label"] === "Cancel");
+  cancel.props.onClick();
+  assert.equal(h.calls().stopped, 1, "startup still has an explicit accessible Cancel button");
   h.component.unmount();
+});
+
+test("recording tooltips show actual enabled bindings and follow pause, edits, and availability", async () => {
+  const h = controls({ getShortcutSettings: async () => [
+    shortcut("recordingPauseResume", "⇧⌥⌘P"), shortcut("recordingStop", "⇧⌥⌘S"),
+  ] });
+  await h.ready();
+  assert.equal(controlButton(h, "Pause Recording").props.title, "Pause Recording · ⇧⌥⌘P");
+  assert.equal(controlButton(h, "Stop and Save Recording").props.title, "Stop and Save Recording · ⇧⌥⌘S");
+  h.state({ ...recording, isRecording: false, isPaused: true });
+  h.shortcuts([shortcut("recordingPauseResume", "Ctrl+Alt+7"), shortcut("recordingStop", "Shift+Ctrl+S")]);
+  assert.equal(controlButton(h, "Resume Recording").props.title, "Resume Recording · Ctrl+Alt+7");
+  assert.equal(controlButton(h, "Stop and Save Recording").props.title, "Stop and Save Recording · Shift+Ctrl+S");
+  for (const status of ["disabled", "occupied", "inactive", "systemManaged"]) {
+    h.shortcuts([shortcut("recordingPauseResume", "P", status), shortcut("recordingStop", "S", status)]);
+    assert.equal(controlButton(h, "Resume Recording").props.title, "Resume Recording");
+    assert.equal(controlButton(h, "Stop and Save Recording").props.title, "Stop and Save Recording");
+  }
+  h.shortcuts([shortcut("recordingPauseResume", "⇧⌥⌘P"), shortcut("recordingStop", "⇧⌥⌘S")]);
+  h.state({ ...recording, isRecording: false, isStarting: true });
+  assert.equal(controlButton(h, "Pause Recording").props.title, "Preparing recording");
+  assert.equal(controlButton(h, "Cancel").props.title, "Cancel");
+  assert.equal(h.shortcutStats().reads, 1);
+  assert.equal(h.layouts.length, 1, "tooltip changes do not change the native control dimensions");
+  h.component.unmount(); await h.flush();
+  assert.equal(h.shortcutStats().disposals, 1);
+});
+
+test("a shortcut event wins over a late initial snapshot", async () => {
+  const snapshot = deferred();
+  const h = controls({ getShortcutSettings: () => snapshot.promise });
+  await h.ready();
+  h.shortcuts([shortcut("recordingPauseResume", "Alt+8"), shortcut("recordingStop", null, "disabled")]);
+  snapshot.resolve([shortcut("recordingPauseResume", "⇧⌥⌘P"), shortcut("recordingStop", "⇧⌥⌘S")]);
+  await h.flush();
+  assert.equal(controlButton(h, "Pause Recording").props.title, "Pause Recording · Alt+8");
+  assert.equal(controlButton(h, "Stop and Save Recording").props.title, "Stop and Save Recording");
+  h.component.unmount(); await h.flush();
+});
+
+test("unmount during shortcut subscription disposes it without starting a snapshot request", async () => {
+  const subscription = deferred();
+  const h = controls({ shortcutSubscription: subscription.promise });
+  await h.ready();
+  const lateEvent = h.shortcutListener();
+  h.component.unmount();
+  lateEvent([shortcut("recordingPauseResume", "Alt+9")]);
+  subscription.resolve(); await h.flush();
+  assert.deepEqual(h.shortcutStats(), { reads: 0, disposals: 1 });
 });
 
 

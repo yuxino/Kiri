@@ -11,14 +11,15 @@
   --kiri-coral: #c83e36;
 
   /* Light scheme */
-  --kiri-canvas: #f6f6f3;
+  --kiri-canvas: #ffffff;
+  --kiri-sidebar: #f5f5f5;
   --kiri-card: #ffffff;
   --kiri-elevated: #ffffff;
-  --kiri-surface-border: #d8d8d3;
-  --kiri-group-fill: #ececea;
+  --kiri-surface-border: #dedede;
+  --kiri-group-fill: #ededed;
   --kiri-label: #0a0a0a;
-  --kiri-secondary-label: #5d5d58;
-  --kiri-disabled-label: #9c9c96;
+  --kiri-secondary-label: #606060;
+  --kiri-disabled-label: #969696;
 
   /* Dark scheme */
   --kiri-canvas-dark: #080808;
@@ -26,9 +27,9 @@
   --kiri-elevated-dark: #181818;
   --kiri-surface-border-dark: #383838;
   --kiri-group-fill-dark: #232323;
-  --kiri-label-dark: #f7f7f4;
-  --kiri-secondary-label-dark: #b7b7b2;
-  --kiri-disabled-label-dark: #70706c;
+  --kiri-label-dark: #f7f7f7;
+  --kiri-secondary-label-dark: #b7b7b7;
+  --kiri-disabled-label-dark: #707070;
 
   /* Semantics */
   --kiri-accent-soft-alpha-10: rgba(0, 0, 0, 0.07);
@@ -37,6 +38,7 @@
   /* Spacing */
   --kiri-space-standard: 14px;
   --kiri-space-page: 24px;
+  --kiri-settings-content-width: 960px;
 
   /* Radii */
   --kiri-radius-control: 8px;
@@ -57,6 +59,7 @@
 /* Editor/capture surfaces are always dark (darkAqua forced in the original). */
 .kiri-dark {
   --kiri-canvas: var(--kiri-canvas-dark);
+  --kiri-sidebar: var(--kiri-card-dark);
   --kiri-card: var(--kiri-card-dark);
   --kiri-elevated: var(--kiri-elevated-dark);
   --kiri-surface-border: var(--kiri-surface-border-dark);
@@ -169,7 +172,7 @@ textarea {
   flex-direction: column;
   box-sizing: border-box;
   padding: 22px 12px;
-  background: var(--kiri-canvas);
+  background: var(--kiri-sidebar);
   border-right: 1px solid var(--kiri-surface-border);
   overflow-y: auto;
 }
@@ -185,6 +188,9 @@ textarea {
 .library-control-panel__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; max-width: 68%; }
 .library-control-panel__actions > .kiri-button { flex: 0 0 auto; white-space: nowrap; }
 .library-control-panel__actions svg { flex-shrink: 0; }
+.library-control-panel--settings { background: transparent; border-bottom: 0; }
+.library-control-panel--settings .library-control-panel__primary { width: 100%; max-width: calc(var(--kiri-settings-content-width) + 2 * var(--kiri-space-page)); min-height: 58px; margin-inline: auto; padding: 18px var(--kiri-space-page) 8px; }
+.library-control-panel--settings .library-control-panel__title { font-size: 20px; font-weight: 600; }
 
 .library-root .kiri-button { font-size: 13px; min-height: 36px; }
 .library-status-state {
@@ -854,7 +860,7 @@ button:active:not(:disabled) {
 .kiri-annotation-tool-group { display:flex; align-items:center; flex:0 0 auto; gap:2px; }
 .kiri-annotation-tool-group + .kiri-annotation-tool-group { padding-left:5px; margin-left:3px; border-left:1px solid rgba(255,255,255,.14); }
 .kiri-capture-tool-options { width:100%; max-width:620px; min-height:0; overflow:auto; pointer-events:auto; box-sizing:border-box; }
-.kiri-annotation-error { position:absolute; left:50%; transform:translateX(-50%); z-index:25; display:flex; align-items:center; gap:8px; max-width:calc(100% - 24px); padding:8px 10px; border:1px solid #555; border-radius:8px; background:#101010; color:#f7f7f4; font:500 11px/1.4 var(--kiri-font-ui); }
+.kiri-annotation-error { position:absolute; left:50%; transform:translateX(-50%); z-index:25; display:flex; align-items:center; gap:8px; max-width:calc(100% - 24px); padding:8px 10px; border:1px solid #555; border-radius:8px; background:#101010; color:var(--kiri-label-dark); font:500 11px/1.4 var(--kiri-font-ui); }
 .kiri-annotation-error-dismiss { flex:0 0 24px; width:24px; height:24px; border:0; border-radius:5px; background:#232323; color:#fff; cursor:pointer; }
 .kiri-annotation-error-dismiss:hover:not(:disabled) { background:#444; }
 .kiri-annotation-error-dismiss:disabled { opacity:.45; cursor:default; }
@@ -873,7 +879,7 @@ button:active:not(:disabled) {
 .kiri-capture-toolbar :is(input:not([type=range]),button):focus-visible,
 .kiri-image-editor-toolbar :is(input:not([type=range]),button):focus-visible,
 .kiri-image-editor-properties :is(input:not([type=range]),button):focus-visible { box-shadow:inset 0 0 0 1px #777; }
-.kiri-image-editor-crop-options { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:6px 10px; background:#101010; color:#f7f7f4; font:500 11px var(--kiri-font-ui); }
+.kiri-image-editor-crop-options { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:6px 10px; background:#101010; color:var(--kiri-label-dark); font:500 11px var(--kiri-font-ui); }
 @media (max-width:740px) {
   .kiri-image-editor-properties { height:160px; flex-basis:160px; }
 }
@@ -971,10 +977,10 @@ button:active:not(:disabled) {
   overflow: hidden;
   box-sizing: border-box;
   border: 1px solid var(--kiri-surface-border-dark);
-  border-radius: 16px;
+  border-radius: 10px;
   background: var(--kiri-elevated-dark);
   color: var(--kiri-label-dark);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  box-shadow: none;
   cursor: default;
 }
 .kiri-record-options[data-adjusting] { pointer-events: none; }
@@ -983,11 +989,12 @@ button:active:not(:disabled) {
 .kiri-record-options[data-constrained] { overflow-y: auto; touch-action: pan-y; }
 .kiri-record-options[data-constrained] .kiri-record-options__scroll { flex: 0 0 auto; overflow: visible; }
 .kiri-record-options__header {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 28px;
+  align-items: center;
   flex-shrink: 0;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 8px 10px;
 }
 .kiri-record-options button { cursor: pointer; }
 .kiri-record-options button:focus-visible { outline: 2px solid #ffffff; outline-offset: -3px; }
@@ -996,26 +1003,26 @@ button:active:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
-  min-height: 46px;
-  padding: 10px 14px;
+  min-height: 32px;
+  padding: 6px 8px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 6px;
   background: var(--kiri-label-dark);
   color: #111111;
-  font: 600 16px/1.3 var(--kiri-font-ui);
+  font: 550 12px/1.35 var(--kiri-font-ui);
   overflow-wrap: anywhere;
 }
 .kiri-record-options__start:hover { background: #dededc; }
 .kiri-record-options__start:active { background: #c9c9c7; }
 .kiri-record-options__start:focus-visible { outline-color: #111111; outline-offset: -4px; }
-.kiri-record-options__record-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.kiri-record-options__record-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .kiri-record-options__icon {
   display: grid;
   place-items: center;
-  width: 32px;
+  width: 28px;
   height: 32px;
   flex-shrink: 0;
   padding: 0;
@@ -1026,66 +1033,70 @@ button:active:not(:disabled) {
 }
 .kiri-record-options__icon:hover { background: #303030; color: #ffffff; }
 .kiri-record-options__scroll { touch-action: pan-y; min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
-.kiri-record-options__body { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 14px; }
+.kiri-record-options__body { display: flex; flex-direction: column; gap: 8px; padding: 6px 10px 8px; border-top: 1px solid #353535; }
 .kiri-record-options__format-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
-.kiri-record-options__formats { display: inline-flex; padding: 3px; border-radius: 8px; background: #080808; }
+.kiri-record-options__formats { display: inline-flex; padding: 2px; border-radius: 6px; background: #080808; }
 .kiri-record-options__format {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 26px;
-  min-width: 48px;
-  padding: 0 10px;
+  min-height: 28px;
+  min-width: 38px;
+  padding: 0 7px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--kiri-secondary-label-dark);
-  font: 600 14px/1 var(--kiri-font-ui);
+  font: 550 11px/1 var(--kiri-font-ui);
 }
 .kiri-record-options__format[aria-pressed=true] { color: #111111; background: var(--kiri-label-dark); }
 .kiri-record-options__format:hover { color: #ffffff; background: #333333; }
 .kiri-record-options__format[aria-pressed=true]:hover { color: #111111; background: #dededc; }
 .kiri-record-options__format[aria-pressed=true]:focus-visible { outline-color: #111111; }
-.kiri-record-options__inputs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
-.kiri-record-options__input-group { position: relative; min-width: 0; }
+.kiri-record-options__inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 8px; }
+.kiri-record-options__input-group { position: relative; display: flex; align-items: stretch; min-width: 0; }
 .kiri-record-options__input {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 9px;
+  gap: 4px;
   width: 100%;
-  min-height: 76px;
-  padding: 12px 3px 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 5px;
   background: transparent;
   color: var(--kiri-label-dark);
-  font: 500 14px/1.35 var(--kiri-font-ui);
+  font: 450 11.5px/1.4 var(--kiri-font-ui);
   overflow-wrap: anywhere;
 }
-.kiri-record-options__input:disabled { cursor: default; opacity: 0.38; }
-.kiri-record-options__input[aria-checked=false] { color: #a5a5a5; }
+.kiri-record-options__input:disabled { cursor: default; opacity: 0.5; }
+.kiri-record-options__input[aria-checked=false] { color: #b8b8b8; }
 .kiri-record-options__input-icon { position: relative; display: flex; flex-shrink: 0; }
-.kiri-record-options__input[aria-checked=false] .kiri-record-options__input-icon::after {
-  content: ""; position: absolute; left: -2px; top: 11px; width: 28px; height: 2px;
-  border-radius: 2px; background: currentColor; transform: rotate(45deg);
-  box-shadow: 0 -2px var(--kiri-elevated-dark), 0 2px var(--kiri-elevated-dark);
-}
+.kiri-record-options__input-label { flex: 1; min-width: 0; text-align: left; overflow-wrap: normal; }
+.kiri-record-options__input-toggle { position: relative; width: 20px; height: 12px; flex: 0 0 20px; border: 1px solid #6b6b6b; border-radius: 8px; box-sizing: border-box; background: #353535; }
+.kiri-record-options__input-toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px; border-radius: 50%; background: #b8b8b8; }
+.kiri-record-options__input[aria-checked=true] .kiri-record-options__input-toggle { border-color: var(--kiri-label-dark); background: var(--kiri-label-dark); }
+.kiri-record-options__input[aria-checked=true] .kiri-record-options__input-toggle::after { left: 10px; background: #111; }
 .kiri-record-options__input:hover:not(:disabled) { background: #292929; }
 .kiri-record-options__input:active:not(:disabled) { background: #333333; }
-.kiri-record-options__input-group[data-accessory] .kiri-record-options__input-icon { transform: translateX(-4px); }
 .kiri-record-options__microphone.kiri-choice-trigger {
-  position: absolute; top: 9px; left: calc(50% + 10px); width: 20px; height: 30px;
-  min-height: 0; padding: 0; justify-content: center; border: 0; border-radius: 5px;
+  flex: 0 0 28px; width: 28px; min-height: 36px;
+  padding: 0; justify-content: center; border: 0; border-left: 1px solid #353535; border-radius: 0 5px 5px 0;
   background: transparent; color: #b8b8b8;
 }
 .kiri-record-options__microphone .kiri-choice-trigger-label { display: none; }
 .kiri-record-options__microphone.kiri-choice-trigger:hover { background: #383838; color: #fff; }
-.kiri-record-device-menu { font-size: 14px; box-shadow: 0 4px 14px #0003; }
-.kiri-record-device-menu .kiri-choice-option { min-height: 42px; padding: 10px 12px; }
+.kiri-record-device-menu { font-size: 12px; box-shadow: none; }
+.kiri-record-device-menu .kiri-choice-option { min-height: 34px; padding: 7px 9px; }
+.kiri-record-device-menu .kiri-choice-menu-header, .kiri-record-device-menu .kiri-choice-menu-status { padding: 7px 9px; font-size: 11px; }
+.kiri-record-device-menu .kiri-choice-option-title { white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 .kiri-record-device-menu .kiri-choice-option[aria-selected=true] { background: transparent; }
 .kiri-record-device-menu .kiri-choice-option:hover, .kiri-record-device-menu .kiri-choice-option:focus-visible { background: #353535; }
-.kiri-record-options__tray { margin: 0; color: var(--kiri-secondary-label-dark); font-size: 14px; line-height: 1.4; }
+.kiri-record-options__tray { margin: 0; color: var(--kiri-secondary-label-dark); font-size: 11px; line-height: 1.45; }
+@media (max-width:335px) {
+  .kiri-record-options__inputs { grid-template-columns: 1fr; }
+}
 
 /* Viewer and recording HUD controls. */
 .kiri-viewer-button {

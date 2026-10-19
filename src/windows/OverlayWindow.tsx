@@ -37,6 +37,7 @@ import {
 } from "../annotation/geom";
 import {
   nextCalloutNumber,
+  selectionBounds,
   type AnnotationMark,
   type AppearanceSettings,
   type Tool,
@@ -46,13 +47,15 @@ import {AnnotationStyleControls} from "../annotation/AnnotationStyleControls";
 import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/AnnotationCanvas";
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
+import { AnnotationToolbarButton } from "../components/AnnotationToolbarButton";
 import { QrOverlay } from "../qr/QrOverlay";
 import { RemoteOcrConsent } from "../ocr/RemoteOcrConsent";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
-import { capturePanelLayout, captureToolbarPosition, recordingPanelLayout } from "./toolbar-layout.js";
+import { capturePanelLayout, captureToolOptionsLayout, captureToolbarPosition, recordingPanelLayout } from "./toolbar-layout.js";
 import { CaptureSizeControls } from "./CaptureSizeControls";
 import { resizeCapturePixels } from "./capture-size.js";
 import { CaptureColorPicker, useCaptureColorPicker } from "./CaptureColorPicker";
+import "./capture-tool-options.css";
 
 function recordingStartError(error: unknown): string {
   const message = String(error);
@@ -138,9 +141,13 @@ export function OverlayWindow() {
   const [moveDrag, setMoveDrag] = useState<{ start: Point; original: Rect } | null>(null);
   const [tool, setTool] = useState<Tool>("select");
   const [selectedMark, setSelectedMark] = useState<AnnotationMark | null>(null);
+  const [selectedMarkEditing, setSelectedMarkEditing] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
-  const onAnnotationSelection = useCallback((mark: AnnotationMark | null) => setSelectedMark(mark), []);
+  const onAnnotationSelection = useCallback((mark: AnnotationMark | null, editing: boolean) => {
+    setSelectedMark(mark);
+    setSelectedMarkEditing(editing);
+  }, []);
   const onAnnotationDocument = useCallback((marks: AnnotationMark[]) => setCalloutNumber(nextCalloutNumber(marks)), []);
   const [appearance, setAppearance] = useAnnotationAppearance();
   const [canUndo, setCanUndo] = useState(false);
@@ -210,6 +217,10 @@ export function OverlayWindow() {
     (window as unknown as { __kiriOverlay: boolean }).__kiriOverlay = true;
     api.startCapture()
       .then((ctx) => {
+        if (disposed) return;
+        const initialMode = ctx.initialMode ?? "screenshot";
+        modeRef.current = initialMode;
+        setMode(initialMode);
         setContext(ctx);
       })
       .catch((error) => {
@@ -253,6 +264,18 @@ export function OverlayWindow() {
   const bounds: Rect = context
     ? { x: 0, y: 0, width: context.displayWidth, height: context.displayHeight }
     : { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+
+  const selectedAnnotationBounds = useMemo(() => {
+    if (!selectedMark || !selection) return [];
+    // Canvas marks use selection-local logical points, including live text
+    // editors. Protect an empty callout editor as well as its separate badge.
+    const rects = selectedMark.kind === "callout"
+      ? [{x: selectedMark.center.x - selectedMark.size / 2, y: selectedMark.center.y - selectedMark.size / 2,
+          width: selectedMark.size, height: selectedMark.size},
+        ...(selectedMarkEditing || selectedMark.text.trim() ? [selectedMark.labelRect] : [])]
+      : [selectionBounds(selectedMark)];
+    return rects.map(rect => ({...rect, x: rect.x + selection.x, y: rect.y + selection.y}));
+  }, [selectedMark, selectedMarkEditing, selection]);
 
   const colorPicker = useCaptureColorPicker(
     !!context && mode === "screenshot" && (phase === "mode-select" || phase === "selecting") &&
@@ -568,14 +591,18 @@ export function OverlayWindow() {
     [],
   );
 
-  // Size inputs cancel their draft before Escape can cancel the capture.
+  // Fields and active HUD gestures own Escape before the capture does.
   useEffect(() => {
     const onEscape = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (isTextComposition(e)) return;
       if (document.querySelector('.kiri-record-options__microphone[aria-expanded="true"]')) return;
+      if (document.querySelector('.kiri-capture-toolbar button[data-dragging="true"]')) return;
       if (e.target instanceof Element && e.target.closest(".kiri-capture-dimension-input")) return;
       if (e.target instanceof Element && e.target.closest(".kiri-callout-description textarea")) return;
+      if (e.target instanceof Element && e.target.closest(
+        ".kiri-capture-tool-options input, .kiri-capture-tool-options textarea, .kiri-capture-tool-options select, .kiri-capture-options-move, .kiri-capture-toolbar-move",
+      )) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (completionLock.locked) return;
@@ -1330,7 +1357,8 @@ export function OverlayWindow() {
           appearance={appearance}
           setAppearance={setAppearance}
           selectedMark={selectedMark}
-          styleControls={<AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance}
+          avoidBounds={selectedAnnotationBounds}
+          renderStyleControls={panelChrome => <AnnotationStyleControls panelChrome={panelChrome} tool={tool} selected={selectedMark} appearance={appearance}
             disabled={completing} nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
             onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
             onChange={(patch, transient) => { setAnnotationError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient); }}
@@ -1669,7 +1697,7 @@ export function RecordOptionsPanel(props: {
     sizeControlsOpen, onChange, onStart, onCancel } = props;
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [measuredHeight, setMeasuredHeight] = useState(200);
+  const [measuredHeight, setMeasuredHeight] = useState(140);
   const settledAnchor = useRef(anchor);
   // Keep the panel stationary and pass pointer input through while the region
   // is being moved/resized. Re-anchor once on release, not on every drag frame.
@@ -1700,12 +1728,12 @@ export function RecordOptionsPanel(props: {
     onChange(next);
   };
   const layout = recordingPanelLayout(settledAnchor.current, bounds,
-    { width: 380, height: measuredHeight }, modeSelectorBounds, sizeControlsOpen);
+    { width: 336, height: measuredHeight }, modeSelectorBounds, sizeControlsOpen);
   const unavailable = t("Unavailable on this platform");
   return (
     <div ref={panelRef} className="kiri-record-options" role="region" aria-label={t("Record Region")}
       data-adjusting={selectionAdjusting || undefined}
-      data-constrained={layout.maxHeight < 168 || undefined}
+      data-constrained={layout.maxHeight < 128 || undefined}
       style={{ left: layout.left, top: layout.top, width: layout.width, maxHeight: layout.maxHeight }}
       onPointerDown={event => event.stopPropagation()}
       onPointerMove={event => event.stopPropagation()}
@@ -1722,13 +1750,13 @@ export function RecordOptionsPanel(props: {
               </button>
             ))}
           </div>
-          <button type="button" className="kiri-record-options__icon" aria-label={t("Cancel")} title={t("Cancel")}
-            onClick={onCancel}><KiriIcon name="xmark" size={18} /></button>
         </div>
         <button type="button" className="kiri-record-options__start" onClick={onStart}>
           <span className="kiri-record-options__record-dot" aria-hidden="true" />
           {gifOutput ? t("Start GIF Recording") : t("Start Recording")}
         </button>
+        <button type="button" className="kiri-record-options__icon" aria-label={t("Cancel")} title={t("Cancel")}
+          onClick={onCancel}><KiriIcon name="xmark" size={16} /></button>
       </div>
       <div ref={scrollRef} className="kiri-record-options__scroll">
         <div className="kiri-record-options__body">
@@ -1737,19 +1765,19 @@ export function RecordOptionsPanel(props: {
               disabled={gifOutput || !systemAudioSupported}
               title={gifOutput ? t("GIF · 12 fps · 720 px long edge · No audio") : !systemAudioSupported ? unavailable : undefined}
               onToggle={() => toggle("capturesSystemAudio")}
-              icon={<Volume2 size={24} />} />
+              icon={<Volume2 size={17} />} />
             <RecordInput label={t("Microphone")} checked={!gifOutput && micSupported && options.capturesMicrophone}
               disabled={gifOutput || !micSupported}
               title={gifOutput ? t("GIF · 12 fps · 720 px long edge · No audio") : !micSupported ? unavailable : undefined}
               onToggle={() => toggle("capturesMicrophone")}
-              icon={<Mic size={24} />}
+              icon={<Mic size={17} />}
               accessory={<RecordingMicrophoneSelect options={options} disabled={gifOutput || !micSupported} onChange={onChange} />} />
             <RecordInput label={t("Pointer")} checked={options.showsCursor}
-              onToggle={() => toggle("showsCursor")} icon={<MousePointer2 size={24} />} />
+              onToggle={() => toggle("showsCursor")} icon={<MousePointer2 size={17} />} />
             <RecordInput label={t("Click highlight")} checked={options.showsCursor && clickHighlightsSupported && options.highlightsClicks}
               disabled={!options.showsCursor || !clickHighlightsSupported}
               title={!clickHighlightsSupported ? unavailable : !options.showsCursor ? t("Enable pointer to highlight clicks") : undefined}
-              onToggle={() => toggle("highlightsClicks")} icon={<MousePointerClick size={24} />} />
+              onToggle={() => toggle("highlightsClicks")} icon={<MousePointerClick size={17} />} />
           </div>
           {trayRecordingControls && <p className="kiri-record-options__tray">{t("Use the tray menu to pause, resume, or stop recording.")}</p>}
         </div>
@@ -1764,7 +1792,8 @@ function RecordInput(props: { label: string; checked: boolean; disabled?: boolea
     <button type="button" className="kiri-record-options__input" role="switch" aria-checked={props.checked}
       disabled={props.disabled} title={props.title ?? props.label} onClick={props.onToggle}>
       <span className="kiri-record-options__input-icon" aria-hidden="true">{props.icon}</span>
-      <span>{props.label}</span>
+      <span className="kiri-record-options__input-label">{props.label}</span>
+      <span className="kiri-record-options__input-toggle" aria-hidden="true" />
     </button>
     {props.accessory}
   </div>;
@@ -1780,6 +1809,8 @@ interface ToolbarProps {
   setAppearance(a: AppearanceSettings): void;
   selectedMark?: AnnotationMark | null;
   styleControls?: React.ReactNode;
+  renderStyleControls?(panelChrome: React.ReactNode): React.ReactNode;
+  avoidBounds?: Rect[];
   labelControls?: React.ReactNode;
   showLabelControls?: boolean;
   selectedLabelId?: number;
@@ -1804,17 +1835,17 @@ interface ToolbarProps {
   onTextFontEnd?(): void;
 }
 
-const TOOLS: { tool: Tool; icon: IconName; title: string }[] = [
-  { tool: "select", icon: "cursorarrow", title: "Select (V)" },
-  { tool: "pen", icon: "pencil.tip", title: "Pen (P)" },
-  { tool: "rectangle", icon: "rectangle.dashed", title: "Rectangle (R)" },
-  { tool: "line", icon: "line.diagonal", title: "Line (L)" },
-  { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)" },
-  { tool: "text", icon: "textformat", title: "Text (T)" },
-  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)" },
-  { tool: "label", icon: "tag", title: "Label bubble (B)" },
-  { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)" },
-  { tool: "watermark", icon: "watermark", title: "Watermark (W)" },
+const TOOLS: { tool: Tool; icon: IconName; title: string; shortcut: string }[] = [
+  { tool: "select", icon: "cursorarrow", title: "Select (V)", shortcut: "V" },
+  { tool: "pen", icon: "pencil.tip", title: "Pen (P)", shortcut: "P" },
+  { tool: "rectangle", icon: "rectangle.dashed", title: "Rectangle (R)", shortcut: "R" },
+  { tool: "line", icon: "line.diagonal", title: "Line (L)", shortcut: "L" },
+  { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)", shortcut: "A" },
+  { tool: "text", icon: "textformat", title: "Text (T)", shortcut: "T" },
+  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)", shortcut: "N" },
+  { tool: "label", icon: "tag", title: "Label bubble (B)", shortcut: "B" },
+  { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)", shortcut: "M" },
+  { tool: "watermark", icon: "watermark", title: "Watermark (W)", shortcut: "W" },
 ];
 
 const toolbarRowStyle: React.CSSProperties = {
@@ -1825,48 +1856,187 @@ const toolbarRowStyle: React.CSSProperties = {
   boxSizing: "border-box",
   alignItems: "center",
   justifyContent: "center",
-  gap: 3,
-  padding: "6px 8px",
+  gap: 2,
+  padding: "6px",
   pointerEvents: "auto",
 };
+
+function useToolbarDrag(position: Point, enabled: boolean, onMove: (point: Point) => void) {
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{pointerId: number; target: HTMLButtonElement; start: Point; origin: Point} | null>(null);
+  const finish = (event?: React.PointerEvent<HTMLButtonElement>) => {
+    const gesture = drag.current;
+    if (!gesture || (event && event.pointerId !== gesture.pointerId)) return;
+    event?.stopPropagation();
+    drag.current = null;
+    if (gesture.target.hasPointerCapture(gesture.pointerId)) gesture.target.releasePointerCapture(gesture.pointerId);
+    setDragging(false);
+  };
+  useEffect(() => { if (!enabled) finish(); }, [enabled]);
+  useEffect(() => () => {
+    const gesture = drag.current;
+    drag.current = null;
+    if (gesture?.target.hasPointerCapture(gesture.pointerId)) gesture.target.releasePointerCapture(gesture.pointerId);
+  }, []);
+  useEffect(() => {
+    const cancelDragOnEscape = (event: KeyboardEvent) => {
+      // Pointer dragging preserves the canvas textarea's focus, so the key's
+      // target may be outside the grip. End only this gesture, not that edit.
+      if (event.key !== "Escape" || !drag.current || isTextComposition(event)) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      finish();
+    };
+    window.addEventListener("keydown", cancelDragOnEscape, true);
+    return () => window.removeEventListener("keydown", cancelDragOnEscape, true);
+  }, []);
+  return {
+    "data-dragging": dragging || undefined,
+    onPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+      if (!enabled || event.button !== 0 || !event.isPrimary || drag.current) return;
+      event.preventDefault(); event.stopPropagation();
+      drag.current = {pointerId: event.pointerId, target: event.currentTarget,
+        start: {x: event.clientX, y: event.clientY}, origin: position};
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setDragging(true);
+    },
+    onPointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+      const gesture = drag.current;
+      if (!gesture || gesture.pointerId !== event.pointerId || !enabled) return;
+      event.preventDefault(); event.stopPropagation();
+      onMove({x: gesture.origin.x + event.clientX - gesture.start.x,
+        y: gesture.origin.y + event.clientY - gesture.start.y});
+    },
+    onPointerUp: finish, onPointerCancel: finish, onLostPointerCapture: finish,
+    onKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+      event.stopPropagation();
+      if (!enabled) return;
+      if (event.key === "Escape") { event.preventDefault(); finish(); event.currentTarget.blur(); return; }
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); return; }
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 2;
+      onMove({x: position.x + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0),
+        y: position.y + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0)});
+    },
+  };
+}
 
 export function Toolbar(props: ToolbarProps) {
   const {selection, bounds, tool, setTool, canUndo, canRedo, canSetSize, sizeControlsOpen, onToggleSize,
     disabled, onUndo, onRedo, onDone, onPin, onOcr, onQr, onCancel} = props;
   const [detailsOpen, setDetailsOpen] = useState(false);
-  useEffect(() => setDetailsOpen(tool !== "select" || props.selectedMark != null || props.selectedCalloutId !== undefined || props.selectedLabelId !== undefined),
-    [tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
+  const detailsHidden = useRef(false);
+  useEffect(() => {
+    if (!detailsHidden.current) setDetailsOpen(tool !== "select" || props.selectedMark != null || props.selectedCalloutId !== undefined || props.selectedLabelId !== undefined);
+  }, [tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
+  const toggleDetails = () => setDetailsOpen(open => {
+    detailsHidden.current = open;
+    return !open;
+  });
+  const [optionsPosition, setOptionsPosition] = useState<Point | null>(null);
+  const [optionsAdjustmentPosition, setOptionsAdjustmentPosition] = useState<Point | null>(null);
+  const optionsAdjustment = useRef<{pointerId: number | null; numberInput: HTMLElement | null}>({pointerId: null, numberInput: null});
+  const [toolbarPosition, setToolbarPosition] = useState<Point | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
-  const [mainHeight, setMainHeight] = useState(48);
+  const optionsRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const [barSize, setBarSize] = useState({ width: 420, height: 48 });
+  const [optionsHeight, setOptionsHeight] = useState(96);
+  const options = props.styleControls ?? (props.showLabelControls ? props.labelControls : props.showCalloutControls ? props.calloutControls : null);
+  const showOptions = detailsOpen && !canSetSize && (!!props.renderStyleControls || !!options);
   // Measure each committed row change before paint, and observe later reflows
   // (font loading, translations and viewport wrapping) as well.
   const measureBar = () => {
-    const el = barRef.current;
+    const el = mainRef.current;
     if (!el) return;
-    setMainHeight(mainRef.current?.offsetHeight ?? 48);
     setBarSize((previous) => {
       const width = el.offsetWidth;
       const height = el.offsetHeight;
       return width === previous.width && height === previous.height
         ? previous : { width, height };
     });
+    const panel = optionsRef.current;
+    if (panel) {
+      // Scroll height preserves natural content height while the available
+      // property area is constrained by the toolbar or the mode selector.
+      setOptionsHeight(panel.scrollHeight + panel.offsetHeight - panel.clientHeight);
+    }
   };
   useLayoutEffect(measureBar);
   useLayoutEffect(() => {
-    const el = barRef.current;
+    const el = mainRef.current;
     if (!el) return;
     const observer = new ResizeObserver(measureBar);
     observer.observe(el);
+    if (optionsRef.current) observer.observe(optionsRef.current);
     return () => observer.disconnect();
+  }, [showOptions]);
+  // Only the main row determines its anchor. Keep dimension clearance while
+  // switching into annotation so choosing a tool does not move that anchor.
+  const {left, top} = captureToolbarPosition(selection, bounds, barSize,
+    sizeControlsOpen, props.modeSelectorBounds, toolbarPosition);
+  const optionsLayout = captureToolOptionsLayout({x: left, y: top, ...barSize}, bounds,
+    {width: Math.min(620, barSize.width), height: optionsHeight}, props.modeSelectorBounds, props.avoidBounds,
+    optionsPosition ?? optionsAdjustmentPosition);
+  const optionsLayoutRef = useRef(optionsLayout);
+  optionsLayoutRef.current = optionsLayout;
+  const holdOptionsPosition = () => setOptionsAdjustmentPosition(previous => previous ?? {
+    x: optionsLayoutRef.current.left, y: optionsLayoutRef.current.top,
+  });
+  const finishOptionsPointer = (event: {pointerId: number}) => {
+    if (optionsAdjustment.current.pointerId !== event.pointerId) return;
+    optionsAdjustment.current.pointerId = null;
+    if (!optionsAdjustment.current.numberInput) setOptionsAdjustmentPosition(null);
+  };
+  const clearOptionsAdjustment = () => {
+    optionsAdjustment.current = {pointerId: null, numberInput: null};
+    setOptionsAdjustmentPosition(null);
+  };
+  // Font/number changes also change annotation bounds. Keep controls under the
+  // pointer (or focused number editor) until that adjustment is finished.
+  useEffect(clearOptionsAdjustment, [showOptions, disabled, tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
+  useEffect(() => {
+    const restoreNumberFocus = () => {
+      const input = document.activeElement;
+      if (!input?.matches('input[type="number"]:not(:disabled)') || !optionsRef.current?.contains(input)) return;
+      optionsAdjustment.current.numberInput = input as HTMLElement;
+      holdOptionsPosition();
+    };
+    window.addEventListener("pointerup", finishOptionsPointer, true);
+    window.addEventListener("pointercancel", finishOptionsPointer, true);
+    window.addEventListener("lostpointercapture", finishOptionsPointer, true);
+    window.addEventListener("blur", clearOptionsAdjustment);
+    window.addEventListener("focus", restoreNumberFocus);
+    return () => {
+      window.removeEventListener("pointerup", finishOptionsPointer, true);
+      window.removeEventListener("pointercancel", finishOptionsPointer, true);
+      window.removeEventListener("lostpointercapture", finishOptionsPointer, true);
+      window.removeEventListener("blur", clearOptionsAdjustment);
+      window.removeEventListener("focus", restoreNumberFocus);
+    };
   }, []);
-  const {maxHeight} = capturePanelLayout(selection, bounds, barSize, props.modeSelectorBounds, canSetSize && sizeControlsOpen);
-  const {left, top} = captureToolbarPosition(selection, bounds, {width: barSize.width, height: Math.min(barSize.height, maxHeight)},
-    canSetSize && sizeControlsOpen, props.modeSelectorBounds);
-  const options = props.styleControls ?? (props.showLabelControls ? props.labelControls : props.showCalloutControls ? props.calloutControls : null);
-  const button = ({tool: value, icon, title}: typeof TOOLS[number]) =>
-    <ToolButton key={value} icon={icon} title={t(title)} active={tool === value} disabled={disabled} onClick={() => setTool(value)}/>;
+  const toolbarDrag = useToolbarDrag({x: left, y: top}, !disabled, setToolbarPosition);
+  const optionsDrag = useToolbarDrag({x: optionsLayout.left, y: optionsLayout.top}, showOptions && !disabled, setOptionsPosition);
+  const dragGlyph = <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+    {[3, 7, 11].flatMap(y => [4, 10].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1"/>))}
+  </svg>;
+  const panelChrome = <>
+    <button type="button" className="kiri-capture-options-move" disabled={disabled}
+      aria-label={t("Move tool options")} title={t("Drag to move. Use arrow keys for fine adjustments.")}
+      {...optionsDrag}>{dragGlyph}</button>
+    <button type="button" className="kiri-capture-options-hide" disabled={disabled}
+      aria-label={t("Hide tool options")} title={t("Hide tool options")}
+      onPointerDown={event => event.preventDefault()} onKeyDown={event => event.stopPropagation()}
+      onClick={event => {
+        detailsHidden.current = true;
+        setDetailsOpen(false);
+        if (document.activeElement === event.currentTarget) mainRef.current?.querySelector<HTMLButtonElement>("button[aria-expanded]")?.focus();
+      }}>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 9 4-4 4 4"/></svg>
+    </button>
+  </>;
+  const button = ({tool: value, icon, title, shortcut}: typeof TOOLS[number]) =>
+    <ToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} disabled={disabled} onClick={() => setTool(value)}/>;
 
   return (
     <>
@@ -1895,66 +2065,55 @@ export function Toolbar(props: ToolbarProps) {
       >
         <div ref={mainRef} className="kiri-hud kiri-annotation-tool-row" style={toolbarRowStyle}>
           <div className="kiri-annotation-tool-group">
-            <ToolButton icon="xmark" title={t("Cancel capture · Esc")} onClick={onCancel}/>
-            {button(TOOLS[0])}
+            <button type="button" className="kiri-capture-toolbar-move" disabled={disabled}
+              aria-label={t("Move annotation toolbar")} title={t("Drag to move. Use arrow keys for fine adjustments.")}
+              {...toolbarDrag}>{dragGlyph}</button>
+            <ToolButton icon="xmark" title={t("Cancel capture · Esc")} shortcut="Escape" onClick={onCancel}/>
           </div>
-          <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>{TOOLS.slice(1, 5).map(button)}</div>
-          <div className="kiri-annotation-tool-group">{TOOLS.slice(5, 8).map(button)}</div>
-          <div className="kiri-annotation-tool-group">{TOOLS.slice(8).map(button)}</div>
+          <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>{TOOLS.map(button)}</div>
           <div className="kiri-annotation-tool-group">
-            <ToolButton icon="arrow.uturn.backward" title={t("Undo (⌘Z)")} disabled={!canUndo} onClick={onUndo}/>
-            <ToolButton icon="arrow.uturn.forward" title={t("Redo (⇧⌘Z)")} disabled={!canRedo} onClick={onRedo}/>
+            <ToolButton icon="arrow.uturn.backward" title={t("Undo")} shortcut="Mod+Z" disabled={!canUndo} onClick={onUndo}/>
+            <ToolButton icon="arrow.uturn.forward" title={t("Redo")} shortcut="Mod+Shift+Z" disabled={!canRedo} onClick={onRedo}/>
+          </div>
+          <div className="kiri-annotation-tool-group">
             <ToolButton icon="text.viewfinder" title={t("Recognize Text")} disabled={disabled} onClick={onOcr}/>
             <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr}/>
             <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "Tool options")}
               active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
-              onClick={() => canSetSize ? onToggleSize() : setDetailsOpen(open => !open)}/>
-          </div>
-          <div className="kiri-annotation-tool-group">
+              onClick={() => canSetSize ? onToggleSize() : toggleDetails()}/>
             <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin}/>
-            <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} primary disabled={disabled} onClick={onDone}/>
+            <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} shortcut="Enter" primary disabled={disabled} onClick={onDone}/>
           </div>
         </div>
-        {detailsOpen && !canSetSize && options && <div className="kiri-hud kiri-capture-tool-options"
-          style={{maxHeight: Math.max(0, maxHeight - mainHeight - 6)}}>{options}</div>}
+        {showOptions && <div ref={optionsRef} className="kiri-hud kiri-capture-tool-options"
+          onPointerDownCapture={event => {
+            if (disabled || event.button !== 0 || !event.isPrimary || optionsAdjustment.current.pointerId !== null) return;
+            const control = (event.target as HTMLElement).closest("input, select, textarea, button, [role=slider]");
+            if (!control || control.matches(".kiri-capture-options-move, .kiri-capture-options-hide")) return;
+            optionsAdjustment.current.pointerId = event.pointerId;
+            holdOptionsPosition();
+          }}
+          onPointerUpCapture={finishOptionsPointer} onPointerCancelCapture={finishOptionsPointer}
+          onLostPointerCaptureCapture={finishOptionsPointer}
+          onFocusCapture={event => {
+            if (disabled || !event.target.matches('input[type="number"]')) return;
+            optionsAdjustment.current.numberInput = event.target;
+            holdOptionsPosition();
+          }}
+          onBlurCapture={event => {
+            if (optionsAdjustment.current.numberInput !== event.target) return;
+            const next = event.relatedTarget as HTMLElement | null;
+            optionsAdjustment.current.numberInput = next?.matches?.('input[type="number"]') &&
+              event.currentTarget.contains(next) ? next : null;
+            if (!optionsAdjustment.current.numberInput && optionsAdjustment.current.pointerId === null) setOptionsAdjustmentPosition(null);
+          }}
+          style={{position: "absolute", left: optionsLayout.left - left, top: optionsLayout.top - top,
+            width: optionsLayout.width, maxHeight: optionsLayout.maxHeight}}>
+          {props.renderStyleControls ? props.renderStyleControls(panelChrome) : <><div className="kiri-capture-options-chrome">{panelChrome}</div>{options}</>}
+        </div>}
       </div>
     </>
   );
 }
 
-function ToolButton(props: {
-  icon?: IconName;
-  label?: string;
-  title?: string;
-  active?: boolean;
-  expanded?: boolean;
-  primary?: boolean;
-  disabled?: boolean;
-  onClick(): void;
-}) {
-  return (
-    <button
-      type="button"
-      className="kiri-toolbar-button"
-      data-active={props.primary || props.active || undefined}
-      title={props.title}
-      aria-label={props.title}
-      aria-pressed={props.active}
-      aria-expanded={props.expanded}
-      onKeyDown={(event) => {
-        // Activate the focused toolbar action without also triggering Return-to-save.
-        if (event.key === "Enter" || event.key === " ") {
-          event.stopPropagation();
-        }
-      }}
-      onClick={props.onClick}
-      disabled={props.disabled}
-    >
-      {props.icon ? (
-        <KiriIcon name={props.icon} size={15} />
-      ) : (
-        props.label
-      )}
-    </button>
-  );
-}
+const ToolButton = AnnotationToolbarButton;

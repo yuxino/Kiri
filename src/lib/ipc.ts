@@ -17,6 +17,7 @@ interface RectDto {
 }
 
 export interface CaptureContextDto {
+  initialMode: "screenshot" | "record" | "ocr";
   displayWidth: number;
   displayHeight: number;
   scale: number;
@@ -141,7 +142,23 @@ export interface ErrorDto {
 
 export interface ShortcutStatusDto {
   label: string;
-  status: "enabled" | "occupied" | "systemManaged";
+  status: "enabled" | "occupied" | "disabled" | "systemManaged";
+}
+
+export type ShortcutAction = "capture" | "record" | "ocr" | "library" | "recordingPauseResume" | "recordingStop";
+
+export interface ShortcutSettingDto {
+  action: ShortcutAction;
+  scope: "global" | "recording";
+  label: string | null;
+  defaultLabel: string;
+  status: ShortcutStatusDto["status"] | "inactive";
+  isDefault: boolean;
+}
+
+export interface ShortcutRecordedDto {
+  action: ShortcutAction;
+  shortcut: string;
 }
 
 export interface PortalShortcutsDto {
@@ -398,6 +415,10 @@ export const api = {
   updatePortalShortcuts: (operation: "setup" | "configure" | "refresh" | "disconnect") => invoke<PortalShortcutsDto>("update_portal_shortcuts", { operation }),
   cancelPortalShortcutSetup: () => invoke<void>("cancel_portal_shortcut_setup"),
   getShortcutStatus: () => invoke<ShortcutStatusDto>("get_shortcut_status"),
+  getShortcutSettings: () => invoke<ShortcutSettingDto[]>("get_shortcut_settings"),
+  setActionShortcut: (action: ShortcutAction, shortcut: string | null) => invoke<ShortcutSettingDto[]>("set_action_shortcut", { action, shortcut }),
+  resetActionShortcut: (action: ShortcutAction) => invoke<ShortcutSettingDto[]>("reset_action_shortcut", { action }),
+  retryActionShortcut: (action: ShortcutAction) => invoke<ShortcutSettingDto[]>("retry_action_shortcut", { action }),
   setCaptureShortcut: (shortcut: string | null) => invoke<ShortcutStatusDto>("set_capture_shortcut", { shortcut }),
   setCaptureShortcutEditing: (editing: boolean) => invoke<void>("set_capture_shortcut_editing", { editing }),
   retryShortcut: () => invoke<ShortcutStatusDto>("retry_shortcut"),
@@ -478,6 +499,10 @@ export function onCaptureShortcutConfirmed(handler: () => void): Promise<Unliste
   return listen("capture-shortcut-confirmed", handler);
 }
 
+export function onShortcutRecorded(handler: (shortcut: ShortcutRecordedDto) => void): Promise<UnlistenFn> {
+  return listen<ShortcutRecordedDto>("shortcut-recorded", (event) => handler(event.payload));
+}
+
 export function onAssetContentChanged(handler: (assetId: string) => void): Promise<UnlistenFn> {
   return listen<string>("asset-content-changed", (event) => handler(event.payload));
 }
@@ -498,6 +523,10 @@ export function onRecordingState(
   handler: (state: RecordingState) => void,
 ): Promise<UnlistenFn> {
   return listen<RecordingState>("recording-state", (event) => handler(event.payload));
+}
+
+export function onShortcutSettingsChanged(handler: (settings: ShortcutSettingDto[]) => void) {
+  return listen<ShortcutSettingDto[]>("shortcut-settings-changed", event => handler(event.payload));
 }
 
 export function onRecordingSaveJobs(

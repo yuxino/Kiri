@@ -28,6 +28,8 @@ Linux QA, and contribution records retain their original language.
 
 ## Current sources of truth
 
+- [`qa/shortcut-settings.md`](qa/shortcut-settings.md) — actual settings geometry,
+  localized editing states, renderer CI, and separate native shortcut acceptance.
 - [`qa/issue-21-windows/README.md`](qa/issue-21-windows/README.md) — native
   Windows multi-display screenshot acceptance and remaining hardware limits.
 - [`qa/issue-82-retest.md`](qa/issue-82-retest.md) — verified repair scope and
@@ -216,3 +218,7 @@ development.
 - [ADR 0108: Support folder and project links](adr/0108-support-folder-and-project-links.md) — explicit shortcuts to existing folders and the GitHub project from About.
 
 - [ADR 0109: Direct library permanent deletion](adr/0109-direct-library-permanent-deletion.md) — confirmed single and batch deletion without a Trash detour.
+
+- [ADR 0110: Shortcut settings and visible tool keys](adr/0110-shortcut-settings-and-visible-tool-keys.md) — four launch actions and two recording-only shortcuts, visible editing and default-reset controls, contextual key references, and shared annotation controls.
+
+- [ADR 0111: Supported shortcut keys and explicit confirmation](adr/0111-supported-shortcut-keys-and-confirmation.md) — native-library-supported keys, confirmation for bare and Shift-only typing/navigation keys, and consistent browser/native recording.

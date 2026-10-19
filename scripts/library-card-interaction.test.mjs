@@ -183,6 +183,7 @@ test("empty library advertises only an available global shortcut", () => {
     null,
   );
   assert.equal(getAvailableShortcutLabel(null), null);
+  assert.equal(getAvailableShortcutLabel({ label: "", status: "disabled" }), null);
 });
 
 function cardProps(overrides = {}) {

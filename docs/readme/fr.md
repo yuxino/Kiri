@@ -21,6 +21,7 @@
 - Enregistrez un MP4 avec le son du système et le microphone en option, ou un GIF sans son.
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.
 - Recherchez, étiquetez, ajoutez aux favoris et exportez vos captures locales ; récupérez les suppressions accidentelles dans la corbeille.
+- Modifiez, désactivez ou rétablissez les raccourcis globaux dans les réglages ; pause/reprise et arrêt avec sauvegarde ne fonctionnent que pendant l’enregistrement ([Wayland utilise les réglages du bureau](../linux.md)).
 
 ## Premiers pas
 

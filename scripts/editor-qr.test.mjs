@@ -203,7 +203,7 @@ test("QR pauses background shortcuts synchronously and Escape restores crop, mar
   for (const [key, extra] of [["Enter", {}], ["z", {metaKey: true}], ["Delete", {}], ["v", {}]]) h.key(key, extra);
   tree = h.component.render();
   assert.deepEqual(h.mutations, []);
-  assert.equal(button(tree, "Save").props.disabled, true);
+  assert.equal(tool(tree, "Save").props.disabled, true);
   assert.equal(tool(tree, "Save As…").props.disabled, true);
   assert.ok(nodes(tree).some(node => node?.props?.inert === true));
   const imeEscape = h.key("Escape", { isComposing: true });
@@ -317,8 +317,8 @@ test("OCR images stay read-only after leaving QR and expose only recognition and
   assert.equal(qr(tree), undefined);
   assert.ok(tool(tree, "Recognize QR Codes"));
   assert.ok(tool(tree, "Close"));
-  for (const title of ["Crop (C)", "Pen (P)", "Undo (⌘Z)", "Recognize Saved Image Locally"]) assert.equal(tool(tree, title), undefined);
-  assert.equal(button(tree, "Save"), undefined);
+  for (const title of ["Crop (C)", "Pen (P)", "Undo", "Recognize Saved Image Locally"]) assert.equal(tool(tree, title), undefined);
+  assert.equal(tool(tree, "Save"), undefined);
   assert.equal(tool(tree, "Save As…"), undefined);
   assert.equal(find(tree, "annotation-canvas").props.interactionDisabled, true);
   assert.equal(find(tree, "annotation-canvas").props.interactionLock.locked, true);

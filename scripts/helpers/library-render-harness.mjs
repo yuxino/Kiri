@@ -189,6 +189,17 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     "./video-capabilities.js": videoCapabilities,
     ...environment.modules,
   };
+  // The real shared button owns focus/activation behavior in every toolbar.
+  // Load it with the same hooks so isolated toolbar slices can exercise it too.
+  const toolbarModule = { exports: {} };
+  new Function("require", "module", "exports", "navigator", "window", "document", componentCode(
+    'import React from "react";\n' + readFileSync(new URL("../../src/components/AnnotationToolbarButton.tsx", import.meta.url), "utf8"),
+  ))(name => {
+    if (name === "./KiriIcons") return { KiriIcon: "icon" };
+    if (name === "./annotation-toolbar.css") return {};
+    return modules[name];
+  }, toolbarModule, toolbarModule.exports, environment.navigator ?? { platform: "MacIntel" }, window, environment.document ?? {});
+  modules["../components/AnnotationToolbarButton"] = toolbarModule.exports;
   const module = { exports: {} };
   if (componentSource == null) {
     librarySource ??= readFileSync(new URL("../../src/windows/LibraryWindow.tsx", import.meta.url), "utf8") +
@@ -196,13 +207,18 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     componentSource = librarySource;
   }
   const globals = environment.globals ?? {};
+  const document = { ...window, body: null, querySelector: () => null, ...environment.document };
   new Function("require", "module", "exports", "window", "document", "requestAnimationFrame", "cancelAnimationFrame", "navigator", ...Object.keys(globals), componentCode(componentSource))((name) => {
+    // This hook harness has no DOM or CSS engine; stylesheet behavior is
+    // covered by the style-contract suites and rendered UI acceptance.
+    if (name.endsWith(".css")) return {};
     if (!(name in modules)) throw new Error(`Unexpected import: ${name}`);
     return modules[name];
-  }, module, module.exports, window, { ...window, body: null, querySelector: () => null, ...environment.document }, () => 1, () => {}, environment.navigator ?? { userAgent: "Macintosh" }, ...Object.values(globals));
+  }, module, module.exports, window, document, () => 1, () => {}, environment.navigator ?? { userAgent: "Macintosh" }, ...Object.values(globals));
 
   return {
     window,
+    document,
     emit: (name, payload) => events.get(name)?.(payload),
     hasEventListener: (name) => events.has(name),
     mount(name, initialProps) {

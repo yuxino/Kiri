@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { createLibraryHarness, nodes, settleRequests, deferred, testAsset } from "./helpers/library-render-harness.mjs";
-import { capturePanelLayout, captureToolbarPosition } from "../src/windows/toolbar-layout.js";
+import { capturePanelLayout, captureToolOptionsLayout, captureToolbarPosition } from "../src/windows/toolbar-layout.js";
 import { initialQrSelection, qrCodeCenter, qrContentType, qrLooksLikeLink } from "../src/qr/selection.js";
 
 const source = 'import React from "react";\n' + readFileSync(new URL("../src/qr/QrResults.tsx", import.meta.url), "utf8");
@@ -57,7 +57,8 @@ test("screenshot toolbar recognition is explicit and does not complete the captu
   const toolbar = overlay.slice(overlay.indexOf("const TOOLS:"));
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
-    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}; ${toolbar}`);
+    import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`);
   let scans = 0, captures = 0;
   const component = harness.mount("Toolbar", { selection:{x:100,y:100,width:140,height:160},bounds:{x:0,y:0,width:1000,height:700},
     tool:"select",appearance:{},canUndo:false,canRedo:false,canSetSize:false,disabled:false,

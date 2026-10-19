@@ -35,9 +35,70 @@ Settings → General → Language offers English, 简体中文, 繁體中文, �
 
 ## Capture
 
-Press ⇧⌘A on macOS or Shift+Ctrl+A on Windows / Linux X11, then select a window or drag a region. On Wayland, use the Capture button or bind `kiri --capture` in desktop settings. Supporting desktops also offer Settings → General → Wayland Desktop Shortcuts for desktop-approved Capture, Pause/Resume, and Stop bindings. Ubuntu 24.04 / GNOME 46 retains the command fallback.
+Press ⇧⌘A on macOS or Shift+Ctrl+A on Windows / Linux X11, then select a window or drag a region. On Wayland, use the Capture button or bind `kiri --capture` in desktop settings. Supporting desktops also offer Settings → Shortcuts → Wayland Desktop Shortcuts for desktop-approved Capture, Pause/Resume, and Stop bindings. Ubuntu 24.04 / GNOME 46 retains the command fallback.
 
-Choose Screenshot, Record, or OCR. The screenshot toolbar also offers Recognize QR Codes. Enter confirms a screenshot; Esc cancels capture. Screenshots go to your clipboard and local library. You can change the capture shortcut in Settings on macOS, Windows, and X11.
+Choose Screenshot, Record, or OCR. The screenshot toolbar also offers Recognize QR Codes. Enter confirms a screenshot; Esc cancels capture. Screenshots go to your clipboard and local library.
+
+### Keyboard shortcuts
+
+Settings → Shortcuts brings global shortcuts and the in-app key reference together.
+On macOS, Windows, and X11, click an action's key field and press the key or
+combination you want. Function keys F1–F24, media keys, and combinations containing
+Control, Alt/Option, or Command/Windows save directly when supported and available.
+Other bare keys or Shift-only combinations show a preview and require **Use this
+key**, because they also affect typing or navigation in other apps. For recording
+controls, that effect lasts only while recording. The old binding remains until
+the change succeeds.
+
+On macOS, ordinary shortcuts do not need Input Monitoring permission. Media-key
+shortcuts use an intercepting event tap and require existing Accessibility
+authorization. If it is missing, Kiri reports an error and keeps the old binding;
+it does not request authorization in a popup or change your permissions.
+
+Esc cancels. Tab or Shift+Tab leaves recording; with a pending key, Tab can move to
+its confirmation button. Esc and Tab can themselves be recorded when combined
+with Control, Alt/Option, or Command/Windows. Pure modifier presses do not set a
+binding. Clear removes a binding, and changed or cleared rows offer Restore
+Default directly.
+
+The four **Launch actions** stay available while Kiri is running:
+
+| Action | macOS | Windows / Linux X11 |
+| --- | --- | --- |
+| Screenshot | ⇧⌘A | Shift+Ctrl+A |
+| Record | ⌥⇧⌘R | Alt+Shift+Ctrl+R |
+| Recognize Text | ⌥⇧⌘O | Alt+Shift+Ctrl+O |
+| Show main window | ⌥⇧⌘L | Alt+Shift+Ctrl+L |
+
+The two **While recording** actions work across applications during recording,
+including while paused:
+
+| Action | macOS | Windows / Linux X11 |
+| --- | --- | --- |
+| Pause/Resume Recording | ⌥⇧⌘P | Alt+Shift+Ctrl+P |
+| Stop and Save Recording | ⌥⇧⌘S | Alt+Shift+Ctrl+S |
+
+Kiri registers these two native bindings when recording begins and releases them
+when stopping begins or recording fails. They do not reserve keys while Kiri is
+idle, choosing a region, or counting down. If a recording binding is unavailable,
+recording continues and Kiri reports the problem; use the floating controls on
+macOS/Windows or the tray menu to pause or stop, then choose another combination
+in Settings → Shortcuts.
+
+Record and Recognize Text open region selection in the corresponding mode. Recording
+still waits for Start and the countdown; remote OCR still requires confirmation.
+Your existing screenshot combination is preserved. If it matches a new default,
+that new action starts unassigned. A duplicate or unavailable replacement leaves
+the previous binding intact. Registration cannot detect every shortcut used inside
+other applications; choose a different combination if one interrupts your workflow.
+
+Wayland keys remain desktop-managed. Assign `kiri --capture`, `kiri --record`,
+`kiri --ocr`, or `kiri --library` in your desktop keyboard settings. For recording
+controls, bind `kiri --toggle-recording-pause` and `kiri --stop-recording`. The
+optional Portal setup retains its Capture, Pause/Resume, and Stop actions.
+These recording commands only act on an ongoing recording, but the desktop may
+keep their keys reserved while Kiri is idle; Kiri cannot release desktop-owned
+bindings between recordings.
 
 Before choosing an annotation tool, click the screenshot toolbar's sliders button to show editable width and height labels on the selection edges. Values use output pixels, including on Retina displays. Enter or leaving a field applies its value; Esc discards the current input, and a second Esc cancels capture. Arrow keys adjust by one pixel, or ten with Shift. Click the sliders again to hide the labels. Once annotation starts, the sliders retain their appearance controls.
 
@@ -51,11 +112,13 @@ Recording preparation offers MP4 / GIF, Start, and four inline icons: system aud
 
 Use the small arrow beside the microphone to select an actual input device without changing the system default. If the selected device is unavailable or disconnects, Kiri reports an error instead of silently switching microphones.
 
-On macOS and Windows, recording controls follow the selection and adapt near display edges. Dragging moves the current panel; the next capture positions it from the new selection again. Pause keeps the recorded elapsed time, and resume continues it. Older Windows versions may still show the system’s full-display capture border. Linux continues to use tray actions or commands.
+On macOS and Windows, recording controls follow the selection and adapt near display edges without taking keyboard focus. Dragging moves the current panel; the next capture positions it from the new selection again. Pause keeps the recorded elapsed time, and resume continues it. Use the configured recording shortcuts, the control buttons, or the tray menu. There are no built-in bare Space/Esc recording commands; a bare key you explicitly confirm as a recording shortcut follows that binding. A button you focus explicitly still supports normal Space/Enter activation. Esc continues to cancel capture and the countdown. Older Windows versions may still show the system’s full-display capture border. Linux uses native X11 shortcuts, desktop-managed Wayland shortcuts, tray actions, or commands.
 
 ## Screenshot annotations
 
 Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type directly on the image, then choose a single mark or a tiled pattern and adjust opacity, angle, and spacing. Watermarks remain editable after saving.
+
+In the screenshot overlay, drag the small handle on the annotation toolbar or in the property panel’s heading to move each independently. With a handle focused, arrow keys move it by 2 pixels, or 10 with Shift. Chosen positions stay for the current capture, even when you adjust the selection or change tools; a new capture starts with automatic placement. The property panel makes room if the toolbar moves over it. Hide tool options keeps the panel closed until you reopen it from the main toolbar. Automatic property-panel placement also avoids the selected annotation.
 
 Text (T), Numbered callout (N), and Label bubble (B) each have their own button in the screenshot and image-editor toolbars. Choose Numbered callout, click to place a number, and type its description directly on the image; Return adds a line. Drag the number and transparent description separately, and adjust size, color, and filled or outline style.
 

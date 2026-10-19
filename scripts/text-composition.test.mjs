@@ -199,7 +199,7 @@ test("capture-phase video save/close does not commit an active IME even with fal
 
 // Execute the actual window handlers with isolated action boundaries. This
 // catches a missed integration, not only correctness of the shared predicate.
-function windowHandler(filename, name) {
+function windowHandler(filename, name, overrides = {}) {
   const source = readFileSync(new URL(`../src/windows/${filename}`, import.meta.url), "utf8");
   const tree = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let handler;
@@ -221,13 +221,130 @@ function windowHandler(filename, name) {
     canvasRef: { current: { cancelTextEditing: () => false,
       undo: action("undo"), redo: action("redo"), deleteSelection: action("delete") } },
     cancel: action("cancel"), closeWindow: action("close"), complete: action("complete"),
-    cancelCrop: action("cancelCrop"), selectTool: action("selectTool"), Element: class Element {} };
+    cancelCrop: action("cancelCrop"), selectTool: action("selectTool"), Element: class Element {}, ...overrides };
   const compiled = ts.transpileModule(`const handler = ${handler};`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 }
   }).outputText;
   const run = new Function(...Object.keys(context), `${compiled}\nreturn handler;`)(...Object.values(context));
-  return { run, calls };
+  return { run, calls, context };
 }
+
+// Install the production effect, including its actual capture-phase listener.
+// Dispatch capture listeners before React target handlers, as the browser does.
+function captureEscapeBoundary(overrides = {}) {
+  const listeners = [];
+  const window = {
+    addEventListener(type, handler, capture) { assert.equal(type, "keydown"); assert.equal(capture, true); listeners.push(handler); },
+    removeEventListener(type, handler, capture) {
+      assert.equal(type, "keydown"); assert.equal(capture, true);
+      const index = listeners.indexOf(handler); if (index >= 0) listeners.splice(index, 1);
+    },
+  };
+  const host = windowHandler("OverlayWindow.tsx", "onEscape", {...overrides, window});
+  const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
+  const tree = ts.createSourceFile("OverlayWindow.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let effect;
+  function find(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(tree) === "useEffect" &&
+        node.arguments[0]?.getText(tree).includes('window.addEventListener("keydown", onEscape, true)')) effect = node.arguments[0].getText(tree);
+    ts.forEachChild(node, find);
+  }
+  find(tree); assert.ok(effect);
+  const compiled = ts.transpileModule(`const install = ${effect};`, {compilerOptions: {target: ts.ScriptTarget.ES2022}}).outputText;
+  const cleanup = new Function(...Object.keys(host.context), `${compiled}\nreturn install();`)(...Object.values(host.context));
+  return {...host, window, cleanup, listeners, dispatch(event, targetHandler) {
+    event.stopImmediatePropagation = function () {this.stopped = true; this.immediateStopped = true;};
+    for (const listener of [...listeners]) { listener(event); if (event.immediateStopped) break; }
+    if (!event.stopped) targetHandler?.(event);
+  }};
+}
+
+class CaptureKeyTarget {
+  constructor(selector, onBlur = () => {}) {this.selector = selector; this.onBlur = onBlur; this.blurs = 0;}
+  closest(selectors) {return selectors.split(/,\s*/).includes(this.selector) ? this : null;}
+  blur() {this.blurs++; this.onBlur();}
+}
+
+test("capture-phase Escape reaches property number and range controls without cancelling capture", () => {
+  for (const type of ["number", "range"]) {
+    const host = captureEscapeBoundary({Element: CaptureKeyTarget});
+    const source = 'import React from "react";\n' + readFileSync(new URL("../src/annotation/AnnotationControlFields.tsx", import.meta.url), "utf8");
+    const runtime = createLibraryHarness({}, source, {modules: {"./model": {}}});
+    const changes = [], finishes = [];
+    const component = runtime.mount("AnnotationNumberControl", {label: "Size", value: 24, min: 12, max: 80,
+      onChange(value) {changes.push(value);}, onFinish() {finishes.push(true);}});
+    const input = () => nodes(component.render()).find(node => node.type === "input" && node.props.type === type);
+    const target = new CaptureKeyTarget(".kiri-capture-tool-options input", () => input().props.onBlur());
+    Object.assign(target, {focus() {}, setPointerCapture() {}, getBoundingClientRect: () => ({left: 0, width: 112})});
+    if (type === "range") input().props.onPointerDown({button: 0, pointerId: 1, clientX: 30, currentTarget: target, preventDefault() {}});
+    const event = key({key: "Escape", target, currentTarget: target});
+    host.dispatch(event, input().props.onKeyDown);
+    assert.equal(target.blurs, 1); assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(host.calls, []); assert.ok(finishes.length > 0);
+    if (type === "range") {
+      const before = changes.length;
+      input().props.onPointerMove({clientX: 90, currentTarget: target});
+      assert.equal(changes.length, before, "Escape ends the active slider gesture as well as focus");
+    }
+    component.unmount(); host.cleanup(); assert.equal(host.listeners.length, 0);
+  }
+});
+
+test("capture-phase Escape leaves callout numbering in the field and ordinary canvas cancellation unchanged", () => {
+  const host = captureEscapeBoundary({Element: CaptureKeyTarget});
+  const source = 'import React from "react";\n' + readFileSync(new URL("../src/annotation/AnnotationStyleControls.tsx", import.meta.url), "utf8");
+  const runtime = createLibraryHarness({}, source, {modules: {
+    "./AnnotationControlFields": {AnnotationChoices: "choices", AnnotationColors: "colors", AnnotationNumberControl: "number"},
+    "./MosaicControls": {MosaicControls: "mosaic"}, "./WatermarkControls": {WatermarkControls: "watermark"},
+  }});
+  const component = runtime.mount("AnnotationStyleControls", {tool: "callout", selected: null, appearance: {}, nextNumber: 1});
+  const input = nodes(component.render()).find(node => node.type === "input" && node.props.type === "number");
+  const target = new CaptureKeyTarget(".kiri-capture-tool-options input");
+  host.dispatch(key({key: "Escape", target, currentTarget: target}), input.props.onKeyDown);
+  assert.equal(target.blurs, 1); assert.deepEqual(host.calls, []);
+  let editsCancelled = 0;
+  host.context.canvasRef.current.cancelTextEditing = () => {editsCancelled++; return editsCancelled === 1;};
+  host.dispatch(key({key: "Escape", target: new CaptureKeyTarget("textarea")}));
+  assert.equal(editsCancelled, 1); assert.deepEqual(host.calls, [], "the first canvas Escape still cancels its text edit");
+  host.dispatch(key({key: "Escape", target: new CaptureKeyTarget("canvas")}));
+  assert.deepEqual(host.calls, ["cancel"], "ordinary Escape still exits capture");
+  component.unmount(); host.cleanup();
+});
+
+test("capture-phase Escape ends a floating drag while preserving canvas text focus and IME", () => {
+  for (const selector of [".kiri-capture-options-move", ".kiri-capture-toolbar-move"]) {
+    let button;
+    const host = captureEscapeBoundary({Element: CaptureKeyTarget, document: {querySelector: query =>
+      query === '.kiri-capture-toolbar button[data-dragging="true"]' && button?.props["data-dragging"] ? {} : null}});
+    const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
+    const hook = source.slice(source.indexOf("function useToolbarDrag("), source.indexOf("export function Toolbar("));
+    const runtime = createLibraryHarness({}, `import React,{useState,useRef,useEffect} from "react"; ${hook}
+      export function Grip(){return <button {...useToolbarDrag({x: 0, y: 0}, true, () => {})}/>;}`, {globals: {isTextComposition}});
+    Object.assign(runtime.window, host.window);
+    const component = runtime.mount("Grip", {});
+    const render = () => {button = component.render(); return button;};
+    render();
+    let captured = false, releases = 0;
+    const target = new CaptureKeyTarget(selector);
+    Object.assign(target, {setPointerCapture() {captured = true;}, hasPointerCapture() {return captured;},
+      releasePointerCapture() {captured = false; releases++;}});
+    render().props.onPointerDown({button: 0, isPrimary: true, pointerId: 3, clientX: 20, clientY: 30, currentTarget: target,
+      preventDefault() {}, stopPropagation() {}});
+    render();
+    const textarea = new CaptureKeyTarget("textarea");
+    setTextComposition(textarea, true);
+    host.dispatch(key({key: "Escape", target: textarea}));
+    assert.equal(captured, true); assert.deepEqual(host.calls, [], "IME Escape belongs to composition");
+    setTextComposition(textarea, false);
+    host.dispatch(key({key: "Escape", target: textarea}));
+    assert.equal(captured, false); assert.equal(releases, 1); assert.equal(textarea.blurs, 0);
+    assert.deepEqual(host.calls, [], "ending a drag must not cancel the focused canvas edit");
+    render();
+    host.dispatch(key({key: "Escape", target, currentTarget: target}), button.props.onKeyDown);
+    assert.equal(target.blurs, 1); assert.deepEqual(host.calls, [], "a focused grip consumes Escape locally");
+    component.unmount(); host.cleanup(); assert.equal(host.listeners.length, 0);
+  }
+});
 for (const [file, name, ordinaryKey, expected] of [
   ["OverlayWindow.tsx", "onEscape", "Escape", "cancel"],
   ["OverlayWindow.tsx", "onKeyDown", "Enter", "complete"],
@@ -250,7 +367,7 @@ for (const [file, name, ordinaryKey, expected] of [
 for (const eventKey of ["Enter", " "]) test(`text tool buttons activate with ${JSON.stringify(eventKey)} without completing capture`, () => {
   for (const [file, component] of [["OverlayWindow.tsx", "ToolButton"], ["EditorWindow.tsx", "EditorToolButton"]]) {
     const source = readFileSync(new URL(`../src/windows/${file}`, import.meta.url), "utf8");
-    const h = createLibraryHarness({}, 'import React from "react";\nimport {KiriIcon} from "../components/KiriIcons";\n' + 'export ' + source.slice(source.indexOf(`function ${component}(`)));
+    const h = createLibraryHarness({}, 'import React from "react";\nimport {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";\n' + 'export ' + source.slice(source.indexOf(`const ${component} =`)));
     const selected = [];
     const overlay = windowHandler("OverlayWindow.tsx", "onKeyDown");
     for (const [tool, icon, title] of [["text", "textformat", "Text (T)"], ["callout", "number.circle", "Numbered callout (N)"], ["label", "tag", "Label bubble (B)"]]) {

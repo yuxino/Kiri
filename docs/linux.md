@@ -48,7 +48,7 @@ edit your compositor configuration, or install a Hyprland FIFO listener.
 
 ### Optional desktop-approved shortcuts
 
-In Settings → General, **Wayland Desktop Shortcuts** checks the installed
+In Settings → Shortcuts, **Wayland Desktop Shortcuts** checks the installed
 `org.freedesktop.portal.GlobalShortcuts` interface. **Set Up Desktop Shortcuts**
 asks the desktop for Capture, Pause/Resume Recording, and Stop Recording only.
 Choose/approve keys in the desktop dialog. Kiri shows its returned trigger
@@ -71,7 +71,7 @@ may retain saved choices. Leaving Settings during setup cancels the request.
 | GNOME 48+ | Backend introduced in 48.rc | Offer setup only after the installed interface/identity probe succeeds |
 | KDE portal backend | GlobalShortcuts implemented; current upstream advertises v2 | Runtime probe; use ConfigureShortcuts only with v2 |
 | Hyprland portal backend | Upstream supports activation but currently returns empty trigger descriptions | Unconfirmed actions stay inactive in Kiri; use CLI bindings until the backend reports usable trigger metadata |
-| X11 | Native global-hotkey path | Existing configurable capture shortcut; no Portal startup |
+| X11 | Native global-hotkey path | Four launch actions plus two recording-only actions; no Portal startup |
 
 Sources: [GNOME release history](https://github.com/GNOME/xdg-desktop-portal-gnome/blob/main/NEWS),
 [Ubuntu Noble package](https://packages.ubuntu.com/noble/xdg-desktop-portal-gnome),
@@ -125,6 +125,11 @@ kiri --toggle-recording-pause
 kiri --stop-recording
 ```
 
+These commands pause/resume or stop and save the current recording. They do
+nothing while no recording is active. Wayland's desktop owns both manual command
+bindings and Portal bindings, so it may continue reserving their keys between
+recordings; Kiri does not promise to release those desktop-owned keys while idle.
+
 The compositor can include its tray menu in captured pixels. Keep that menu
 outside the selected region, or use the desktop shortcuts to avoid it. Pause
 ends the current segment; resuming on Wayland may ask for screen sharing again.
@@ -136,9 +141,19 @@ it is not a desktop-wide Linux recording-stop shortcut.
 
 ## X11
 
-The native capture shortcut defaults to `Ctrl+Shift+A` and can be changed in
-Settings → General. A conflicting binding leaves Kiri available through the
-Capture button and preserves the previous shortcut when a replacement fails.
+Settings → Shortcuts manages four launch actions that remain registered while
+Kiri runs: Screenshot (`Ctrl+Shift+A`), Record (`Ctrl+Alt+Shift+R`), Recognize Text
+(`Ctrl+Alt+Shift+O`), and Show main window (`Ctrl+Alt+Shift+L`). Two additional
+bindings control an ongoing recording: Pause/Resume (`Ctrl+Alt+Shift+P`) and Stop
+and Save (`Ctrl+Alt+Shift+S`). Those two are registered only during recording,
+including pauses, and released when stopping begins or recording fails; they do
+not reserve keys while idle, selecting a region, or counting down.
+
+Every action can be changed or disabled independently; see the
+[shortcut table](usage.md#keyboard-shortcuts). A conflicting replacement preserves
+the previous binding. If a recording binding is unavailable when recording begins,
+Kiri reports the problem and continues recording; tray actions and commands remain
+available. The Capture button also remains available when a launch binding fails.
 X11 capture requests managed fullscreen on the captured monitor before showing
 the selection canvas. Panels and docks keep their normal reserved workarea;
 they must not shift or crop the frozen desktop.
@@ -161,7 +176,7 @@ cover MP4/GIF encoding and merging. Check the candidate's reports for results.
 | Displays | X11 monitor selection; single-display Wayland | Wayland multiple displays unavailable; physical fractional-scale acceptance pending |
 | Local OCR | System Tesseract with installed `eng`, `chi_sim`, `jpn` data | Real GNOME text/IME workflows; missing models show an error |
 | Remote OCR | Explicit send/retry, Secret Service credentials | Needs a configured profile and an unlocked secret store |
-| Recording | MP4 with optional audio or silent GIF, optional pointer, tray/command controls | Portal consent, pause/resume, timing, and control exclusion on real GNOME |
+| Recording | MP4 with optional audio or silent GIF, optional pointer, X11 native / Wayland desktop shortcuts and tray/command controls | Portal consent, pause/resume, timing, and control exclusion on real GNOME |
 | Saved videos | Playback, thumbnails, GIF conversion, normal-speed cuts/reordering and MP4 export with source audio | System GStreamer codecs required; no speed changes, effects, masks, annotations or stickers; [installed-app acceptance](qa/linux-video-export.md) remains separate |
 | Audio | Optional system audio, microphone or both in MP4; explicit microphone check | Requires local PulseAudio or PipeWire-Pulse and GStreamer audio plugins; real-device acceptance remains separate |
 | Click highlights | Unavailable | No click ripple |
@@ -267,8 +282,11 @@ for the virtual display; this does not exercise a physical GPU. A separate
 normal X11 test window displays public text and gray
 shapes. Kiri captures it with its shipping backend, then the script compares
 the selected preview, saved and clipboard pixels, recognizes text through the OCR UI, and
-checks restart persistence. Recording starts through the overlay and uses the
-desktop commands to pause, resume, and stop. The exported MP4 is decoded with
+checks restart persistence. The X11 script uses the native Show main window,
+Recognize Text, and Record shortcuts; recording still starts explicitly in the
+overlay, then the recording-scoped P/S combinations pause, resume, and stop it.
+This X11 path does not additionally test the CLI controls; the separate Wayland
+script retains its desktop-command path. The exported MP4 is decoded with
 system GStreamer to check its size, silent audio layout, duration, and frames:
 both recorded scenes must appear, while the pause-only scene and recording
 controls must be absent. There is no runtime synthetic-capture mode.
