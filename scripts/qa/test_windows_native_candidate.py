@@ -2,6 +2,7 @@
 
 import ast
 import copy
+from contextlib import contextmanager
 import hashlib
 import importlib.util
 import os
@@ -11,6 +12,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import zipfile
+from windows_qa_profile import isolated_app_directories
 
 spec = importlib.util.spec_from_file_location("candidate", Path(__file__).with_name("windows-native-candidate.py"))
 candidate = importlib.util.module_from_spec(spec)
@@ -260,6 +262,124 @@ class ConfirmationExecutableTests(unittest.TestCase):
         for sha in ("", "short", "not-a-commit"):
             with self.subTest(sha=sha), self.assertRaisesRegex(RuntimeError, "source commit SHA"):
                 self.result(GITHUB_SHA=sha)
+
+
+class NativePackageIsolationTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.roaming, self.local = self.root / "Roaming", self.root / "Local"
+        self.profiles = (self.roaming / "kiri", self.local / "io.yuxino.kiri")
+        for path in self.profiles:
+            path.mkdir(parents=True)
+            (path / "prior.txt").write_text("original QA profile")
+        self.recovery, self.output = self.root / "recovery", self.root / "evidence"
+        self.recovery.mkdir(); self.output.mkdir()
+        self.portable, self.installed = self.root / "portable/kiri.exe", self.root / "installed/kiri.exe"
+        for path in (self.portable, self.installed):
+            path.parent.mkdir(); path.write_bytes(b"application")
+        (self.portable.parent / "kiri.portable").write_text("")
+        self.report = {"success": False}
+        self.events, self.labels = [], []
+        self.scope = 0
+        self.fail_smoke = self.fail_stop = self.fail_restore = self.extra_portable_file = False
+
+        @contextmanager
+        def isolate():
+            self.scope += 1
+            current = self.scope
+            self.events.append(("enter", current))
+            with isolated_app_directories(self.profiles, self.recovery):
+                try:
+                    yield {"APPDATA": str(self.roaming), "LOCALAPPDATA": str(self.local)}
+                finally:
+                    self.events.append(("restore", current))
+                    # The log must already be safe before directory restoration.
+                    filename = "portable-native.log" if current == 1 else "NSIS-native.log"
+                    self.assertTrue((self.output / filename).is_file())
+            if self.fail_restore:
+                raise RuntimeError("profile restoration failed")
+
+        def smoke(executable, update_button, label):
+            self.labels.append(label)
+            self.events.append(("smoke", label))
+            self.assertEqual((executable, update_button),
+                             (self.portable, "Open Releases Page") if label == "portable ZIP"
+                             else (self.installed, "Check for Updates"))
+            cache = self.profiles[1] / "EBWebView"
+            self.assertFalse(cache.exists(), "The next executable reused the previous WebView profile")
+            self.assertFalse((self.profiles[0] / "prior.txt").exists())
+            cache.mkdir(); (cache / "owner.txt").write_text(label)
+            log = self.profiles[1] / "logs/kiri.log"
+            log.parent.mkdir(); log.write_text(label + " log\n")
+            (self.profiles[0] / "generated.txt").write_text(label)
+            if self.extra_portable_file:
+                (self.portable.parent / "unexpected.txt").write_text("unexpected")
+            if self.fail_smoke:
+                raise ValueError("native acceptance failed")
+
+        def stop():
+            self.events.append(("stop", self.scope))
+            if self.fail_stop:
+                raise RuntimeError("process-tree stop failed")
+
+        source = ast.parse(Path(__file__).with_name("windows-release-native.py").read_text())
+        helper = next(node for node in source.body if isinstance(node, ast.FunctionDef)
+                      and node.name == "smoke_isolated_package")
+        main = next(node for node in source.body if isinstance(node, ast.Try))
+        self.driver = compile(ast.Module(body=[helper, *main.body], type_ignores=[]), "native-package-driver", "exec")
+        self.namespace = {"Path": Path, "os": Mock(environ={"KIRI_QA_PORTABLE_EXE": str(self.portable),
+                                                          "KIRI_QA_INSTALLED_EXE": str(self.installed)}),
+                          "isolated_windows_profile": isolate, "smoke": smoke, "stop": stop,
+                          "report": self.report, "output": self.output}
+
+    def run_driver(self):
+        exec(self.driver, self.namespace)
+
+    def assert_original_profiles_restored(self):
+        for path in self.profiles:
+            self.assertEqual((path / "prior.txt").read_text(), "original QA profile")
+            self.assertFalse((path / "generated.txt").exists())
+            self.assertFalse((path / "EBWebView").exists())
+        self.assertEqual(list(self.recovery.iterdir()), [])
+
+    def test_each_real_package_driver_gets_fresh_profiles_and_its_own_log(self):
+        (self.output / "kiri-native.log").write_text("stale log from an earlier run\n")
+        self.run_driver()
+        self.assertEqual(self.events, [("enter", 1), ("smoke", "portable ZIP"), ("stop", 1), ("restore", 1),
+                                       ("enter", 2), ("smoke", "NSIS installation"), ("stop", 2), ("restore", 2)])
+        self.assertTrue(self.report["success"])
+        self.assertTrue(self.report["native_acceptance_success"])
+        self.assertEqual((self.output / "portable-native.log").read_text(), "portable ZIP log\n")
+        self.assertEqual((self.output / "NSIS-native.log").read_text(), "NSIS installation log\n")
+        self.assertEqual((self.output / "kiri-native.log").read_text(), "portable ZIP log\nNSIS installation log\n")
+        self.assert_original_profiles_restored()
+
+    def test_acceptance_stop_or_restore_failure_cannot_start_the_next_package(self):
+        for field, message in (("fail_smoke", "native acceptance failed"),
+                               ("fail_stop", "process-tree stop failed"),
+                               ("fail_restore", "profile restoration failed")):
+            with self.subTest(failure=field):
+                setattr(self, field, True)
+                with self.assertRaisesRegex((RuntimeError, ValueError), message):
+                    self.run_driver()
+                self.assertEqual(self.labels, ["portable ZIP"])
+                self.assertFalse(self.report["success"])
+                self.assertNotIn("native_acceptance_success", self.report)
+                self.assertEqual((self.output / "portable-native.log").read_text(), "portable ZIP log\n")
+                self.assertFalse((self.output / "NSIS-native.log").exists())
+                self.assert_original_profiles_restored()
+                setattr(self, field, False)
+                self.scope = 0; self.labels.clear(); self.events.clear()
+
+    def test_portable_side_file_check_is_preserved_before_installed_launch(self):
+        self.extra_portable_file = True
+        with self.assertRaisesRegex(RuntimeError, "Portable copy wrote unexpected files"):
+            self.run_driver()
+        self.assertEqual(self.labels, ["portable ZIP"])
+        self.assertFalse(self.report["success"])
+        self.assert_original_profiles_restored()
 
 
 class NativeSettingsRouteTests(unittest.TestCase):

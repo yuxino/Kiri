@@ -643,31 +643,49 @@ def smoke(executable, update_button, label):
         stop()
 
 
+def smoke_isolated_package(executable, update_button, label):
+    global app_environment, library, native_log
+    # The two executable paths must not reuse a WebView profile immediately
+    # after taskkill. Restore one package's isolated directories completely
+    # before giving the next package fresh directories of its own.
+    with isolated_windows_profile() as app_environment:
+        library = Path(app_environment["APPDATA"]) / "kiri"
+        native_log = Path(app_environment["LOCALAPPDATA"]) / "io.yuxino.kiri/logs/kiri.log"
+        report["isolated_profile"] = True
+        try:
+            smoke(executable, update_button, label)
+        except Exception as error:
+            # Keep the primary failure if later WebView cleanup also fails.
+            report["acceptance_error"] = str(error)
+            raise
+        finally:
+            try:
+                stop()
+            finally:
+                # Capture this package's log before its profile is restored,
+                # including when process-tree cleanup itself fails.
+                if native_log.is_file():
+                    content = native_log.read_bytes()
+                    filename = f"{label.split()[0]}-native.log"
+                    (output / filename).write_bytes(content)
+                    report.setdefault("package_logs", {})[label] = filename
+                    with (output / "kiri-native.log").open("ab") as combined:
+                        combined.write(content)
+
+
 try:
+    (output / "kiri-native.log").write_bytes(b"")
     portable = Path(os.environ["KIRI_QA_PORTABLE_EXE"])
     installed = Path(os.environ["KIRI_QA_INSTALLED_EXE"])
     if not (portable.parent / "kiri.portable").is_file():
         raise RuntimeError("Extracted portable marker is missing")
     if (installed.parent / "kiri.portable").exists():
         raise RuntimeError("Installed copy contains a portable marker")
-    with isolated_windows_profile() as app_environment:
-        library = Path(app_environment["APPDATA"]) / "kiri"
-        native_log = Path(app_environment["LOCALAPPDATA"]) / "io.yuxino.kiri/logs/kiri.log"
-        report["isolated_profile"] = True
-        try:
-            smoke(portable, "Open Releases Page", "portable ZIP")
-            if sorted(path.name for path in portable.parent.iterdir()) != ["kiri.exe", "kiri.portable"]:
-                raise RuntimeError("Portable copy wrote unexpected files beside the executable")
-            smoke(installed, "Check for Updates", "NSIS installation")
-            report["native_acceptance_success"] = True
-        except Exception as error:
-            # Keep the primary failure if later WebView cleanup also fails.
-            report["acceptance_error"] = str(error)
-            raise
-        finally:
-            stop()
-            if native_log.is_file():
-                (output / "kiri-native.log").write_bytes(native_log.read_bytes())
+    smoke_isolated_package(portable, "Open Releases Page", "portable ZIP")
+    if sorted(path.name for path in portable.parent.iterdir()) != ["kiri.exe", "kiri.portable"]:
+        raise RuntimeError("Portable copy wrote unexpected files beside the executable")
+    smoke_isolated_package(installed, "Check for Updates", "NSIS installation")
+    report["native_acceptance_success"] = True
     report["success"] = True
 except Exception as error:
     import traceback

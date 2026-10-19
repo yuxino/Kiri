@@ -283,6 +283,80 @@ def visible_control(label):
     return None
 
 
+def library_restore_observation(window):
+    info = command("xwininfo", "-id", window, check=False).stdout
+    bounds = {}
+    for key, label in (("x", "Absolute upper-left X"), ("y", "Absolute upper-left Y"),
+                       ("width", "Width"), ("height", "Height")):
+        match = re.search(rf"^\s*{re.escape(label)}:\s*(-?\d+)\s*$", info, re.MULTILINE)
+        if match:
+            bounds[key] = int(match.group(1))
+    mapped = re.search(r"^\s*Map State:\s*(\S+)", info, re.MULTILINE)
+    properties = command("xprop", "-id", window, "WM_STATE", "_NET_WM_STATE", check=False).stdout
+    state = re.search(r"window state:\s*(\w+)", properties)
+    control = visible_control("Settings")
+    control_bounds = None
+    if control is not None:
+        _, rect = control
+        control_bounds = [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height]
+    return {
+        "active_window": command("xdotool", "getactivewindow", check=False).stdout.strip(),
+        "bounds": bounds if len(bounds) == 4 else None,
+        "map_state": mapped.group(1) if mapped else None,
+        "wm_state": state.group(1) if state else None,
+        "wm_properties": properties.strip(),
+        "settings_bounds": control_bounds,
+        "screen": list(ImageGrab.grab().size),
+    }
+
+
+def wait_for_restored_library(window, before, timeout=10):
+    # Focus and AT-SPI SHOWING can precede Openbox's unminimize animation.
+    # Wait only for this explicit restoration; ordinary control checks retain
+    # their immediate out-of-screen failure and strict painted-pixel checks.
+    evidence = {"window": window, "before": before, "timeout_seconds": timeout, "samples": []}
+    report["library_restore"] = evidence
+    expected = before["bounds"]
+    if expected is None:
+        raise RuntimeError(f"Missing original library geometry: {before}")
+    started = time.monotonic()
+    previous = None
+    stable_samples = 0
+
+    def restored():
+        nonlocal previous, stable_samples
+        sample = library_restore_observation(window)
+        sample["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        evidence["samples"].append(sample)
+        rect, control = sample["bounds"], sample["settings_bounds"]
+        screen_width, screen_height = sample["screen"]
+        ready = (
+            sample["active_window"] == window
+            and sample["map_state"] == "IsViewable" and sample["wm_state"] == "Normal"
+            and "_NET_WM_STATE_HIDDEN" not in sample["wm_properties"]
+            and rect == expected and control is not None
+            and 0 <= rect["x"] < rect["x"] + rect["width"] <= screen_width
+            and 0 <= rect["y"] < rect["y"] + rect["height"] <= screen_height
+            and rect["x"] <= control[0] < control[2] <= rect["x"] + rect["width"]
+            and rect["y"] <= control[1] < control[3] <= rect["y"] + rect["height"]
+        )
+        signature = (rect, control, sample["screen"]) if ready else None
+        stable_samples = stable_samples + 1 if ready and signature == previous else int(ready)
+        previous = signature
+        sample["stable_samples"] = stable_samples
+        if stable_samples >= 3:
+            evidence["restored"] = True
+            return sample
+        return None
+
+    try:
+        return wait_for("stable restored library geometry and Settings control", restored, timeout=timeout)
+    except RuntimeError as error:
+        evidence["error"] = str(error)
+        last = evidence["samples"][-1] if evidence["samples"] else None
+        raise RuntimeError(f"{error}; last library restoration state: {json.dumps(last)}") from error
+
+
 def wait_for_control(label, source=None):
     wait_for(f"accessible UI control: {label}", lambda: visible_control(label))
 
@@ -772,10 +846,13 @@ try:
         raise RuntimeError("QA must start with an empty isolated library")
     report["checks"].append("installed app paints an accessible Settings control in the visible library of an empty isolated profile")
 
+    library_window = command("xdotool", "getactivewindow").stdout.strip()
+    if library_window not in windows():
+        raise RuntimeError("The initial library must own focus before minimizing it")
+    library_before_restore = library_restore_observation(library_window)
     show_fixture()
     command("xdotool", "key", "--clearmodifiers", "ctrl+alt+shift+l")
-    wait_for("main-window shortcut restores and focuses the minimized library", lambda:
-             command("xdotool", "getactivewindow").stdout.strip() in windows())
+    wait_for_restored_library(library_window, library_before_restore)
     wait_for_control("Settings")
     if overlay() is not None or assets():
         raise RuntimeError("Main-window shortcut unexpectedly started capture or saved an asset")
