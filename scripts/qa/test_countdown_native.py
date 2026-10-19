@@ -29,6 +29,7 @@ class ActiveShortcutTests(unittest.TestCase):
         self.drop_shortcut = False
         self.steal_focus = False
         self.report = {}
+        self.screenshots = []
         source = Mock(handle=42)
         source.set_focus.side_effect = lambda: setattr(self, "foreground", 42)
         clock = Mock(monotonic=lambda: self.now)
@@ -36,9 +37,14 @@ class ActiveShortcutTests(unittest.TestCase):
         native = Mock(GetForegroundWindow=lambda: self.foreground, GetAncestor=lambda handle, _: handle)
         keyboard = Mock()
         keyboard.send_keys.side_effect = self.send
-        self.namespace = functions("assert_source_foreground", "recording_shortcut", "exercise_recording_controls",
+        self.source, self.clock, self.native = source, clock, native
+        self.namespace = functions("fail_source_focus", "focus_source_fixture", "assert_source_foreground",
+                                   "recording_shortcut", "exercise_recording_controls",
                                    source_window=source, user32=native, time=clock, keyboard=keyboard,
-                                   report=self.report, find=self.find, assert_closed=self.closed)
+                                   report=self.report, find=self.find, assert_closed=self.closed,
+                                   hit_evidence=lambda hwnd: {"hwnd": hwnd, "pid": hwnd + 1000,
+                                                             "title": "source" if hwnd == 42 else "other"},
+                                   save_safe_desktop=self.screenshots.append)
 
     def find(self, name):
         expected = "recording" if name == "Pause Recording" else "paused"
@@ -90,6 +96,11 @@ class ActiveShortcutTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Before paused.*foreground"):
             self.namespace["recording_shortcut"]("^%+p", "paused", lambda: self.find("Resume Recording"))
         self.assertEqual(self.keys, [])
+        self.assertEqual(self.report["focus_failures"][0]["expected"],
+                         {"hwnd": 42, "pid": 1042, "title": "source"})
+        self.assertEqual(self.report["focus_failures"][0]["actual"],
+                         {"hwnd": 99, "pid": 1099, "title": "other"})
+        self.assertEqual(self.screenshots, ["focus-failure-1.png"])
 
     def test_successful_state_transition_does_not_hide_focus_theft(self):
         self.steal_focus = True
@@ -97,6 +108,77 @@ class ActiveShortcutTests(unittest.TestCase):
             self.namespace["exercise_recording_controls"]([101, 102])
         self.assertEqual(self.state, "paused")
         self.assertNotIn("active_recording_shortcuts", self.report)
+        self.assertEqual(self.report["focus_failures"][0]["actual"]["hwnd"], 99)
+        self.assertEqual(self.screenshots, ["focus-failure-1.png"])
+        # Fixture activation happens once before keys; a failed result cannot
+        # regain focus behind the assertion and turn a failure into a pass.
+        self.source.set_focus.assert_called_once()
+
+    def test_ready_fixture_does_not_add_an_arbitrary_sleep(self):
+        self.namespace["focus_source_fixture"]("Recording shortcut fixture")
+        self.source.set_focus.assert_called_once()
+        self.clock.sleep.assert_not_called()
+        self.assertEqual(self.report, {})
+
+    def test_delayed_native_focus_is_observed_before_any_shortcut_is_sent(self):
+        ready_at = None
+        def request_focus():
+            nonlocal ready_at
+            self.foreground = 99
+            ready_at = self.now + 0.15
+        def foreground():
+            if ready_at is not None and self.now >= ready_at:
+                self.foreground = 42
+            return self.foreground
+        self.source.set_focus.side_effect = request_focus
+        self.native.GetForegroundWindow = foreground
+        pauses, stopped = self.namespace["exercise_recording_controls"]([101, 102])
+        self.assertEqual(self.keys, ["^%+p", "^%+p", "^%+s"])
+        self.assertGreaterEqual(pauses[1]["pause_requested"], ready_at)
+        self.assertGreater(stopped, 117)
+        self.source.set_focus.assert_called_once()
+        self.assertNotIn("focus_failures", self.report)
+
+    def test_fixture_timeout_records_identity_and_screenshot_without_sending_keys(self):
+        self.foreground = 99
+        self.source.set_focus.side_effect = None
+        with self.assertRaisesRegex(RuntimeError, "Recording shortcut fixture did not take native focus"):
+            self.namespace["exercise_recording_controls"]([101, 102])
+        self.assertGreaterEqual(self.now, 113)
+        self.assertLess(self.now, 113.1)
+        self.assertEqual(self.keys, [])
+        self.source.set_focus.assert_called_once()
+        failure = self.report["focus_failures"][0]
+        self.assertEqual(failure["expected"]["hwnd"], 42)
+        self.assertEqual(failure["actual"], {"hwnd": 99, "pid": 1099, "title": "other"})
+        self.assertEqual(failure["foreground"], failure["actual"])
+        self.assertEqual(failure["screenshot"], "focus-failure-1.png")
+
+    def test_focus_request_error_keeps_evidence_and_does_not_send_keys(self):
+        self.foreground = 99
+        self.source.set_focus.side_effect = RuntimeError("UIA activation failed")
+        with self.assertRaisesRegex(RuntimeError, "could not request native focus: UIA activation failed"):
+            self.namespace["focus_source_fixture"]("Recording shortcut fixture")
+        self.assertEqual(self.keys, [])
+        self.clock.sleep.assert_not_called()
+        self.assertEqual(self.report["focus_failures"][0]["actual"]["hwnd"], 99)
+        self.assertEqual(self.screenshots, ["focus-failure-1.png"])
+
+    def test_readiness_and_strict_checks_use_the_native_root_window(self):
+        self.source.set_focus.side_effect = None
+        self.foreground = 142
+        self.native.GetAncestor = lambda handle, _: 42 if handle == 142 else handle
+        self.namespace["focus_source_fixture"]("Recording shortcut fixture")
+        self.assertEqual(self.namespace["assert_source_foreground"]("Before paused"), 42)
+        self.clock.sleep.assert_not_called()
+
+    def test_screenshot_error_cannot_replace_the_original_focus_failure(self):
+        self.foreground = 99
+        self.namespace["save_safe_desktop"] = Mock(side_effect=OSError("screenshot unavailable"))
+        with self.assertRaisesRegex(RuntimeError, "Before paused.*foreground"):
+            self.namespace["recording_shortcut"]("^%+p", "paused", lambda: self.find("Resume Recording"))
+        self.assertEqual(self.report["focus_failures"][0]["screenshot_error"], "screenshot unavailable")
+        self.assertEqual(self.keys, [])
 
     def test_stop_requires_both_recording_windows_to_close(self):
         self.drop_shortcut = True

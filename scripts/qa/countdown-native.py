@@ -95,10 +95,7 @@ def verify_recording_geometry(panel,selection):
  if not geometry['source_maximized']:raise RuntimeError('Starting recording changed the source maximized state')
  # The assertion concerns border input routing, so make its underlying test
  # fixture the foreground target rather than assuming no other CI window rose.
- source_window.set_focus();focus_deadline=time.monotonic()+2
- while user32.GetAncestor(user32.GetForegroundWindow(),2)!=source_window.handle:
-  if time.monotonic()>=focus_deadline:raise RuntimeError('Recording input fixture did not take native focus')
-  time.sleep(.05)
+ focus_source_fixture('Recording input fixture')
  hit=user32.WindowFromPoint(wintypes.POINT(x,y));hit_root=user32.GetAncestor(hit,2)
  geometry['edge_hit_after_fixture_activation']=hit_evidence(hit_root)
  if not user32.IsWindowVisible(region_hwnd):raise RuntimeError('Recording region disappeared when its source was focused')
@@ -160,10 +157,31 @@ def cancelled():
  if exists('Pause Recording') or exists('Cancel Countdown'):raise RuntimeError('Cancelled flow remains active')
  if not user32.IsZoomed(source_window.handle):raise RuntimeError('Cancelling capture changed the source maximized state')
  report.setdefault('source_state_after_cancel',[]).append({'maximized':True,'rect':window_rect(source_window.handle)})
+def fail_source_focus(message,foreground):
+ evidence={'message':message,'expected':hit_evidence(source_window.handle),
+     'actual':hit_evidence(user32.GetAncestor(foreground,2)),'foreground':hit_evidence(foreground)}
+ failures=report.setdefault('focus_failures',[]);failures.append(evidence)
+ filename=f'focus-failure-{len(failures)}.png'
+ try:
+  save_safe_desktop(filename);evidence['screenshot']=filename
+ except Exception as error:evidence['screenshot_error']=str(error)
+ raise RuntimeError(message)
+def focus_source_fixture(label):
+ # UIA's focus request can return before Win32 foreground activation finishes.
+ # Wait only for fixture setup; shortcut result checks below never refocus or retry.
+ try:source_window.set_focus()
+ except Exception as error:
+  fail_source_focus(label+' could not request native focus: '+str(error),user32.GetForegroundWindow())
+ deadline=time.monotonic()+2
+ while True:
+  foreground=user32.GetForegroundWindow()
+  if user32.GetAncestor(foreground,2)==source_window.handle:return
+  if time.monotonic()>=deadline:fail_source_focus(label+' did not take native focus',foreground)
+  time.sleep(.05)
 def assert_source_foreground(label):
- foreground=user32.GetAncestor(user32.GetForegroundWindow(),2)
- if foreground!=source_window.handle:raise RuntimeError(label+' did not preserve the source foreground window')
- return int(foreground)
+ foreground=user32.GetForegroundWindow();root=user32.GetAncestor(foreground,2)
+ if root!=source_window.handle:fail_source_focus(label+' did not preserve the source foreground window',foreground)
+ return int(root)
 def recording_shortcut(keys,state,verify_state):
  before=assert_source_foreground('Before '+state)
  requested=time.monotonic();keyboard.send_keys(keys)
@@ -180,7 +198,7 @@ def exercise_recording_controls(recording_windows):
  find('Pause Recording');resume_confirmed=time.monotonic()
  pauses=[{'pause_requested':pause_requested,'pause_confirmed':pause_confirmed,
           'resume_requested':resume_requested,'resume_confirmed':resume_confirmed,'source':'buttons'}]
- time.sleep(3);source_window.set_focus()
+ time.sleep(3);focus_source_fixture('Recording shortcut fixture')
  pause_requested,pause_confirmed=recording_shortcut('^%+p','paused',lambda:find('Resume Recording'))
  time.sleep(5)
  resume_requested,resume_confirmed=recording_shortcut('^%+p','recording',lambda:find('Pause Recording'))
