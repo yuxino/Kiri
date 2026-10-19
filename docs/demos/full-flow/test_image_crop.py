@@ -9,6 +9,7 @@ import io
 import json
 import os
 import threading
+import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -38,6 +39,7 @@ async def main():
     MEDIA['crop-fixture'] = (buffer.getvalue(), 'image/png')
     before = os.environ.get('KIRI_CROP_BEFORE') == '1'
     results = []
+    lifecycle = []
     server = ThreadingHTTPServer(('127.0.0.1', 8791), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
@@ -49,27 +51,41 @@ async def main():
                     for width, height in ([(800, 600)] if before else [(800, 600), (1280, 720)]):
                         for scale in ([1] if before else [1, 1.25, 1.5, 2]):
                             context = await browser.new_context(viewport={'width': width, 'height': height}, device_scale_factor=scale, locale=language)
+                            case = {'language': language, 'viewport': [width, height], 'backingScale': scale, 'phase': 'loading', 'errors': [], 'events': []}
+                            lifecycle.append(case)
                             try:
                                 await context.route('**/*', lambda r: r.continue_() if r.request.url.startswith(('http://127.0.0.1:8791/', 'blob:http://127.0.0.1:8791/', 'data:image/')) else r.abort())
                                 page = await context.new_page()
                                 page.set_default_timeout(8000)
-                                errors, outputs = [], []
+                                errors, outputs = case['errors'], []
                                 pending_outputs = asyncio.Queue()
                                 print(f'Crop/export: {language} {width}x{height} backing={scale}', flush=True)
-                                page.on('pageerror', lambda e: errors.append(str(e)))
+                                def trace(event, current=case, **details):
+                                    current['events'].append({'event': event, 'time': time.monotonic(), 'phase': current['phase'], **details})
 
-                                async def backend(source, command, args):
+                                # Each callback belongs to this context, including events emitted
+                                # during close; the next iteration must not inherit its errors.
+                                page.on('pageerror', lambda error, captured=errors, record=trace: (captured.append(str(error)), record('pageerror', message=str(error))))
+                                page.on('request', lambda request, record=trace: record('request', url=request.url) if request.resource_type == 'script' else None)
+                                page.on('requestfinished', lambda request, record=trace: record('requestfinished', url=request.url) if request.resource_type == 'script' else None)
+                                page.on('requestfailed', lambda request, record=trace: record('requestfailed', url=request.url, failure=request.failure))
+
+                                async def backend(source, command, args, captured=outputs, pending=pending_outputs):
                                     assert command == 'editor_output', command
                                     data = bytes(args.pop('bytes'))
                                     with Image.open(io.BytesIO(data)) as png:
                                         args['pngSize'] = list(png.size)
-                                    outputs.append(args)
-                                    pending_outputs.put_nowait(args)
+                                    captured.append(args)
+                                    pending.put_nowait(args)
                                     return {'revisionSha256': 'a' * 64 if args['action'] == 'save-as' else 'b' * 64, 'actionSucceeded': True}
 
                                 await context.expose_binding('__backend', backend)
                                 await page.goto('http://127.0.0.1:8791/desktop.html')
-                                await page.wait_for_function('typeof window.invoke === "function"')
+                                # The shell's invoke function exists before its lazy library
+                                # module has loaded. Wait for that initial window before editor work.
+                                await page.frame_locator('#library').get_by_role('button', name='设置', exact=True).wait_for()
+                                case['phase'] = 'editing'
+                                trace('fixture-ready')
                                 await page.evaluate('''({language, project}) => {
                                     const original = window.invoke;
                                     window.invoke = async (kind, command, args) => {
@@ -85,7 +101,7 @@ async def main():
                                     await page.evaluate("frame('editor', {id:'crop-fixture'})")
                                     f = page.frame_locator('#editor')
                                     await f.locator('canvas').wait_for()
-                                    await f.get_by_title(strings['Crop (C)'], exact=True).wait_for()
+                                    await f.get_by_role('button',name=strings['Crop (C)'], exact=True).wait_for()
                                     await page.wait_for_timeout(80)
                                     await page.locator('#editor').evaluate('''el => {
                                         const internal = el.contentWindow.__TAURI_INTERNALS__, original = internal.invoke;
@@ -110,7 +126,7 @@ async def main():
                                     await page.mouse.up()
 
                                 async def crop(f):
-                                    await f.get_by_title(strings['Crop (C)'], exact=True).click()
+                                    await f.get_by_role('button',name=strings['Crop (C)'], exact=True).click()
                                     await drag_doc(f, (0, 0), (50, 40))
                                     await drag_doc(f, (499, 299), (350, 220))
 
@@ -128,13 +144,13 @@ async def main():
 
                                 f = await editor()
                                 await crop(f)
-                                rectangle = f.get_by_title(strings['Rectangle (R)'], exact=True)
+                                rectangle = f.get_by_role('button',name=strings['Rectangle (R)'], exact=True)
                                 if before:
                                     assert await rectangle.is_disabled(), 'baseline no longer reproduces Crop tool interlock'
                                     await page.screenshot(path=str(OUT / 'crop-interlock-before.png'))
                                     # The old export-only bug wrongly permits a clean close after Save As.
                                     f = await editor()
-                                    await f.get_by_title(strings['Rectangle (R)'], exact=True).click()
+                                    await f.get_by_role('button',name=strings['Rectangle (R)'], exact=True).click()
                                     await drag_doc(f, (80, 60), (160, 110))
                                     await crop(f)
                                     await f.get_by_role('button', name=strings['Save As…'], exact=True).click()
@@ -146,8 +162,8 @@ async def main():
                                     continue
 
                                 assert await rectangle.is_enabled()
-                                undo = f.get_by_title(strings['Undo (⌘Z)'], exact=True)
-                                redo = f.get_by_title(strings['Redo (⇧⌘Z)'], exact=True)
+                                undo = f.get_by_role('button',name=strings['Undo'], exact=True)
+                                redo = f.get_by_role('button',name=strings['Redo'], exact=True)
                                 await undo.click()
                                 await f.get_by_role('button', name=strings['Save As…'], exact=True).click()
                                 await page.wait_for_timeout(120)
@@ -161,10 +177,10 @@ async def main():
                                 if language == 'en' and width == 800 and scale == 1:
                                     # The wrapped toolbar keeps both crop and annotation actions
                                     # visible without scrolling to find either control.
-                                    assert await f.get_by_title(strings['Crop (C)'], exact=True).is_visible()
+                                    assert await f.get_by_role('button',name=strings['Crop (C)'], exact=True).is_visible()
                                     assert await rectangle.is_visible()
                                     await page.screenshot(path=str(OUT / 'crop-annotate-after.png'))
-                                await f.get_by_title(strings['Crop (C)'], exact=True).click()
+                                await f.get_by_role('button',name=strings['Crop (C)'], exact=True).click()
                                 await undo.click()
                                 await redo.click()
                                 # Cancelling export cannot drop the pending crop or its history.
@@ -211,9 +227,14 @@ async def main():
                                 assert not errors, errors
                                 results.append({'language':language, 'viewport':[width,height], 'backingScale':scale, 'savedPixels':[600,360], 'passed':['crop tool switching with focused-button Enter', 'crop undo/redo across tool switch', 'independent annotation undo/redo', 'export-only close guard', 'keyboard Save As exports without library Save', 'cancelled export keeps crop', 'keyboard cancel crop retains original-coordinate marks', 'Escape cancels crop only', 'source-pixel mapping and translated marks', 'final Save PNG dimensions']})
                             finally:
+                                case['phase'] = 'closing'
                                 await context.close()
+                                case['phase'] = 'closed'
+                                (OUT / 'crop-lifecycle.json').write_text(json.dumps(lifecycle, ensure_ascii=False, indent=2) + '\n')
             finally:
                 await browser.close()
+                (OUT / 'crop-lifecycle.json').write_text(json.dumps(lifecycle, ensure_ascii=False, indent=2) + '\n')
+            assert not [case for case in lifecycle if case['errors']], lifecycle
     finally:
         server.shutdown()
         server.server_close()

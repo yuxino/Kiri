@@ -881,7 +881,7 @@ try:
     expected.save(output / "expected-region.png")
     open_capture()
     drag_region((220, 240, 900, 620))
-    wait_for_control("Done — Copy to clipboard · Return")
+    wait_for_control("Done — Copy to clipboard")
     preview = screenshot("selected-region.png")
     # Exclude handles and the 1px selection border, then verify what the user
     # sees is the same region that will be copied and saved.
@@ -1081,7 +1081,7 @@ try:
         raise RuntimeError("The focus-restore control must start from the external fixture")
     open_capture()
     drag_region((220, 240, 900, 620))
-    click_control("Done — Copy to clipboard · Return")
+    click_control("Done — Copy to clipboard")
     wait_for("capture with background library closes", lambda: overlay() is None)
     wait_for("focus returns to the source with background library", lambda:
              command("xdotool", "getactivewindow").stdout.strip() == source_window)

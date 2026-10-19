@@ -521,7 +521,7 @@ def verify_current_root_capture():
     mouse.press(coords=region[:2])
     mouse.move(coords=region[2:])
     mouse.release(coords=region[2:])
-    find("Done — Copy to clipboard · Return", kinds=("Button",))
+    find("Done — Copy to clipboard", kinds=("Button",))
     keyboard.send_keys("{ENTER}")
     created = wait_for("new capture in current custom library", lambda: [
         asset for asset in index() if asset["id"] not in old_ids])

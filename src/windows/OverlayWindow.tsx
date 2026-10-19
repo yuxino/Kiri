@@ -2082,7 +2082,7 @@ export function Toolbar(props: ToolbarProps) {
               active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
               onClick={() => canSetSize ? onToggleSize() : toggleDetails()}/>
             <ToolButton icon="pin" title={t("Pin Screenshot on Top")} disabled={disabled} onClick={onPin}/>
-            <ToolButton icon="checkmark" title={t("Done — Copy to clipboard · Return")} shortcut="Enter" primary disabled={disabled} onClick={onDone}/>
+            <ToolButton icon="checkmark" title={t("Done — Copy to clipboard")} shortcut="Enter" primary disabled={disabled} onClick={onDone}/>
           </div>
         </div>
         {showOptions && <div ref={optionsRef} className="kiri-hud kiri-capture-tool-options"

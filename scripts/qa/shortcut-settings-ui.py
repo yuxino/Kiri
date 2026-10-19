@@ -89,7 +89,7 @@ GEOMETRY = r"""() => {
       for(const target of focusTargets){
         const style=getComputedStyle(target),width=parseFloat(style.outlineWidth)||0;
         focusMetrics.push({action:row.dataset.action,element:target.className,outlineStyle:style.outlineStyle,
-          outlineWidth:style.outlineWidth,outlineOffset:style.outlineOffset,shadow:style.boxShadow,border:style.borderColor});
+          outlineWidth:style.outlineWidth,outlineOffset:style.outlineOffset,shadow:style.boxShadow,border:style.borderColor,bounds:rect(target)});
         const outlineBleed=style.outlineStyle==='none'?0:Math.max(0,width+(parseFloat(style.outlineOffset)||0));
         const bleed={left:outlineBleed,right:outlineBleed,top:outlineBleed,bottom:outlineBleed};
         // Focus may be painted by a solid box-shadow instead of outline.
@@ -102,7 +102,8 @@ GEOMETRY = r"""() => {
           bleed.left=Math.max(bleed.left,extent-x);bleed.right=Math.max(bleed.right,extent+x);
           bleed.top=Math.max(bleed.top,extent-y);bleed.bottom=Math.max(bleed.bottom,extent+y);
         }
-        if(Object.values(bleed).every(value=>value===0))continue;
+        // An inset ring must not hide a partially clipped focused button.
+        // Always check the button bounds, even when there is no outer ink.
         const b=rect(target),outline={x:b.x-bleed.left*zoom,y:b.y-bleed.top*zoom,
           right:b.right+bleed.right*zoom,bottom:b.bottom+bleed.bottom*zoom};
         for(let ancestor=target.parentElement;ancestor;ancestor=ancestor.parentElement){
@@ -245,6 +246,7 @@ async def editable_cases(page, checks, evidence_prefix=None):
     await page.keyboard.press("Tab")
     await expect(row.locator('.kiri-shortcut-apply')).to_be_focused()
     await geometry(page, "keyboard-confirm-focus", checks)
+    await screenshot("confirm-focus")
     await page.keyboard.press("Escape")
     await expect(recorder).to_have_attribute("aria-pressed", "false")
     await expect(row.locator('.kiri-shortcut-chord')).to_have_text(original)
@@ -440,7 +442,8 @@ async def run_case(browser, url, output, spec):
         else:
             representative = (target, language, width, height, zoom) in {
                 ("macos", "zh-Hans", 1000, 640, 1), ("windows", "de", 1000, 640, 1),
-                ("windows", "de", 1000, 640, 1.25), ("linux", "de", 700, 640, 1)}
+                ("windows", "de", 1000, 640, 1.25), ("linux", "de", 700, 640, 1),
+                ("macos", "de", 1000, 640, 1.25)}
             await editable_cases(page, checks, output / name if representative else None)
         await references(page, checks)
         assert not errors, errors

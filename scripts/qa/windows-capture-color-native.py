@@ -39,7 +39,7 @@ report = {"success": False, "native": True, "checks": [],
 app = fixture = source = None
 capture_handle = None
 desktop = Desktop(backend="uia")
-DONE = "Done — Copy to clipboard · Return"
+DONE = "Done — Copy to clipboard"
 POINTS = {"near-black": ((110, 250), "#000302"),
           "pink": ((530, 250), "#FA80FF"),
           "single-pixel": ((200, 240), "#102030")}

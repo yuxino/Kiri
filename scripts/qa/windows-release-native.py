@@ -250,7 +250,7 @@ def direct_pin_acceptance(source, expected, region, user32):
     source.set_focus()
     keyboard.send_keys("^+a"); find("Screenshot")
     drag_mouse(region[:2], region[2:])
-    find(re.escape("Done — Copy to clipboard · Return"))
+    find(re.escape("Done — Copy to clipboard"))
     keyboard.send_keys("{ENTER}")
     find("Pin Screenshot on Top", timeout=7)  # Ordinary completion card.
     copied = ImageGrab.grabclipboard()
@@ -292,7 +292,7 @@ def library_hidden_capture_acceptance(library_window, source, region, expected):
                 wait_for("Escape restores the library", native.is_visible)
                 continue
             drag_mouse(region[:2], region[2:])
-            find(re.escape("Done — Copy to clipboard · Return"))
+            find(re.escape("Done — Copy to clipboard"))
             keyboard.send_keys("{ENTER}")
             find("Pin Screenshot on Top", timeout=7)
             copied = ImageGrab.grabclipboard()
@@ -353,7 +353,7 @@ def quick_capture_acceptance(library_window):
         mouse.press(coords=region[:2])
         mouse.move(coords=region[2:])
         mouse.release(coords=region[2:])
-        find(re.escape("Done — Copy to clipboard · Return"))
+        find(re.escape("Done — Copy to clipboard"))
         mouse.double_click(coords=(400, 380))
         pin_button = find("Pin Screenshot on Top", timeout=7)
         copied = ImageGrab.grabclipboard()

@@ -1,5 +1,6 @@
 """Exercise native shortcut settings and idle recording scope on isolated Windows CI."""
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,9 +17,11 @@ if os.environ.get("GITHUB_ACTIONS") != "true" or os.name != "nt":
 
 output = Path("shortcut-native-review")
 output.mkdir(exist_ok=True)
-report = {"success": False, "checks": []}
+report = {"success": False, "native": True, "checks": []}
 desktop = Desktop(backend="uia")
-executable = Path("src-tauri/target/release/kiri.exe").resolve()
+installed_exe = os.environ.get("KIRI_QA_INSTALLED_EXE")
+executable = Path(installed_exe or "src-tauri/target/release/kiri.exe").resolve()
+report["candidate"] = {"path": str(executable), "source": "installed" if installed_exe else "compiled fallback"}
 process = None
 hotkey_id, probe_id = 2122, 2123
 held = False
@@ -160,6 +163,7 @@ def failure_evidence():
 
 
 try:
+    report["candidate"]["sha256"] = hashlib.sha256(executable.read_bytes()).hexdigest()
     # This helper also requires a GitHub-hosted runner. It backs up only Kiri's
     # directories and restores prior QA data after this run's processes stop.
     with isolated_windows_profile() as environment:

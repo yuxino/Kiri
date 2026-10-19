@@ -23,6 +23,29 @@ function releaseWindowsJob(source) {
   return workflow.match(/\n  build-windows:\n([\s\S]*)$/)?.[1];
 }
 
+function assertReleaseNativeGates(source) {
+  const job = releaseWindowsJob(source);
+  assert.ok(job, "the Windows release job must exist");
+  assert.match(job, /releaseDraft:\s*true/);
+  const steps = job.split(/^      - /m).slice(1);
+  const install = steps.findIndex(step => step.startsWith("name: Install and smoke-test both Windows packages\n"));
+  const upload = steps.findIndex(step => step.startsWith("name: Upload portable package to draft release\n"));
+  assert.ok(install >= 0 && upload > install, "native acceptance must precede portable publication");
+  assert.match(steps[install], /"KIRI_QA_INSTALLED_EXE=\$env:KIRI_QA_INSTALLED_EXE" \| Out-File -FilePath \$env:GITHUB_ENV/,
+    "later gates must inherit the executable installed from the release installer");
+  for (const driver of ["countdown", "shortcut"]) {
+    const index = steps.findIndex(step => step.includes(`run: python scripts/qa/${driver}-native.py\n`));
+    assert.ok(index > install && index < upload, `${driver} must check the installed release before final upload`);
+    assert.doesNotMatch(steps[index], /^\s*(?:if|continue-on-error):/m, `${driver} cannot be optional or ignore failures`);
+    const timeout = Number(steps[index].match(/timeout-minutes:\s*(\d+)/)?.[1]);
+    assert.ok(timeout >= 3 && timeout <= 8, `${driver} needs a bounded native-test timeout`);
+    const artifact = steps.find(step => step.includes(`path: ${driver}-native-review/\n`));
+    assert.ok(artifact, `${driver} must retain its evidence`);
+    assert.match(artifact, /uses: actions\/upload-artifact@/);
+    assert.match(artifact, /if: always\(\)/, `${driver} evidence must survive failure`);
+  }
+}
+
 function markdownTargetPath(destination) {
   // Strip URL components before decoding; encoded ? and # can be filename text.
   return destination.replace(/^<|>$/g, "").split(/[?#]/, 1)[0];
@@ -170,6 +193,31 @@ test("release Windows job parsing accepts LF and CRLF", () => {
     assert.match(windowsJob, /needs: verify-version/);
     assert.match(windowsJob, /releaseDraft:\s*true/);
   }
+});
+
+test("release native gates validate the actual installed bundle and keep failure evidence", () => {
+  const workflow = readFileSync(join(repositoryRoot, ".github/workflows/release.yml"), "utf8");
+  for (const newline of ["\n", "\r\n"]) {
+    assertReleaseNativeGates(workflow.replace(/\r?\n/g, newline));
+  }
+  const shortcut = readFileSync(join(repositoryRoot, "scripts/qa/shortcut-native.py"), "utf8");
+  assert.match(shortcut, /installed_exe = os\.environ\.get\("KIRI_QA_INSTALLED_EXE"\)/);
+  assert.match(shortcut, /executable = Path\(installed_exe or "src-tauri\/target\/release\/kiri\.exe"\)\.resolve\(\)/);
+  assert.match(shortcut, /"source": "installed" if installed_exe else "compiled fallback"/);
+  assert.match(shortcut, /report\["candidate"\]\["sha256"\] = hashlib\.sha256\(executable\.read_bytes\(\)\)\.hexdigest\(\)/);
+  assert.match(shortcut, /subprocess\.Popen\(\[str\(executable\)\]/);
+});
+
+test("release gate regression rejects missing, optional and failure-ignoring native checks", () => {
+  const workflow = readFileSync(join(repositoryRoot, ".github/workflows/release.yml"), "utf8");
+  for (const driver of ["countdown", "shortcut"]) {
+    const command = `run: python scripts/qa/${driver}-native.py`;
+    for (const replacement of ["run: echo skipped", `if: false\n        ${command}`, `continue-on-error: true\n        ${command}`]) {
+      assert.throws(() => assertReleaseNativeGates(workflow.replace(command, replacement)));
+    }
+    assert.throws(() => assertReleaseNativeGates(workflow.replace(`path: ${driver}-native-review/`, "path: unrelated/")));
+  }
+  assert.throws(() => assertReleaseNativeGates(workflow.replace("-FilePath $env:GITHUB_ENV", "-FilePath other-file")));
 });
 
 test("completed migration material stays in Git history", () => {

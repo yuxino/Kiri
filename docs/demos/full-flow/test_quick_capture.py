@@ -114,18 +114,18 @@ async def main():
                 await drag((200, 160), (1050, 570))
                 await page.mouse.dblclick(70, 60)  # Outside selection.
                 await page.mouse.dblclick(200, 160)  # Resize handle.
-                await frame.get_by_title('Rectangle (R)', exact=True).dblclick()  # Toolbar.
+                await frame.get_by_role('button',name='Rectangle (R)', exact=True).dblclick()  # Toolbar.
                 assert await confirms() == 1
                 await drag((300, 240), (500, 330))
-                await frame.get_by_title('Select (V)', exact=True).click()
+                await frame.get_by_role('button',name='Select (V)', exact=True).click()
                 await page.mouse.dblclick(300, 270)  # Existing annotation.
                 assert await confirms() == 1
-                await frame.get_by_title('Text (T)', exact=True).click()
+                await frame.get_by_role('button',name='Text (T)', exact=True).click()
                 await page.mouse.click(650, 300)
                 text = frame.get_by_role('textbox', name='Text content', exact=True)
                 await text.fill('editable reference')
                 await page.mouse.click(950, 470)  # Commit without confirming.
-                await frame.get_by_title('Select (V)', exact=True).click()
+                await frame.get_by_role('button',name='Select (V)', exact=True).click()
                 await page.mouse.dblclick(680, 315)
                 await text.wait_for()
                 assert await text.input_value() == 'editable reference'
@@ -141,7 +141,7 @@ async def main():
                 for index, title in enumerate(tools):
                     frame = await capture()
                     await drag((200, 160), (1050, 570))
-                    await frame.get_by_title(title, exact=True).click()
+                    await frame.get_by_role('button',name=title, exact=True).click()
                     if title == 'Watermark (W)':
                         await frame.get_by_role('button', name='Edit watermark', exact=True).click()
                         field = frame.get_by_role('textbox', name='Text content', exact=True)

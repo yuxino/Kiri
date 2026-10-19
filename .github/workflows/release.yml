@@ -89,13 +89,39 @@ jobs:
           if ($installerProcess.ExitCode -ne 0) { throw "NSIS installation failed: $($installerProcess.ExitCode)" }
           $env:KIRI_QA_PORTABLE_EXE = Join-Path $env:RUNNER_TEMP 'kiri-portable-verify/kiri.exe'
           $env:KIRI_QA_INSTALLED_EXE = Join-Path $install 'kiri.exe'
+          if (-not (Test-Path $env:KIRI_QA_INSTALLED_EXE)) { throw 'Installed release executable is missing' }
+          "KIRI_QA_INSTALLED_EXE=$env:KIRI_QA_INSTALLED_EXE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           python scripts/qa/windows-release-native.py
+
+      - name: Verify release countdown and recording controls on the actual desktop
+        timeout-minutes: 4
+        run: python scripts/qa/countdown-native.py
+
+      - name: Verify release shortcuts on the actual desktop
+        timeout-minutes: 3
+        run: python scripts/qa/shortcut-native.py
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: windows-release-review
           path: windows-release-review/
+          retention-days: 5
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: countdown-native-review
+          path: countdown-native-review/
+          retention-days: 5
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: shortcut-native-review
+          path: shortcut-native-review/
           retention-days: 5
           if-no-files-found: warn
 

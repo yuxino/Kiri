@@ -50,7 +50,7 @@ async def main():
                                 };
                             }''', {'width': width, 'height': height, 'scale': scale, 'language': language})
                             async def check(f):
-                                done = f.get_by_role('button', name=translations['Done — Copy to clipboard · Return'], exact=True)
+                                done = f.get_by_role('button', name=translations['Done — Copy to clipboard'], exact=True)
                                 await done.wait_for()
                                 toolbar = f.locator('.kiri-capture-toolbar')
                                 # Wait for ResizeObserver placement to settle after tool reflow.
@@ -140,7 +140,14 @@ async def main():
                                             assert await options_toggle.get_attribute('aria-expanded') == 'true'
                                             _, reopened_options = await check(f)
                                             assert reopened_options['bar']['y'] + reopened_options['bar']['height'] <= y
-                                        assert await done.get_attribute('title') == translations['Done — Copy to clipboard · Return']
+                                        assert await done.get_attribute('aria-label') == translations['Done — Copy to clipboard']
+                                        assert await done.get_attribute('aria-keyshortcuts') == 'Enter'
+                                        await done.focus()
+                                        tooltip = f.get_by_role('tooltip').filter(has_text=translations['Done — Copy to clipboard'])
+                                        await tooltip.wait_for()
+                                        platform_key = await done.evaluate("e=>/Mac|iPhone|iPad/.test(e.ownerDocument.defaultView.navigator.platform)?'Return':'Enter'")
+                                        assert await tooltip.inner_text() == translations['Done — Copy to clipboard'] + ' · ' + platform_key
+                                        assert await tooltip.get_attribute('id') == await done.get_attribute('aria-describedby')
                                     await done.click()
                                     await page.wait_for_function('state.calls.some(x=>x.c==="confirm_capture")')
                                     request = await page.evaluate('state.pendingAnnotation.selection')

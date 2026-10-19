@@ -807,7 +807,7 @@
 .kiri-global-shortcut__copy { min-width: 0; }
 .kiri-global-shortcut__copy strong { font-size: 13px; font-weight: 400; line-height: 1.4; overflow-wrap: anywhere; }
 .kiri-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.kiri-global-shortcut__controls { display: grid; grid-template-columns: minmax(0, 260px) 28px; align-items: start; gap: 6px; flex: 0 0 294px; max-width: 100%; margin-left: auto; min-width: 0; }
+.kiri-global-shortcut__controls { display: grid; grid-template-columns: minmax(0, 288px) 28px; align-items: start; gap: 6px; flex: 0 0 322px; max-width: 100%; margin-left: auto; min-width: 0; }
 .kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls { grid-template-columns: minmax(0, 176px) 28px; flex-basis: 242px; }
 .kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls[data-long-key] { grid-template-columns: minmax(0, 192px) 28px; }
 .kiri-shortcut-field { display: flex; align-items: stretch; min-width: 0; height: 32px; box-sizing: border-box; border: 1px solid var(--kiri-surface-border); border-radius: 6px; background: color-mix(in srgb, var(--kiri-group-fill) 40%, var(--kiri-card)); overflow: hidden; }
@@ -856,6 +856,7 @@
 .kiri-shortcut-feedback p { margin: 0; font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .kiri-shortcut-apply { min-height: 26px; padding: 3px 9px; border: 1px solid var(--kiri-label); border-radius: 5px; background: var(--kiri-label); color: var(--kiri-card); font: 11.5px/1.4 var(--kiri-font-ui); cursor: pointer; }
 .kiri-shortcut-apply:hover { opacity: .85; }
+.kiri-settings .kiri-shortcut-apply:focus-visible { outline: 2px solid var(--kiri-card); outline-offset: -3px; }
 .kiri-shortcut-retry { min-height: 24px; padding: 2px 7px; border: 1px solid var(--kiri-surface-border); border-radius: 4px; background: var(--kiri-card); color: var(--kiri-label); font: 11.5px/1.4 var(--kiri-font-ui); cursor: pointer; }
 .kiri-shortcut-retry:hover:not(:disabled) { border-color: var(--kiri-secondary-label); background: var(--kiri-group-fill); }
 .kiri-shortcut-retry:disabled { opacity: .5; cursor: default; }

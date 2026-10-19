@@ -144,7 +144,7 @@ async def overlay_cases(browser, report):
                 }""")
                 assert layout["clearOfMode"], layout
                 assert all(b["inside"] and b["hit"] for b in layout["buttons"]), layout
-                await page.get_by_role("button", name=dictionary["Done — Copy to clipboard · Return"], exact=True).click()
+                await page.get_by_role("button", name=dictionary["Done — Copy to clipboard"], exact=True).click()
                 await page.wait_for_function("__annotationToolsQa.exports.length===1")
                 mark = await page.evaluate("__annotationToolsQa.document.marks[0]")
                 assert mark["text"] == "QA" and mark["kind"] == "watermark", mark
@@ -379,7 +379,7 @@ async def placement_finished(page, title, source_hash):
     # These assertions precede every save: exportResult itself can commit a
     # pending editor and would otherwise conceal an incorrect canvas click.
     await page.locator("textarea").wait_for(state="detached")
-    await page.wait_for_function("[...document.querySelectorAll('.kiri-annotation-controls-heading span')].every(e=>e.textContent!=='Selected object')")
+    await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="detached")
     assert await page.get_by_role("button", name=title, exact=True).get_attribute("aria-pressed") == "true"
     assert await page.evaluate("__annotationToolsQa.exports.length") == 0
     assert await placement_source_hash(page) == source_hash, "Annotation gestures must never alter the clean source"
@@ -389,7 +389,7 @@ async def placement_export(page, surface, source_hash):
     await page.locator("textarea").wait_for(state="detached")
     assert await page.evaluate("__annotationToolsQa.exports.length") == 0
     assert await placement_source_hash(page) == source_hash
-    title = "Save As…" if surface == "editor" else "Done — Copy to clipboard · Return"
+    title = "Save As…" if surface == "editor" else "Done — Copy to clipboard"
     await page.get_by_role("button", name=title, exact=True).click()
     await page.wait_for_function("__annotationToolsQa.exports.length===1")
     result = await page.evaluate("""async () => {
@@ -493,7 +493,7 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
     await page.get_by_role("button", name=title, exact=True).click()
     start, end = await placement_point(page, .18, .27), await placement_point(page, .36, .42)
     await placement_drag(page, start, end)
-    await page.get_by_text("Selected object", exact=True).wait_for(state="visible")
+    await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
     case["phase"] = "first blank drag only deselects"
     second_start, second_end = await placement_point(page, .68, .62), await placement_point(page, .83, .77)
     await placement_drag(page, second_start, second_end)
@@ -502,7 +502,7 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
     assert first_pixels != empty_hash
     case["phase"] = "second blank drag creates another shape"
     await placement_drag(page, second_start, second_end)
-    await page.get_by_text("Selected object", exact=True).wait_for(state="visible")
+    await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
     blank = await placement_point(page, .12, .82)
     await page.mouse.click(blank["x"], blank["y"])
     await placement_finished(page, title, source_hash)
@@ -520,7 +520,7 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
     case["phase"] = "own existing shape moves on its first drag"
     middle = {"x": (start["x"] + end["x"]) / 2, "y": (start["y"] + end["y"]) / 2}
     await placement_drag(page, middle, {"x": middle["x"] + 30, "y": middle["y"] + 18})
-    await page.get_by_text("Selected object", exact=True).wait_for(state="visible")
+    await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
     await page.mouse.click(blank["x"], blank["y"])
     await placement_finished(page, title, source_hash)
     moved_pixels = await placement_canvas_hash(page)
@@ -556,7 +556,7 @@ async def placement_continuous_case(page, surface, tool, title, source_hash, emp
     case["phase"] = "two consecutive strokes with the same active tool"
     for start, end in [((.18, .27), (.40, .39)), ((.62, .65), (.84, .77))]:
         await placement_drag(page, await placement_point(page, *start), await placement_point(page, *end))
-        await page.get_by_text("Selected object", exact=True).wait_for(state="visible")
+        await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
         assert await page.get_by_role("button", name=title, exact=True).get_attribute("aria-pressed") == "true"
     # Switch to Select only after both strokes: otherwise a tool switch could
     # clear the selection and hide a swallowed second-stroke regression.
@@ -676,7 +676,13 @@ async def finish_before_placement_cases(browser, report):
                 case["failure"] = {"type": type(error).__name__, "message": str(error), "pageErrors": errors,
                     "ui": await page.evaluate("""() => ({inputs:[...document.querySelectorAll('textarea')].map(e=>({value:e.value,focused:document.activeElement===e})),
                       exports:__annotationToolsQa.exports.length,lastExportDocumentMarks:__annotationToolsQa.document.marks,
-                      selected:[...document.querySelectorAll('button[aria-pressed=true]')].map(e=>e.ariaLabel||e.title||e.textContent)})""") if page else None}
+                      selected:[...document.querySelectorAll('button[aria-pressed=true]')].map(e=>e.ariaLabel||e.title||e.textContent),
+                      baselineComparison:(()=>{const c=document.querySelector('canvas'),
+                        before=__annotationToolsQa.placementBaseline,after=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+                        let changed=0,beforeVisible=0,afterVisible=0;
+                        for(let i=0;i<after.length;i+=4){if(before[i+3])beforeVisible++;if(after[i+3])afterVisible++;
+                          if(after[i]!==before[i]||after[i+1]!==before[i+1]||after[i+2]!==before[i+2]||after[i+3]!==before[i+3])changed++;}
+                        return {width:c.width,height:c.height,beforeBytes:before.length,afterBytes:after.length,changed,beforeVisible,afterVisible};})()})""") if page else None}
                 if page:
                     await page.screenshot(path=str(OUT / f"finish-placement-{surface}-{tool}-{title.split()[0]}-failure.png"))
                 raise
@@ -718,7 +724,7 @@ async def deletion_cases(browser, report):
                     assert await page.locator("textarea").count() == 0, "Single click must select, not edit"
                     await page.keyboard.press(key)
                     await page.mouse.move(20, 20)
-                    await page.wait_for_function("!document.querySelector('.kiri-annotation-controls-heading span')")
+                    await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="detached")
                     assert await placement_canvas_hash(page) == empty_hash, (surface, title, key)
                     await page.keyboard.press("Control+z")
                     assert await placement_canvas_hash(page) != empty_hash, "Undo must restore the object"
@@ -740,7 +746,13 @@ async def verify():
     report = {"scope": "Actual product windows with isolated IPC; no native or IME claim", "editor": [], "overlay": [], "finishBeforePlacement": []}
     try:
         async with async_playwright() as runtime:
-            browser = await runtime.chromium.launch(headless=True, executable_path=os.environ.get("CHROME_BIN", "/usr/bin/google-chrome"))
+            # Repeated getImageData calls can move Chromium's 2D canvas from
+            # GPU to software rendering, shifting resampled source RGB by one.
+            # Keep one rasterizer so exact undo/redo pixel assertions stay strict.
+            browser = await runtime.chromium.launch(headless=True,
+                executable_path=os.environ.get("CHROME_BIN", "/usr/bin/google-chrome"),
+                args=["--disable-accelerated-2d-canvas"])
+            report["canvasRasterization"] = "software 2D; exact pixel equality, no tolerance"
             page = await browser.new_page()
             await page.goto(URL)
             await page.locator("canvas").wait_for()

@@ -42,8 +42,8 @@ async def main():
      await f.locator('img').first.evaluate('(im)=>im.decode()')
      await drag((180,140),(1050,570));return f
     f=await capture()
-    await f.get_by_title('Rectangle (R)',exact=True).click();await drag((230,180),(500,250))
-    await f.get_by_title('Text (T)',exact=True).click();await page.mouse.click(620,310)
+    await f.get_by_role('button',name='Rectangle (R)',exact=True).click();await drag((230,180),(500,250))
+    await f.get_by_role('button',name='Text (T)',exact=True).click();await page.mouse.click(620,310)
     textarea=f.get_by_role('textbox',name='Text content',exact=True)
     await textarea.evaluate("""el=>{
      window.textChildMutations=0;
@@ -71,7 +71,7 @@ async def main():
      buffer=io.BytesIO();Image.new('RGB',(1000,600),'#707b8d').save(buffer,format='PNG');MEDIA['image-edit-fixture']=(buffer.getvalue(),'image/png')
      await page.evaluate("frame('editor',{id:'image-edit-fixture'})")
      editor=page.frame_locator('#editor');await editor.locator('canvas').wait_for()
-     await editor.get_by_title('Text (T)',exact=True).click();await page.mouse.click(600,320)
+     await editor.get_by_role('button',name='Text (T)',exact=True).click();await page.mouse.click(600,320)
      await editor.get_by_role('textbox',name='Text content',exact=True).press_sequentially('unsaved text',delay=20)
      await editor.get_by_role('button',name='Cancel',exact=True).click();await page.locator('#editor').wait_for(state='detached')
      await page.screenshot(path=str(OUT/'image-close-before.png'))
@@ -92,11 +92,11 @@ async def main():
     await textarea.press('Escape');await textarea.wait_for(state='detached')
     assert await page.locator('#overlay').count()==1,'first Escape closed capture'
     await page.screenshot(path=str(OUT/'text-escape-after.png'))
-    await f.get_by_title('Undo (⌘Z)',exact=True).click()
-    assert await f.get_by_title('Redo (⇧⌘Z)',exact=True).is_enabled(),'earlier rectangle was lost'
-    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click()
+    await f.get_by_role('button',name='Undo',exact=True).click()
+    assert await f.get_by_role('button',name='Redo',exact=True).is_enabled(),'earlier rectangle was lost'
+    await f.get_by_role('button',name='Redo',exact=True).click()
     await page.keyboard.press('Escape');await page.locator('#overlay').wait_for(state='detached')
-    f=await capture();await f.get_by_title('Text (T)',exact=True).click();await page.mouse.click(620,310)
+    f=await capture();await f.get_by_role('button',name='Text (T)',exact=True).click();await page.mouse.click(620,310)
     textarea=f.get_by_role('textbox',name='Text content',exact=True)
     await textarea.press_sequentially('line one',delay=10);await textarea.press('Shift+Enter');await textarea.press_sequentially('line two',delay=10)
     typed=await textarea.input_value()
@@ -137,14 +137,31 @@ async def main():
     expected+='中文'
     assert await description.input_value()==expected
     assert await description.evaluate('el=>window.calloutChildMutations')==0,'callout input rewrote native textarea DOM'
+    # Target the first description's actual visible first line. The movable
+    # property panel may cover an old fixed point farther down its label.
+    first_label=await description.bounding_box()
+    first_callout_point={'x':first_label['x']+min(20,first_label['width']/2),
+                         'y':first_label['y']+min(20,first_label['height']/2)}
+    async def click_first_callout(double=False):
+     assert await f.locator('canvas').evaluate('(canvas,p)=>canvas.ownerDocument.elementFromPoint(p.x,p.y)===canvas',first_callout_point),'callout target is covered by a control'
+     if double:await page.mouse.dblclick(**first_callout_point)
+     else:await page.mouse.click(**first_callout_point)
     # A single click selects; a double click creates a separate native editor.
-    await f.get_by_title('Numbered callout (N)',exact=True).click();await page.mouse.click(950,480)
+    await f.get_by_role('button',name='Numbered callout (N)',exact=True).click();await page.mouse.click(950,480)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='2'")
     await description.press_sequentially('second description',delay=10)
-    await f.get_by_title('Select (V)',exact=True).click();await page.mouse.click(480,380)
-    await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
+    await f.get_by_role('button',name='Select (V)',exact=True).click();await click_first_callout()
+    try:
+     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
+    except Exception:
+     await page.screenshot(path=str(OUT/'callout-selection-failure.png'))
+     diagnostic=await f.locator('body').evaluate("""(p)=>{const hit=document.elementFromPoint(p.x,p.y);return {point:p,hit:hit?{tag:hit.tagName,classes:hit.className,label:hit.ariaLabel,text:hit.textContent}:null,
+      inputs:[...document.querySelectorAll('input,textarea')].map(e=>({label:e.ariaLabel,value:e.value})),
+      canvas:document.querySelector('canvas')?.getBoundingClientRect().toJSON()};}""",first_callout_point)
+     (OUT/'callout-selection-failure.json').write_text(json.dumps(diagnostic,ensure_ascii=False,indent=2)+'\n')
+     raise
     assert await description.count()==0,'single-click selection started text editing'
-    await page.mouse.dblclick(480,380)
+    await click_first_callout(double=True)
     await page.screenshot(path=str(OUT/'callout-reselection.png'))
     assert await description.input_value()==expected,{'stage':'reselection','actual':await description.input_value()}
     await description.press('Meta+ArrowDown' if sys.platform=='darwin' else 'Control+End')
@@ -153,15 +170,15 @@ async def main():
     await description.press(mod+'+Shift+z');assert await description.input_value()==expected+'x'
     await description.press(mod+'+z');assert await description.input_value()==expected
     await description.press_sequentially(' edited',delay=10)
-    await f.get_by_title('Undo (⌘Z)',exact=True).click();await page.mouse.dblclick(480,380)
+    await f.get_by_role('button',name='Undo',exact=True).click();await click_first_callout(double=True)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     assert await description.input_value()==expected,'canvas Undo did not restore the callout field'
-    await f.get_by_title('Redo (⇧⌘Z)',exact=True).click();await page.mouse.dblclick(480,380)
+    await f.get_by_role('button',name='Redo',exact=True).click();await click_first_callout(double=True)
     await page.wait_for_function("document.querySelector('#overlay').contentDocument.querySelector('input[aria-label=\"Number\"]')?.value==='1'")
     expected+=' edited'
     assert await description.input_value()==expected,'canvas Redo did not restore the callout field'
     await page.screenshot(path=str(OUT/'callout-input-after.png'))
-    await f.get_by_title('Done — Copy to clipboard · Return',exact=True).click()
+    await f.get_by_role('button',name='Done — Copy to clipboard',exact=True).click()
     await page.locator('#overlay').wait_for(state='detached')
     callouts=[mark['text'] for mark in json.loads((await page.evaluate('state.pendingAnnotation'))['documentJson'])['marks'] if mark['kind']=='callout']
     assert callouts==[expected,'second description'],callouts
@@ -174,7 +191,7 @@ async def main():
     await page.evaluate('state.editorCloseEvents=true;state.editorDestroyCalls=0')
     f=await editor();await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
     await page.locator('#editor').wait_for(state='detached')
-    f=await editor();await f.get_by_title('Text (T)',exact=True).click();await page.mouse.click(600,320)
+    f=await editor();await f.get_by_role('button',name='Text (T)',exact=True).click();await page.mouse.click(600,320)
     textarea=f.get_by_role('textbox',name='Text content',exact=True)
     await textarea.press_sequentially('unsaved text',delay=20)
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
@@ -188,14 +205,14 @@ async def main():
     await textarea.press('Escape');await textarea.wait_for(state='detached')
     # The discarded pending text leaves a clean editor, so ordinary close works.
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await page.locator('#editor').wait_for(state='detached')
-    f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
+    f=await editor();await f.get_by_role('button',name='Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     # Native close-request event is IPC-injected; the rendered modal must prevent closure.
     await page.locator('#editor').evaluate("el=>el.contentWindow.__emit('tauri://close-requested',null)")
     dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
     await dialog.get_by_role('button',name='Keep editing',exact=True).click()
-    await f.get_by_title('Undo (⌘Z)',exact=True).click();await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
+    await f.get_by_role('button',name='Undo',exact=True).click();await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
     await page.locator('#editor').wait_for(state='detached')
-    f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
+    f=await editor();await f.get_by_role('button',name='Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     await page.evaluate('state.cancelSaveAs=true');await f.get_by_role('button',name='Save As…',exact=True).click()
     assert await page.evaluate('state.updates')==0
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True);await dialog.wait_for()
@@ -205,12 +222,12 @@ async def main():
     await page.evaluate('state.failSave=false')
     await dialog.get_by_role('button',name='Save & close',exact=True).click();await page.locator('#editor').wait_for(state='detached')
     assert len((await page.evaluate('state.prepared'))['marks'])==1
-    f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
+    f=await editor();await f.get_by_role('button',name='Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();dialog=f.get_by_role('dialog',name='Save changes before closing?',exact=True)
     await dialog.get_by_role('button',name='Discard unsaved changes & close',exact=True).click()
     await page.locator('#editor').wait_for(state='detached')
     # Save As exports only: the editable library asset still has unsaved marks.
-    f=await editor();await f.get_by_title('Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
+    f=await editor();await f.get_by_role('button',name='Rectangle (R)',exact=True).click();await drag((300,220),(650,370))
     await page.evaluate('state.cancelSaveAs=false');await f.get_by_role('button',name='Save As…',exact=True).click()
     await page.wait_for_function('state.updates===3');await page.wait_for_timeout(100)
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click()
@@ -220,12 +237,12 @@ async def main():
     await dialog.wait_for(state='hidden')
     exported_marks=(await page.evaluate('state.prepared'))['marks']
     assert len(exported_marks)==1
-    await f.get_by_text('Selected object',exact=True).wait_for(state='visible')
+    await f.get_by_role('button',name='Delete annotation',exact=True).wait_for(state='visible')
     # Keep editing retains the selected rectangle. Its first blank gesture
     # only deselects; the complete drag must not place another rectangle.
     await drag((700,400),(900,500))
-    await f.get_by_text('Selected object',exact=True).wait_for(state='hidden')
-    assert await f.get_by_title('Rectangle (R)',exact=True).get_attribute('aria-pressed')=='true','deselect changed the active tool'
+    await f.get_by_role('button',name='Delete annotation',exact=True).wait_for(state='hidden')
+    assert await f.get_by_role('button',name='Rectangle (R)',exact=True).get_attribute('aria-pressed')=='true','deselect changed the active tool'
     await f.get_by_role('button',name='Save As…',exact=True).click();await page.wait_for_function('state.updates===4')
     assert (await page.evaluate('state.prepared'))['marks']==exported_marks,'first blank drag changed or added a selected rectangle'
     await drag((700,400),(900,500))
@@ -234,7 +251,7 @@ async def main():
     assert (await page.evaluate('state.prepared'))['marks'][0]==exported_marks[0],'continuing edits changed the earlier rectangle'
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await dialog.wait_for()
     await dialog.get_by_role('button',name='Keep editing',exact=True).click()
-    await f.get_by_title('Undo (⌘Z)',exact=True).click();await f.get_by_title('Undo (⌘Z)',exact=True).click()
+    await f.get_by_role('button',name='Undo',exact=True).click();await f.get_by_role('button',name='Undo',exact=True).click()
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await page.locator('#editor').wait_for(state='detached')
     assert await page.evaluate('state.editorDestroyCalls')==6,'close never reached SDK destroy'
     assert not errors,errors
