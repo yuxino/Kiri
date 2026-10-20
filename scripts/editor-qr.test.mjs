@@ -207,6 +207,25 @@ test("a pending crop stays cancellable while annotating without changing marks, 
   h.component.unmount();
 });
 
+test("crop cancellation stays in the toolbar without covering image handles", async () => {
+  const h = await loadedEditor();
+  tool(h.component.render(), "Crop (C)").props.onClick();
+  let tree = h.component.render();
+  const toolbar = nodes(tree).find(node => node?.props?.className === "kiri-image-editor-toolbar");
+  assert.ok(button(toolbar, "Cancel crop"));
+  assert.equal(find(tree, "annotation-style-controls"), undefined);
+  assert.equal(nodes(tree).some(node => node?.props?.className === "kiri-image-editor-properties"), false);
+  assert.equal(tool(tree, "Tool options").props.disabled, true);
+  tool(tree, "Select (V)").props.onClick();
+  tree = h.component.render();
+  assert.ok(button(tree, "Cancel crop"), "pending crop remains cancellable in Select");
+  assert.equal(find(tree, "annotation-style-controls"), undefined);
+  tool(tree, "Recognize QR Codes").props.onClick();
+  tree = h.component.render();
+  assert.equal(button(tree, "Cancel crop").props.disabled, true);
+  h.component.unmount();
+});
+
 test("QR pauses background shortcuts synchronously and Escape restores crop, marks and an uncommitted text draft", async () => {
   const pending = deferred();
   const h = await loadedEditor({ scanQr: () => pending.promise });

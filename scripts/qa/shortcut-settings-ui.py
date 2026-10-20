@@ -294,20 +294,30 @@ async def editable_cases(page, checks, evidence_prefix=None):
     await screenshot("long-special-key")
     await row.locator('.kiri-shortcut-reset').click()
     await expect(row.locator('.kiri-shortcut-chord')).to_have_text(original)
-    await recorder.click()
-    await expect(recorder).to_have_attribute("aria-pressed", "true")
-    # The pinned browser keyboard API has no media key codes. Exercise the
-    # production native-event subscriber through the isolated Tauri event bus.
-    await page.evaluate("""async()=>{
-      const {emit}=await import('/node_modules/@tauri-apps/api/event.js');
-      await emit('shortcut-recorded',{shortcut:'Control+Alt+Shift+Super+MediaTrackPrevious',action:'recordingPauseResume'});
-    }""")
-    await expect(recorder).to_have_attribute("aria-pressed", "false")
-    await expect(row.locator('.kiri-shortcut-chord')).to_contain_text("Previous Track")
-    await geometry(page, "long-media-key-native-event", checks)
-    await screenshot("long-media-key")
-    await row.locator('.kiri-shortcut-reset').click()
-    await expect(row.locator('.kiri-shortcut-chord')).to_have_text(original)
+    # Source-derived measurements of every supported key with all modifiers
+    # identify Previous Track (Windows/X11) and MediaFastForward (macOS) as
+    # the widest native labels. Home and Num 4 also cover the compact-width
+    # threshold: a short label can still contain wide glyphs.
+    native_cases = [("MediaTrackPrevious", "Previous Track", "long-media-key-native-event"),
+                    ("Numpad4", "Num 4", "modified-keypad-native-event")]
+    if await page.evaluate("/Macintosh|Mac OS X/i.test(navigator.userAgent)"):
+        native_cases += [("MediaFastForward", "MediaFastForward", "long-mac-media-key-native-event"),
+                         ("Home", "Home", "modified-home-native-event")]
+    for code, label, state in native_cases:
+        await recorder.click()
+        await expect(recorder).to_have_attribute("aria-pressed", "true")
+        # The pinned browser keyboard API has no media key codes. Exercise
+        # the same production native-event subscriber for these key fixtures.
+        await page.evaluate("""async code=>{
+          const {emit}=await import('/node_modules/@tauri-apps/api/event.js');
+          await emit('shortcut-recorded',{shortcut:'Control+Alt+Shift+Super+'+code,action:'recordingPauseResume'});
+        }""", code)
+        await expect(recorder).to_have_attribute("aria-pressed", "false")
+        await expect(row.locator('.kiri-shortcut-chord')).to_contain_text(label)
+        await geometry(page, state, checks)
+        await screenshot(state)
+        await row.locator('.kiri-shortcut-reset').click()
+        await expect(row.locator('.kiri-shortcut-chord')).to_have_text(original)
     await recorder.click()
     await expect(recorder).to_have_attribute("aria-pressed", "true")
     await page.evaluate("__shortcutSettingsQa.failNext='This shortcut is already assigned to another action.'")

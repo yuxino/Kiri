@@ -269,7 +269,7 @@ export function EditorWindow(props: { id: string }) {
 
   const viewport = useImageViewport(imageSize, props.id, completing || !!ocrAsset);
   const {containerRef, viewSize, size: containerSize} = viewport;
-  const hasToolOptions = !readOnly && (tool !== "select" || selectedMark !== null || cropSelection !== null);
+  const hasToolOptions = !readOnly && tool !== "crop" && (tool !== "select" || selectedMark !== null);
   useEffect(() => { setOptionsOpen(true); }, [tool, selectedMark?.id]);
 
   const documentRegion = useMemo<Rect>(() => {
@@ -490,6 +490,9 @@ export function EditorWindow(props: { id: string }) {
           </div>
         </div>}
         <div className="kiri-image-editor-actions">
+          {!readOnly && cropSelection && <button type="button" className="kiri-image-editor-view-button" disabled={qrActive || completing}
+            onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+            onClick={cancelCrop}>{t("Cancel crop")}</button>}
           {!readOnly && <EditorToolButton icon="slider.horizontal.3" title={t("Tool options")} expanded={optionsOpen}
             active={hasToolOptions && optionsOpen} disabled={!hasToolOptions || qrActive} onClick={() => setOptionsOpen(open => !open)}/>}
 
@@ -600,12 +603,7 @@ export function EditorWindow(props: { id: string }) {
         </div>
         </div>
       {hasToolOptions && optionsOpen && !qrActive && <div className="kiri-image-editor-properties" inert={qrActive}>
-        {(tool === "crop" || cropSelection) && <div className="kiri-image-editor-crop-options"><strong>{t("Crop")}</strong>
-          {cropSelection && <button type="button" className="kiri-annotation-action" disabled={qrActive || completing}
-            onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
-            onClick={cancelCrop}>{t("Cancel crop")}</button>}</div>}
-        {tool !== "crop" &&
-          <AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance} disabled={qrActive}
+        <AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance} disabled={qrActive}
             panelChrome={<button type="button" className="kiri-capture-options-hide" aria-label={t("Hide tool options")}
               title={t("Hide tool options")} onKeyDown={event => event.stopPropagation()} onClick={() => setOptionsOpen(false)}><KiriIcon name="xmark" size={12}/></button>}
             nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
@@ -613,7 +611,7 @@ export function EditorWindow(props: { id: string }) {
             onChange={(patch, transient) => {setActionError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient);}}
             onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
             onDelete={() => canvasRef.current?.deleteSelection()}
-            onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
+            onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>
       </div>}
         {qrActive && <QrOverlay scan={qrScan} failed={!!qrError} error={qrError}
           sourceRect={{ x: viewport.layout.x - viewport.scroll.x,

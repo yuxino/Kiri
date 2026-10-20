@@ -117,7 +117,18 @@ async def main():
                                     return f
 
                                 async def drag_doc(f, start, end):
-                                    box = await f.locator('canvas').first.bounding_box()
+                                    # The raster canvas can cover only a scrolled visible
+                                    # portion. Pointer geometry belongs to the full image.
+                                    image = f.locator('canvas').first if before else f.locator('.annotation-canvas-root')
+                                    box = await image.bounding_box()
+                                    hit = await image.evaluate('''(image, p) => {
+                                        const r=image.getBoundingClientRect();
+                                        const target=document.elementFromPoint(r.x+p[0]*r.width/500, r.y+p[1]*r.height/300);
+                                        return {inside:target?.closest('.kiri-image-editor-picture')===image.closest('.kiri-image-editor-picture'),
+                                            target:target?.outerHTML.slice(0,200)};
+                                    }''', start)
+                                    if not before:
+                                        assert hit['inside'], hit
                                     def point(p):
                                         return box['x'] + p[0] * box['width'] / 500, box['y'] + p[1] * box['height'] / 300
                                     await page.mouse.move(*point(start))
@@ -127,6 +138,8 @@ async def main():
 
                                 async def crop(f):
                                     await f.get_by_role('button',name=strings['Crop (C)'], exact=True).click()
+                                    if not before:
+                                        assert await f.locator('.kiri-image-editor-properties').count() == 0, 'Crop controls must not cover its image handles'
                                     await drag_doc(f, (0, 0), (50, 40))
                                     await drag_doc(f, (499, 299), (350, 220))
 
@@ -171,6 +184,9 @@ async def main():
                                 await redo.click()
                                 await rectangle.focus()
                                 await rectangle.press('Enter')
+                                # Optional annotation properties float over the image.
+                                # Use their real close action before drawing underneath.
+                                await f.get_by_role('button', name=strings['Hide tool options'], exact=True).click()
                                 await drag_doc(f, (80, 60), (160, 110))
                                 await undo.click()
                                 await redo.click()

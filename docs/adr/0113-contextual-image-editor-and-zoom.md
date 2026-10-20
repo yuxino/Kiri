@@ -12,8 +12,10 @@ annotation controls as capture.
 ## Decision
 
 - Keep the existing compact annotation toolbar. Show a bounded floating options
-  panel only for the current tool, selected object, or pending crop. Empty Select
-  has no properties panel. The options button hides/reopens it; choosing a tool
+  panel only for an annotation tool or selected object. Empty Select and Crop
+  have no properties panel. A pending crop keeps its Cancel crop action in the
+  toolbar so all crop handles remain reachable. The options button hides/reopens
+  annotation properties; choosing a tool
   or a different object shows the corresponding controls. Opening options does
   not resize or reposition the image.
 - Long images open at a readable width, capped at original pixel density; ordinary

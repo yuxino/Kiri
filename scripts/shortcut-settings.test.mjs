@@ -685,6 +685,8 @@ test("a rejected retry preserves the configured binding and exposes the native e
 test("long native key labels size the entire column and retain its width while editing", async () => {
   for (const [userAgent, label] of [
     ["Macintosh", "⇧⌃⌥⌘Previous Track"],
+    ["Macintosh", "⇧⌃⌥⌘MediaFastForward"],
+    ["Macintosh", "⇧⌃⌥⌘Home"],
     ["Windows NT 10.0", "Shift+Ctrl+Alt+Win+Previous Track"],
   ]) {
     const normal = snapshot();

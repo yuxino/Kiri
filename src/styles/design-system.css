@@ -864,7 +864,7 @@ button:active:not(:disabled) {
 .kiri-annotation-error-dismiss { flex:0 0 24px; width:24px; height:24px; border:0; border-radius:5px; background:#232323; color:#fff; cursor:pointer; }
 .kiri-annotation-error-dismiss:hover:not(:disabled) { background:#444; }
 .kiri-annotation-error-dismiss:disabled { opacity:.45; cursor:default; }
-.kiri-image-editor-toolbar { min-height:56px; flex:0 0 auto; box-sizing:border-box; display:flex; flex-wrap:wrap; align-content:center; align-items:center; gap:4px 10px; padding:6px 10px; border-bottom:1px solid #383838; background:#101010; }
+.kiri-image-editor-toolbar { min-height:56px; flex:0 0 auto; box-sizing:border-box; display:flex; flex-wrap:wrap; align-content:center; align-items:center; gap:4px 10px; padding:6px 10px; border-bottom:1px solid #383838; background:#101010; color:var(--kiri-label-dark); font:500 11px var(--kiri-font-ui); }
 .kiri-image-editor-tools { display:flex; flex-wrap:wrap; align-items:center; gap:4px 0; min-width:0; }
 .kiri-image-editor-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:4px; margin-left:auto; }
 /* Tool options float over the image without changing its viewport. */
@@ -883,7 +883,6 @@ button:active:not(:disabled) {
 .kiri-capture-toolbar :is(input:not([type=range]),button):focus-visible,
 .kiri-image-editor-toolbar :is(input:not([type=range]),button):focus-visible,
 .kiri-image-editor-properties :is(input:not([type=range]),button):focus-visible { box-shadow:inset 0 0 0 1px #777; }
-.kiri-image-editor-crop-options { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:6px 10px; background:#101010; color:var(--kiri-label-dark); font:500 11px var(--kiri-font-ui); }
 @media (max-width:470px) {
   .kiri-image-editor-tools { width:100%; }
 }
