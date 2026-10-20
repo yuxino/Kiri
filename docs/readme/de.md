@@ -16,12 +16,13 @@
 
 ## Funktionen
 
-- Fenster oder Bereiche aufnehmen, Text, Pfeile und Mosaik hinzufügen und Screenshots als schwebende Referenzen anheften.
+- Fenster oder Bereiche aufnehmen, Text, Pfeile und Mosaik hinzufügen und Screenshots als schwebende Referenzen anheften. Nach dem Speichern vergrößern und weiterbearbeiten.
+- Nach oben oder unten scrollen und einen langen Screenshot erstellen; bereits erfasste Bereiche werden nicht doppelt hinzugefügt (macOS, Windows, Linux X11).
 - Text mit lokalem OCR aus Bildern kopieren und QR-Codes lesen.
 - MP4 mit optionalem Systemton und Mikrofon aufnehmen oder als GIF ohne Ton speichern.
 - Clips eines Videos kürzen und umordnen, dann eine neue MP4-Datei exportieren.
 - Lokale Aufnahmen suchen, mit Tags versehen, favorisieren und exportieren; versehentlich Gelöschtes aus dem Papierkorb wiederherstellen.
-- Globale Tastenkürzel in den Einstellungen ändern, deaktivieren oder zurücksetzen; Tastenkürzel zum Pausieren/Fortsetzen sowie Beenden und Speichern gelten nur während einer Aufnahme ([Wayland nutzt Desktop-Einstellungen](../linux.md)).
+- Globale Tastenkürzel direkt in den Einstellungen festlegen, deaktivieren oder zurücksetzen; Aufnahmesteuerungen gelten nur während einer Aufnahme ([Wayland nutzt Desktop-Einstellungen](../linux.md)).
 
 ## Erste Schritte
 

@@ -1,5 +1,5 @@
 // EditorWindow — annotation editor for saved captures
-// Dark screenshot editor with one compact toolbar and an aspect-fit canvas.
+// Screenshot tools share one document; viewing zoom never changes saved pixels.
 
 import { OcrDialog } from "../ocr/TextHistory";
 import { QrOverlay } from "../qr/QrOverlay";
@@ -31,6 +31,9 @@ import { AnnotationToolbarButton } from "../components/AnnotationToolbarButton";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
 import { hasPendingImageTextChange, hasUnsavedImageChanges, type ImageEditSnapshot, type ImageTextDraft } from "../annotation/image-edit-state.js";
 import { ImageCloseGuard, type ImageCloseGuardHandle } from "./ImageCloseGuard";
+import { useImageViewport } from "./useImageViewport";
+import { Minus, Plus, CircleHelp } from "lucide-react";
+import "./editor-view.css";
 
 type EditorTool = Tool | "crop";
 
@@ -53,7 +56,7 @@ export function EditorWindow(props: { id: string }) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
   const [document, setDocument] = useState<AnnotationDocumentV1 | null>(null);
-  const [containerSize, setContainerSize] = useState({ width: 800, height: 560 });
+  const [optionsOpen, setOptionsOpen] = useState(true);
   const [tool, setTool] = useState<EditorTool>("select");
   const [selectedMark, setSelectedMark] = useState<AnnotationMark | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
@@ -77,7 +80,7 @@ export function EditorWindow(props: { id: string }) {
   const [savedSnapshot, setSavedSnapshot] = useState<ImageEditSnapshot>({ marks: [], crop: null });
   const closeGuardRef = useRef<ImageCloseGuardHandle>(null);
   const canvasRef = useRef<AnnotationCanvasHandle>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+
   const revisionRef = useRef<string | null>(null);
   const qrRequestRef = useRef<string | null>(null);
   const requestedQrRef = useRef(new URLSearchParams(window.location.search).get("qr") === "1");
@@ -264,30 +267,10 @@ export function EditorWindow(props: { id: string }) {
     };
   }, [props.id]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const publish = () => {
-      setContainerSize({
-        width: Math.max(1, container.clientWidth),
-        height: Math.max(1, container.clientHeight),
-      });
-    };
-    publish();
-    const observer = new ResizeObserver(publish);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  // Aspect-fit CSS size; annotation geometry remains in document.canvas.
-  const viewSize = useMemo(() => {
-    if (!imageSize) return { width: 1, height: 1 };
-    const scale = Math.min(
-      containerSize.width / imageSize.w,
-      containerSize.height / imageSize.h,
-    );
-    return { width: imageSize.w * scale, height: imageSize.h * scale };
-  }, [containerSize, imageSize]);
+  const viewport = useImageViewport(imageSize, props.id, completing || !!ocrAsset);
+  const {containerRef, viewSize, size: containerSize} = viewport;
+  const hasToolOptions = !readOnly && (tool !== "select" || selectedMark !== null || cropSelection !== null);
+  useEffect(() => { setOptionsOpen(true); }, [tool, selectedMark?.id]);
 
   const documentRegion = useMemo<Rect>(() => {
     const canvas = document?.canvas ?? { width: 1, height: 1 };
@@ -373,6 +356,7 @@ export function EditorWindow(props: { id: string }) {
   }, [closeQr, completionLock, cropRedo, cropSelection, cropUndo, document, tool]);
 
   function selectTool(next: EditorTool) {
+    setOptionsOpen(true);
     if (readOnlyRef.current || qrRequestRef.current) return;
     canvasRef.current?.finishAppearanceAdjustment();
     if (next === "watermark") {
@@ -506,6 +490,9 @@ export function EditorWindow(props: { id: string }) {
           </div>
         </div>}
         <div className="kiri-image-editor-actions">
+          {!readOnly && <EditorToolButton icon="slider.horizontal.3" title={t("Tool options")} expanded={optionsOpen}
+            active={hasToolOptions && optionsOpen} disabled={!hasToolOptions || qrActive} onClick={() => setOptionsOpen(open => !open)}/>}
+
           <EditorToolButton icon="qrcode" title={t("Recognize QR Codes")} active={qrActive} disabled={!image || completing || !!ocrAsset}
             onClick={() => qrRequestRef.current ? closeQr() : runQr()}/>
           {!readOnly && <EditorToolButton icon="text.viewfinder" title={t("Recognize Saved Image Locally")} disabled={!image || completing || qrActive}
@@ -516,20 +503,7 @@ export function EditorWindow(props: { id: string }) {
             onClick={() => void complete("save")}/>}
         </div>
       </div>
-      {!readOnly && <div className="kiri-image-editor-properties" inert={qrActive}>
-        {(tool === "crop" || cropSelection) && <div className="kiri-image-editor-crop-options"><strong>{t("Crop")}</strong>
-          {cropSelection && <button type="button" className="kiri-annotation-action" disabled={qrActive || completing}
-            onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
-            onClick={cancelCrop}>{t("Cancel crop")}</button>}</div>}
-        {tool !== "crop" &&
-          <AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance} disabled={qrActive}
-            nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
-            onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
-            onChange={(patch, transient) => {setActionError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient);}}
-            onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
-            onDelete={() => canvasRef.current?.deleteSelection()}
-            onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
-      </div>}
+
 
       {ocrAsset && <OcrDialog asset={ocrAsset} onClose={() => setOcrAsset(null)} />}
 
@@ -576,12 +550,13 @@ export function EditorWindow(props: { id: string }) {
         </div>
       )}
 
-      {/* Canvas area */}
-      <div ref={containerRef} style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", background: "#141414", position: "relative" }}>
+      <div className="kiri-image-editor-stage">
+        <div ref={containerRef} className="kiri-image-editor-viewport" aria-label={t("Image")}
+          data-pan-ready={viewport.space || undefined} data-panning={viewport.panning || undefined} {...viewport.handlers}>
+        <div className="kiri-image-editor-surface" style={{width: viewport.layout.surfaceWidth, height: viewport.layout.surfaceHeight}}>
         {imageSize && document && (
-          <div style={{ position: "relative", width: viewSize.width, height: viewSize.height,
-            backgroundImage: qrActive && image ? `url("${image.src}")` : undefined,
-            backgroundSize: "100% 100%", backgroundRepeat: "no-repeat" }}>
+          <div className="kiri-image-editor-picture" style={{left: viewport.layout.x, top: viewport.layout.y, width: viewSize.width, height: viewSize.height,
+            backgroundImage: qrActive && image ? `url("${image.src}")` : undefined}}>
             {/* Keep the canvas and native text editor mounted: QR reads the
                 same clean source, then restores all unsaved edits on exit. */}
             <div style={{ visibility: qrActive ? "hidden" : undefined }}>
@@ -590,6 +565,7 @@ export function EditorWindow(props: { id: string }) {
               image={image}
               region={documentRegion}
               viewSize={viewSize}
+              visibleViewport={viewport.visibleViewport}
               initialDocument={document}
               interactionDisabled={readOnly || completing || tool === "crop" || qrActive}
               interactionLock={canvasLock}
@@ -621,11 +597,40 @@ export function EditorWindow(props: { id: string }) {
             </div>
           </div>
         )}
+        </div>
+        </div>
+      {hasToolOptions && optionsOpen && !qrActive && <div className="kiri-image-editor-properties" inert={qrActive}>
+        {(tool === "crop" || cropSelection) && <div className="kiri-image-editor-crop-options"><strong>{t("Crop")}</strong>
+          {cropSelection && <button type="button" className="kiri-annotation-action" disabled={qrActive || completing}
+            onKeyDown={event => {if (event.key === "Enter" || event.key === " ") event.stopPropagation();}}
+            onClick={cancelCrop}>{t("Cancel crop")}</button>}</div>}
+        {tool !== "crop" &&
+          <AnnotationStyleControls tool={tool} selected={selectedMark} appearance={appearance} disabled={qrActive}
+            panelChrome={<button type="button" className="kiri-capture-options-hide" aria-label={t("Hide tool options")}
+              title={t("Hide tool options")} onKeyDown={event => event.stopPropagation()} onClick={() => setOptionsOpen(false)}><KiriIcon name="xmark" size={12}/></button>}
+            nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
+            onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
+            onChange={(patch, transient) => {setActionError(null); setAppearance({...appearance, ...patch}); canvasRef.current?.updateSelectionAppearance(patch, transient);}}
+            onFinish={() => canvasRef.current?.finishAppearanceAdjustment()}
+            onDelete={() => canvasRef.current?.deleteSelection()}
+            onEditText={() => canvasRef.current?.editSelectedText()} onEditWatermark={() => canvasRef.current?.editWatermark()}/>}
+      </div>}
         {qrActive && <QrOverlay scan={qrScan} failed={!!qrError} error={qrError}
-          sourceRect={{ x: (containerSize.width - viewSize.width) / 2,
-            y: (containerSize.height - viewSize.height) / 2, ...viewSize }}
+          sourceRect={{ x: viewport.layout.x - viewport.scroll.x,
+            y: viewport.layout.y - viewport.scroll.y, ...viewSize }}
           selection={documentRegion} bounds={{ x: 0, y: 0, ...containerSize }} scale={1}
           onRetry={() => { closeQr(); runQr(); }} onClose={closeQr} onOpened={closeQr} />}
+      </div>
+      <div className="kiri-image-editor-viewbar" role="group" aria-label={t("Zoom")}>
+        <button type="button" className="kiri-image-editor-view-button" aria-label={t("Zoom out")} title={t("Zoom out")} disabled={!image} onClick={() => viewport.zoomBy(0.8)}><Minus size={14}/></button>
+        <span className="kiri-image-editor-zoom-value" aria-live="off">{Math.round(viewport.layout.zoom * 1000) / 10}%</span>
+        <button type="button" className="kiri-image-editor-view-button" aria-label={t("Zoom in")} title={t("Zoom in")} disabled={!image} onClick={() => viewport.zoomBy(1.25)}><Plus size={14}/></button>
+        <span className="kiri-image-editor-view-divider"/>
+        <button type="button" className="kiri-image-editor-view-button" aria-pressed={viewport.mode === "width"} disabled={!image} onClick={() => viewport.changeView("width")}>{t("Fit width")}</button>
+        <button type="button" className="kiri-image-editor-view-button" aria-pressed={viewport.mode === "fit"} disabled={!image} onClick={() => viewport.changeView("fit")}>{t("Fit image")}</button>
+        <button type="button" className="kiri-image-editor-view-button" aria-pressed={Math.abs(viewport.layout.zoom - 1) < 0.001} disabled={!image} onClick={() => viewport.changeView("manual", 1)}>{t("Actual size")}</button>
+        <button type="button" className="kiri-image-editor-view-button" aria-label={t("Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.")}
+          title={t("Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.")}><CircleHelp size={14}/></button>
       </div>
       <ImageCloseGuard ref={closeGuardRef} dirty={!readOnly && dirty} busy={completing} lock={completionLock}
         error={actionError} onSave={() => { closeQr(); return complete("save"); }} />

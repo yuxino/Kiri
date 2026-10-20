@@ -20,6 +20,12 @@ const ControlPanelWindow = React.lazy(() =>
     default: module.ControlPanelWindow,
   })),
 );
+const ScrollCaptureWindow = React.lazy(() =>
+  import("./windows/ScrollCaptureWindow").then((module) => ({ default: module.ScrollCaptureWindow })),
+);
+const ScrollCaptureRegionWindow = React.lazy(() =>
+  import("./windows/ScrollCaptureRegionWindow").then((module) => ({ default: module.ScrollCaptureRegionWindow })),
+);
 const RippleWindow = React.lazy(() =>
   import("./windows/RippleWindow").then((module) => ({ default: module.RippleWindow })),
 );
@@ -96,6 +102,11 @@ function App() {
       return <CountdownWindow />;
     case "control-panel":
       return <ControlPanelWindow />;
+    case "scroll-capture":
+      return <ScrollCaptureWindow sessionId={params.get("sessionId") ?? ""} compact={params.get("compact") === "1"} />;
+    case "scroll-capture-region":
+      return <ScrollCaptureRegionWindow x={Number(params.get("x"))} y={Number(params.get("y"))}
+        width={Number(params.get("width"))} height={Number(params.get("height"))} />;
     case "recording-region":
       return <RecordingRegionWindow />;
     case "ripple":

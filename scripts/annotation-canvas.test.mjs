@@ -259,13 +259,13 @@ test("dragging the direction dot never flips or moves its label, while click and
 function annotation(initialDocument, options = {}) {
   const exports = [], frames = [], creations = [], ref = {current: null}, changes = [];
   function canvas() {
-    const value = {width: 640, height: 360, drawCalls: [],
+    const value = {width: 640, height: 360, drawCalls: [], transforms: [],
       getBoundingClientRect: () => options.boundingRect?.() ?? ({left: 0, top: 0, width: initialDocument.canvas.width, height: initialDocument.canvas.height}),
       setPointerCapture() {}, releasePointerCapture() {},
       focus() { value.focused = true; },
       toBlob(callback) { callback(new Blob([new Uint8Array([1, 2, 3])], {type: "image/png"})); },
     };
-    const context = {font: "", setTransform() {}, save() {}, restore() {},
+    const context = {canvas: value, font: "", setTransform(...args) { value.transforms.push(args); }, save() {}, restore() {},
       measureText(text) { const size = Number(this.font.match(/ ([\d.]+)px/)?.[1] ?? 18); return {width: options.measureText?.(text, size) ?? text.length * size * .4}; },
       drawImage: (...args) => value.drawCalls.push(args)};
     value.getContext = () => context;
@@ -273,6 +273,7 @@ function annotation(initialDocument, options = {}) {
     return value;
   }
   const live = canvas();
+  const root = {getBoundingClientRect: () => options.rootRect?.() ?? live.getBoundingClientRect()};
   const image = {complete: true, naturalWidth: initialDocument.sourcePixels.width, naturalHeight: initialDocument.sourcePixels.height};
   const harness = createLibraryHarness({}, source, {
     modules: {
@@ -284,19 +285,24 @@ function annotation(initialDocument, options = {}) {
         if (!r.exporting) frames.push({marks: structuredClone(marks), options: structuredClone(options)});
         if (r.exporting) exports.push({source: r.sourceImage, sourceWidth: r.sourceWidth, sourceHeight: r.sourceHeight,
           sourceOffset: r.sourceOffset, regionSize: r.regionSize, scaleX: r.scaleX, scaleY: r.scaleY,
-          marks: structuredClone(marks), canvasWidth: r.ctx.canvas?.width});
+          marks: structuredClone(marks), canvasWidth: r.ctx.canvas?.width, canvasHeight: r.ctx.canvas?.height});
       }},
     },
     document: {createElement: type => { assert.equal(type, "canvas"); return canvas(); }},
     globals: {devicePixelRatio: 1, ...options.globals},
-    attachRef(node) { if (node.type === "canvas") node.props.ref.current = live; },
+    attachRef(node) {
+      if (node.type === "canvas") {
+        node.props.ref.current = live;
+        live.width = node.props.width; live.height = node.props.height;
+      } else if (node.props.className === "annotation-canvas-root") node.props.ref.current = root;
+    },
   });
   const props = {ref, image, region: {x: 0, y: 0, ...initialDocument.canvas}, initialDocument,
     appearance, tool: "select", onHistoryChange() {}, onCancel() {},
     onDocumentChange: marks => changes.push(structuredClone(marks)), ...options};
   const component = harness.mount("default", props);
   component.render();
-  return {component, props, ref, changes, exports, frames, creations, live,
+  return {component, props, ref, changes, exports, frames, creations, live, root,
     pointer(name, x, y, event = {}) {
       const node = nodes(component.render()).find(node => node?.type === "canvas");
       node.props[name]({clientX: x, clientY: y, button: 0, pointerId: 1, detail: 1,
@@ -1707,4 +1713,105 @@ test("capture: input/composition invalidates an empty first-click editor", () =>
   nodes(h.component.render()).find(node => node?.props?.className === "annotation-canvas-root").props.onCompositionStartCapture();
   captureClick(h, 2, {target: new CaptureTextArea()});
   assert.equal(finishes, 0); assert.ok(inlineEditor(h));
+});
+
+
+test("a long-image viewport allocates only visible device pixels and maps drawing through the full view", async () => {
+  const document = {schemaVersion: 1, canvas: {width: 2000, height: 30000},
+    sourcePixels: {width: 2000, height: 30000}, marks: []};
+  const h = annotation(document, {tool: "rectangle", globals: {devicePixelRatio: 2},
+    viewSize: {width: 1000, height: 15000},
+    visibleViewport: {x: 100.25, y: 9500.25, width: 600, height: 400},
+    rootRect: () => ({left: -100, top: -9500, width: 1000, height: 15000}),
+    boundingRect: () => ({left: 0, top: 0, width: 600.5, height: 400.5})});
+  const renderedCanvas = () => nodes(h.component.render()).find(node => node?.type === "canvas");
+  assert.equal(renderedCanvas().props.width, 1201);
+  assert.equal(renderedCanvas().props.height, 801);
+  assert.deepEqual(h.live.transforms.at(-1), [1, 0, 0, 1, -200, -19000]);
+  assert.equal(renderedCanvas().props.style.left, 100);
+  assert.equal(renderedCanvas().props.style.top, 9500);
+  h.pointer("onPointerDown", 50, 50);
+  h.pointer("onPointerMove", 90, 80);
+  h.pointer("onPointerUp", 90, 80);
+  assert.deepEqual(h.changes.at(-1)[0].rect, {x: 300, y: 19100, width: 80, height: 60});
+  const exported = await h.ref.current.exportResult();
+  assert.deepEqual(exported.document.canvas, document.canvas);
+  assert.deepEqual(exported.document.sourcePixels, document.sourcePixels);
+  assert.deepEqual(exported.document.marks, h.changes.at(-1));
+  assert.equal(h.exports.at(-1).canvasWidth, 2000);
+  assert.equal(h.exports.at(-1).canvasHeight, 30000, "only explicit export allocates the full output");
+  assert.equal(h.creations.at(-1).height, 0, "export releases the temporary full-resolution backing");
+  h.component.unmount();
+});
+
+test("scrolling a clipped preview redraws its translated content without changing document or undo history", () => {
+  const h = annotation(documentWith([rectangle]), {viewSize: {width: 1280, height: 720},
+    visibleViewport: {x: 0, y: 0, width: 320, height: 180}});
+  const count = h.frames.length;
+  h.component.render({...h.props, visibleViewport: {x: 400, y: 250, width: 320, height: 180}});
+  assert.ok(h.frames.length > count, "an origin-only viewport change must repaint");
+  assert.deepEqual(h.live.transforms.at(-1), [2, 0, 0, 2, -400, -250]);
+  assert.equal(h.live.width, 320); assert.equal(h.live.height, 180);
+  assert.deepEqual(h.frames.at(-1).marks, [rectangle]);
+  assert.deepEqual(h.changes, []);
+  h.component.unmount();
+});
+
+test("a clipped text edit stays mounted and in document units while the image zoom changes", async () => {
+  const h = annotation(documentWith([text]), {selectedMarkId: text.id,
+    viewSize: {width: 320, height: 180}, visibleViewport: {x: 0, y: 0, width: 320, height: 180}});
+  h.ref.current.editSelectedText(); h.component.render();
+  const before = inlineEditor(h);
+  const draft = {...before.props.editing};
+  before.props.onTextChange("正在输入中文 — unfinished"); h.component.render();
+  const current = inlineEditor(h).props.editing;
+  h.component.render({...h.props, viewSize: {width: 1280, height: 720},
+    visibleViewport: {x: 50, y: 20, width: 320, height: 180}});
+  const after = inlineEditor(h);
+  assert.equal(after.props.key, before.props.key, "zoom must preserve the native textarea identity and its IME/undo state");
+  assert.equal(after.props.editing, current, "zoom must not rewrite draft state or editor padding into document coordinates");
+  assert.equal(after.props.editing.fontSize, draft.fontSize);
+  assert.deepEqual(after.props.editing.rect, current.rect);
+  assert.deepEqual(h.changes, []);
+  const layer = nodes(h.component.render()).find(node => node?.type === "div" && node.props.style?.transformOrigin === "top left");
+  assert.equal(layer.props.style.transform, "scale(2, 2)");
+  const result = await h.ref.current.exportResult();
+  assert.equal(result.document.marks[0].text, "正在输入中文 — unfinished");
+  assert.equal(result.document.marks[0].fontSize, text.fontSize);
+  assert.equal(result.document.marks[0].rect.x, text.rect.x);
+  assert.equal(result.document.marks[0].rect.y, text.rect.y);
+  h.component.unmount();
+});
+
+test("visible preview bounds clamp to the image and empty or invalid regions never allocate a full canvas", () => {
+  const h = annotation(documentWith([]), {visibleViewport: {x: -12, y: 340, width: 50, height: 40}});
+  assert.equal(h.live.width, 38); assert.equal(h.live.height, 20);
+  for (const visibleViewport of [
+    {x: 900, y: 500, width: 20, height: 20},
+    {x: 0, y: 0, width: 0, height: 20},
+    {x: NaN, y: 0, width: 100, height: 100},
+  ]) {
+    h.component.render({...h.props, visibleViewport});
+    assert.equal(h.live.width * h.live.height, 0);
+  }
+  h.component.unmount();
+});
+
+
+test("double-clicking a text mark in a scrolled preview uses the full document frame", () => {
+  const mark = {...text, rect: {...text.rect, x: 200, y: 100}};
+  const h = annotation(documentWith([mark]), {viewSize: {width: 1280, height: 720},
+    visibleViewport: {x: 300, y: 100, width: 320, height: 180},
+    rootRect: () => ({left: -300, top: -100, width: 1280, height: 720}),
+    boundingRect: () => ({left: 0, top: 0, width: 320, height: 180})});
+  for (let click = 1; click <= 2; click++) {
+    h.pointer("onPointerDown", 280, 145, {detail: 0});
+    h.pointer("onPointerUp", 280, 145, {detail: 0});
+    h.mouse("onClick", 280, 145, click);
+  }
+  h.mouse("onDoubleClick", 280, 145, 2);
+  assert.equal(inlineEditor(h)?.props.editing.id, mark.id);
+  assert.equal(inlineEditor(h)?.props.editing.text, mark.text);
+  assert.deepEqual(h.changes, []);
+  h.component.unmount();
 });

@@ -8,6 +8,8 @@
     "editor-*",
     "countdown",
     "control-panel",
+    "scroll-capture",
+    "scroll-capture-region",
     "recording-region",
     "ripple",
     "viewer-*",

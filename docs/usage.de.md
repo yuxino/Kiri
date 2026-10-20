@@ -28,9 +28,11 @@ Einstellungen → Allgemein → Sprache bietet English, 简体中文, 繁體中�
 
 ## Aufnehmen
 
-Drücken Sie ⇧⌘A auf macOS oder Shift+Ctrl+A auf Windows / Linux X11 und wählen Sie ein Fenster oder ziehen Sie einen Bereich. Auf Wayland verwenden Sie die Aufnahme-Schaltfläche oder weisen `kiri --capture` in den Desktop-Einstellungen zu. Unterstützte Desktops bieten Einstellungen → Allgemein → Wayland-Desktop-Tastenkürzel für genehmigte Aufnahme-, Pause/Fortsetzen- und Beenden-Tastenkürzel. Ubuntu 24.04 / GNOME 46 behält die Befehlslösung bei.
+Drücken Sie ⇧⌘A auf macOS oder Shift+Ctrl+A auf Windows / Linux X11 und wählen Sie ein Fenster oder ziehen Sie einen Bereich. Auf Wayland verwenden Sie die Aufnahme-Schaltfläche oder weisen `kiri --capture` in den Desktop-Einstellungen zu. Unterstützte Desktops bieten Einstellungen → Tastenkürzel → Wayland-Desktop-Tastenkürzel für genehmigte Aufnahme-, Pause/Fortsetzen- und Beenden-Tastenkürzel. Ubuntu 24.04 / GNOME 46 behält die Befehlslösung bei.
 
-Wählen Sie Screenshot, Aufnahme oder OCR. Die Screenshot-Leiste bietet auch QR-Erkennung. Enter bestätigt einen Screenshot; Esc bricht ab. Screenshots landen in der Zwischenablage und lokalen Bibliothek. Auf macOS, Windows und X11 lässt sich das Aufnahme-Tastenkürzel in Einstellungen ändern.
+Unter macOS, Windows und Linux öffnet die Kiri-Programmdatei mit `--capture`, `--record`, `--ocr` oder `--library` die Bereichsauswahl für Screenshots, die Bereichsauswahl für Aufnahmen, die Texterkennung beziehungsweise das Hauptfenster, auch wenn Kiri noch nicht läuft.
+
+Wählen Sie Screenshot, Aufnahme oder OCR. Die Screenshot-Leiste bietet auch QR-Erkennung. Enter bestätigt einen Screenshot; Esc bricht ab. Screenshots landen in der Zwischenablage und lokalen Bibliothek. Unter macOS, Windows und X11 können Sie in Einstellungen → Tastenkürzel ein Tastenfeld anklicken und die gewünschte Taste drücken, die Belegung löschen oder zurücksetzen. Aufnahmesteuerungen sind nur während einer Aufnahme aktiv.
 
 Klicken Sie vor der Auswahl eines Zeichenwerkzeugs auf die Schieberegler der Screenshot-Leiste, um Breite und Höhe am Auswahlrand zu bearbeiten. Werte sind Ausgabepixel, auch bei Retina. Enter oder Verlassen eines Feldes übernimmt den Wert. Esc verwirft die Eingabe; ein zweites Esc bricht die Aufnahme ab. Pfeiltasten ändern um ein Pixel, mit Shift um zehn. Ein erneuter Klick verbirgt die Werte. Nach Beginn der Anmerkungen steuern die Schieberegler deren Aussehen.
 
@@ -44,9 +46,29 @@ Die Aufnahmevorbereitung bietet MP4 / GIF, Start und vier nebeneinanderliegende 
 
 Der kleine Pfeil neben dem Mikrofon öffnet die Auswahl der verfügbaren Eingabegeräte, ohne das Standardgerät des Systems zu ändern. Ist das gewählte Gerät nicht verfügbar oder wird es getrennt, meldet Kiri einen Fehler, statt unbemerkt zu einem anderen Mikrofon zu wechseln.
 
+## Scrollaufnahmen
+
+Wählen Sie den scrollenden Inhalt und vor dem Hinzufügen von Anmerkungen **Scrollaufnahme** in der Screenshot-Leiste. Beginnen Sie an beliebiger Stelle und scrollen Sie wie gewohnt nach oben oder unten. Bereits erfasster Inhalt wird beim Zurückscrollen nicht doppelt hinzugefügt. Lesepausen beenden die Aufnahme nicht. **Fertig** kopiert und speichert das Bild; vor dem Speichern bricht Esc ab. Enter bleibt für die ursprüngliche Anwendung verfügbar.
+
+Während einer Scrollaufnahme führt `kiri --finish-scroll-capture` dieselbe Prüfung vor dem vollständigen Speichern wie **Fertig** aus; ein Teilergebnis wird nie automatisch stattdessen gespeichert. `kiri --cancel-scroll-capture` bricht vor Beginn des Speicherns ab. Beide Befehle steuern nur die laufende Sitzung und starten keine neue Aufnahme.
+
+Der ausgewählte Bereich bleibt während der Aufnahme sichtbar markiert; außerhalb wird der Bildschirm abgedunkelt. Klicks, Mausrad und Trackpad-Gesten erreichen weiterhin die ursprüngliche Anwendung. Diese Anzeige verändert die Auswahl nicht und erscheint nicht im gespeicherten Bild.
+
+Die Vorschau folgt dem aktuellen Ausschnitt der Originalaufnahme und passt ihn an die Panelbreite an. Ihr Maßstab bleibt gleich, wenn die Aufnahme länger wird. Scrollen Sie in der Vorschau zum Prüfen; sobald der Zeiger den Bereich verlässt, folgt sie wieder der Quelle. Ziehen Sie die Titelzeile, um das Fenster zu verschieben; bei kompakten Bedienelementen ziehen Sie den Statustext. Das Fenster bleibt auf dem aufgenommenen Bildschirm und unter X11 außerhalb der Auswahl.
+
+Nach dem Scrollen entfernt Kiri erkannte feste Kopf- und Fußleisten. An nicht erneut besuchten Außenrändern können Schatten bleiben. Fordert Kiri zur Wiederherstellung auf, scrollen Sie durch den betroffenen Bereich zurück, bevor Sie das vollständige Bild speichern.
+
+Wenn sich eine Ansicht nicht zuordnen lässt, bleibt das zusammenhängende Ergebnis erhalten. Scrollen Sie zum erfassten Inhalt zurück und dann durch die fehlende Stelle. Mit dem Scrollbalken übersprungener, nie angezeigter Inhalt muss erneut sichtbar werden. **Erfassten Bereich speichern** speichert ausdrücklich nur das aktuelle Teilergebnis und ergänzt keine fehlenden oder unsicheren Inhalte. Nach einem Speicherfehler können Sie denselben erhaltenen Stand erneut speichern.
+
+Verfügbar auf macOS, Windows und Linux X11, nicht auf Wayland. Unter macOS muss die Auswahl vollständig in einem normalen Anwendungsfenster liegen. Die Aufnahme bleibt an dieses Fenster gebunden; fremde schwebende Fenster und andere Fenster derselben Anwendung werden ausgeschlossen. Wenn das Quellfenster verschoben oder seine Größe geändert wird oder es nicht mehr verfügbar ist, stoppt die Aufnahme und behält den bisherigen Stand. Windows und X11 erfassen weiterhin den Bildschirmbereich und schließen fremde schwebende Fenster nicht automatisch aus; halten Sie diese außerhalb der Auswahl.
+
+Große leere oder wiederholte Bereiche, horizontales Scrollen, Zoom und Layoutänderungen können die Zuordnung unterbrechen. X11 benötigt außerhalb der Auswahl Platz für die kompakten Bedienelemente von 220 × 76 plus etwas Abstand. macOS und Windows können bei Bedarf von der Aufnahme ausgeschlossene Bedienelemente innerhalb der Auswahl platzieren. Beim Größenlimit speichern Sie den erfassten Bereich und beginnen eine neue Aufnahme.
+
 ## Screenshot-Anmerkungen
 
-Wählen Sie eine vorhandene Anmerkung aus, um ihren Stil zu ändern. Mosaik bietet Freihand, Rechteck und Ellipse sowie Pixel- und Unschärfeeffekte mit einstellbarer Stärke. Mit Wasserzeichen (W) schreiben Sie direkt ins Bild und wählen Einzel- oder Kacheldarstellung, Deckkraft, Winkel und Abstand. Gespeicherte Wasserzeichen bleiben bearbeitbar.
+Gespeicherte Bilder nutzen dieselben Anmerkungswerkzeuge: Ein Werkzeug oder Objekt auswählen, um seine Optionen zu zeigen. Ohne Auswahl bleibt die Bildfläche frei. Lange Bilder werden an die Fensterbreite angepasst; schmale Bilder werden nicht automatisch vergrößert. Scrollen bewegt die Ansicht. Unten lassen sich Zoom, Breite, gesamtes Bild und Originalgröße wählen. Pinch oder Strg/Command-Scrollen zoomt; Leertaste und Ziehen verschiebt die Ansicht. Der Ansichtszoom ändert keine gespeicherten Pixel.
+
+Wählen Sie eine vorhandene Anmerkung aus, um ihren Stil zu ändern. Mosaik bietet Freihand, Rechteck und Ellipse sowie Pixel- und Unschärfeeffekte mit einstellbarer Stärke. Mit Wasserzeichen (W) schreiben Sie direkt ins Bild und passen Deckkraft, Winkel und Abstand des gekachelten Wasserzeichens an. Gespeicherte Wasserzeichen bleiben bearbeitbar.
 
 Text (T), Nummerierte Notiz (N) und Beschriftungsblase (B) haben eigene Schaltflächen in den Werkzeugleisten für Screenshots und Bildbearbeitung. Wählen Sie die nummerierte Notiz, klicken Sie zum Platzieren und geben Sie die Beschreibung direkt im Bild ein; Return fügt eine Zeile hinzu. Zahl und transparenter Beschreibungsrahmen lassen sich getrennt ziehen; Größe, Farbe und gefüllter Stil oder Kontur sind einstellbar.
 

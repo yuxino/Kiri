@@ -16,10 +16,10 @@ function setEditingInterception(editing: boolean): Promise<void> {
 
 const ACTIONS: Array<{ action: ShortcutAction; title: string; description: string; icon: IconName; command: string }> = [
   { action: "capture", title: "Screenshot", description: "Choose a window or region to capture.", icon: "camera.viewfinder", command: "kiri --capture" },
-  { action: "record", title: "Record", description: "Choose a region for a new recording.", icon: "record.circle", command: "kiri --record" },
+  { action: "record", title: "Record", description: "Choose a region for a new recording.", icon: "record.circle.fill", command: "kiri --record" },
   { action: "ocr", title: "Recognize Text", description: "Choose a region to recognize text.", icon: "text.viewfinder", command: "kiri --ocr" },
   { action: "library", title: "Show main window", description: "Bring Kiri to the front.", icon: "photo.on.rectangle", command: "kiri --library" },
-  { action: "recordingPauseResume", title: "Pause/Resume Recording", description: "Pause/Resume Recording", icon: "pause.fill", command: "kiri --toggle-recording-pause" },
+  { action: "recordingPauseResume", title: "Pause/Resume Recording", description: "Pause/Resume Recording", icon: "pause.circle.fill", command: "kiri --toggle-recording-pause" },
   { action: "recordingStop", title: "Stop and Save Recording", description: "Stop and Save Recording", icon: "stop.fill", command: "kiri --stop-recording" },
 ];
 
@@ -245,14 +245,14 @@ export function ShortcutsSettings() {
                 const descriptionId = `shortcut-description-${action}`;
                 return <div className="kiri-global-shortcut" key={action} data-action={action} data-editing={isEditing || undefined}>
                   <div className="kiri-global-shortcut__identity">
-                    <span className="kiri-global-shortcut__icon"><KiriIcon name={icon} size={16} /></span>
+                    <span className="kiri-global-shortcut__icon" aria-hidden="true"><KiriIcon name={icon} size={action === "capture" ? 18 : 19} /></span>
                     <div className="kiri-global-shortcut__copy">
                       <strong id={`shortcut-title-${action}`} title={t(description)}>{t(title)}</strong>
                       <span id={descriptionId} className="kiri-visually-hidden">{t(description)}</span>
                     </div>
                   </div>
                   {setting.status === "systemManaged" ? <code className="kiri-shortcut-command">{command}</code> : <>
-                    <div className="kiri-global-shortcut__controls" data-long-key={Math.max(pending?.label.length ?? 0, setting.label?.length ?? 0) > 14 || undefined}
+                    <div className="kiri-global-shortcut__controls" data-long-key={Math.max(pending?.label.length ?? 0, setting.label?.length ?? 0) > 8 || undefined}
                       onBlur={(event) => {
                         if (editingRef.current === action && !event.currentTarget.contains(event.relatedTarget)) void stopEditing();
                       }}
@@ -262,6 +262,11 @@ export function ShortcutsSettings() {
                           event.preventDefault(); event.stopPropagation(); void stopEditing();
                         }
                       }}>
+                      <span className="kiri-shortcut-reset-slot">
+                        {canReset && <button type="button" tabIndex={0} className="kiri-shortcut-reset" disabled={busy !== null || isEditing}
+                          aria-label={fmt("Restore default shortcut for %@", t(title))} title={`${t("Restore Default")} · ${setting.defaultLabel}`}
+                          onClick={() => void perform(action, () => api.resetActionShortcut(action))}><RotateCcw size={14} aria-hidden="true" /></button>}
+                      </span>
                       <div className="kiri-shortcut-field" data-editing={isEditing || undefined} data-unset={!setting.label || undefined} aria-busy={busy === action}>
                         <button type="button" tabIndex={0} className="kiri-shortcut-recorder" disabled={busy !== null} title={t("Click a shortcut to change it.")}
                           aria-label={fmt("Edit shortcut for %@: %@", t(title), pending?.label ?? setting.label ?? t("Not set"))}
@@ -282,11 +287,6 @@ export function ShortcutsSettings() {
                             onClick={() => void perform(action, () => api.setActionShortcut(action, null))}><X size={12} aria-hidden="true" /></button> :
                           <span className="kiri-shortcut-clear-placeholder" aria-hidden="true" />}
                       </div>
-                      <span className="kiri-shortcut-reset-slot">
-                        {canReset && <button type="button" tabIndex={0} className="kiri-shortcut-reset" disabled={busy !== null || isEditing}
-                          aria-label={fmt("Restore default shortcut for %@", t(title))} title={`${t("Restore Default")} · ${setting.defaultLabel}`}
-                          onClick={() => void perform(action, () => api.resetActionShortcut(action))}><RotateCcw size={14} aria-hidden="true" /></button>}
-                      </span>
                       {(rowError || pending || setting.status === "occupied") && <div className="kiri-shortcut-feedback" id={`shortcut-feedback-${action}`}>
                         {rowError || (!pending && setting.status === "occupied") ? <>
                           <p className="kiri-shortcut-status--error" role="alert">{t(rowError ?? "This shortcut is in use by another app.")}</p>

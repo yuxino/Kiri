@@ -26,10 +26,11 @@ const floating = { x: 350, y: 310, width: 480, height: 120 };
 // Only native/data-loading boundaries and unrelated child surfaces are stubbed;
 // the selection state, geometry, phase changes and rendered outlines stay real.
 async function overlay(t, { windowRects = [floating, normal, background], scale = 2,
-  devicePixelRatio = scale, width = 1512, height = 982 } = {}) {
+  devicePixelRatio = scale, width = 1512, height = 982, scrollingCapture = true } = {}) {
   const errors = [];
+  const scrollStarts = [];
   let cancelled = 0;
-  const context = { displayWidth: width, displayHeight: height, scale,
+  const context = { captureId: "capture-1", displayWidth: width, displayHeight: height, scale,
     pixelWidth: Math.round(width * scale), pixelHeight: Math.round(height * scale),
     windowRects, sourceApplication: "selection-test" };
   const harness = createLibraryHarness({}, source, {
@@ -46,7 +47,8 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
         startCapture: async () => context,
         getRecordingOptions: async () => recordingOptions,
         micSupported: async () => true,
-        platformCapabilities: async () => ({ recording: true, microphone: true, systemAudio: true, clickHighlights: true }),
+        platformCapabilities: async () => ({ scrollingCapture, recording: true, microphone: true, systemAudio: true, clickHighlights: true }),
+        startScrollCapture: async (captureId, selection) => { scrollStarts.push({ captureId, selection }); },
         cancelCapture: async () => { cancelled++; },
       } },
       "../annotation/geom": geometry.exports,
@@ -90,7 +92,12 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
       preventDefault() {}, stopPropagation() {} });
     render();
   };
-  return { region, hoverRect,
+  return { region, hoverRect, scrollStarts,
+    toolbar: () => nodes(render()).find(node => node?.type?.name === "Toolbar"),
+    annotationContent(hasContent, canUndo = hasContent) {
+      nodes(render()).find(node => node?.type === "annotation-canvas").props.onHistoryChange(canUndo, false, hasContent);
+      render();
+    },
     hover: (x, y) => pointer("onPointerMove", x, y),
     click(x, y) { pointer("onPointerDown", x, y); pointer("onPointerUp", x, y); },
     drag(from, move, release) {
@@ -171,4 +178,30 @@ test("switching to recording before selection preserves hover and click geometry
   assert.deepEqual(h.hoverRect(), floating);
   h.click(400, 350);
   assert.deepEqual(h.region(), floating, "recording preparation receives exactly the hovered selection");
+});
+
+
+test("scrolling starts from the selected region only when live annotation content is empty", async t => {
+  const h = await overlay(t);
+  h.click(250, 200);
+  h.annotationContent(true);
+  assert.equal(h.toolbar().props.scrollCaptureUnavailable, "Remove annotations before starting scrolling capture.");
+  h.toolbar().props.onScrollCapture();
+  await settleRequests();
+  assert.equal(h.scrollStarts.length, 0, "even a queued activation must not discard committed or live marks");
+  h.annotationContent(false, true);
+  assert.equal(h.toolbar().props.scrollCaptureUnavailable, undefined, "undo history alone does not block a clean document");
+  h.toolbar().props.onScrollCapture();
+  h.toolbar().props.onScrollCapture();
+  assert.deepEqual(h.scrollStarts, [{ captureId: "capture-1", selection: normal }]);
+  await settleRequests();
+});
+
+test("an unsupported desktop keeps scrolling unavailable without starting a capture", async t => {
+  const h = await overlay(t, { scrollingCapture: false });
+  h.click(250, 200);
+  assert.equal(h.toolbar().props.scrollCaptureUnavailable, "Scrolling capture is unavailable on this desktop.");
+  h.toolbar().props.onScrollCapture();
+  await settleRequests();
+  assert.equal(h.scrollStarts.length, 0);
 });

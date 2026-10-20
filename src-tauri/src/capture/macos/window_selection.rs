@@ -103,7 +103,7 @@ pub(super) fn candidate_rects(
         .collect()
 }
 
-fn is_system_chrome(bundle_id: &str) -> bool {
+pub(super) fn is_system_chrome(bundle_id: &str) -> bool {
     matches!(
         bundle_id,
         "com.apple.dock"

@@ -21,6 +21,7 @@ import {
   Moon,
   MoreHorizontal,
   MousePointer2,
+  MoveVertical,
   Pause,
   Pen,
   Pin,
@@ -74,6 +75,7 @@ export type IconName =
   | "camera.viewfinder" // Screenshot mode
   | "record.circle" // Record mode
   | "text.viewfinder" // OCR mode
+  | "arrows.up.down"
   | "qrcode"
   | "pin"
   | "pin.slash"
@@ -125,6 +127,7 @@ const ICONS: Record<IconName, React.ComponentType<Record<string, unknown>>> = {
   "record.circle": Video,
   "text.viewfinder": ScanText,
   "qrcode": QrCode,
+  "arrows.up.down": MoveVertical,
   pin: Pin,
   "pin.slash": PinOff,
   "square.dashed": SquareDashed,

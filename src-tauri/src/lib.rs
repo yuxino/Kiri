@@ -33,6 +33,7 @@ mod media_playback;
 #[cfg(windows)]
 mod media_source_windows;
 mod record;
+mod scroll_capture;
 mod remote_ocr;
 mod shortcut_settings;
 mod portal_shortcuts;
@@ -64,8 +65,7 @@ pub fn run() {
                 args.len(),
                 !cwd.is_empty()
             );
-            #[cfg(target_os = "linux")]
-            if handle_linux_action(app, &args) { return; }
+            if handle_desktop_action(app, &args) { return; }
             if let Err(error) = show_library_window(app, "single-instance") {
                 log::error!("[single-instance] library reopen failed: {error}");
             }
@@ -74,6 +74,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
+                    if scroll_capture::handle_escape(app, shortcut, event.state()) { return; }
                     let Some(bindings) = app.try_state::<shortcut_settings::ShortcutBindings>() else { return; };
                     if event.state() == ShortcutState::Released {
                         bindings.release(shortcut);
@@ -135,11 +136,8 @@ pub fn run() {
             app.manage(shortcut_settings::ShortcutBindings::new(
                 shortcut_settings::load(app.handle()),
             ));
-            #[cfg(target_os = "linux")]
-            let capture_launch = std::env::args().any(|argument| matches!(argument.as_str(), "--capture" | "--record" | "--ocr"));
-            #[cfg(not(target_os = "linux"))]
-            let capture_launch = false;
-            if !capture_launch {
+            let launch_args = std::env::args().collect::<Vec<_>>();
+            if desktop_launch_opens_library(&launch_args) {
                 show_library_window(app.handle(), "startup").map_err(anyhow::Error::msg)?;
             }
 
@@ -149,11 +147,7 @@ pub fn run() {
             shortcut_settings::register_all(app.handle());
             portal_shortcuts::init(app.handle());
             install_tray(app.handle())?;
-            #[cfg(target_os = "linux")]
-            {
-                let args = std::env::args().collect::<Vec<_>>();
-                handle_linux_action(app.handle(), &args);
-            }
+            handle_desktop_action(app.handle(), &launch_args);
             log::info!("[app] setup complete");
             Ok(())
         })
@@ -162,6 +156,9 @@ pub fn run() {
             // Dock/taskbar app); capture sessions close it programmatically.
             match event {
                 tauri::WindowEvent::CloseRequested { .. } => {}
+                tauri::WindowEvent::Moved(position) if window.label() == "scroll-capture" => {
+                    log::debug!("[scroll] panel moved native_x={} native_y={}", position.x, position.y);
+                }
                 tauri::WindowEvent::Destroyed => {
                     log::info!("[window] destroyed label={}", window.label());
                     if let Some(state) = window.app_handle().try_state::<AppState>() {
@@ -227,6 +224,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            scroll_capture::start_scroll_capture,
+            scroll_capture::scroll_capture_status,
+            scroll_capture::move_scroll_capture_panel,
+            scroll_capture::finish_scroll_capture,
+            scroll_capture::cancel_scroll_capture,
             media_playback::get_media_playback_origin,
             commands::list_assets,
             commands::get_asset,
@@ -502,23 +504,77 @@ pub fn ensure_click_monitor(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// A desktop-owned shortcut can forward an action to the resident instance.
-/// This works on GNOME Wayland without modifying compositor configuration.
-#[cfg(target_os = "linux")]
-fn handle_linux_action(app: &tauri::AppHandle, args: &[String]) -> bool {
-    if args.iter().any(|value| value == "--stop-recording") {
-        linux_recording_action(app, true);
-    } else if args.iter().any(|value| value == "--toggle-recording-pause") {
-        linux_recording_action(app, false);
-    } else if let Some(action) = desktop_shortcut_action(args) {
-        dispatch_shortcut_action(app, action, "desktop-shortcut");
-    } else {
-        return false;
+/// Explicit local commands use the same guarded action dispatch as native
+/// shortcuts. This also permits desktop automation without synthesizing keys.
+fn handle_desktop_action(app: &tauri::AppHandle, args: &[String]) -> bool {
+    if let Some(action) = desktop_scroll_action(args) {
+        match action {
+            DesktopScrollAction::Cancel => {
+                if let Err(error) = scroll_capture::cancel_active(app) {
+                    log::warn!("[desktop-command] scrolling cancel failed: {error}");
+                }
+            }
+            DesktopScrollAction::Finish => {
+                // Capture session ownership now, before scheduling the future.
+                // A delayed command must never finish a replacement session.
+                let finish = scroll_capture::finish_active(app.clone());
+                std::mem::drop(tauri::async_runtime::spawn(async move {
+                    match finish.await {
+                        Ok(()) => log::info!("[desktop-command] scrolling capture saved"),
+                        Err(error) => log::warn!("[desktop-command] scrolling finish failed: {error}"),
+                    }
+                }));
+            }
+        }
+        return true;
     }
-    true
+    #[cfg(target_os = "linux")]
+    {
+        if args.iter().any(|value| value == "--stop-recording") {
+            linux_recording_action(app, true);
+            return true;
+        }
+        if args.iter().any(|value| value == "--toggle-recording-pause") {
+            linux_recording_action(app, false);
+            return true;
+        }
+    }
+    if let Some(action) = desktop_shortcut_action(args) {
+        dispatch_shortcut_action(app, action, "desktop-command");
+        true
+    } else {
+        false
+    }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DesktopScrollAction {
+    Finish,
+    Cancel,
+}
+
+fn desktop_scroll_action(args: &[String]) -> Option<DesktopScrollAction> {
+    // Cancellation wins when conflicting control flags are supplied together.
+    [
+        ("--cancel-scroll-capture", DesktopScrollAction::Cancel),
+        ("--finish-scroll-capture", DesktopScrollAction::Finish),
+    ]
+    .into_iter()
+    .find_map(|(flag, action)| args.iter().any(|argument| argument == flag).then_some(action))
+}
+
+fn desktop_launch_opens_library(args: &[String]) -> bool {
+    desktop_scroll_action(args).is_none()
+        && !matches!(
+            desktop_shortcut_action(args),
+            Some(
+                shortcut_settings::ShortcutAction::Capture
+                    | shortcut_settings::ShortcutAction::Record
+                    | shortcut_settings::ShortcutAction::Ocr
+            )
+        )
+}
+
 fn desktop_shortcut_action(args: &[String]) -> Option<shortcut_settings::ShortcutAction> {
     use shortcut_settings::ShortcutAction;
     [("--capture", ShortcutAction::Capture), ("--record", ShortcutAction::Record),
@@ -720,6 +776,7 @@ fn dispatch_shortcut_action(app: &tauri::AppHandle, action: shortcut_settings::S
 }
 
 fn schedule_capture_mode(app: &tauri::AppHandle, source: &'static str, mode: state::CaptureMode) {
+    if scroll_capture::show_if_active(app) { return; }
     let Some(state) = app.try_state::<AppState>() else {
         log::warn!("[{source}] capture start ignored before app state was ready");
         return;
@@ -890,6 +947,40 @@ mod tests {
         }
         assert_eq!(super::desktop_shortcut_action(&["kiri".into(), "--unknown".into()]), None);
         assert_eq!(super::desktop_shortcut_action(&["kiri".into(), "notes--record".into()]), None);
+    }
+
+    #[test]
+    fn scrolling_desktop_commands_are_exact_and_cancel_wins_conflicting_flags() {
+        use super::DesktopScrollAction::{Cancel, Finish};
+        for (flag, action) in [
+            ("--finish-scroll-capture", Finish),
+            ("--cancel-scroll-capture", Cancel),
+        ] {
+            assert_eq!(super::desktop_scroll_action(&["kiri".into(), flag.into()]), Some(action));
+            for argument in [format!("notes{flag}"), format!("{flag}=true"), format!("{flag}.txt")] {
+                assert_eq!(super::desktop_scroll_action(&["kiri".into(), argument]), None);
+            }
+        }
+        for flags in [
+            ["--finish-scroll-capture", "--cancel-scroll-capture"],
+            ["--cancel-scroll-capture", "--finish-scroll-capture"],
+        ] {
+            assert_eq!(super::desktop_scroll_action(&flags.map(String::from)), Some(Cancel));
+        }
+        assert_eq!(super::desktop_scroll_action(&["kiri".into(), "--capture".into()]), None);
+    }
+
+    #[test]
+    fn desktop_controls_and_capture_launch_without_opening_library() {
+        for flag in ["--finish-scroll-capture", "--cancel-scroll-capture", "--capture", "--record", "--ocr"] {
+            assert!(!super::desktop_launch_opens_library(&["kiri".into(), flag.into()]));
+        }
+        assert!(!super::desktop_launch_opens_library(&[
+            "kiri".into(), "--library".into(), "--finish-scroll-capture".into(),
+        ]));
+        assert!(super::desktop_launch_opens_library(&["kiri".into()]));
+        assert!(super::desktop_launch_opens_library(&["kiri".into(), "--library".into()]));
+        assert!(super::desktop_launch_opens_library(&["kiri".into(), "--unknown".into()]));
     }
 
     #[test]

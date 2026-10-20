@@ -16,12 +16,13 @@
 
 ## Fonctions
 
-- Capturez une fenêtre ou une zone, ajoutez du texte, des flèches ou une mosaïque, et épinglez les images comme références flottantes.
+- Capturez une fenêtre ou une zone, ajoutez du texte, des flèches ou une mosaïque, et épinglez les images comme références flottantes. Zoomez et poursuivez les retouches après l’enregistrement.
+- Faites défiler vers le haut ou le bas pour créer une longue capture ; revenir sur une zone capturée ne l’ajoute pas deux fois (macOS, Windows, Linux X11).
 - Extrayez le texte avec la reconnaissance locale et lisez les codes QR.
 - Enregistrez un MP4 avec le son du système et le microphone en option, ou un GIF sans son.
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.
 - Recherchez, étiquetez, ajoutez aux favoris et exportez vos captures locales ; récupérez les suppressions accidentelles dans la corbeille.
-- Modifiez, désactivez ou rétablissez les raccourcis globaux dans les réglages ; pause/reprise et arrêt avec sauvegarde ne fonctionnent que pendant l’enregistrement ([Wayland utilise les réglages du bureau](../linux.md)).
+- Définissez, désactivez ou rétablissez les raccourcis globaux dans les réglages ; les commandes d’enregistrement ne sont actives que pendant celui-ci ([Wayland utilise les réglages du bureau](../linux.md)).
 
 ## Premiers pas
 

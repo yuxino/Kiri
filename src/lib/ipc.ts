@@ -17,6 +17,7 @@ interface RectDto {
 }
 
 export interface CaptureContextDto {
+  captureId: string;
   initialMode: "screenshot" | "record" | "ocr";
   displayWidth: number;
   displayHeight: number;
@@ -25,6 +26,35 @@ export interface CaptureContextDto {
   pixelHeight: number;
   windowRects: RectDto[];
   sourceApplication: string | null;
+}
+
+export interface ScrollCaptureDetailPreviewDto {
+  image: string;
+  revision: number;
+  left: number;
+  /** Absolute document coordinate, including prepended content. */
+  top: number;
+  /** Native PNG pixel dimensions; this image has not been downsampled. */
+  width: number;
+  height: number;
+  displayScale: number;
+}
+
+export interface ScrollCaptureStatusDto {
+  sessionId: string;
+  phase: "starting" | "capturing" | "reconnecting" | "finishing" | "saving" | "failed" | "limit";
+  width: number;
+  height: number;
+  revision: number;
+  frames: number;
+  /** The image and its coordinates are published as one immutable snapshot. */
+  detailPreview?: ScrollCaptureDetailPreviewDto | null;
+  viewportTop: number;
+  viewportHeight: number;
+  /** Document-space position of the top edge, which decreases on prepend. */
+  contentOrigin: number;
+  canSavePartial: boolean;
+  message?: string | null;
 }
 
 export interface OcrRecognitionDto {
@@ -171,6 +201,7 @@ export interface PortalShortcutsDto {
 }
 
 export interface PlatformCapabilitiesDto {
+  scrollingCapture: boolean;
   recording: boolean;
   localOcr: boolean;
   systemAudio: boolean;
@@ -341,6 +372,16 @@ export const api = {
 
   startCapture: () => invoke<CaptureContextDto>("start_capture"),
   cancelCapture: () => invoke<void>("cancel_capture"),
+  startScrollCapture: (captureId: string, selection: RectDto) =>
+    invoke<void>("start_scroll_capture", { captureId, selection }),
+  moveScrollCapturePanel: (sessionId: string, x: number, y: number) =>
+    invoke<{ x: number; y: number }>("move_scroll_capture_panel", { sessionId, x, y }),
+  scrollCaptureStatus: (sessionId: string) =>
+    invoke<ScrollCaptureStatusDto>("scroll_capture_status", { sessionId }),
+  finishScrollCapture: (sessionId: string, allowPartial = false) =>
+    invoke<void>("finish_scroll_capture", { sessionId, allowPartial }),
+  cancelScrollCapture: (sessionId: string) =>
+    invoke<void>("cancel_scroll_capture", { sessionId }),
   confirmCapture: async (
     png: Uint8Array,
     annotation: {

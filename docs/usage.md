@@ -37,6 +37,8 @@ Settings → General → Language offers English, 简体中文, 繁體中文, �
 
 Press ⇧⌘A on macOS or Shift+Ctrl+A on Windows / Linux X11, then select a window or drag a region. On Wayland, use the Capture button or bind `kiri --capture` in desktop settings. Supporting desktops also offer Settings → Shortcuts → Wayland Desktop Shortcuts for desktop-approved Capture, Pause/Resume, and Stop bindings. Ubuntu 24.04 / GNOME 46 retains the command fallback.
 
+On macOS, Windows and Linux, the Kiri executable also accepts `--capture`, `--record`, `--ocr` and `--library` to open screenshot selection, recording selection, text recognition and the main window, whether Kiri is already running or starting for the first time.
+
 Choose Screenshot, Record, or OCR. The screenshot toolbar also offers Recognize QR Codes. Enter confirms a screenshot; Esc cancels capture. Screenshots go to your clipboard and local library.
 
 ### Keyboard shortcuts
@@ -114,9 +116,29 @@ Use the small arrow beside the microphone to select an actual input device witho
 
 On macOS and Windows, recording controls follow the selection and adapt near display edges without taking keyboard focus. Dragging moves the current panel; the next capture positions it from the new selection again. Pause keeps the recorded elapsed time, and resume continues it. Use the configured recording shortcuts, the control buttons, or the tray menu. There are no built-in bare Space/Esc recording commands; a bare key you explicitly confirm as a recording shortcut follows that binding. A button you focus explicitly still supports normal Space/Enter activation. Esc continues to cancel capture and the countdown. Older Windows versions may still show the system’s full-display capture border. Linux uses native X11 shortcuts, desktop-managed Wayland shortcuts, tray actions, or commands.
 
+## Scrolling screenshots
+
+Select the scrolling content, then choose **Scrolling Screenshot** in the screenshot toolbar before adding annotations. Start anywhere and scroll naturally up or down; captured content is not added twice when you return to it. Pausing to read does not end capture. Choose **Done** to copy and save, or **Esc** to cancel before saving starts. Enter remains available to the original application.
+
+While scrolling capture is active, `kiri --finish-scroll-capture` performs the same complete-save check as **Done**; it never falls back to saving a partial result. `kiri --cancel-scroll-capture` cancels before saving begins. Both commands control only the current session and do not start a new capture.
+
+The selected area stays visibly marked during capture. The area outside it is dimmed, while clicks, wheel input and trackpad gestures pass through to the original application. This guide does not change the capture area or appear in the saved image.
+
+The preview follows a section of the original capture, fitted to the panel width. Its scale stays the same as the screenshot grows. Scroll inside it to inspect the captured content; move the pointer away to resume following. Drag the title row to move the panel; for compact controls, drag the status text. The panel stays on the capture display and, on X11, outside the selection.
+
+After scrolling, Kiri removes detected fixed headers and footers. Shadows may remain at outer edges you have not revisited. If Kiri asks for recovery, scroll back through the affected area before saving the complete image.
+
+If the view cannot be joined, Kiri keeps the connected result and asks you to return to captured content. Scroll back, then continue through the missing area. Content skipped by a large scrollbar jump cannot be recovered without showing it again. **Save captured area**, when offered, explicitly saves only the current partial result; it does not fill missing or uncertain content. If saving fails, retry without losing that result.
+
+Available on macOS, Windows and Linux X11; unavailable on Wayland. On macOS, select an area fully inside one normal application window. Capture stays bound to that window and excludes external floating windows and other windows from the same app. Moving, resizing or losing the source window stops capture while preserving progress. Windows and X11 still capture the display region and do not automatically exclude external floating windows; keep those outside the selection.
+
+Large blank or repeated areas, horizontal scrolling, zoom changes and layout reflow can prevent matching. On X11, leave room outside the selection for the compact 220 × 76 controls plus a small gap; macOS and Windows may place capture-excluded controls inside the selection when needed. If the image reaches its size limit, save the captured area and start another capture.
+
 ## Screenshot annotations
 
-Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type directly on the image, then choose a single mark or a tiled pattern and adjust opacity, angle, and spacing. Watermarks remain editable after saving.
+Saved images use the same annotation tools: select a tool or existing object to show its options; an empty selection leaves the image clear. Long images open to fit the window width; smaller images are not enlarged automatically. Scroll to browse, use the bottom controls to zoom or fit the width/image, and choose Actual size for original pixel density. Pinch or Ctrl/Command-scroll zooms; hold Space and drag to pan. Viewing changes do not alter saved pixels.
+
+Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type directly on the image, then adjust the tiled watermark’s opacity, angle, and spacing. Watermarks remain editable after saving.
 
 In the screenshot overlay, drag the small handle on the annotation toolbar or in the property panel’s heading to move each independently. With a handle focused, arrow keys move it by 2 pixels, or 10 with Shift. Chosen positions stay for the current capture, even when you adjust the selection or change tools; a new capture starts with automatic placement. The property panel makes room if the toolbar moves over it. Hide tool options keeps the panel closed until you reopen it from the main toolbar. Automatic property-panel placement also avoids the selected annotation.
 

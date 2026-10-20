@@ -1,0 +1,47 @@
+.kiri-scroll-region {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kiri-scroll-region,
+.kiri-scroll-region * {
+  pointer-events: none;
+}
+
+.kiri-scroll-region__mask,
+.kiri-scroll-region__border,
+.kiri-scroll-region__hint-slot {
+  position: absolute;
+}
+
+.kiri-scroll-region__mask {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.kiri-scroll-region__border {
+  background: var(--kiri-label);
+}
+
+.kiri-scroll-region__hint-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kiri-scroll-region__hint {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 6px 10px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--kiri-card);
+  color: var(--kiri-label);
+  font: 500 11px/16px var(--kiri-font-ui);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

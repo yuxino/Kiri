@@ -828,6 +828,41 @@ pub fn pin_webview_to_display_scale(window: &tauri::WebviewWindow, display_scale
     }
 }
 
+/// Required exclusion for scrolling controls that may sit inside the capture
+/// region. Unlike the best-effort recording helper below, startup must fail if
+/// Windows cannot apply the native EXCLUDEFROMCAPTURE policy to this HWND.
+pub(crate) fn require_window_capture_exclusion(window: &tauri::WebviewWindow) -> Result<()> {
+    use windows::Wdk::System::SystemServices::RtlGetVersion;
+    use windows::Win32::Graphics::Dwm::DwmIsCompositionEnabled;
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
+
+    let mut version = OSVERSIONINFOW {
+        dwOSVersionInfoSize: std::mem::size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+    unsafe { RtlGetVersion(&mut version) }
+        .map_err(|error| anyhow!("Could not verify scrolling control capture exclusion: {error}"))?;
+    // Earlier Windows accepts the value but treats it as WDA_MONITOR, which
+    // replaces the control window with a blank area instead of removing it.
+    if version.dwMajorVersion < 10
+        || (version.dwMajorVersion == 10 && version.dwBuildNumber < 19041)
+    {
+        bail!("Scrolling capture requires Windows 10 version 2004 or later.");
+    }
+    if !unsafe { DwmIsCompositionEnabled() }
+        .map_err(|error| anyhow!("Could not verify desktop composition: {error}"))?
+        .as_bool()
+    {
+        bail!("Scrolling capture requires desktop composition to exclude its controls.");
+    }
+    let hwnd = HWND(window.hwnd()?.0 as *mut _);
+    // A successful call applies the requested policy to our top-level window.
+    // The OS/build and DWM checks above prevent its documented blank-window
+    // compatibility fallback. WGC is the native consumer of this policy.
+    unsafe { SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) }
+        .map_err(|error| anyhow!("Could not exclude scrolling capture controls: {error}"))
+}
+
 pub fn set_window_capture_excluded(app: &tauri::AppHandle, label: &str, excluded: bool) {
     let Some(window) = app.get_webview_window(label) else {
         return;

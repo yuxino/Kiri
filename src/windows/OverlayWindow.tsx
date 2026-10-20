@@ -66,6 +66,18 @@ function recordingStartError(error: unknown): string {
   return "Could not start screen recording.";
 }
 
+function scrollingStartError(error: unknown): string {
+  const message = String(error);
+  for (const known of [
+    "Leave room outside the selection for scrolling capture controls.",
+    "Select a scrolling area fully inside one application window.",
+    "Finish the current scrolling capture first.",
+    "Scrolling capture is unavailable in this desktop session.",
+    "Could not register Escape for scrolling capture.",
+  ]) if (message.includes(known)) return known;
+  return "Could not start scrolling capture. Try again.";
+}
+
 type Phase =
   | "mode-select"
   | "selecting"
@@ -144,11 +156,15 @@ export function OverlayWindow() {
   const [selectedMarkEditing, setSelectedMarkEditing] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
   const [calloutNumber, setCalloutNumber] = useState(1);
+  const [hasAnnotations, setHasAnnotations] = useState(false);
+  const hasAnnotationContentRef = useRef(false);
   const onAnnotationSelection = useCallback((mark: AnnotationMark | null, editing: boolean) => {
     setSelectedMark(mark);
     setSelectedMarkEditing(editing);
   }, []);
-  const onAnnotationDocument = useCallback((marks: AnnotationMark[]) => setCalloutNumber(nextCalloutNumber(marks)), []);
+  const onAnnotationDocument = useCallback((marks: AnnotationMark[]) => {
+    setCalloutNumber(nextCalloutNumber(marks));
+  }, []);
   const [appearance, setAppearance] = useAnnotationAppearance();
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -165,6 +181,7 @@ export function OverlayWindow() {
   const [recordOptions, setRecordOptions] = useState<RecordingOptions>(DEFAULT_RECORDING_OPTIONS);
   const [micSupported, setMicSupported] = useState(true);
   const [platformCaps, setPlatformCaps] = useState<PlatformCapabilitiesDto>({
+    scrollingCapture: false,
     recording: true,
     localOcr: true,
     systemAudio: true,
@@ -467,6 +484,22 @@ export function OverlayWindow() {
     },
     [completionLock, selection],
   );
+
+  const startScrollCapture = useCallback(async () => {
+    if (!selection || !context?.captureId || !platformCaps.scrollingCapture ||
+        hasAnnotationContentRef.current || selectedMarkEditing || !completionLock.acquire()) return;
+    setCompleting(true);
+    setAnnotationError(null);
+    try {
+      await api.startScrollCapture(context.captureId, selection);
+    } catch (error) {
+      reportFrontend(`start_scroll_capture rejected: ${String(error)}`);
+      setAnnotationError(scrollingStartError(error));
+    } finally {
+      completionLock.release();
+      setCompleting(false);
+    }
+  }, [completionLock, context?.captureId, platformCaps.scrollingCapture, selectedMarkEditing, selection]);
 
   const recognizePreparedLocal = useCallback(async () => {
     const pending = preparedOcrRef.current;
@@ -1175,7 +1208,9 @@ export function OverlayWindow() {
             calloutNumber={calloutNumber}
             onSelectionInfo={onAnnotationSelection}
             onDocumentChange={onAnnotationDocument}
-            onHistoryChange={(u, r) => {
+            onHistoryChange={(u, r, hasContent) => {
+              hasAnnotationContentRef.current = hasContent;
+              setHasAnnotations(hasContent);
               setCanUndo(u);
               setCanRedo(r);
             }}
@@ -1375,6 +1410,10 @@ export function OverlayWindow() {
           onRedo={() => canvasRef.current?.redo()}
           onDone={() => void complete()}
           onPin={() => void complete(true)}
+          onScrollCapture={() => void startScrollCapture()}
+          scrollCaptureUnavailable={!platformCaps.scrollingCapture
+            ? "Scrolling capture is unavailable on this desktop."
+            : hasAnnotations || selectedMarkEditing ? "Remove annotations before starting scrolling capture." : undefined}
           onOcr={() => {
             const canvas = canvasRef.current;
             canvas?.finishAppearanceAdjustment();
@@ -1829,6 +1868,8 @@ interface ToolbarProps {
   onPin(): void;
   onOcr(): void;
   onQr(): void;
+  onScrollCapture?(): void;
+  scrollCaptureUnavailable?: string;
   onCancel(): void;
   onTextFontBegin?(): void;
   onTextFontLive?(value: number): void;
@@ -2078,6 +2119,9 @@ export function Toolbar(props: ToolbarProps) {
           <div className="kiri-annotation-tool-group">
             <ToolButton icon="text.viewfinder" title={t("Recognize Text")} disabled={disabled} onClick={onOcr}/>
             <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr}/>
+            {props.onScrollCapture && <ToolButton icon="arrows.up.down"
+              title={props.scrollCaptureUnavailable ? `${t("Scrolling Screenshot")} · ${t(props.scrollCaptureUnavailable)}` : t("Scrolling Screenshot")}
+              disabled={disabled || !!props.scrollCaptureUnavailable} onClick={props.onScrollCapture}/>}
             <ToolButton icon="slider.horizontal.3" title={t(canSetSize ? "Resize selection" : "Tool options")}
               active={canSetSize ? sizeControlsOpen : detailsOpen} expanded={canSetSize ? sizeControlsOpen : detailsOpen}
               onClick={() => canSetSize ? onToggleSize() : toggleDetails()}/>

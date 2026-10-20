@@ -4,6 +4,7 @@ import * as qrSelection from "../../src/qr/selection.js";
 import * as cardInteraction from "../../src/windows/library-card-interaction.js";
 import * as viewerCopyShortcut from "../../src/windows/viewer-copy-shortcut.js";
 import * as videoCapabilities from "../../src/windows/video-capabilities.js";
+import * as imageViewport from "../../src/annotation/image-viewport.js";
 
 // Exercise the real component handlers without a WebView, native IPC, or a
 // user's library. This models hook state/effect cleanup, not DOM or layout.
@@ -54,6 +55,7 @@ export const testAsset = {
 export function createLibraryHarness(apiOverrides = {}, componentSource = null, environment = {}) {
   let active;
   const listeners = new Map();
+  const captureListeners = new Map();
   const events = new Map();
   const sameDeps = (left, right) => left && right && left.length === right.length &&
     left.every((value, index) => Object.is(value, right[index]));
@@ -115,13 +117,28 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
   };
   const window = {
     location: { search: environment.search ?? "" },
+    devicePixelRatio: environment.devicePixelRatio ?? 1,
     getSelection: () => null,
-    addEventListener(name, callback) {
-      if (!listeners.has(name)) listeners.set(name, new Set());
-      listeners.get(name).add(callback);
+    addEventListener(name, callback, options) {
+      const target = (options === true || options?.capture) ? captureListeners : listeners;
+      if (!target.has(name)) target.set(name, new Set());
+      target.get(name).add(callback);
     },
-    removeEventListener(name, callback) { listeners.get(name)?.delete(callback); },
-    dispatchEvent(event) { listeners.get(event.type)?.forEach((callback) => callback(event)); },
+    removeEventListener(name, callback, options) {
+      const target = (options === true || options?.capture) ? captureListeners : listeners;
+      target.get(name)?.delete(callback);
+    },
+    dispatchEvent(event) {
+      captureListeners.get(event.type)?.forEach((callback) => callback(event));
+      listeners.get(event.type)?.forEach((callback) => callback(event));
+    },
+    // Native window capture runs before a child's React handler can stop the
+    // bubbling phase. Used to exercise key-release cleanup across controls.
+    dispatchThroughTarget(event, targetHandler) {
+      captureListeners.get(event.type)?.forEach((callback) => callback(event));
+      targetHandler(event);
+      if (!event.cancelBubble) listeners.get(event.type)?.forEach((callback) => callback(event));
+    },
   };
   const subscribe = (name) => (callback) => {
     events.set(name, callback);
@@ -187,6 +204,15 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     get "./gif-conversion"() { return gifConversion(); },
     "./viewer-copy-shortcut.js": viewerCopyShortcut,
     "./video-capabilities.js": videoCapabilities,
+    "../annotation/image-viewport.js": imageViewport,
+    get "./useImageViewport"() {
+      const hook = {exports: {}};
+      const hookGlobals = environment.globals ?? {};
+      new Function("require", "module", "exports", "window", ...Object.keys(hookGlobals), componentCode(
+        readFileSync(new URL("../../src/windows/useImageViewport.ts", import.meta.url), "utf8"),
+      ))(name => modules[name], hook, hook.exports, window, ...Object.values(hookGlobals));
+      return hook.exports;
+    },
     ...environment.modules,
   };
   // The real shared button owns focus/activation behavior in every toolbar.

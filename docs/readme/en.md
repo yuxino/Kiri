@@ -16,12 +16,13 @@
 
 ## Features
 
-- Capture a window or region, add text, arrows or mosaic, and pin screenshots as floating references.
+- Capture a window or region, add text, arrows or mosaic, and pin screenshots as floating references. Zoom and continue editing after saving.
+- Scroll up or down to build a long screenshot; revisiting captured content does not add it twice (macOS, Windows, Linux X11).
 - Extract text with local OCR and read QR codes.
 - Record MP4 with optional system audio and microphone, or save a silent GIF.
 - Trim and reorder clips from one video, then export a new MP4.
 - Search, tag, favorite and export local captures, with Trash for accidental deletions.
-- Customize, disable or restore default global shortcuts in Settings; shortcuts to pause/resume or stop and save work only during recording ([Wayland uses desktop settings](../linux.md)).
+- Set, disable or restore global shortcuts directly in Settings; recording controls are active only while recording ([Wayland uses desktop settings](../linux.md)).
 
 ## Get started
 

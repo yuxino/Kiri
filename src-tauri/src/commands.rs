@@ -88,6 +88,7 @@ impl From<&Rect> for RectDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureContextDto {
+    pub capture_id: uuid::Uuid,
     pub initial_mode: crate::state::CaptureMode,
     pub display_width: f64,
     pub display_height: f64,
@@ -852,7 +853,7 @@ async fn pick_library_folder(app: &AppHandle) -> Result<Option<PathBuf>, String>
 
 fn ensure_library_location_change_idle(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
-    if state.capture.lock().unwrap().session.is_some() {
+    if state.capture.lock().unwrap().session.is_some() || state.scroll_capture.is_active() {
         return Err("Finish the current capture before moving the library.".into());
     }
     let recording = state.recording.lock().unwrap();
@@ -1902,6 +1903,7 @@ fn export_gif_file(
 fn capture_context(session: &CaptureSession) -> CaptureContextDto {
     let display = &session.display;
     CaptureContextDto {
+        capture_id: session.capture_id,
         initial_mode: session.initial_mode,
         display_width: display.screen_frame.width,
         display_height: display.screen_frame.height,
@@ -1924,6 +1926,7 @@ pub(crate) fn start_capture_with_mode(
     app: AppHandle,
     initial_mode: crate::state::CaptureMode,
 ) -> Result<CaptureContextDto, String> {
+    crate::scroll_capture::ensure_idle(&app)?;
     log::info!("start_capture: beginning capture flow");
     let state = app.state::<AppState>();
     let _start_permit = match state.capture_start.try_begin() {
@@ -1946,6 +1949,8 @@ pub(crate) fn start_capture_with_mode(
         }
     };
     let _transition = state.library_transition.lock().unwrap();
+    // Scrolling capture can take ownership while this call waits for the lock.
+    crate::scroll_capture::ensure_idle(&app)?;
 
     {
         let capture = state.capture.lock().unwrap();
@@ -2119,6 +2124,7 @@ where
 
 #[cfg(target_os = "linux")]
 fn linux_capture_preflight(app: &AppHandle) -> Result<LinuxCapturePrep, String> {
+    crate::scroll_capture::ensure_idle(app)?;
     if crate::capture::linux::is_wayland()
         && app.available_monitors().map_err(|e| e.to_string())?.len() != 1
     {
@@ -2166,6 +2172,11 @@ fn linux_capture_commit(
 ) -> Result<CaptureContextDto, String> {
     let state = app.state::<AppState>();
     let _transition = state.library_transition.lock().unwrap();
+    // Recheck after the portal returns, under the same lock as scroll transfer.
+    if let Err(error) = crate::scroll_capture::ensure_idle(app) {
+        restore_capture_origin(app, &prep.hidden_windows, prep.was_kiri_frontmost, prep.pid);
+        return Err(error);
+    }
     // A library move can finish while the portal permission dialog is open.
     state
         .library
@@ -2240,7 +2251,9 @@ fn finish_frozen_capture(
         display.backing_scale
     );
 
+    let capture_id = uuid::Uuid::new_v4();
     let context = CaptureContextDto {
+        capture_id,
         initial_mode,
         display_width: display.screen_frame.width,
         display_height: display.screen_frame.height,
@@ -2251,7 +2264,6 @@ fn finish_frozen_capture(
         source_application: name.clone(),
     };
 
-    let capture_id = uuid::Uuid::new_v4();
     let overlay_frame = display.screen_frame;
     let overlay_scale = display.backing_scale;
     log::info!("start_capture: publishing frozen image capture_id={capture_id}");
@@ -2341,7 +2353,7 @@ fn hide_library_windows(app: &AppHandle) -> Result<Vec<String>, String> {
     Ok(hidden)
 }
 
-fn restore_capture_origin(
+pub(crate) fn restore_capture_origin(
     app: &AppHandle,
     hidden_windows: &[String],
     was_kiri_frontmost: bool,
@@ -2623,7 +2635,7 @@ pub(crate) fn open_capture_link(
     result
 }
 
-fn invalidate_capture_resources(app: &AppHandle, session: &CaptureSession) {
+pub(crate) fn invalidate_capture_resources(app: &AppHandle, session: &CaptureSession) {
     let state = app.state::<AppState>();
     for label in &session.overlay_labels {
         state
@@ -2955,6 +2967,19 @@ fn confirm_capture_inner(
     })
 }
 
+/// Saves pixels assembled internally by the bounded scrolling document.
+/// Never accepts a renderer-provided image or relaxes normal capture IPC limits.
+pub(crate) fn save_scroll_capture(
+    app: &AppHandle, session: &CaptureSession, png: &[u8], size: (u32, u32),
+) -> Result<CompletionPreviewDto, String> {
+    let state = app.state::<AppState>();
+    let _transition = state.library_transition.lock().unwrap();
+    confirm_capture_inner(app, &state, session, png,
+        (i64::from(size.0), i64::from(size.1)), None)
+        .map(|feedback| feedback.preview)
+        .map_err(|failure| failure.message)
+}
+
 /// Finalizes a successful capture only after its owner WebView has gone away.
 /// This callback runs outside the synchronous confirmation IPC, so creating
 /// the completion preview cannot prevent WebView2 from delivering that IPC
@@ -3213,7 +3238,7 @@ pub async fn save_file_dialog(
     Ok(Some(token.to_string()))
 }
 
-fn restore_focus(app: &AppHandle, session: &CaptureSession) {
+pub(crate) fn restore_focus(app: &AppHandle, session: &CaptureSession) {
     restore_capture_origin(
         app,
         &session.hidden_windows,
@@ -3797,6 +3822,7 @@ pub async fn start_recording_flow(
     app: AppHandle,
     request: StartRecordingRequest,
 ) -> Result<(), String> {
+    crate::scroll_capture::ensure_idle(&app)?;
     // Do not trigger a privacy prompt for stale/direct IPC without a live
     // user-initiated capture session.
     {
@@ -5911,6 +5937,7 @@ pub fn mic_supported() -> bool {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformCapabilitiesDto {
+    pub scrolling_capture: bool,
     pub recording: bool,
     pub local_ocr: bool,
     pub system_audio: bool,
@@ -5927,6 +5954,7 @@ pub struct PlatformCapabilitiesDto {
 #[tauri::command]
 pub fn platform_capabilities() -> PlatformCapabilitiesDto {
     PlatformCapabilitiesDto {
+        scrolling_capture: crate::scroll_capture::supported(),
         video_editing: crate::video_export::editing_available(),
         video_speed_editing: cfg!(any(windows, target_os = "macos")),
         video_effects_editing: cfg!(any(windows, target_os = "macos")),

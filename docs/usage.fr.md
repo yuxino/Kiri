@@ -28,9 +28,11 @@ Réglages → Général → Langue propose English, 简体中文, 繁體中文, 
 
 ## Capture
 
-Appuyez sur ⇧⌘A sous macOS ou Shift+Ctrl+A sous Windows / Linux X11, puis sélectionnez une fenêtre ou faites glisser une zone. Sous Wayland, utilisez le bouton de capture ou attribuez `kiri --capture` dans les réglages du bureau. Les bureaux compatibles proposent aussi Réglages → Général → Raccourcis du bureau Wayland pour autoriser Capturer, Suspendre/Reprendre et Arrêter. Ubuntu 24.04 / GNOME 46 conserve la solution par commandes.
+Appuyez sur ⇧⌘A sous macOS ou Shift+Ctrl+A sous Windows / Linux X11, puis sélectionnez une fenêtre ou faites glisser une zone. Sous Wayland, utilisez le bouton de capture ou attribuez `kiri --capture` dans les réglages du bureau. Les bureaux compatibles proposent aussi Réglages → Raccourcis → Raccourcis du bureau Wayland pour autoriser Capturer, Suspendre/Reprendre et Arrêter. Ubuntu 24.04 / GNOME 46 conserve la solution par commandes.
 
-Choisissez Capture d’écran, Enregistrer ou OCR. La barre de capture propose aussi la reconnaissance QR. Entrée confirme une capture ; Échap annule. Les captures vont dans le presse-papiers et la bibliothèque locale. Vous pouvez changer le raccourci de capture dans les réglages sous macOS, Windows et X11.
+Sous macOS, Windows et Linux, l’exécutable Kiri accepte aussi `--capture`, `--record`, `--ocr` et `--library` pour ouvrir respectivement la sélection de capture d’écran, la sélection d’enregistrement, la reconnaissance de texte et la fenêtre principale, que Kiri soit déjà lancé ou non.
+
+Choisissez Capture d’écran, Enregistrer ou OCR. La barre de capture propose aussi la reconnaissance QR. Entrée confirme une capture ; Échap annule. Les captures vont dans le presse-papiers et la bibliothèque locale. Sous macOS, Windows et X11, cliquez sur un champ dans Réglages → Raccourcis et appuyez sur la touche voulue ; vous pouvez aussi effacer ou rétablir une attribution. Les commandes d’enregistrement ne sont actives que pendant celui-ci.
 
 Avant de choisir un outil d’annotation, cliquez sur les curseurs de la barre de capture pour afficher les champs de largeur et de hauteur aux bords de la sélection. Les valeurs utilisent les pixels de sortie, y compris sur Retina. Entrée ou quitter un champ applique sa valeur ; Échap ignore la saisie, et un deuxième Échap annule la capture. Les flèches ajustent d’un pixel, ou de dix avec Maj. Cliquez à nouveau sur les curseurs pour masquer les champs. Après le début de l’annotation, ils règlent son apparence.
 
@@ -44,9 +46,29 @@ Le panneau de préparation propose MP4 / GIF, Démarrer et quatre icônes côte 
 
 La petite flèche à côté du microphone permet de choisir un périphérique d’entrée réel sans modifier celui par défaut du système. Si le périphérique choisi est indisponible ou déconnecté, Kiri affiche une erreur au lieu de changer de microphone silencieusement.
 
+## Captures défilantes
+
+Sélectionnez le contenu à faire défiler, puis **Capture défilante** dans la barre de capture avant d’ajouter des annotations. Commencez où vous voulez et faites défiler normalement vers le haut ou le bas. Revenir sur du contenu capturé n’ajoute pas de doublons. Une pause pour lire ne termine pas la capture. **Terminé** copie et enregistre ; Échap annule avant le début de l’enregistrement. Entrée reste disponible dans l’application d’origine.
+
+Pendant une capture défilante, `kiri --finish-scroll-capture` effectue les mêmes vérifications avant l’enregistrement complet que **Terminé**, sans enregistrer automatiquement un résultat partiel à la place. `kiri --cancel-scroll-capture` annule avant le début de l’enregistrement. Ces commandes contrôlent uniquement la session en cours et ne démarrent aucune capture.
+
+La sélection reste visible pendant la capture et l’extérieur est assombri. Les clics, la molette et les gestes du pavé tactile atteignent directement l’application d’origine. Ce repère ne change pas la sélection et n’apparaît pas dans l’image enregistrée.
+
+L’aperçu suit la partie actuelle de la capture originale, ajustée à la largeur du panneau. Son échelle reste la même lorsque la capture s’allonge. Faites défiler cet aperçu pour l’examiner, puis éloignez le pointeur pour reprendre le suivi. Faites glisser le titre pour déplacer le panneau, ou le texte d’état en mode compact. Le panneau reste sur l’écran capturé et, sous X11, hors de la sélection.
+
+Après défilement, Kiri retire les en-têtes et pieds de page fixes identifiés. Des ombres peuvent rester aux bords que vous n’avez pas revisités. Si Kiri demande une reprise, revenez sur la zone concernée avant d’enregistrer l’image complète.
+
+Si une vue ne peut pas être raccordée, Kiri conserve le résultat continu et vous invite à revenir au contenu capturé. Revenez, puis parcourez la zone manquante. Le contenu sauté avec la barre de défilement doit être affiché pour être capturé. **Enregistrer la zone capturée** sauvegarde uniquement le résultat partiel actuel, sans compléter les contenus manquants ou incertains. En cas d’échec de sauvegarde, le résultat est conservé pour réessayer.
+
+Disponible sur macOS, Windows et Linux X11, mais pas sur Wayland. Sur macOS, la sélection doit tenir entièrement dans une fenêtre d’application normale. La capture reste liée à cette fenêtre et exclut les fenêtres flottantes externes ainsi que les autres fenêtres de la même application. Déplacer, redimensionner ou rendre indisponible la fenêtre source arrête la capture en conservant la progression. Windows et X11 capturent toujours la zone d’écran et n’excluent pas automatiquement les fenêtres flottantes externes : gardez-les hors de la sélection.
+
+Les grandes zones vides ou répétitives, le défilement horizontal, le zoom et les changements de mise en page peuvent interrompre le raccordement. Sous X11, laissez hors de la sélection de la place pour les commandes compactes de 220 × 76 et un petit espacement. macOS et Windows peuvent placer les commandes exclues de la capture dans la sélection si nécessaire. À la limite de taille, enregistrez la zone capturée et commencez une nouvelle capture.
+
 ## Annotations de capture
 
-Sélectionnez une annotation existante pour modifier son style. La mosaïque propose le dessin libre, le rectangle et l’ellipse, avec pixellisation ou flou et intensité réglable. Filigrane (W) permet de saisir du texte directement sur l’image, puis de choisir un affichage unique ou répété et de régler l’opacité, l’angle et l’espacement. Les filigranes restent modifiables après enregistrement.
+Les images enregistrées reprennent les outils de capture : sélectionnez un outil ou une annotation pour afficher ses options. Sans sélection, la place reste à l’image. Les images longues s’adaptent à la largeur de la fenêtre ; les images plus étroites ne sont pas agrandies automatiquement. Faites défiler pour les parcourir ; les commandes du bas règlent le zoom, la largeur, l’image entière ou la taille réelle. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer ; Espace et glisser déplacent l’image. Le zoom ne modifie pas les pixels enregistrés.
+
+Sélectionnez une annotation existante pour modifier son style. La mosaïque propose le dessin libre, le rectangle et l’ellipse, avec pixellisation ou flou et intensité réglable. Filigrane (W) permet de saisir du texte directement sur l’image, puis de régler l’opacité, l’angle et l’espacement du filigrane répété. Les filigranes restent modifiables après enregistrement.
 
 Texte (T), Note numérotée (N) et Bulle de texte (B) ont chacun leur bouton dans les barres d’outils de capture et d’édition d’image. Choisissez la note numérotée, cliquez pour la placer et saisissez sa description directement sur l’image ; Retour ajoute une ligne. Déplacez séparément le numéro et le cadre transparent de la description, et réglez la taille, la couleur et le style plein ou contour.
 

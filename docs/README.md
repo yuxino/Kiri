@@ -28,6 +28,8 @@ Linux QA, and contribution records retain their original language.
 
 ## Current sources of truth
 
+- [`qa/scrolling-capture.md`](qa/scrolling-capture.md) — bidirectional result checks,
+  recovery, localized controls and separate native scrolling-capture acceptance.
 - [`qa/shortcut-settings.md`](qa/shortcut-settings.md) — actual settings geometry,
   localized editing states, renderer CI, and separate native shortcut acceptance.
 - [`qa/issue-21-windows/README.md`](qa/issue-21-windows/README.md) — native
@@ -222,3 +224,7 @@ development.
 - [ADR 0110: Shortcut settings and visible tool keys](adr/0110-shortcut-settings-and-visible-tool-keys.md) — four launch actions and two recording-only shortcuts, visible editing and default-reset controls, contextual key references, and shared annotation controls.
 
 - [ADR 0111: Supported shortcut keys and explicit confirmation](adr/0111-supported-shortcut-keys-and-confirmation.md) — native-library-supported keys, confirmation for bare and Shift-only typing/navigation keys, and consistent browser/native recording.
+
+- [ADR 0112: Free bidirectional scrolling capture](adr/0112-free-bidirectional-scroll-capture.md) — natural up/down scrolling, verified original-pixel strips, explicit partial saving and platform limits.
+
+- [ADR 0113: Contextual image editor and zoom](adr/0113-contextual-image-editor-and-zoom.md)

@@ -13,8 +13,8 @@ use objc2_core_foundation::CFRunLoop;
 use tauri::{AppHandle, Manager};
 
 use objc2_app_kit::{
-    NSBackingStoreType, NSColor, NSEvent, NSEventMask, NSPanel, NSRunningApplication,
-    NSScreenSaverWindowLevel, NSWindow, NSWindowCollectionBehavior, NSWindowOrderingMode,
+    NSAccessibility, NSBackingStoreType, NSColor, NSEvent, NSEventMask, NSPanel, NSRunningApplication,
+    NSScreenSaverWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowOrderingMode,
     NSWindowStyleMask, NSWorkspace,
 };
 use objc2_core_foundation::kCFRunLoopDefaultMode;
@@ -57,7 +57,46 @@ thread_local! {
     static SPACE_PARENTS: RefCell<HashMap<isize, Retained<NSPanel>>> = RefCell::new(HashMap::new());
 }
 
-fn attach_space_parent(window: &tauri::WebviewWindow, ns_window: &NSWindow) {
+fn hide_decorative_window_from_accessibility(window: &NSWindow) {
+    // Scope this to the owned decorative window and its content only. Hiding
+    // an application or a common ancestor would also hide the Done/Cancel panel.
+    window.setAccessibilityElement(false);
+    window.setAccessibilityHidden(true);
+    if let Some(content) = window.contentView() {
+        content.setAccessibilityElement(false);
+        content.setAccessibilityHidden(true);
+    }
+}
+
+fn hide_decorative_view_tree_from_accessibility(view: &NSView) {
+    view.setAccessibilityElement(false);
+    view.setAccessibilityHidden(true);
+    // Public NSView traversal only: WebKit's native scroll/container views
+    // are descendants of this one owned WKWebView, never sibling controls.
+    for child in view.subviews() {
+        hide_decorative_view_tree_from_accessibility(&child);
+    }
+}
+
+fn hide_decorative_webview_from_accessibility(window: &tauri::WebviewWindow) {
+    // Tauri runs this closure on the main thread and provides the actual
+    // WKWebView. contentView() is Wry's wrapper, not the webview itself.
+    if let Err(error) = window.with_webview(|webview| {
+        // WKWebView publicly inherits NSView on macOS. The borrowed native
+        // handle is valid for this closure and never escapes it.
+        if let Some(view) = unsafe { webview.inner().cast::<NSView>().as_ref() } {
+            hide_decorative_view_tree_from_accessibility(view);
+        }
+    }) {
+        log::warn!("Could not hide decorative scrolling webview from accessibility: {error}");
+    }
+}
+
+fn attach_space_parent(
+    window: &tauri::WebviewWindow,
+    ns_window: &NSWindow,
+    accessibility_hidden: bool,
+) {
     let id = ns_window.windowNumber();
     let existing = SPACE_PARENTS.with_borrow(|parents| parents.get(&id).cloned());
     let created = existing.is_none();
@@ -86,6 +125,9 @@ fn attach_space_parent(window: &tauri::WebviewWindow, ns_window: &NSWindow) {
     // updating the parent does not apply the same displacement twice.
     if !created {
         parent.removeChildWindow(ns_window);
+    }
+    if accessibility_hidden {
+        hide_decorative_window_from_accessibility(&parent);
     }
     parent.setFrame_display(ns_window.frame(), false);
     parent.setCollectionBehavior(ns_window.collectionBehavior());
@@ -123,6 +165,10 @@ fn apply_transient_window_policy(
     if policy.screen_saver_level {
         ns_window.setLevel(NSScreenSaverWindowLevel);
     }
+    if policy.accessibility_hidden {
+        hide_decorative_window_from_accessibility(ns_window);
+        hide_decorative_webview_from_accessibility(window);
+    }
     // A shortcut may be pressed while another application owns a native
     // full-screen Space. Changing collectionBehavior makes this window
     // eligible for that Space, but a window that was created before the
@@ -131,7 +177,7 @@ fn apply_transient_window_policy(
     // non-activating: it keeps the video/app in its full-screen Space instead
     // of switching the user back to Kiri's ordinary Space.
     if policy.full_screen_auxiliary {
-        attach_space_parent(window, ns_window);
+        attach_space_parent(window, ns_window, policy.accessibility_hidden);
         ns_window.orderFrontRegardless();
     }
 }
@@ -410,6 +456,7 @@ mod transient_window_tests {
             full_screen_auxiliary: true,
             stationary: false,
             screen_saver_level: true,
+            accessibility_hidden: false,
         };
 
         let behavior = transient_window_behavior(current, policy);
@@ -433,6 +480,7 @@ mod transient_window_tests {
                 full_screen_auxiliary: true,
                 stationary: true,
                 screen_saver_level: false,
+                accessibility_hidden: false,
             },
         );
 

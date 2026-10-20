@@ -35,6 +35,39 @@ test("the click ripple stays passive so recording hotkeys keep focus", () => {
   assert.match(rippleBuilder, /set_window_click_through\(app, "ripple"\)/);
 });
 
+for (const name of ["start_capture_with_mode", "linux_capture_commit"]) {
+  test(`${name} rechecks scrolling capture while holding the shared transition lock`, () => {
+    const commands = readFileSync(join(rustRoot, "commands.rs"), "utf8");
+    const body = commands.match(new RegExp(`fn ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body, `${name} must remain present`);
+    const transition = body.indexOf("let _transition = state.library_transition.lock().unwrap();");
+    assert.ok(transition >= 0, "capture publication must hold the shared transition lock");
+    const locked = body.slice(transition);
+    const guard = locked.indexOf("crate::scroll_capture::ensure_idle(");
+    const capture = locked.indexOf("state.capture.lock()");
+    assert.ok(guard >= 0 && guard < capture, "the early preflight check cannot substitute for a recheck before capture state is read");
+    if (name === "linux_capture_commit") {
+      assert.match(
+        locked.slice(guard, capture),
+        /restore_capture_origin\(app, &prep\.hidden_windows, prep\.was_kiri_frontmost, prep\.pid\);[\s\S]*return Err\(error\);/,
+        "a rejected post-portal commit must restore its preflight window state",
+      );
+    }
+  });
+}
+
+test("scrolling capture transfers ownership under the same transition lock", () => {
+  const source = readFileSync(join(rustRoot, "scroll_capture.rs"), "utf8");
+  const start = source.match(/fn start\(app: AppHandle,[\s\S]*?\n\}/)?.[0];
+  assert.ok(start, "scrolling capture start must remain present");
+  const transition = start.indexOf("let _transition = state.library_transition.lock().unwrap();");
+  const active = start.indexOf("let mut active = state.scroll_capture.0.lock().unwrap();");
+  const take = start.indexOf("flow.session.take()");
+  const publish = start.indexOf("*active = Some(");
+  assert.ok(transition >= 0 && transition < active && active < take && take < publish);
+  assert.doesNotMatch(start.slice(transition, publish), /drop\(_transition\)/);
+});
+
 test("capture confirmation finalizes only after its owner IPC returns", () => {
   const commands = readFileSync(join(rustRoot, "commands.rs"), "utf8").replace(/\r\n?/g, "\n");
   const overlay = readFileSync(

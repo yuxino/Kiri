@@ -39,6 +39,7 @@ use super::{CaptureHealth, CapturedDisplay};
 
 mod window_selection;
 mod audio;
+mod scroll_window;
 
 // ---------------------------------------------------------------------------
 // Permissions
@@ -828,7 +829,8 @@ impl MacRecordingSession {
                     .setCaptureResolution(objc2_screen_capture_kit::SCCaptureResolutionType::Best);
                 configuration.setScalesToFit(false);
                 configuration.setShowsCursor(options.shows_cursor);
-                configuration.setShowMouseClicks(false);
+                // Mouse-click highlighting is off by default. Its setter is
+                // macOS 15+, so do not send that selector on supported macOS 14.
                 configuration.setCapturesAudio(options.captures_system_audio);
                 if options.captures_microphone {
                     // This selector is available on macOS 15+. The backend
@@ -1327,5 +1329,547 @@ mod recording_lifetime_tests {
 
         drop(delegate);
         assert!(weak_state.upgrade().is_none());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scrolling capture: native image stream, independent of recording and audio.
+// ---------------------------------------------------------------------------
+
+struct MacScrollSession {
+    stop_tx: mpsc::Sender<()>,
+    done_rx: mpsc::Receiver<std::result::Result<(), String>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl super::scroll::NativeScrollSource for MacScrollSession {
+    fn stop(&mut self) -> Result<()> {
+        if self.thread.is_none() {
+            return Ok(());
+        }
+        let _ = self.stop_tx.send(());
+        let result = self.done_rx.recv_timeout(Duration::from_secs(8));
+        // Never turn a native timeout into an unbounded join. The stream thread
+        // keeps ownership until its cleanup finishes, including late callbacks.
+        let thread = self.thread.take().unwrap();
+        match result {
+            Ok(result) => {
+                thread
+                    .join()
+                    .map_err(|_| anyhow!("Scrolling capture cleanup failed."))?;
+                result.map_err(|message| anyhow!(message))
+            }
+            Err(_) => {
+                drop(thread);
+                bail!("Scrolling capture cleanup timed out.")
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct ScrollMetrics {
+    frames: u64,
+    geometry: Duration,
+    copy: Duration,
+    slowest: Duration,
+    last_report: Option<std::time::Instant>,
+}
+
+impl ScrollMetrics {
+    fn record(&mut self, geometry: Duration, copy: Duration) {
+        self.frames += 1;
+        self.geometry += geometry;
+        self.copy += copy;
+        self.slowest = self.slowest.max(geometry + copy);
+        let now = std::time::Instant::now();
+        let last = self.last_report.get_or_insert(now);
+        if last.elapsed() >= Duration::from_secs(3) {
+            self.report();
+            self.last_report = Some(now);
+        }
+    }
+
+    fn report(&self) {
+        if self.frames == 0 {
+            return;
+        }
+        log::debug!(
+            "[scroll] native frames={} geometry_mean_ms={:.3} copy_mean_ms={:.3} slowest_ms={:.3}",
+            self.frames,
+            self.geometry.as_secs_f64() * 1000.0 / self.frames as f64,
+            self.copy.as_secs_f64() * 1000.0 / self.frames as f64,
+            self.slowest.as_secs_f64() * 1000.0
+        );
+    }
+}
+
+struct ScrollDelegateState {
+    target: super::scroll::ScrollTarget,
+    metrics: std::sync::Mutex<ScrollMetrics>,
+    sender: std::sync::Mutex<Option<super::scroll_frames::ScrollFrameSender>>,
+    health: Arc<CaptureHealth>,
+    width: u32,
+    height: u32,
+    stopped: std::sync::atomic::AtomicBool,
+}
+
+struct KiriScrollDelegateIvars {
+    state: Arc<ScrollDelegateState>,
+}
+
+objc2::define_class!(
+    #[unsafe(super(NSObject))]
+    #[thread_kind = AnyThread]
+    #[name = "KiriScrollStreamDelegate"]
+    #[ivars = KiriScrollDelegateIvars]
+    struct KiriScrollStreamDelegate;
+    unsafe impl NSObjectProtocol for KiriScrollStreamDelegate {}
+    unsafe impl SCStreamOutput for KiriScrollStreamDelegate {
+        #[unsafe(method(stream:didOutputSampleBuffer:ofType:))]
+        fn scroll_output(
+            &self,
+            _stream: &SCStream,
+            buffer: &CMSampleBuffer,
+            output_type: SCStreamOutputType,
+        ) {
+            let state = &self.ivars().state;
+            if output_type != SCStreamOutputType::Screen
+                || state.stopped.load(std::sync::atomic::Ordering::Acquire)
+                || !unsafe { buffer.data_is_ready() }
+                || !scroll_sample_is_complete(buffer)
+                || state.health.unexpected_failure().is_some()
+            {
+                return;
+            }
+            let captured_at = std::time::Instant::now();
+            if let Err(error) = scroll_window::validate(state.target) {
+                state.health.report_capture_failure(error.to_string());
+                return;
+            }
+            let geometry_time = captured_at.elapsed();
+            let copy_started = std::time::Instant::now();
+            let Some(pixel_buffer) = (unsafe { buffer.image_buffer() }) else {
+                return;
+            };
+            let width = CVPixelBufferGetWidth(&pixel_buffer);
+            let height = CVPixelBufferGetHeight(&pixel_buffer);
+            if width != state.width as usize || height != state.height as usize {
+                state.health.report_capture_failure(
+                    "The scrolling capture display dimensions changed.".into(),
+                );
+                return;
+            }
+            if let Some(frame) = copy_scroll_pixel_buffer(&pixel_buffer, width, height) {
+                if log::log_enabled!(log::Level::Debug) {
+                    state
+                        .metrics
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .record(geometry_time, copy_started.elapsed());
+                }
+                if let Some(sender) = state
+                    .sender
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .as_ref()
+                {
+                    sender.send(frame, state.width, state.height, captured_at);
+                }
+            } else {
+                state.health.report_capture_failure(
+                    "Scrolling capture could not read a complete native frame.".into(),
+                );
+            }
+        }
+    }
+    unsafe impl SCStreamDelegate for KiriScrollStreamDelegate {
+        #[unsafe(method(stream:didStopWithError:))]
+        fn scroll_stopped(&self, _stream: &SCStream, error: &NSError) {
+            self.ivars()
+                .state
+                .health
+                .report_unexpected_stop(error.localizedDescription().to_string());
+        }
+    }
+);
+
+impl KiriScrollStreamDelegate {
+    fn with_state(state: Arc<ScrollDelegateState>) -> Retained<Self> {
+        let this = Self::alloc().set_ivars(KiriScrollDelegateIvars { state });
+        unsafe { msg_send![super(this), init] }
+    }
+}
+
+fn copy_scroll_pixel_buffer(
+    buffer: &CVPixelBuffer,
+    width: usize,
+    height: usize,
+) -> Option<Vec<u8>> {
+    let row_bytes = width.checked_mul(4)?;
+    let length = row_bytes.checked_mul(height)?;
+    if length > super::scroll_frames::MAX_QUEUE_BYTES / 2 {
+        return None;
+    }
+    if unsafe { CVPixelBufferLockBaseAddress(buffer, CVPixelBufferLockFlags::ReadOnly) } != 0 {
+        return None;
+    }
+    let result = (|| {
+        let base = CVPixelBufferGetBaseAddress(buffer);
+        let stride = CVPixelBufferGetBytesPerRow(buffer);
+        if base.is_null() || stride < row_bytes {
+            return None;
+        }
+        let mut pixels = Vec::with_capacity(length);
+        for row in 0..height {
+            let offset = row.checked_mul(stride)?;
+            pixels.extend_from_slice(unsafe {
+                std::slice::from_raw_parts(base.add(offset).cast::<u8>(), row_bytes)
+            });
+        }
+        Some(pixels)
+    })();
+    unsafe { CVPixelBufferUnlockBaseAddress(buffer, CVPixelBufferLockFlags::ReadOnly) };
+    result
+}
+
+fn scroll_sample_is_complete(buffer: &CMSampleBuffer) -> bool {
+    let Some(attachments) = (unsafe { buffer.sample_attachments_array(false) }) else {
+        return false;
+    };
+    if attachments.count() == 0 {
+        return false;
+    }
+    // SCK supplies a CFDictionary toll-free bridged to NSDictionary. A missing,
+    // idle, blank, or suspended frame is not new image evidence.
+    let dictionary =
+        unsafe { &*(attachments.value_at_index(0) as *const NSDictionary<NSString, NSObject>) };
+    dictionary
+        .objectForKey(unsafe { objc2_screen_capture_kit::SCStreamFrameInfoStatus })
+        .and_then(|value| value.downcast::<NSNumber>().ok())
+        .is_some_and(|status| {
+            status.integerValue() == objc2_screen_capture_kit::SCFrameStatus::Complete.0
+        })
+}
+
+fn validate_scroll_display_at_stop(display_id: u32, frame: Rect, scale: f64) -> Result<()> {
+    let (sender, receiver) = mpsc::channel();
+    dispatch2::run_on_main(move |main| {
+        let current = NSScreen::screens(main)
+            .iter()
+            .filter_map(|screen| screen_geometry(&screen).ok())
+            .find(|screen| screen.display_id == display_id);
+        let valid = current.is_some_and(|screen| {
+            validate_recording_geometry(frame, scale, screen.frame, screen.backing_scale).is_ok()
+        });
+        let _ = sender.send(valid);
+    });
+    if receiver.recv_timeout(Duration::from_secs(2)) != Ok(true) {
+        bail!("The selected display could not be verified before finishing scrolling capture.");
+    }
+    Ok(())
+}
+
+/// Resolve a one-window inclusion filter without ever waiting on the main
+/// thread. The display-based filter keeps sourceRect in display coordinates;
+/// independent-window capture can ignore sourceRect and scale after a resize.
+fn scroll_source_snapshot(
+    display_id: u32,
+    expected_frame: Rect,
+    scale: f64,
+    selection: Rect,
+    bound_target: Option<super::scroll::ScrollTarget>,
+) -> Result<(Option<RecordingFilterPointer>, super::scroll::ScrollTarget)> {
+    if MainThreadMarker::new().is_some() {
+        bail!("Scrolling filter preparation must not block the main thread.");
+    }
+    let (tx, rx) = mpsc::channel::<
+        std::result::Result<(Option<RecordingFilterPointer>, super::scroll::ScrollTarget), String>,
+    >();
+    dispatch2::run_on_main(move |_main| {
+        let block = RcBlock::new(
+            move |content: *mut SCShareableContent, error: *mut NSError| {
+                if !error.is_null() {
+                    let error = unsafe { Retained::retain(error).unwrap() };
+                    let _ = tx.send(Err(error.localizedDescription().to_string()));
+                    return;
+                }
+                let Some(content) = (unsafe { Retained::retain(content) }) else {
+                    let _ = tx.send(Err("The scrolling capture source is unavailable.".into()));
+                    return;
+                };
+                let pointer = Retained::into_raw(content) as usize;
+                let tx = tx.clone();
+                dispatch2::run_on_main(move |main| {
+                    let result =
+                        (|| -> Result<(Option<RecordingFilterPointer>, super::scroll::ScrollTarget)> {
+                            let content =
+                                unsafe { Retained::from_raw(pointer as *mut SCShareableContent) }
+                                    .ok_or_else(|| {
+                                    anyhow!("The scrolling capture source is unavailable.")
+                                })?;
+                            let current = NSScreen::screens(main)
+                                .iter()
+                                .filter_map(|screen| screen_geometry(&screen).ok())
+                                .find(|screen| screen.display_id == display_id)
+                                .ok_or_else(|| {
+                                    anyhow!("The selected display is no longer available.")
+                                })?;
+                            validate_recording_geometry(
+                                expected_frame,
+                                scale,
+                                current.frame,
+                                current.backing_scale,
+                            )?;
+                            let display = unsafe { content.displays() }
+                                .iter()
+                                .find(|display| unsafe { display.displayID() } == display_id)
+                                .ok_or_else(|| {
+                                    anyhow!("The selected display is no longer available.")
+                                })?;
+                            let (window, target) = scroll_window::resolve(
+                                &content,
+                                selection,
+                                bound_target,
+                            )?;
+                            let filter = bound_target.map(|_| {
+                                let filter = unsafe {
+                                    SCContentFilter::initWithDisplay_includingWindows(
+                                        SCContentFilter::alloc(),
+                                        &display,
+                                        &NSArray::from_slice(&[&*window]),
+                                    )
+                                };
+                                RecordingFilterPointer(Some(Retained::into_raw(filter) as usize))
+                            });
+                            log::debug!(
+                                "[scroll] source target={target:?} display={display_id} bound={}",
+                                bound_target.is_some()
+                            );
+                            Ok((filter, target))
+                        })()
+                        .map_err(|error| error.to_string());
+                    let _ = tx.send(result);
+                });
+            },
+        );
+        unsafe {
+            SCShareableContent::getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler(
+                false, true, &block,
+            );
+        }
+    });
+    rx.recv_timeout(Duration::from_secs(8))
+        .map_err(|_| anyhow!("Scrolling source lookup timed out."))?
+        .map_err(|message| anyhow!(message))
+}
+
+pub(crate) fn resolve_scroll_target(
+    display: &CapturedDisplay,
+    region: super::scroll::PixelRegion,
+) -> Result<super::scroll::ScrollTarget> {
+    let (_, target) = scroll_source_snapshot(
+        display.display_id,
+        display.screen_frame,
+        display.backing_scale,
+        scroll_global_selection(display, region),
+        None,
+    )?;
+    Ok(target)
+}
+
+fn scroll_global_selection(display: &CapturedDisplay, region: super::scroll::PixelRegion) -> Rect {
+    let scale = display.backing_scale;
+    Rect::new(
+        display.screen_frame.x + region.x as f64 / scale,
+        display.screen_frame.y + region.y as f64 / scale,
+        region.width as f64 / scale,
+        region.height as f64 / scale,
+    )
+}
+
+pub(crate) fn start_scroll_source(
+    display: &CapturedDisplay,
+    region: super::scroll::PixelRegion,
+    bound_target: super::scroll::ScrollTarget,
+    sender: super::scroll_frames::ScrollFrameSender,
+    health: Arc<CaptureHealth>,
+) -> Result<(
+    Box<dyn super::scroll::NativeScrollSource>,
+    super::scroll::ScrollTarget,
+)> {
+    let (filter, target) = scroll_source_snapshot(
+        display.display_id,
+        display.screen_frame,
+        display.backing_scale,
+        scroll_global_selection(display, region),
+        Some(bound_target),
+    )?;
+    let filter = filter.ok_or_else(|| anyhow!("The scrolling capture source is unavailable."))?;
+    let display_id = display.display_id;
+    let expected_frame = display.screen_frame;
+    let scale = display.backing_scale;
+    let (stop_tx, stop_rx) = mpsc::channel();
+    let (ready_tx, ready_rx) = mpsc::channel::<std::result::Result<(), String>>();
+    let (done_tx, done_rx) = mpsc::channel();
+    let thread = std::thread::Builder::new()
+        .name("kiri-scroll-sck".into())
+        .spawn(move || {
+            let filter =
+                unsafe { Retained::from_raw(filter.into_raw() as *mut SCContentFilter).unwrap() };
+            let configuration = unsafe {
+                let config = SCStreamConfiguration::new();
+                config.setSourceRect(CGRect {
+                    origin: CGPoint {
+                        x: region.x as f64 / scale,
+                        y: region.y as f64 / scale,
+                    },
+                    size: CGSize {
+                        width: region.width as f64 / scale,
+                        height: region.height as f64 / scale,
+                    },
+                });
+                config.setWidth(region.width as usize);
+                config.setHeight(region.height as usize);
+                config.setMinimumFrameInterval(CMTime {
+                    value: 1,
+                    timescale: 60,
+                    flags: objc2_core_media::CMTimeFlags(1),
+                    epoch: 0,
+                });
+                config.setQueueDepth(3);
+                config.setPixelFormat(0x4247_5241);
+                config
+                    .setCaptureResolution(objc2_screen_capture_kit::SCCaptureResolutionType::Best);
+                config.setScalesToFit(false);
+                config.setShowsCursor(false);
+                // Mouse-click highlighting is off by default. Its setter is
+                // macOS 15+, so do not send that selector on supported macOS 14.
+                config.setCapturesAudio(false);
+                config
+            };
+            let state = Arc::new(ScrollDelegateState {
+                target,
+                metrics: std::sync::Mutex::new(ScrollMetrics::default()),
+                sender: std::sync::Mutex::new(Some(sender)),
+                health: Arc::clone(&health),
+                width: region.width,
+                height: region.height,
+                stopped: std::sync::atomic::AtomicBool::new(false),
+            });
+            let delegate = KiriScrollStreamDelegate::with_state(Arc::clone(&state));
+            let queue = dispatch2::DispatchQueue::new("io.yuxino.kiri.scroll", None);
+            let output: &ProtocolObject<dyn SCStreamOutput> = ProtocolObject::from_ref(&*delegate);
+            let stream = unsafe {
+                SCStream::initWithFilter_configuration_delegate(
+                    SCStream::alloc(),
+                    &filter,
+                    &configuration,
+                    Some(ProtocolObject::from_ref(&*delegate)),
+                )
+            };
+            let registration = unsafe {
+                stream.addStreamOutput_type_sampleHandlerQueue_error(
+                    output,
+                    SCStreamOutputType::Screen,
+                    Some(&queue),
+                )
+            };
+            if let Err(error) = registration {
+                let _ = ready_tx.send(Err(format!("{error:?}")));
+                return;
+            }
+            if let Err(error) = start_capture_sync(&stream) {
+                let _ =
+                    remove_stream_outputs(&stream, output, &queue, &[SCStreamOutputType::Screen]);
+                let _ = ready_tx.send(Err(error.to_string()));
+                return;
+            }
+            let _ = ready_tx.send(Ok(()));
+            let geometry_check_pending = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            loop {
+                match stop_rx.recv_timeout(Duration::from_millis(500)) {
+                    Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+                if health.unexpected_failure().is_some() {
+                    break;
+                }
+                // SCK can become idle when the window is minimized. The
+                // periodic check also catches geometry loss without new frames.
+                if let Err(error) = scroll_window::validate(target) {
+                    health.report_capture_failure(error.to_string());
+                    break;
+                }
+                if !geometry_check_pending.swap(true, std::sync::atomic::Ordering::AcqRel) {
+                    let health = Arc::clone(&health);
+                    let pending = Arc::clone(&geometry_check_pending);
+                    dispatch2::run_on_main(move |main| {
+                        let current = NSScreen::screens(main)
+                            .iter()
+                            .filter_map(|screen| screen_geometry(&screen).ok())
+                            .find(|screen| screen.display_id == display_id);
+                        if current.is_none_or(|current| {
+                            validate_recording_geometry(
+                                expected_frame,
+                                scale,
+                                current.frame,
+                                current.backing_scale,
+                            )
+                            .is_err()
+                        }) {
+                            health.report_capture_failure(
+                                "The selected display changed. Start a new scrolling capture."
+                                    .into(),
+                            );
+                        }
+                        pending.store(false, std::sync::atomic::Ordering::Release);
+                    });
+                }
+            }
+            // First detach the output and drain its serial callback queue.
+            // A finalization must retain already delivered tail frames, unlike
+            // recorder shutdown which can discard late encoder callbacks.
+            let result =
+                remove_stream_outputs(&stream, output, &queue, &[SCStreamOutputType::Screen])
+                    .and_then(|()| {
+                        validate_scroll_display_at_stop(display_id, expected_frame, scale)
+                    })
+                    .and_then(|()| scroll_window::validate(target));
+            state
+                .metrics
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .report();
+            state
+                .stopped
+                .store(true, std::sync::atomic::Ordering::Release);
+            state
+                .sender
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .take();
+            drop(stream);
+            drop(delegate);
+            drop(queue);
+            let _ = done_tx.send(result.map_err(|error| error.to_string()));
+        })?;
+    match ready_rx.recv_timeout(Duration::from_secs(10)) {
+        Ok(Ok(())) => Ok((
+            Box::new(MacScrollSession {
+                stop_tx,
+                done_rx,
+                thread: Some(thread),
+            }),
+            target,
+        )),
+        Ok(Err(error)) => {
+            let _ = stop_tx.send(());
+            Err(anyhow!(error))
+        }
+        Err(_) => {
+            let _ = stop_tx.send(());
+            bail!("Scrolling capture startup timed out.")
+        }
     }
 }

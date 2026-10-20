@@ -40,6 +40,7 @@ pub enum TransientWindowRole {
     RecordingCountdown,
     RecordingControls,
     RecordingRegion,
+    ScrollCaptureRegion,
     CompletionFeedback,
     ClickRipple,
 }
@@ -50,6 +51,7 @@ pub(super) struct TransientWindowPolicy {
     pub full_screen_auxiliary: bool,
     pub stationary: bool,
     pub screen_saver_level: bool,
+    pub accessibility_hidden: bool,
 }
 
 impl TransientWindowRole {
@@ -57,11 +59,14 @@ impl TransientWindowRole {
         TransientWindowPolicy {
             can_join_all_spaces: true,
             full_screen_auxiliary: true,
-            stationary: matches!(self, Self::ClickRipple | Self::RecordingRegion),
+            stationary: matches!(self, Self::ClickRipple | Self::RecordingRegion | Self::ScrollCaptureRegion),
             // Preserve the existing native levels: capture UI and completion
             // feedback use the screen-saver level, while the click ripple
             // continues to rely on its always-on-top window configuration.
             screen_saver_level: !matches!(self, Self::ClickRipple | Self::RecordingRegion),
+            // Only the passive scrolling mask is decorative; its sibling
+            // controls and every other existing role retain their AX behavior.
+            accessibility_hidden: matches!(self, Self::ScrollCaptureRegion),
         }
     }
 }
@@ -136,7 +141,7 @@ pub fn write_image_to_clipboard(png: &[u8]) -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         let image = image::load_from_memory(png).map_err(|error| anyhow::anyhow!(error))?;
-        let rgba = image.to_rgba8();
+        let rgba = image.into_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
         let mut clipboard = arboard::Clipboard::new().map_err(|error| anyhow::anyhow!(error))?;
@@ -317,6 +322,7 @@ mod tests {
             TransientWindowRole::RecordingCountdown,
             TransientWindowRole::RecordingControls,
             TransientWindowRole::RecordingRegion,
+            TransientWindowRole::ScrollCaptureRegion,
             TransientWindowRole::CompletionFeedback,
             TransientWindowRole::ClickRipple,
         ] {
@@ -342,6 +348,22 @@ mod tests {
         let ripple = TransientWindowRole::ClickRipple.policy();
         assert!(ripple.stationary);
         assert!(!ripple.screen_saver_level);
+    }
+
+    #[test]
+    fn only_passive_scroll_region_is_hidden_from_accessibility() {
+        for role in [
+            TransientWindowRole::CaptureOverlay,
+            TransientWindowRole::RecordingCountdown,
+            TransientWindowRole::RecordingControls,
+            TransientWindowRole::RecordingRegion,
+            TransientWindowRole::ScrollCaptureRegion,
+            TransientWindowRole::CompletionFeedback,
+            TransientWindowRole::ClickRipple,
+        ] {
+            assert_eq!(role.policy().accessibility_hidden,
+                role == TransientWindowRole::ScrollCaptureRegion, "{role:?}");
+        }
     }
 
     #[test]

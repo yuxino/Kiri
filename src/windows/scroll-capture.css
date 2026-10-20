@@ -1,0 +1,218 @@
+.kiri-scroll-capture {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 12px;
+  background: var(--kiri-card);
+  color: var(--kiri-label);
+  font: 12px var(--kiri-font-ui);
+}
+
+.kiri-scroll-capture button {
+  font-family: inherit;
+}
+
+.kiri-scroll-capture__header {
+  flex: none;
+  min-height: 20px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kiri-scroll-capture__header > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kiri-scroll-capture__header > svg {
+  flex: none;
+}
+
+.kiri-scroll-capture__status {
+  flex: none;
+  min-height: 14px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.kiri-scroll-capture__status[data-error] {
+  color: #efaaa5;
+}
+
+.kiri-scroll-capture__dimensions {
+  flex: none;
+  font-weight: 400;
+  color: var(--kiri-secondary-label);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kiri-scroll-capture__preview {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--kiri-disabled-label) var(--kiri-group-fill);
+  overflow-anchor: none;
+  background: var(--kiri-canvas);
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 4px;
+}
+
+.kiri-scroll-capture__image {
+  position: relative;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.kiri-scroll-capture__image img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.kiri-scroll-capture__image img[data-visible] {
+  visibility: visible;
+}
+
+.kiri-scroll-capture__image[data-empty] {
+  height: 0;
+  overflow: hidden;
+}
+
+.kiri-scroll-capture__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100%;
+  color: var(--kiri-secondary-label);
+  font-size: 11px;
+}
+
+.kiri-scroll-capture__actions {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.kiri-scroll-capture__cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: none;
+  min-width: 72px;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--kiri-secondary-label);
+  background: transparent;
+  cursor: pointer;
+}
+
+.kiri-scroll-capture__cancel:hover:not(:disabled) {
+  color: var(--kiri-label);
+  background: var(--kiri-group-fill);
+}
+
+.kiri-scroll-capture__cancel:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.kiri-scroll-capture .kiri-scroll-capture__done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 30px;
+  flex: 1;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.kiri-scroll-capture__done svg {
+  flex: none;
+}
+
+.kiri-scroll-capture__done span {
+  min-width: 0;
+}
+
+.kiri-scroll-capture button:focus-visible,
+.kiri-scroll-capture__preview:focus-visible {
+  outline: 1px solid var(--kiri-label);
+  outline-offset: -3px;
+}
+
+.kiri-scroll-capture--compact {
+  padding: 5px 8px;
+  gap: 3px;
+  border-radius: 8px;
+}
+
+.kiri-scroll-capture--compact .kiri-scroll-capture__status {
+  min-height: 24px;
+  flex: 1;
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.kiri-scroll-capture--compact .kiri-scroll-capture__cancel,
+.kiri-scroll-capture--compact .kiri-scroll-capture__done {
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.kiri-scroll-capture--compact .kiri-scroll-capture__cancel {
+  min-width: 30px;
+  padding-inline: 7px;
+}
+
+.kiri-scroll-capture--compact .kiri-scroll-capture__cancel span {
+  display: none;
+}
+
+.kiri-scroll-capture__header,
+.kiri-scroll-capture--compact .kiri-scroll-capture__status {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kiri-scroll-capture__header[data-dragging],
+.kiri-scroll-capture--compact .kiri-scroll-capture__status[data-dragging] {
+  cursor: grabbing;
+}

@@ -19,11 +19,21 @@ const qr = tree => find(tree, "qr-overlay");
 const scan = (id, width = 1200, height = 800, codes = [{index: 0}]) => ({ requestId: id, width, height, codes, imageUrl: "unused-preview" });
 
 function editor(options = {}) {
+  class TestElement {
+    constructor(tag) { this.tag = tag; }
+    closest(selector) { return selector.split(",").includes(this.tag) ? this : null; }
+  }
   const calls = [], mutations = [];
   let listener, sequence = 0, resize, pendingIntent = options.pendingIntent ?? false;
   const size = { width: options.width ?? 1200, height: options.height ?? 800 };
   const document = { schemaVersion: 1, canvas: { width: size.width / 2, height: size.height / 2 }, sourcePixels: size, marks: [text] };
-  const container = { clientWidth: 800, clientHeight: 560 };
+  const containerListeners = new Map();
+  const container = { clientWidth: options.containerWidth ?? 800, clientHeight: options.containerHeight ?? 560, scrollLeft: 0, scrollTop: 0,
+    getBoundingClientRect: () => ({left: 0, top: 0, width: container.clientWidth, height: container.clientHeight}),
+    addEventListener: (name, listener) => containerListeners.set(name, listener),
+    removeEventListener: name => containerListeners.delete(name),
+    setPointerCapture() {},
+  };
   const snapshot = { state: "valid", readOnly: options.readOnly ?? false, revisionSha256: "opened-revision", documentJson: JSON.stringify(document) };
   const canvas = {
     exportResult: async () => { mutations.push("export"); return null; },
@@ -43,6 +53,7 @@ function editor(options = {}) {
   const harness = createLibraryHarness({}, editorSource, {
     search: options.search,
     strictEffects: options.strictEffects,
+    devicePixelRatio: options.devicePixelRatio,
     modules: {
       "../lib/ipc": { api, isEditorRevisionMismatch: error => String(error) === "The screenshot changed after the editor opened.",
         onEditorRecognizeQr: async callback => { listener = callback; if (options.listenerReady) await options.listenerReady; return () => { if (listener === callback) listener = null; }; } },
@@ -69,7 +80,7 @@ function editor(options = {}) {
       URL: { createObjectURL: () => "blob:opened-clean-source", revokeObjectURL: () => {} },
       Image: class { naturalWidth = size.width; naturalHeight = size.height; complete = true; async decode() {} },
       ResizeObserver: class { constructor(callback) { resize = callback; } observe() {} disconnect() {} },
-      Element: class {},
+      Element: TestElement,
     },
     attachRef(node) {
       if (!node.props?.ref) return;
@@ -82,7 +93,16 @@ function editor(options = {}) {
     },
   });
   const component = harness.mount("EditorWindow", { id: "saved-image" });
-  return { ...harness, component, calls, mutations, document,
+  return { ...harness, component, calls, mutations, document, container, element: tag => new TestElement(tag),
+    scroll: (x, y) => { container.scrollLeft = x; container.scrollTop = y;
+      nodes(component.render()).find(node => node?.props?.className === "kiri-image-editor-viewport").props.onScroll(); },
+    wheel(deltaY, deltaMode = 0, extra = {}) {
+      const event = {deltaY, deltaMode, clientX: 400, clientY: 280, ctrlKey: false, metaKey: false,
+        defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...extra};
+      containerListeners.get("wheel")?.(event);
+      component.render();
+      return event;
+    },
     recognize: () => { pendingIntent = true; listener?.(); },
     resize: (width, height) => { container.clientWidth = width; container.clientHeight = height; resize(); },
     key(key, extra = {}) {
@@ -129,7 +149,7 @@ test("saved-image recognition uses the original stage and exact opened revision 
   h.component.unmount();
 });
 
-test("QR arrows follow centered aspect-fit CSS pixels across resize, independent of the logical document and pending crop", async () => {
+test("QR arrows follow padded aspect-fit CSS pixels across resize, independent of the logical document and pending crop", async () => {
   const h = await loadedEditor();
   tool(h.component.render(), "Crop (C)").props.onClick();
   let tree = h.component.render();
@@ -137,16 +157,16 @@ test("QR arrows follow centered aspect-fit CSS pixels across resize, independent
   find(tree, "crop-overlay").props.onChange(pendingCrop);
   tool(h.component.render(), "Recognize QR Codes").props.onClick();
   tree = h.component.render();
-  assert.equal(qr(tree).props.sourceRect.x, 0);
-  assert.equal(qr(tree).props.sourceRect.width, 800);
-  assert.ok(Math.abs(qr(tree).props.sourceRect.y - 40 / 3) < 1e-9);
-  assert.ok(Math.abs(qr(tree).props.sourceRect.height - 1600 / 3) < 1e-9);
+  assert.ok(Math.abs(qr(tree).props.sourceRect.x - 12) < 1e-9);
+  assert.ok(Math.abs(qr(tree).props.sourceRect.width - 776) < 1e-9);
+  assert.ok(Math.abs(qr(tree).props.sourceRect.y - 64 / 3) < 1e-9);
+  assert.ok(Math.abs(qr(tree).props.sourceRect.height - 1552 / 3) < 1e-9);
   assert.deepEqual(find(tree, "annotation-canvas").props.region, { x: 0, y: 0, width: 600, height: 400 });
   assert.deepEqual(find(tree, "crop-overlay").props.selection, pendingCrop);
   assert.equal(find(tree, "crop-overlay").props.active, false);
   h.resize(250, 100);
   tree = h.component.render();
-  assert.deepEqual(qr(tree).props.sourceRect, { x: 50, y: 0, width: 150, height: 100 });
+  assert.deepEqual(qr(tree).props.sourceRect, { x: 68, y: 12, width: 114, height: 76 });
   assert.deepEqual(qr(tree).props.bounds, { x: 0, y: 0, width: 250, height: 100 });
   h.key("Escape");
   tree = h.component.render();
@@ -396,4 +416,150 @@ test("loading, no-result and failure use a small status with close/retry and no 
   assert.ok(button(tree, "Retry"));
   assert.equal(nodes(tree).some(node => ["dialog", "img"].includes(node?.type)), false);
   component.unmount();
+});
+
+
+test("long-image QR source geometry follows actual size, zoom and scroll while document coordinates stay fixed", async () => {
+  const h = await loadedEditor({width: 1200, height: 12000, devicePixelRatio: 2});
+  let tree = h.component.render();
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, {width: 600, height: 6000});
+  h.scroll(0, 1600);
+  tree = h.component.render();
+  assert.deepEqual(find(tree, "annotation-canvas").props.visibleViewport,
+    {x: 0, y: 1492, width: 600, height: 752});
+  tool(tree, "Recognize QR Codes").props.onClick();
+  tree = h.component.render();
+  assert.deepEqual(qr(tree).props.sourceRect, {x: 100, y: -1588, width: 600, height: 6000});
+  assert.deepEqual(qr(tree).props.selection, {x: 0, y: 0, width: 600, height: 6000});
+  assert.deepEqual(qr(tree).props.bounds, {x: 0, y: 0, width: 800, height: 560});
+  h.scroll(0, 2800);
+  tree = h.component.render();
+  assert.equal(qr(tree).props.sourceRect.y, -2788);
+  h.key("Escape");
+  tree = h.component.render();
+  tool(tree, "Zoom in").props.onClick();
+  tree = h.component.render();
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, {width: 750, height: 7500});
+  const sourceCenterBefore = (2800 + 280 - 12) / .5;
+  const sourceCenterAfter = (h.container.scrollTop + 280 - 12) / .625;
+  assert.equal(sourceCenterAfter, sourceCenterBefore, "toolbar zoom must retain the same source point at the viewport center");
+  tool(tree, "Recognize QR Codes").props.onClick();
+  tree = h.component.render();
+  assert.deepEqual(qr(tree).props.sourceRect, {x: 25, y: 12 - h.container.scrollTop, width: 750, height: 7500});
+  assert.deepEqual(find(tree, "annotation-canvas").props.region, {x: 0, y: 0, width: 600, height: 6000});
+  assert.deepEqual(h.mutations, [], "view controls must not save, crop or edit the document");
+  h.component.unmount();
+});
+
+
+test("initial long-image loading after a real viewport measurement starts at its first row", async () => {
+  const h = await loadedEditor({width: 1200, height: 12000, devicePixelRatio: 2,
+    containerWidth: 1190, containerHeight: 780});
+  assert.equal(h.container.scrollTop, 0);
+  assert.equal(h.container.scrollLeft, 0);
+  const tree = h.component.render();
+  assert.deepEqual(find(tree, "annotation-canvas").props.visibleViewport, {x: 0, y: 0, width: 600, height: 864});
+  h.component.unmount();
+});
+
+test("a DPI-only screen transition preserves the visible image center", async () => {
+  const h = await loadedEditor({width: 4000, height: 30000, devicePixelRatio: 1});
+  button(h.component.render(), "Actual size").props.onClick(); h.component.render();
+  h.scroll(500, 8000); h.component.render();
+  const before = {x: 500 + 400 - 12, y: 8000 + 280 - 12};
+  h.window.devicePixelRatio = 2;
+  h.window.dispatchEvent({type: "resize"});
+  const tree = h.component.render();
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, {width: 2000, height: 15000});
+  assert.equal((h.container.scrollLeft + 400 - 12) / .5, before.x);
+  assert.equal((h.container.scrollTop + 280 - 12) / .5, before.y);
+  assert.deepEqual(h.mutations, []);
+  h.component.unmount();
+});
+
+
+test("QR viewing retains ordinary wheel scrolling and normalized modifier-wheel zoom", async () => {
+  for (const [deltaY, deltaMode] of [[16, 0], [1, 1]]) {
+    const h = await loadedEditor({width: 1200, height: 12000, devicePixelRatio: 2});
+    tool(h.component.render(), "Recognize QR Codes").props.onClick(); h.component.render();
+    assert.equal(h.wheel(100).defaultPrevented, false, "QR must not swallow ordinary scrolling to codes below the viewport");
+    assert.equal(h.wheel(deltaY, deltaMode, {ctrlKey: true}).defaultPrevented, true);
+    const tree = h.component.render();
+    assert.ok(Math.abs(qr(tree).props.sourceRect.width - 600 * Math.exp(-16 * .008)) < 1e-7);
+    assert.deepEqual(h.mutations, []);
+    h.component.unmount();
+  }
+});
+
+test("an active annotation pointer locks wheel and button zoom until the gesture ends", async () => {
+  const h = await loadedEditor({width: 1200, height: 12000, devicePixelRatio: 2});
+  const stage = () => nodes(h.component.render()).find(node => node?.props?.className === "kiri-image-editor-viewport");
+  stage().props.onPointerDownCapture({button: 0, target: null, currentTarget: h.container});
+  const before = find(h.component.render(), "annotation-canvas").props.viewSize;
+  assert.equal(h.wheel(80).defaultPrevented, true);
+  tool(h.component.render(), "Zoom in").props.onClick();
+  assert.deepEqual(find(h.component.render(), "annotation-canvas").props.viewSize, before);
+  h.window.dispatchEvent({type: "pointerup"}); h.component.render();
+  tool(h.component.render(), "Zoom in").props.onClick();
+  assert.deepEqual(find(h.component.render(), "annotation-canvas").props.viewSize,
+    {width: before.width * 1.25, height: before.height * 1.25});
+  assert.deepEqual(h.mutations, []);
+  h.component.unmount();
+});
+
+
+test("zoom in never shrinks a tiny image already fitted beyond the normal zoom ceiling", async () => {
+  const h = await loadedEditor({width: 100, height: 100, devicePixelRatio: 2});
+  button(h.component.render(), "Fit width").props.onClick();
+  let tree = h.component.render();
+  const fitted = find(tree, "annotation-canvas").props.viewSize;
+  assert.equal(fitted.width, 776);
+  tool(tree, "Zoom in").props.onClick();
+  tree = h.component.render();
+  assert.deepEqual(find(tree, "annotation-canvas").props.viewSize, fitted,
+    "the ceiling may stop enlargement but must never reverse the requested direction");
+  tool(tree, "Zoom out").props.onClick();
+  tree = h.component.render();
+  assert.ok(Math.abs(find(tree, "annotation-canvas").props.viewSize.width - fitted.width * .8) < 1e-7);
+  assert.deepEqual(find(tree, "annotation-canvas").props.region, {x: 0, y: 0, width: 50, height: 50});
+  assert.deepEqual(h.mutations, []);
+  h.component.unmount();
+});
+
+
+test("a textarea pointer that can become a callout drag also locks zoom without consuming text selection", async () => {
+  const h = await loadedEditor({width: 1200, height: 12000, devicePixelRatio: 2});
+  const stage = () => nodes(h.component.render()).find(node => node?.props?.className === "kiri-image-editor-viewport");
+  const target = h.element("textarea");
+  const event = {button: 0, target, currentTarget: h.container,
+    prevented: false, stopped: false, preventDefault() {this.prevented = true;}, stopPropagation() {this.stopped = true;}};
+  stage().props.onPointerDownCapture(event);
+  assert.equal(event.prevented, false); assert.equal(event.stopped, false);
+  const before = find(h.component.render(), "annotation-canvas").props.viewSize;
+  assert.equal(h.wheel(-80, 0, {ctrlKey: true, target}).defaultPrevented, true);
+  tool(h.component.render(), "Zoom in").props.onClick();
+  assert.deepEqual(find(h.component.render(), "annotation-canvas").props.viewSize, before);
+  h.window.dispatchEvent({type: "pointerup"}); h.component.render();
+  tool(h.component.render(), "Zoom in").props.onClick();
+  assert.equal(find(h.component.render(), "annotation-canvas").props.viewSize.width, before.width * 1.25);
+  assert.deepEqual(h.mutations, []);
+  h.component.unmount();
+});
+
+test("Space pan mode clears before a focused label button stops keyup bubbling", async () => {
+  const h = await loadedEditor();
+  const stage = () => nodes(h.component.render()).find(node => node?.props?.className === "kiri-image-editor-viewport");
+  h.key(" ", {code: "Space"});
+  assert.equal(stage().props["data-pan-ready"], true);
+  let stopped = false;
+  const event = {type: "keyup", key: " ", code: "Space", target: h.element("button"), cancelBubble: false,
+    stopPropagation() {this.cancelBubble = true; stopped = true;}};
+  h.window.dispatchThroughTarget(event, event => event.stopPropagation());
+  assert.equal(stopped, true, "the child retains its activation handling");
+  assert.equal(stage().props["data-pan-ready"], undefined, "window capture must release pan even when the keyup cannot bubble");
+  h.key(" ", {code: "Space"}); assert.equal(stage().props["data-pan-ready"], true);
+  h.window.dispatchEvent({type: "blur"});
+  assert.equal(stage().props["data-pan-ready"], undefined);
+  assert.deepEqual(h.mutations, []);
+  h.component.unmount();
 });

@@ -17,7 +17,11 @@ provides the window and IPC boundary.
 - `src-tauri/src/core/library_location.rs` owns the active library marker,
   availability, and whole-library migration rules.
 - `src-tauri/src/capture/` and `src-tauri/src/platform/` contain platform
-  implementations.
+  implementations. `capture/scroll.rs` and `capture/scroll_frames.rs` provide
+  native raw scrolling frames and a separate bounded queue.
+- `src-tauri/src/core/scroll_document.rs` owns bidirectional original-pixel
+  matching and the connected image; `src-tauri/src/scroll_capture.rs` owns its
+  session, worker, panel and local save lifecycle.
 - `scripts/` contains release checks, icon generation, stable macOS signing,
   Universal DMG verification, and isolated Linux desktop QA.
 
@@ -38,6 +42,8 @@ modules.
 | `overlay` | Active-display capture, selection, annotation, and OCR consent |
 | `countdown` | Recording countdown |
 | `control-panel` | Recording pause/resume/stop controls |
+| `scroll-capture` | Nonactivating scrolling screenshot preview and completion controls |
+| `scroll-capture-region` | Persistent pointer-transparent selection guide with dimming outside the crop |
 | `recording-region` | Passive, capture-excluded recording region outline |
 | `ripple` | Optional recorded click highlight |
 | `editor-*` | Full screenshot editor |
@@ -229,6 +235,79 @@ device/display recovery guidance is localized; raw native errors stay in logs.
 A failure with no saved asset offers Open Library instead of a GIF retry. Windows
 queries optional capture-border control before disabling the system indicator;
 unsupported builds retain the system default (ADR 0102).
+
+## Scrolling screenshot flow
+
+The screenshot toolbar starts scrolling capture from the existing selection only
+when no committed annotations or live drafts exist. The owning overlay supplies
+its capture ID and selection; the backend validates both, replaces the frozen
+overlay with a nonactivating `scroll-capture` panel and `scroll-capture-region`
+guide, and restores source focus. The guide remains visible throughout capture,
+with a clear selected area and dimming outside it. Native pointer-event
+passthrough preserves source clicks and gestures. Its masks, border and hint
+stay outside the pixel crop, including on X11 where capture exclusion is absent.
+No scroll injection or input interception drives sampling. Enter remains owned
+by the source application; a temporary Escape registration cancels the session.
+
+`capture/scroll.rs` exposes native-resolution BGRA frames from ScreenCaptureKit,
+Windows Graphics Capture or X11. macOS uses a display-based inclusion filter for
+one normal application window containing the entire selection. It preserves the
+display-space crop while excluding external floating windows and all other
+windows from the same application. `capture/macos/scroll_window.rs` binds the
+window ID, owner PID and global geometry; complete frames, idle checks and stop
+validate that identity. A resumed source uses the same binding, and a changed or
+unavailable source fails without switching to another window or display capture.
+SCK content lookup is registered and resolved on main without waiting there.
+Windows and X11 still capture display regions and do not inherit macOS's external
+window exclusion. This filtering does not remove overlays painted inside the
+source window itself.
+
+The byte-bounded `scroll_frames.rs` queue is independent of recording/audio,
+preserves chronological bridge samples under
+pressure, and carries sequence/time/drop information. Stitching runs off the UI
+thread. `core/scroll_document.rs` indexes row fingerprints at signed document
+positions, verifies candidates against native overlap pixels, and adds only new
+strips above or below the connected result. Revisits update the viewport rather
+than appending duplicate content. Verified displacement identifies the moving
+body and strips detected opaque fixed top/bottom chrome; blank margins are not
+classified as fixed solely because their screen pixels match. The clean matching
+area is separate from provisional visible edge rows, which retain initial text
+and can be replaced by clear displaced observations. A never-revisited shadow
+may remain at the outermost edge instead of silently losing visible lines.
+The first still frame cannot establish these edges. Provisional new rows retain
+observation positions. Contradictory displaced observations require recovery,
+and independent agreeing observations can replace provisional pixels without
+blending. Confirmed rows remain immutable. Body reframing updates the signed
+origin and preview coordinates. Ambiguity never guesses a new placement.
+
+The panel polls status serially and shows a bounded crop of original captured
+pixels. The crop fits the panel width, with scale capped at the source display
+size; extending the long image does not reduce the preview scale. Each encoded
+crop keeps its coordinates atomically and follows accepted revisits even when
+the document revision is unchanged. Source direction is tracked independently
+of image publication so late crops still follow the correct edge. Scrolling
+inside the preview holds the displayed region; leaving it resumes following.
+A single encoder handles crops of at most 4 Mi pixels. Its reservation avoids
+rebuilding previews while encoding is busy.
+Controls prefer outside placement; macOS/Windows may use native capture exclusion
+for a compact in-selection fallback. X11 requires outside space for 220 × 76
+controls plus a gap. Wayland is unavailable.
+
+Done waits for settling, stops and drains the native source and rechecks the
+last view and unresolved row contradictions before saving. Known contradictions
+block a complete save until revisiting the area verifies or repairs it. Unmatched
+or interrupted capture retains the connected result; saving only that portion
+requires explicit Save captured area and does not imply the missing or uncertain
+content was repaired. Save failure preserves the document for retry. Successful output uses the existing
+clipboard, managed-library and completion-preview path. Session checks reject
+stale commands; teardown releases native sources and the temporary Escape grab.
+
+Fixed-edge handling depends on motion evidence; arbitrary sticky elements or
+in-window overlays are not universally reconstructed. Repeated/blank content,
+horizontal movement, zoom, unknown jumps and reflow remain matching limits.
+Moving or resizing the bound macOS source stops it rather than changing the crop.
+See [ADR 0112](adr/0112-free-bidirectional-scroll-capture.md) and the separate
+[acceptance checklist](qa/scrolling-capture.md) for behavior and evidence limits.
 
 ## Screenshot editing flow
 
@@ -904,3 +983,32 @@ source stalls, discontinuities and queue overflow fail the recording instead of
 producing a successful silent file. Pause closes each segment, and merge keeps
 the AAC track on the same completed-segment boundaries as video. See
 [ADR 0073](adr/0073-linux-recording-audio.md) for details and acceptance limits.
+
+### Explicit local action commands
+
+On macOS, Windows and Linux, `--capture`, `--record`, `--ocr` and `--library`
+forward to the resident application's normal guarded action dispatcher. A first
+launch with a capture action skips opening the library, preserving the source
+application as the capture origin. These commands use real platform capture and
+existing permission checks; they do not inject frames or bypass selection.
+Linux's `--toggle-recording-pause` and `--stop-recording` remain Linux-only.
+
+`--finish-scroll-capture` and `--cancel-scroll-capture` control only the current
+scrolling-capture session on supported platforms. Dispatch captures the session
+identity before scheduling asynchronous completion. Both use the same session
+request state machine as the panel; CLI finish always requests a complete result
+and never authorizes partial saving. No active session is started implicitly, and
+these control-only launches do not open the library. Recovery uses the session's
+normal status, and command failures are recorded in the application log;
+single-instance forwarding is not a synchronous save-result protocol.
+
+### Saved-image viewing
+
+The image editor uses a scrollable, independently zoomed view and contextual
+floating annotation options (ADR 0113). Image view geometry remains separate
+from persisted document geometry. AnnotationCanvas allocates only the visible
+view rectangle while full-image bounds drive pointer mapping and text layout.
+QR markers receive the image's actual scrolled CSS rectangle. Export remains at
+source resolution. Scrolling-capture preview presentation uses two decoded image
+buffers, committing pixels and placement together while keeping the previous
+image visible during loading or failure.

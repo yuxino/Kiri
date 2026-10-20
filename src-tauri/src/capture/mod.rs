@@ -16,6 +16,9 @@ pub use windows as current;
 #[cfg(target_os = "linux")]
 pub use linux as current;
 
+pub mod scroll;
+pub mod scroll_frames;
+
 use crate::core::geometry::Rect;
 use std::sync::Arc;
 
@@ -54,6 +57,16 @@ impl CaptureHealth {
         }
         state.unexpected_failure = Some(message);
         true
+    }
+
+    /// A malformed final frame or changed display remains a real failure even
+    /// after expected native shutdown has begun. Only OS stop callbacks may
+    /// be suppressed at that boundary.
+    pub(crate) fn report_capture_failure(&self, message: String) {
+        let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if state.unexpected_failure.is_none() {
+            state.unexpected_failure = Some(message);
+        }
     }
 
     pub(crate) fn unexpected_failure(&self) -> Option<String> {
@@ -197,6 +210,14 @@ mod tests {
         health.begin_expected_stop();
         assert!(!health.report_unexpected_stop("normal close callback".into()));
         assert!(health.unexpected_failure().is_none());
+    }
+
+    #[test]
+    fn invalid_tail_frame_is_not_hidden_by_expected_shutdown() {
+        let health = CaptureHealth::default();
+        health.begin_expected_stop();
+        health.report_capture_failure("tail frame geometry changed".into());
+        assert_eq!(health.unexpected_failure().as_deref(), Some("tail frame geometry changed"));
     }
 
     #[test]

@@ -38,17 +38,32 @@ async def assert_actions(page):
 
 
 async def assert_properties(page):
-    """Every normal property control is visible without a hidden partial row."""
-    result = await page.evaluate("""() => {
-      const panel=document.querySelector('.kiri-image-editor-properties');
-      const r=panel.getBoundingClientRect();
-      return [...panel.querySelectorAll('button,input')].map(e=>{
-        const q=e.getBoundingClientRect();return {title:e.ariaLabel||e.title||e.textContent,
-          inside:q.width>0&&q.height>0&&q.left>=r.left-1&&q.right<=r.right+1&&
-            q.top>=r.top-1&&q.bottom<=r.bottom+1,
-          hit:document.elementFromPoint(q.x+q.width/2,q.y+q.height/2)?.closest('button,input')===e};
-      });
+    """Every property remains reachable inside the bounded floating panel."""
+    panel = page.locator('.kiri-image-editor-properties')
+    geometry = await panel.evaluate("""panel => {
+      const r=panel.getBoundingClientRect(), style=getComputedStyle(panel);
+      return {scrollTop:panel.scrollTop, position:style.position,
+        height:r.height, maxHeight:Math.min(240,panel.offsetParent.clientHeight-24),
+        inside:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,
+        noHorizontalOverflow:panel.scrollWidth<=panel.clientWidth+1};
     }""")
+    assert geometry["position"] == "absolute", geometry
+    assert geometry["inside"] and geometry["noHorizontalOverflow"], geometry
+    assert geometry["height"] <= geometry["maxHeight"] + 1, geometry
+    result = []
+    for control in await panel.locator('button,input').all():
+        # Center each field so a sticky heading cannot hide it. Scrolling the
+        # options must neither focus nor commit the native text editor.
+        await control.evaluate("e=>e.scrollIntoView({block:'center',inline:'nearest'})")
+        result.append(await control.evaluate("""e => {
+          const panel=e.closest('.kiri-image-editor-properties');
+          const r=panel.getBoundingClientRect(), q=e.getBoundingClientRect();
+          return {title:e.ariaLabel||e.title||e.textContent,
+            inside:q.width>0&&q.height>0&&q.left>=r.left-1&&q.right<=r.right+1&&
+              q.top>=r.top-1&&q.bottom<=r.bottom+1,
+            hit:document.elementFromPoint(q.x+q.width/2,q.y+q.height/2)?.closest('button,input')===e};
+        }"""))
+    await panel.evaluate('(panel,top)=>{panel.scrollTop=top}', geometry["scrollTop"])
     assert all(row["inside"] and row["hit"] for row in result), result
 
 
@@ -106,7 +121,7 @@ async def editor_cases(browser, report):
                 if width == 320:
                     await page.screenshot(path=str(OUT / f"editor-{language}-320.png"))
                 report["editor"].append({"language": language, "width": width, "passed": True,
-                                         "completeProperties": True, "tiledOnly": True, "secondEdit": True})
+                                         "reachableProperties": True, "floatingOptions": True, "tiledOnly": True, "secondEdit": True})
             finally:
                 await context.close()
 

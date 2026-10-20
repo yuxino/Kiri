@@ -758,7 +758,8 @@
   display: flex;
   flex-wrap: wrap;
   flex-shrink: 0;
-  gap: 2px 24px;
+  gap: 2px 12px;
+  margin-inline: -8px;
   padding-top: 5px;
 }
 .kiri-settings-tab {
@@ -766,9 +767,10 @@
   align-items: center;
   gap: 5px;
   min-height: 36px;
-  padding: 0 1px;
+  padding: 0 8px;
   border: 0;
   border-bottom: 1.5px solid transparent;
+  border-radius: 5px 5px 0 0;
   color: var(--kiri-secondary-label);
   background: transparent;
   font: 400 13px var(--kiri-font-ui);
@@ -776,6 +778,7 @@
 }
 .kiri-settings-tab[aria-selected="true"] { color: var(--kiri-label); border-bottom-color: var(--kiri-label); font-weight: 500; }
 .kiri-settings-tab:hover { color: var(--kiri-label); }
+.kiri-settings .kiri-settings-tab:focus-visible { outline: 1.5px solid var(--kiri-secondary-label); outline-offset: -3px; }
 .kiri-settings-tab-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
 .kiri-settings-panel { min-width: 0; min-height: 0; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px 24px 1px; scrollbar-gutter: stable; }
 .kiri-settings-panel > * { flex-shrink: 0; }
@@ -800,38 +803,58 @@
 .kiri-shortcut-action-group__heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 12px; margin-bottom: 5px; }
 .kiri-shortcut-action-group__heading h3 { margin: 0; color: var(--kiri-secondary-label); font-size: 12px; font-weight: 500; line-height: 1.5; }
 .kiri-global-shortcuts { width: 100%; overflow: visible; border: 0; border-radius: 0; background: transparent; }
-.kiri-global-shortcut { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; min-height: 40px; padding: 4px 0; box-sizing: border-box; }
-.kiri-global-shortcut + .kiri-global-shortcut { border-top: 1px solid color-mix(in srgb, var(--kiri-surface-border) 50%, transparent); }
-.kiri-global-shortcut__identity { display: flex; align-items: center; gap: 10px; flex: 1 0 160px; min-width: 0; }
-.kiri-global-shortcut__icon { display: flex; align-items: center; flex: 0 0 16px; color: var(--kiri-secondary-label); }
+.kiri-global-shortcut { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 20px; min-height: 46px; padding: 6px 0; box-sizing: border-box; }
+.kiri-global-shortcut + .kiri-global-shortcut { border-top: 1px solid color-mix(in srgb, var(--kiri-surface-border) 45%, transparent); }
+.kiri-global-shortcut__identity { display: flex; align-items: center; gap: 10px; flex: 1 1 144px; min-width: 0; }
+/* The square slot aligns the labels; glyph sizes compensate for their actual
+   Lucide path bounds instead of stretching each symbol to the same shape. */
+.kiri-global-shortcut__icon { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; color: var(--kiri-secondary-label); }
+.kiri-global-shortcut__icon > svg { display: block; stroke-width: 1.8; }
 .kiri-global-shortcut__copy { min-width: 0; }
 .kiri-global-shortcut__copy strong { font-size: 13px; font-weight: 400; line-height: 1.4; overflow-wrap: anywhere; }
 .kiri-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.kiri-global-shortcut__controls { display: grid; grid-template-columns: minmax(0, 288px) 28px; align-items: start; gap: 6px; flex: 0 0 322px; max-width: 100%; margin-left: auto; min-width: 0; }
-.kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls { grid-template-columns: minmax(0, 176px) 28px; flex-basis: 242px; }
-.kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls[data-long-key] { grid-template-columns: minmax(0, 192px) 28px; }
-.kiri-shortcut-field { display: flex; align-items: stretch; min-width: 0; height: 32px; box-sizing: border-box; border: 1px solid var(--kiri-surface-border); border-radius: 6px; background: color-mix(in srgb, var(--kiri-group-fill) 40%, var(--kiri-card)); overflow: hidden; }
-.kiri-shortcut-field:hover { border-color: var(--kiri-secondary-label); }
-.kiri-shortcut-field[data-editing] { border-color: var(--kiri-label); background: var(--kiri-card); box-shadow: 0 0 0 1px color-mix(in srgb, var(--kiri-label) 20%, transparent); }
-/* An outer outline on the inner button is clipped into a false scrollbar by
-   the field. Give the recorder one complete focus ring around the whole field. */
-.kiri-shortcut-field:has(.kiri-shortcut-recorder:focus-visible) { border-color: var(--kiri-label); box-shadow: 0 0 0 1px var(--kiri-label); }
+.kiri-global-shortcut__controls {
+  --shortcut-field-width: 240px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  flex: 0 1 calc(var(--shortcut-field-width) + 34px);
+  width: calc(var(--shortcut-field-width) + 34px);
+  max-width: 100%;
+  margin-left: auto;
+  min-width: 0;
+}
+.kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls {
+  --shortcut-field-width: 132px;
+}
+.kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls[data-long-key] {
+  --shortcut-field-width: 208px;
+}
+.kiri-shortcut-field { display: flex; align-items: stretch; min-width: 0; min-height: 32px; box-sizing: border-box; border: 1px solid var(--kiri-surface-border); border-radius: 7px; background: var(--kiri-card); overflow: hidden; transition: border-color var(--kiri-motion-hover) ease-out, background var(--kiri-motion-hover) ease-out; }
+.kiri-shortcut-field:hover { border-color: color-mix(in srgb, var(--kiri-secondary-label) 55%, var(--kiri-surface-border)); }
+.kiri-shortcut-field[data-editing] { border-color: var(--kiri-label); background: color-mix(in srgb, var(--kiri-group-fill) 30%, var(--kiri-card)); }
+/* The recorder's focus ring encloses the field, so it cannot be clipped by
+   the clear button or mistaken for an input caret. */
+.kiri-shortcut-field:has(.kiri-shortcut-recorder:focus-visible) { outline: 1.5px solid var(--kiri-label); outline-offset: 2px; }
 .kiri-settings .kiri-shortcut-recorder:focus-visible { outline: none; }
-.kiri-settings .kiri-shortcut-clear:focus-visible, .kiri-settings .kiri-shortcut-cancel:focus-visible { outline: 2px solid var(--kiri-label); outline-offset: -3px; }
+.kiri-settings .kiri-shortcut-clear:focus-visible, .kiri-settings .kiri-shortcut-cancel:focus-visible { outline: 1.5px solid var(--kiri-label); outline-offset: -3px; border-radius: 4px; }
 .kiri-shortcut-field button:active:not(:disabled) { transform: none; }
-.kiri-shortcut-recorder { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 1; min-width: 0; height: 30px; box-sizing: border-box; padding: 0 8px; border: 0; border-radius: 0; background: transparent; color: var(--kiri-label); font: 12.5px var(--kiri-font-ui); white-space: nowrap; cursor: pointer; }
-.kiri-shortcut-recorder:hover:not(:disabled) { background: color-mix(in srgb, var(--kiri-group-fill) 45%, var(--kiri-card)); }
-.kiri-shortcut-recorder:disabled { color: var(--kiri-secondary-label); background: var(--kiri-group-fill); cursor: default; }
-.kiri-shortcut-chord { white-space: nowrap; font: inherit; letter-spacing: .3px; }
-.kiri-shortcut-listening { font-size: 11.5px; }
-.kiri-shortcut-clear, .kiri-shortcut-cancel, .kiri-shortcut-clear-placeholder { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 30px; box-sizing: border-box; padding: 0; border: 0; border-left: 1px solid transparent; border-radius: 0; background: transparent; color: var(--kiri-secondary-label); font: 10px var(--kiri-font-ui); cursor: pointer; }
-.kiri-shortcut-field:hover .kiri-shortcut-clear, .kiri-shortcut-field:focus-within .kiri-shortcut-clear, .kiri-shortcut-cancel { border-left-color: color-mix(in srgb, var(--kiri-surface-border) 60%, transparent); }
-.kiri-shortcut-clear-placeholder { border: 0; cursor: default; }
+.kiri-shortcut-recorder { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 1; min-width: 0; min-height: 30px; box-sizing: border-box; padding: 0 8px; border: 0; border-radius: 0; background: transparent; color: var(--kiri-label); font: 13px/1.25 var(--kiri-font-ui); white-space: nowrap; cursor: pointer; }
+.kiri-shortcut-recorder:hover:not(:disabled) { background: color-mix(in srgb, var(--kiri-group-fill) 35%, var(--kiri-card)); }
+.kiri-shortcut-recorder:disabled { color: var(--kiri-secondary-label); cursor: default; }
+.kiri-shortcut-value { min-width: 0; }
+.kiri-shortcut-chord { white-space: nowrap; font: 500 13px/1.25 var(--kiri-font-ui); letter-spacing: .4px; }
+.kiri-shortcuts-page[data-compact-keys] .kiri-shortcut-chord { font-size: 14px; letter-spacing: .7px; }
+.kiri-shortcut-listening { display: block; font-size: 11.5px; line-height: 1.25; white-space: normal; }
+.kiri-shortcut-clear, .kiri-shortcut-cancel, .kiri-shortcut-clear-placeholder { display: grid; place-items: center; align-self: stretch; flex: 0 0 24px; width: 24px; min-height: 30px; box-sizing: border-box; padding: 0; border: 0; background: transparent; color: var(--kiri-secondary-label); font: 10px var(--kiri-font-ui); cursor: pointer; }
+.kiri-shortcut-cancel { flex-basis: 28px; width: 28px; }
+.kiri-shortcut-clear-placeholder { cursor: default; }
 .kiri-shortcut-clear:hover:not(:disabled), .kiri-shortcut-cancel:hover { background: var(--kiri-group-fill); color: var(--kiri-label); }
 .kiri-shortcut-clear:disabled { opacity: .5; cursor: default; }
-.kiri-shortcut-reset-slot { display: flex; width: 28px; }
-.kiri-shortcut-reset { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--kiri-surface-border); border-radius: 5px; background: var(--kiri-card); color: var(--kiri-secondary-label); cursor: pointer; }
-.kiri-shortcut-reset:hover:not(:disabled) { border-color: var(--kiri-secondary-label); background: var(--kiri-group-fill); color: var(--kiri-label); }
+.kiri-shortcut-reset-slot { display: flex; align-items: center; width: 28px; min-height: 32px; }
+.kiri-shortcut-reset { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--kiri-secondary-label); cursor: pointer; }
+.kiri-shortcut-reset:hover:not(:disabled) { background: var(--kiri-group-fill); color: var(--kiri-label); }
 .kiri-shortcut-reset:disabled { opacity: .5; cursor: default; }
 .kiri-shortcut-keys { display: inline-flex; align-items: center; flex-wrap: nowrap; flex-shrink: 0; white-space: nowrap; gap: 3px; }
 .kiri-shortcut-keys kbd {
@@ -875,3 +898,7 @@
   .kiri-shortcut-reference__group dl { grid-template-columns: minmax(0, 1fr); }
 }
 .kiri-shortcut-key-or { color: var(--kiri-disabled-label); padding: 0 2px; font-size: 11px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kiri-shortcut-field { transition: none; }
+}

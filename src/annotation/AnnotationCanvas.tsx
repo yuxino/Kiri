@@ -120,6 +120,8 @@ interface Props {
   onRedo?(): void;
   /** CSS viewport size; document coordinates remain fixed to canvas/region. */
   viewSize?: { width: number; height: number };
+  /** Visible rectangle in CSS viewSize coordinates. Only the preview bitmap is clipped. */
+  visibleViewport?: Rect;
   /** Prevents edits while an immutable export snapshot is being committed. */
   interactionDisabled?: boolean;
   /** Synchronous companion to interactionDisabled for the pre-render event gap. */
@@ -279,6 +281,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       onUndo,
       onRedo,
       viewSize,
+      visibleViewport,
       interactionDisabled = false,
       interactionLock,
       tool,
@@ -315,6 +318,11 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       return id;
     }, [history]);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
+    // A clipped canvas has a different origin and size from the document view.
+    // Keep every pointer, double-click and gesture checkpoint in the full view.
+    const viewFrame = useCallback(() =>
+      (rootRef.current ?? canvasRef.current!).getBoundingClientRect(), []);
     const [marks, setMarks] = useState<AnnotationMark[]>(() =>
       history.elements.slice(),
     );
@@ -435,6 +443,22 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     );
     const viewScaleX = 1 / hitTestScale.x;
     const viewScaleY = 1 / hitTestScale.y;
+    const renderScale = devicePixelRatio;
+    const viewport = useMemo(() => {
+      if (!visibleViewport) return {x: 0, y: 0, width: view.width, height: view.height};
+      const {x, y, width, height} = visibleViewport;
+      if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
+        return {x: 0, y: 0, width: 0, height: 0};
+      }
+      // Cover fractional scroll offsets on the device-pixel grid, without
+      // allocating the rest of a long image or leaving a one-pixel seam.
+      const left = Math.min(view.width, Math.max(0, Math.floor(x * renderScale) / renderScale));
+      const top = Math.min(view.height, Math.max(0, Math.floor(y * renderScale) / renderScale));
+      const right = Math.min(view.width, Math.max(left, Math.ceil((x + width) * renderScale) / renderScale));
+      const bottom = Math.min(view.height, Math.max(top, Math.ceil((y + height) * renderScale) / renderScale));
+      return {x: left, y: top, width: right - left, height: bottom - top};
+    }, [visibleViewport?.x, visibleViewport?.y, visibleViewport?.width, visibleViewport?.height,
+      view.width, view.height, renderScale]);
 
     const publishHistory = useCallback(() => {
       onHistoryChange(
@@ -553,12 +577,12 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const sourceImage = getSourceImage();
       if (!sourceImage) return;
       ctx.setTransform(
-        devicePixelRatio * viewScaleX,
+        renderScale * viewScaleX,
         0,
         0,
-        devicePixelRatio * viewScaleY,
-        0,
-        0,
+        renderScale * viewScaleY,
+        -viewport.x * renderScale,
+        -viewport.y * renderScale,
       );
       const context: RenderContext = {
         ctx,
@@ -615,28 +639,34 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       view.height,
       viewScaleX,
       viewScaleY,
+      renderScale,
+      viewport.x,
+      viewport.y,
+      viewport.width,
+      viewport.height,
       displaySize,
       getSourceImage,
       onFrame,
       onLiveMarks,
     ]);
 
-    useEffect(() => {
+    // Updating a canvas backing size clears it. Repaint before the resized or
+    // scrolled viewport is presented, including when only its origin changed.
+    useLayoutEffect(() => {
       redraw();
     }, [redraw, image]);
 
     const toPoint = useCallback((e: React.PointerEvent | MouseEvent): Point => {
-      const canvas = canvasRef.current!;
       // Selecting a callout can open its inspector and resize the editor stage
       // before pointerup. Keep this gesture in the coordinate space it began in.
       const rect = interactionRef.current.kind !== "none" && gestureRectRef.current
-        ? gestureRectRef.current : canvas.getBoundingClientRect();
+        ? gestureRectRef.current : viewFrame();
       return viewPointToDocument(
         { x: e.clientX - rect.left, y: e.clientY - rect.top },
         { width: rect.width, height: rect.height },
         documentSize,
       );
-    }, [documentSize.height, documentSize.width]);
+    }, [documentSize.height, documentSize.width, viewFrame]);
 
     const commitText = useCallback(() => {
       const current = editingRef.current;
@@ -988,7 +1018,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if (editingRef.current && canvasClickRef.current.editingCalloutId !== calloutClickRef.current?.id) calloutClickRef.current = null;
         finishAppearanceAdjustment();
         const canvas = canvasRef.current!;
-        gestureRectRef.current = canvas.getBoundingClientRect();
+        gestureRectRef.current = viewFrame();
         canvas.setPointerCapture(e.pointerId);
         const p = clampPoint(toPoint(e), {
           x: 0,
@@ -1794,6 +1824,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       ? marks.map(mark => mark.id === draft.id ? draft : mark) : marks;
     return (
       <div
+        ref={rootRef}
         className="annotation-canvas-root"
         aria-busy={interactionDisabled}
         data-interaction-disabled={interactionDisabled || undefined}
@@ -1805,7 +1836,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           if (!onFinishOnBlankDoubleClick) return;
               finishAppearanceAdjustment();
           const canvas = canvasRef.current!;
-          const frame = canvas.getBoundingClientRect();
+          const frame = viewFrame();
           const point = viewPointToDocument({x: event.clientX - frame.left, y: event.clientY - frame.top}, frame, documentSize);
           const selected = selectedIndexRef.current === null ? null : history.elements[selectedIndexRef.current];
           const currentTool = toolRef.current;
@@ -1870,13 +1901,14 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         <canvas
           ref={canvasRef}
           tabIndex={-1}
-          width={Math.round(view.width * devicePixelRatio)}
-          height={Math.round(view.height * devicePixelRatio)}
+          width={Math.round(viewport.width * renderScale)}
+          height={Math.round(viewport.height * renderScale)}
           style={{
             display: "block",
             outline: "none",
-            width: view.width,
-            height: view.height,
+            width: viewport.width,
+            height: viewport.height,
+            ...(visibleViewport ? {position: "absolute" as const, left: viewport.x, top: viewport.y} : {}),
             // Spec §6.7: mosaic uses a crosshair, select tracks hover
             // (arrow/hand/crosshair), all other tools use the arrow.
             cursor:
@@ -1912,7 +1944,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
             // The inspector may shrink the stage on the first click and hide
             // again on the second. Resolve the second click in its own frame,
             // rather than the layout React rendered after that click ended.
-            const frame = gestureRectRef.current ?? canvasRef.current!.getBoundingClientRect();
+            const frame = gestureRectRef.current ?? viewFrame();
             const pointInFrame = (rect: CanvasFrame) => viewPointToDocument(
               {x: event.clientX - rect.left, y: event.clientY - rect.top}, rect, documentSize);
             const index = markIndexAt(history.elements, pointInFrame(frame),
@@ -1991,7 +2023,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
                 event.preventDefault(); event.stopPropagation();
                 const index = editingRef.current.index!;
                 const canvas = canvasRef.current!;
-                gestureRectRef.current = canvas.getBoundingClientRect();
+                gestureRectRef.current = viewFrame();
                 canvas.setPointerCapture(event.pointerId);
                 const frame = gestureRectRef.current;
                 const start = viewPointToDocument({x: firstPoint.x - frame.left, y: firstPoint.y - frame.top}, frame, documentSize);

@@ -1284,3 +1284,170 @@ mod tests {
         assert!(cropped[4..].iter().all(|byte| *byte == 0));
     }
 }
+
+// Raw WGC source for scrolling screenshots. No audio/encoder state is shared
+// with recording, and invalid/changed geometry is never padded into an image.
+struct WinScrollState {
+    sender: Option<super::scroll_frames::ScrollFrameSender>,
+    region: super::scroll::PixelRegion,
+    identity: DisplayIdentity,
+    geometry_checked_at: Instant,
+    health: Arc<CaptureHealth>,
+}
+
+struct WinScrollHandler {
+    state: Arc<Mutex<WinScrollState>>,
+}
+
+impl GraphicsCaptureApiHandler for WinScrollHandler {
+    type Flags = Arc<Mutex<WinScrollState>>;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+
+    fn new(context: Context<Self::Flags>) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            state: context.flags,
+        })
+    }
+
+    fn on_frame_arrived(
+        &mut self,
+        frame: &mut Frame,
+        _control: InternalCaptureControl,
+    ) -> std::result::Result<(), Self::Error> {
+        let captured_at = Instant::now();
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        if state.sender.is_none() || state.health.unexpected_failure().is_some() {
+            return Ok(());
+        }
+        let width = frame.width() as usize;
+        let height = frame.height() as usize;
+        if width != state.identity.physical_width as usize
+            || height != state.identity.physical_height as usize
+        {
+            state.health.report_capture_failure(
+                "The selected display dimensions changed. Start a new scrolling capture.".into(),
+            );
+            return Ok(());
+        }
+        if state.geometry_checked_at.elapsed() >= Duration::from_millis(500) {
+            let unchanged = current_display_identities()
+                .ok()
+                .and_then(|identities| unique_display_identity_index(&state.identity, &identities))
+                .is_some();
+            if !unchanged {
+                state.health.report_capture_failure(
+                    "The selected display changed. Start a new scrolling capture.".into(),
+                );
+                return Ok(());
+            }
+            state.geometry_checked_at = captured_at;
+        }
+        let region = state.region;
+        let mut buffer = match frame.buffer() {
+            Ok(buffer) => buffer,
+            Err(error) => {
+                state.health.report_capture_failure(format!(
+                    "Scrolling capture could not read a frame: {error}"
+                ));
+                return Ok(());
+            }
+        };
+        let pitch = buffer.row_pitch() as usize;
+        let raw = buffer.as_raw_buffer();
+        let valid = pitch >= width.saturating_mul(4)
+            && raw.len() >= pitch.saturating_mul(height)
+            && region.x as usize + region.width as usize <= width
+            && region.y as usize + region.height as usize <= height;
+        if !valid {
+            state
+                .health
+                .report_capture_failure("Scrolling capture received an incomplete frame.".into());
+            return Ok(());
+        }
+        let pixels = crop_rgba_to_bgra(
+            raw,
+            width,
+            height,
+            pitch,
+            PixelRegion {
+                x: region.x as usize,
+                y: region.y as usize,
+                width: region.width as usize,
+                height: region.height as usize,
+            },
+        );
+        state
+            .sender
+            .as_ref()
+            .unwrap()
+            .send(pixels, region.width, region.height, captured_at);
+        Ok(())
+    }
+
+    fn on_closed(&mut self) -> std::result::Result<(), Self::Error> {
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        state.health.report_unexpected_stop(
+            "Windows Graphics Capture closed the scrolling capture.".into(),
+        );
+        state.sender.take();
+        Ok(())
+    }
+}
+
+struct WindowsScrollSession {
+    control: Option<CaptureControl<WinScrollHandler, Box<dyn std::error::Error + Send + Sync>>>,
+    state: Arc<Mutex<WinScrollState>>,
+}
+
+impl super::scroll::NativeScrollSource for WindowsScrollSession {
+    fn stop(&mut self) -> Result<()> {
+        let result = self
+            .control
+            .take()
+            .map(|control| control.stop().map_err(|error| anyhow!("{error}")))
+            .transpose();
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        state.sender.take();
+        if current_display_identities().ok()
+            .and_then(|identities| unique_display_identity_index(&state.identity, &identities)).is_none() {
+            state.health.report_capture_failure("The selected display changed before scrolling capture finished.".into());
+        }
+        result.map(|_| ())
+    }
+}
+
+pub(crate) fn start_scroll_source(
+    display: &CapturedDisplay,
+    region: super::scroll::PixelRegion,
+    sender: super::scroll_frames::ScrollFrameSender,
+    health: Arc<CaptureHealth>,
+) -> Result<Box<dyn super::scroll::NativeScrollSource>> {
+    let identity = display
+        .display_identity
+        .as_ref()
+        .ok_or_else(|| anyhow!("The selected display identity is unavailable."))?;
+    let monitor = resolve_recording_monitor(identity)?;
+    let state = Arc::new(Mutex::new(WinScrollState {
+        sender: Some(sender),
+        region,
+        identity: identity.clone(),
+        geometry_checked_at: Instant::now(),
+        health,
+    }));
+    let settings = Settings::new(
+        monitor,
+        CursorCaptureSettings::WithoutCursor,
+        recording_draw_border_settings(),
+        SecondaryWindowSettings::Default,
+        recording_minimum_update_interval(),
+        DirtyRegionSettings::Default,
+        ColorFormat::Rgba8,
+        Arc::clone(&state),
+    );
+    let control =
+        WinScrollHandler::start_free_threaded(settings).map_err(|error| anyhow!("{error}"))?;
+    Ok(Box::new(WindowsScrollSession {
+        control: Some(control),
+        state,
+    }))
+}

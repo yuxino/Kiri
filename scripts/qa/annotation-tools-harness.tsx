@@ -22,27 +22,42 @@ const language = params.get("lang") as KiriLanguage;
 if (languages.includes(language)) setLanguage(language);
 const overlay = params.get("window") === "overlay";
 const scale = overlay ? Number(params.get("scale")) || 2 : 1;
-const width = overlay ? innerWidth : 960, height = overlay ? innerHeight : 600;
+const longImage = !overlay && params.has("long");
+const width = overlay ? innerWidth : longImage ? 1800 : 960, height = overlay ? innerHeight : longImage ? 12000 : 600;
 const source = document.createElement("canvas");
 source.width = Math.round(width * scale); source.height = Math.round(height * scale);
 const ctx = source.getContext("2d")!;
 ctx.scale(scale, scale);
-for (let y = 0; y < height; y += 20) for (let x = 0; x < width; x += 20) {
-  ctx.fillStyle = `rgb(${(x * 7 + y * 13) % 190 + 40},${(x * 17 + y * 3) % 190 + 40},${(x / 20 % 3) * 70 + 60})`;
-  ctx.fillRect(x, y, 20, 20);
+if (longImage) {
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, width, height);
+  for (let y = 0, section = 1; y < height; y += 240, section++) {
+    const number = String(section).padStart(3, "0");
+    ctx.fillStyle = "#181818"; ctx.font = "600 30px sans-serif";
+    ctx.fillText(`SECTION ${number} · 第 ${number} 段`, 64, y + 62);
+    ctx.font = "24px sans-serif";
+    ctx.fillText(`Kiri generated long-image sample ${number}. Scroll, zoom and inspect this numbered section.`, 64, y + 112);
+    ctx.fillText(`编号 ${number}：这张测试长图用于查看文字、缩放和标注，不包含用户内容。`, 64, y + 158);
+    ctx.fillStyle = "#ddd"; ctx.fillRect(64, y + 211, width - 128, 1);
+  }
+} else {
+  for (let y = 0; y < height; y += 20) for (let x = 0; x < width; x += 20) {
+    ctx.fillStyle = `rgb(${(x * 7 + y * 13) % 190 + 40},${(x * 17 + y * 3) % 190 + 40},${(x / 20 % 3) * 70 + 60})`;
+    ctx.fillRect(x, y, 20, 20);
+  }
+  ctx.fillStyle = "#fff"; ctx.fillRect(24, 24, width - 48, 82);
+  ctx.fillStyle = "#141414"; ctx.font = "22px sans-serif";
+  ctx.fillText("Kiri annotation QA — generated test image", 40, 62);
+  ctx.font = "16px sans-serif"; ctx.fillText("Direct text · mosaic · editable watermarks", 40, 88);
 }
-ctx.fillStyle = "#fff"; ctx.fillRect(24, 24, width - 48, 82);
-ctx.fillStyle = "#141414"; ctx.font = "22px sans-serif";
-ctx.fillText("Kiri annotation QA — generated test image", 40, 62);
-ctx.font = "16px sans-serif"; ctx.fillText("Direct text · mosaic · editable watermarks", 40, 88);
 const png = await new Promise<Blob>(resolve => source.toBlob(blob => resolve(blob!)));
 let stored: AnnotationDocumentV1 = {
   schemaVersion: 1, canvas: {width, height}, sourcePixels: {width: source.width, height: source.height}, marks: [],
 };
+const seedY = longImage ? 2400 : 180;
 if (params.has("seed")) stored.marks = [
-  {kind: "rectangle", id: 1, rect: {x: 120, y: 180, width: 150, height: 100}, color: "white", width: 4},
-  {kind: "text", id: 2, rect: {x: 300, y: 180, width: 180, height: 42}, text: "Editable text", color: "white", fontSize: 24, background: "transparent"},
-  {kind: "mosaic", id: 3, points: [{x: 550, y: 180}, {x: 750, y: 280}], brushDiameter: 24, intensity: "strong", style: "pixel", shape: "rectangle"},
+  {kind: "rectangle", id: 1, rect: {x: 120, y: seedY, width: 150, height: 100}, color: longImage ? "black" : "white", width: 4},
+  {kind: "text", id: 2, rect: {x: 300, y: seedY, width: 180, height: 42}, text: "Editable text", color: longImage ? "black" : "white", fontSize: 24, background: "transparent"},
+  {kind: "mosaic", id: 3, points: [{x: 550, y: seedY}, {x: 750, y: seedY + 100}], brushDiameter: 24, intensity: "strong", style: "pixel", shape: "rectangle"},
 ];
 if (params.has("watermark")) stored.marks.push({kind: "watermark", id: 4,
   text: "Kiri QA", rect: {x: params.has("outside") ? -180 : 320, y: params.has("outside") ? -120 : 300, width: 140, height: 42},

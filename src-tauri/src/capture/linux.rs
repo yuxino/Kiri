@@ -932,3 +932,124 @@ mod overlay_geometry_tests {
         assert!((scale - 2240.0 / 1400.0).abs() < 0.01);
     }
 }
+
+// X11 raw screenshot sampling uses the existing native xcap backend, without
+// PNG encode/decode, subprocesses, audio, pointer hooks, or scroll injection.
+// X11 cannot exclude Kiri windows: the controller must keep every control
+// outside the selected pixel region before starting this source.
+struct LinuxScrollSession {
+    stop: Arc<AtomicBool>,
+    done: mpsc::Receiver<()>,
+    worker: Option<std::thread::JoinHandle<()>>,
+}
+
+impl super::scroll::NativeScrollSource for LinuxScrollSession {
+    fn stop(&mut self) -> Result<()> {
+        self.stop.store(true, Ordering::Release);
+        let Some(worker) = self.worker.take() else {
+            return Ok(());
+        };
+        worker.thread().unpark();
+        if self.done.recv_timeout(Duration::from_secs(3)).is_err() {
+            drop(worker);
+            bail!("Scrolling capture cleanup timed out.");
+        }
+        worker
+            .join()
+            .map_err(|_| anyhow!("Scrolling capture worker failed."))
+    }
+}
+
+pub(crate) fn start_scroll_source(
+    display: &CapturedDisplay,
+    region: super::scroll::PixelRegion,
+    sender: super::scroll_frames::ScrollFrameSender,
+    health: Arc<super::CaptureHealth>,
+) -> Result<Box<dyn super::scroll::NativeScrollSource>> {
+    if is_wayland() {
+        bail!("Scrolling capture is not yet available on Wayland. Use an X11 session.");
+    }
+    let identity = display
+        .display_identity
+        .clone()
+        .ok_or_else(|| anyhow!("The selected display identity is unavailable."))?;
+    let display_id = display.display_id;
+    // Resolve afresh, including ID, layout and scale. An enumeration position
+    // alone can silently switch to another monitor after a disconnect.
+    let resolve_monitor = move || -> Result<xcap::Monitor> {
+        let mut found = None;
+        for monitor in xcap::Monitor::all()? {
+            let current = DisplayIdentity {
+                device_name: monitor.name()?,
+                physical_x: monitor.x()?,
+                physical_y: monitor.y()?,
+                physical_width: monitor.width()?,
+                physical_height: monitor.height()?,
+                scale_factor: f64::from(monitor.scale_factor()?).max(1.0),
+            };
+            if monitor.id()? == display_id && current == identity {
+                if found.is_some() {
+                    bail!("The selected display is ambiguous.");
+                }
+                found = Some(monitor);
+            }
+        }
+        found.ok_or_else(|| anyhow!("The selected display changed. Start a new scrolling capture."))
+    };
+    resolve_monitor()?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_stop = Arc::clone(&stop);
+    let (done_tx, done) = mpsc::channel();
+    let worker = std::thread::Builder::new()
+        .name("kiri-scroll-x11".into())
+        .spawn(move || {
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
+                    let mut monitor = resolve_monitor()?;
+                    let mut geometry_checked_at = Instant::now();
+                    while !worker_stop.load(Ordering::Acquire) {
+                        let captured_at = Instant::now();
+                        if geometry_checked_at.elapsed() >= Duration::from_millis(500) {
+                            monitor = resolve_monitor()?;
+                            geometry_checked_at = captured_at;
+                        }
+                        let image = monitor.capture_region(
+                            region.x, region.y, region.width, region.height,
+                        )?;
+                        if image.width() != region.width || image.height() != region.height {
+                            bail!("The scrolling capture display dimensions changed.");
+                        }
+                        let mut pixels = image.into_raw();
+                        for pixel in pixels.chunks_exact_mut(4) {
+                            pixel.swap(0, 2);
+                        }
+                        if !sender.send(pixels, region.width, region.height, captured_at) {
+                            break;
+                        }
+                        if let Some(wait) =
+                            Duration::from_secs_f64(1.0 / 30.0).checked_sub(captured_at.elapsed())
+                        {
+                            std::thread::park_timeout(wait);
+                        }
+                    }
+                    resolve_monitor()?;
+                    Ok(())
+                }));
+            match result {
+                Ok(Err(error)) => {
+                    health.report_capture_failure(error.to_string());
+                }
+                Err(_) => {
+                    health.report_capture_failure("The scrolling capture worker failed.".into());
+                }
+                Ok(Ok(())) => {}
+            }
+            drop(sender);
+            let _ = done_tx.send(());
+        })?;
+    Ok(Box::new(LinuxScrollSession {
+        stop,
+        done,
+        worker: Some(worker),
+    }))
+}

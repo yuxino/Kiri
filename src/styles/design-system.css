@@ -867,8 +867,12 @@ button:active:not(:disabled) {
 .kiri-image-editor-toolbar { min-height:56px; flex:0 0 auto; box-sizing:border-box; display:flex; flex-wrap:wrap; align-content:center; align-items:center; gap:4px 10px; padding:6px 10px; border-bottom:1px solid #383838; background:#101010; }
 .kiri-image-editor-tools { display:flex; flex-wrap:wrap; align-items:center; gap:4px 0; min-width:0; }
 .kiri-image-editor-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:4px; margin-left:auto; }
-/* Reserve complete control rows without moving the canvas between selections. */
-.kiri-image-editor-properties { height:128px; flex:0 0 128px; min-height:0; overflow:auto; background:#101010; border-bottom:1px solid #383838; box-sizing:border-box; }
+/* Tool options float over the image without changing its viewport. */
+.kiri-image-editor-properties { position:absolute; left:12px; top:10px; z-index:10; width:min(560px, calc(100% - 24px)); max-height:min(240px, calc(100% - 24px)); min-height:0; overflow:auto; background:#101010; border:1px solid #383838; border-radius:8px; box-sizing:border-box; }
+.kiri-image-editor-properties .kiri-annotation-controls-heading { position:sticky; top:0; z-index:2; background:#101010; }
+.kiri-image-editor-properties .kiri-capture-options-hide { display:grid; place-items:center; flex:0 0 24px; width:24px; height:26px; padding:0; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--kiri-secondary-label-dark); cursor:pointer; }
+.kiri-image-editor-properties .kiri-capture-options-hide:hover:not(:disabled) { color:var(--kiri-label-dark); background:var(--kiri-group-fill-dark); }
+.kiri-image-editor-properties .kiri-capture-options-hide:disabled { opacity:.45; cursor:default; }
 .kiri-image-editor-properties, .kiri-capture-tool-options { scrollbar-width:thin; scrollbar-color:#777 transparent; scrollbar-gutter:stable; overscroll-behavior:contain; }
 .kiri-image-editor-properties::-webkit-scrollbar, .kiri-capture-tool-options::-webkit-scrollbar { width:6px; height:6px; }
 .kiri-image-editor-properties::-webkit-scrollbar-thumb, .kiri-capture-tool-options::-webkit-scrollbar-thumb { background:#777; border-radius:6px; }
@@ -880,12 +884,8 @@ button:active:not(:disabled) {
 .kiri-image-editor-toolbar :is(input:not([type=range]),button):focus-visible,
 .kiri-image-editor-properties :is(input:not([type=range]),button):focus-visible { box-shadow:inset 0 0 0 1px #777; }
 .kiri-image-editor-crop-options { position:sticky; top:0; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:6px 10px; background:#101010; color:var(--kiri-label-dark); font:500 11px var(--kiri-font-ui); }
-@media (max-width:740px) {
-  .kiri-image-editor-properties { height:160px; flex-basis:160px; }
-}
 @media (max-width:470px) {
   .kiri-image-editor-tools { width:100%; }
-  .kiri-image-editor-properties { height:248px; flex-basis:248px; }
 }
 
 .kiri-toolbar-swatch {
