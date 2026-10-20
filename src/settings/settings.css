@@ -829,7 +829,7 @@
   --shortcut-field-width: 132px;
 }
 .kiri-shortcuts-page[data-long-keys] .kiri-global-shortcut__controls {
-  --shortcut-field-width: 280px;
+  --shortcut-field-width: 300px;
 }
 .kiri-shortcuts-page[data-compact-keys][data-long-keys] .kiri-global-shortcut__controls {
   --shortcut-field-width: 224px;
