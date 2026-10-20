@@ -245,12 +245,17 @@ async def editable_cases(page, checks, evidence_prefix=None):
     await geometry(page, "keyboard-cancel-focus", checks)
     await page.keyboard.press("Tab")
     await expect(row.locator('.kiri-shortcut-apply')).to_be_focused()
+    await expect(row.locator('.kiri-shortcut-apply')).to_be_in_viewport()
     await geometry(page, "keyboard-confirm-focus", checks)
     await screenshot("confirm-focus")
     await page.keyboard.press("Escape")
     await expect(recorder).to_have_attribute("aria-pressed", "false")
     await expect(row.locator('.kiri-shortcut-chord')).to_have_text(original)
     assert await page.evaluate("__shortcutSettingsQa.calls.length") == 0
+    # Keyboard focus can legitimately scroll the confirmation button into view
+    # in a short window. Compare the next edit/cancel with that current layout,
+    # not with the scroll position before the user tabbed to confirmation.
+    before_navigation_edit = await geometry(page, "before-navigation-editing", checks)
     await recorder.click()
     await expect(recorder).to_have_attribute("aria-pressed", "true")
     await page.keyboard.press("ArrowRight")
@@ -260,7 +265,7 @@ async def editable_cases(page, checks, evidence_prefix=None):
     await row.locator('.kiri-shortcut-cancel').click()
     await expect(row.locator('.kiri-shortcut-chord')).to_have_text(original)
     assert await page.evaluate("__shortcutSettingsQa.calls.length") == 0, "Cancelling a pending candidate must not clear or mutate the binding"
-    unchanged_layout(before, await geometry(page, "candidate-cancelled", checks), "candidate-cancelled")
+    unchanged_layout(before_navigation_edit, await geometry(page, "candidate-cancelled", checks), "candidate-cancelled")
     await recorder.click()
     await expect(recorder).to_have_attribute("aria-pressed", "true")
     await page.keyboard.press("a")

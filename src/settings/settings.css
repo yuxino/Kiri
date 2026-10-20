@@ -828,8 +828,11 @@
 .kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls {
   --shortcut-field-width: 132px;
 }
-.kiri-shortcuts-page[data-compact-keys] .kiri-global-shortcut__controls[data-long-key] {
-  --shortcut-field-width: 208px;
+.kiri-shortcuts-page[data-long-keys] .kiri-global-shortcut__controls {
+  --shortcut-field-width: 280px;
+}
+.kiri-shortcuts-page[data-compact-keys][data-long-keys] .kiri-global-shortcut__controls {
+  --shortcut-field-width: 224px;
 }
 .kiri-shortcut-field { display: flex; align-items: stretch; min-width: 0; min-height: 32px; box-sizing: border-box; border: 1px solid var(--kiri-surface-border); border-radius: 7px; background: var(--kiri-card); overflow: hidden; transition: border-color var(--kiri-motion-hover) ease-out, background var(--kiri-motion-hover) ease-out; }
 .kiri-shortcut-field:hover { border-color: color-mix(in srgb, var(--kiri-secondary-label) 55%, var(--kiri-surface-border)); }

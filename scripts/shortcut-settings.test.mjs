@@ -680,3 +680,30 @@ test("a rejected retry preserves the configured binding and exposes the native e
   assert.deepEqual(ui.calls, []);
   ui.page.unmount(); await tick();
 });
+
+
+test("long native key labels size the entire column and retain its width while editing", async () => {
+  for (const [userAgent, label] of [
+    ["Macintosh", "⇧⌃⌥⌘Previous Track"],
+    ["Windows NT 10.0", "Shift+Ctrl+Alt+Win+Previous Track"],
+  ]) {
+    const normal = snapshot();
+    if (!userAgent.includes("Macintosh")) {
+      for (const setting of normal) setting.label = setting.defaultLabel = "Shift+Ctrl+Alt+P";
+    }
+    const ui = harness({}, normal, { navigator: { userAgent } });
+    await tick();
+    assert.equal(ui.page.render().props["data-long-keys"], undefined);
+    ui.change(normal.map((setting) => setting.action === "recordingPauseResume" ? { ...setting, label, isDefault: false } : setting));
+    const wide = ui.page.render();
+    assert.equal(wide.props["data-long-keys"], true, "the field width belongs to the common page rather than a single row");
+    assert.ok(text(row(wide, "recordingPauseResume")).includes(label));
+    await begin(ui, "recordingPauseResume");
+    assert.equal(ui.page.render().props["data-long-keys"], true, "the stored long key keeps the column stable while its prompt is shown");
+    cancelButton(ui.page.render(), "recordingPauseResume").props.onClick(); await tick();
+    assert.equal(ui.page.render().props["data-long-keys"], true);
+    ui.change(normal);
+    assert.equal(ui.page.render().props["data-long-keys"], undefined, "restoring short keys restores the compact layout");
+    ui.page.unmount(); await tick();
+  }
+});

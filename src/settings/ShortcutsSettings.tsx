@@ -204,7 +204,12 @@ export function ShortcutsSettings() {
   };
 
   const systemManaged = settings?.some((setting) => setting.status === "systemManaged");
-  return <div className="kiri-shortcuts-page" data-compact-keys={/Macintosh|Mac OS X/i.test(navigator.userAgent) || undefined}>
+  const compactKeys = /Macintosh|Mac OS X/i.test(navigator.userAgent);
+  // Keep every field in one column, including while a saved long binding is
+  // being edited. Native media key names need room beyond the usual modifiers.
+  const longestLabel = Math.max(candidate?.label.length ?? 0, ...(settings ?? []).map((setting) => setting.label?.length ?? 0));
+  const longKeys = longestLabel > (compactKeys ? 8 : 24);
+  return <div className="kiri-shortcuts-page" data-compact-keys={compactKeys || undefined} data-long-keys={longKeys || undefined}>
     <section className="kiri-settings-section kiri-shortcut-section" aria-labelledby="global-shortcuts-title">
       <div className="kiri-settings-section__heading kiri-shortcuts-heading">
         <div>
@@ -252,7 +257,7 @@ export function ShortcutsSettings() {
                     </div>
                   </div>
                   {setting.status === "systemManaged" ? <code className="kiri-shortcut-command">{command}</code> : <>
-                    <div className="kiri-global-shortcut__controls" data-long-key={Math.max(pending?.label.length ?? 0, setting.label?.length ?? 0) > 8 || undefined}
+                    <div className="kiri-global-shortcut__controls"
                       onBlur={(event) => {
                         if (editingRef.current === action && !event.currentTarget.contains(event.relatedTarget)) void stopEditing();
                       }}

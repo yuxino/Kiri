@@ -841,6 +841,7 @@ pub(crate) fn require_window_capture_exclusion(window: &tauri::WebviewWindow) ->
         ..Default::default()
     };
     unsafe { RtlGetVersion(&mut version) }
+        .ok()
         .map_err(|error| anyhow!("Could not verify scrolling control capture exclusion: {error}"))?;
     // Earlier Windows accepts the value but treats it as WDA_MONITOR, which
     // replaces the control window with a blank area instead of removing it.
