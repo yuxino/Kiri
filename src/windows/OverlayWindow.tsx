@@ -74,6 +74,11 @@ function scrollingStartError(error: unknown): string {
     "Finish the current scrolling capture first.",
     "Scrolling capture is unavailable in this desktop session.",
     "Could not register Escape for scrolling capture.",
+    "Scrolling capture requires Windows 10 version 2004 or later.",
+    "Scrolling capture requires desktop composition to exclude its controls.",
+    "Could not exclude Kiri controls from scrolling capture.",
+    "Could not create scrolling capture controls.",
+    "Could not start the scrolling capture stream.",
   ]) if (message.includes(known)) return known;
   return "Could not start scrolling capture. Try again.";
 }

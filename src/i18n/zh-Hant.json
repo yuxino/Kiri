@@ -844,5 +844,10 @@
   "Fit width": "符合寬度",
   "Fit image": "符合視窗",
   "Actual size": "原始大小",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "捲動查看；雙指捏合或按住 Ctrl/Command 捲動縮放；按住空白鍵拖動畫面。"
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "捲動查看；雙指捏合或按住 Ctrl/Command 捲動縮放；按住空白鍵拖動畫面。",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "捲動截圖需要 Windows 10 2004 或更新版本。",
+  "Scrolling capture requires desktop composition to exclude its controls.": "捲動截圖需要啟用桌面合成，以隱藏擷取控制列。",
+  "Could not exclude Kiri controls from scrolling capture.": "無法在捲動截圖中隱藏 Kiri 控制列。",
+  "Could not create scrolling capture controls.": "無法建立捲動截圖控制視窗。",
+  "Could not start the scrolling capture stream.": "無法啟動捲動截圖的畫面擷取。"
 }

@@ -184,3 +184,12 @@ For each supported native platform, test:
 
 Passing counts and native results belong to a dated run record for the exact
 candidate. Leave unexecuted items explicitly unverified.
+
+
+## Windows startup follow-up (#152)
+
+The v1.6.26 report describes failure before scrolling begins. The attachment does not show the native error. The reporter previously supplied Windows 10 build 19045, x86_64 and two 1920 × 1080 displays at 100% in #159; confirm the current environment rather than assuming it is unchanged. That previous build meets the 19041 capture-exclusion gate.
+
+Startup now records the failed stage and the native error details that the upstream API retains. The visible notice distinguishes OS/composition requirements, control exclusion, control creation and capture-stream startup. This diagnostic change does not establish the cause of the reported failure or repair Windows compatibility.
+
+On the installed Windows candidate, use one public text document and record: start, first preview frame, downward scrolling, reversal, finish, then cancel and start again. Inspect the saved pixels for gaps, duplicate content, black regions and captured controls. Preserve the `[scroll] startup failed:` log line with its stage, plus Kiri's copied support information, on failure. Repeat the same sample after a cause-specific fix. Do not reset permissions, remove control exclusion or substitute compilation results for this native retest.

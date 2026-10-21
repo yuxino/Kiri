@@ -26,6 +26,119 @@ const SAVE_FAILED: &str = "Could not save scrolling capture. Try again.";
 const INACTIVE: &str = "This scrolling capture is no longer active.";
 const SOURCE_FAILED: &str = "Scrolling capture stopped. Save the captured area or cancel.";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StartupStage {
+    Cancelled,
+    EscapeRegistration,
+    SourceSelection,
+    OverlayTransition,
+    RegionWindow,
+    RegionPlacement,
+    RegionPointerPassthrough,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    RegionExclusion,
+    PanelWindow,
+    PanelPlacement,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    PanelExclusion,
+    WindowDispatch,
+    CaptureStream,
+}
+
+impl StartupStage {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Cancelled => "cancelled",
+            Self::EscapeRegistration => "register-escape",
+            Self::SourceSelection => "select-source",
+            Self::OverlayTransition => "close-overlay",
+            Self::RegionWindow => "create-region-window",
+            Self::RegionPlacement => "place-region-window",
+            Self::RegionPointerPassthrough => "region-pointer-passthrough",
+            Self::RegionExclusion => "exclude-region-window",
+            Self::PanelWindow => "create-panel-window",
+            Self::PanelPlacement => "place-panel-window",
+            Self::PanelExclusion => "exclude-panel-window",
+            Self::WindowDispatch => "dispatch-control-windows",
+            Self::CaptureStream => "start-capture-stream",
+        }
+    }
+}
+
+struct StartupFailure {
+    stage: StartupStage,
+    detail: String,
+}
+
+impl StartupFailure {
+    fn new(stage: StartupStage, error: impl Into<anyhow::Error>) -> Self {
+        // Convert ordinary native errors too: alternate Display alone does not
+        // walk a tauri/thiserror source chain unless it is wrapped by anyhow.
+        Self::detail(stage, format!("{:#}", error.into()))
+    }
+
+    fn detail(stage: StartupStage, detail: impl Into<String>) -> Self {
+        Self {
+            stage,
+            detail: detail.into(),
+        }
+    }
+
+    fn cancelled() -> Self {
+        Self::detail(StartupStage::Cancelled, INACTIVE)
+    }
+
+    fn message(&self) -> &'static str {
+        match self.stage {
+            StartupStage::Cancelled => INACTIVE,
+            StartupStage::EscapeRegistration => "Could not register Escape for scrolling capture.",
+            StartupStage::SourceSelection
+                if self
+                    .detail
+                    .contains("Select a scrolling area fully inside one application window.") =>
+            {
+                "Select a scrolling area fully inside one application window."
+            }
+            StartupStage::RegionExclusion | StartupStage::PanelExclusion => {
+                if self
+                    .detail
+                    .contains("Scrolling capture requires Windows 10 version 2004 or later.")
+                {
+                    "Scrolling capture requires Windows 10 version 2004 or later."
+                } else if self.detail.contains(
+                    "Scrolling capture requires desktop composition to exclude its controls.",
+                ) {
+                    "Scrolling capture requires desktop composition to exclude its controls."
+                } else {
+                    "Could not exclude Kiri controls from scrolling capture."
+                }
+            }
+            StartupStage::OverlayTransition
+            | StartupStage::RegionWindow
+            | StartupStage::RegionPlacement
+            | StartupStage::RegionPointerPassthrough
+            | StartupStage::PanelWindow
+            | StartupStage::PanelPlacement
+            | StartupStage::WindowDispatch => "Could not create scrolling capture controls.",
+            StartupStage::CaptureStream => "Could not start the scrolling capture stream.",
+            StartupStage::SourceSelection => "Could not start scrolling capture.",
+        }
+    }
+
+    fn notice(&self, cancelled: bool) -> Option<&'static str> {
+        (!cancelled && self.stage != StartupStage::Cancelled).then(|| self.message())
+    }
+
+    fn diagnostic(&self) -> String {
+        format!(
+            "{} [stage={}]: {}",
+            self.message(),
+            self.stage.label(),
+            self.detail
+        )
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct ScrollCaptureState(Mutex<Option<Arc<Session>>>);
 impl ScrollCaptureState {
@@ -475,24 +588,24 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
     crate::microphone::stop();
     crate::commands::invalidate_capture_resources(&app, &capture);
     let mut owns_escape = false;
-    let setup = (|| {
+    let setup = (|| -> Result<ScrollSource, StartupFailure> {
         if control.requests.lock().unwrap().cancelled {
-            return Err(INACTIVE.into());
+            return Err(StartupFailure::cancelled());
         }
         let shortcut = Shortcut::new(None, Code::Escape);
         if !app.global_shortcut().is_registered(shortcut) {
             app.global_shortcut()
                 .register(shortcut)
-                .map_err(|_| "Could not register Escape for scrolling capture.".to_string())?;
+                .map_err(|error| StartupFailure::new(StartupStage::EscapeRegistration, error))?;
             owns_escape = true;
         }
         // Resolve while the frozen overlay still holds the original stacking
         // order. Closing it or activating the pre-capture app can raise a
         // different, overlapping window before the source is bound.
         let target = scroll::resolve_target(&capture.display, selection)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| StartupFailure::new(StartupStage::SourceSelection, error))?;
         if control.requests.lock().unwrap().cancelled {
-            return Err(INACTIVE.into());
+            return Err(StartupFailure::cancelled());
         }
         let labels = capture.overlay_labels.clone();
         let source_pid = match target {
@@ -502,11 +615,15 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
         let session_id = control.id;
         let scale = capture.display.backing_scale;
         let screen = capture.display.screen_frame;
-        ui(&app, move |app| {
+        startup_ui(&app, move |app| {
             for label in labels {
                 if let Some(window) = app.get_webview_window(&label) {
-                    window.hide().map_err(|error| error.to_string())?;
-                    window.close().map_err(|error| error.to_string())?;
+                    window.hide().map_err(|error| {
+                        StartupFailure::new(StartupStage::OverlayTransition, error)
+                    })?;
+                    window.close().map_err(|error| {
+                        StartupFailure::new(StartupStage::OverlayTransition, error)
+                    })?;
                 }
             }
             // A live, passive hole retains the selected area's position while
@@ -536,17 +653,17 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
             .resizable(false)
             .shadow(false)
             .build()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| StartupFailure::new(StartupStage::RegionWindow, error))?;
             watch_session_window(&region, session_id);
             platform::place_transient_window(&region, screen, scale)
-                .map_err(|error| error.to_string())?;
-            region
-                .set_ignore_cursor_events(true)
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| StartupFailure::new(StartupStage::RegionPlacement, error))?;
+            region.set_ignore_cursor_events(true).map_err(|error| {
+                StartupFailure::new(StartupStage::RegionPointerPassthrough, error)
+            })?;
             #[cfg(windows)]
             {
                 platform::windows::require_window_capture_exclusion(&region)
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| StartupFailure::new(StartupStage::RegionExclusion, error))?;
                 platform::windows::pin_webview_to_display_scale(&region, scale);
             }
             #[cfg(not(windows))]
@@ -580,13 +697,13 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
             .resizable(false)
             .shadow(false)
             .build()
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| StartupFailure::new(StartupStage::PanelWindow, error))?;
             watch_session_window(&panel, session_id);
             platform::place_transient_window(&panel, frame, scale)
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| StartupFailure::new(StartupStage::PanelPlacement, error))?;
             #[cfg(windows)]
             platform::windows::require_window_capture_exclusion(&panel)
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| StartupFailure::new(StartupStage::PanelExclusion, error))?;
             #[cfg(not(windows))]
             platform::set_window_capture_excluded(&app, PANEL, true);
             platform::show_window_without_activation(
@@ -602,34 +719,29 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
         // Let the source repaint after the frozen overlay has gone. This is a
         // one-time startup wait on this worker, never a per-scroll input delay.
         if control.requests.lock().unwrap().cancelled {
-            return Err(INACTIVE.into());
+            return Err(StartupFailure::cancelled());
         }
         std::thread::sleep(Duration::from_millis(120));
         if control.requests.lock().unwrap().cancelled {
-            return Err(INACTIVE.into());
+            return Err(StartupFailure::cancelled());
         }
         scroll::start(&capture.display, selection, &target)
-            .map_err(|error| error.to_string())
+            .map_err(|error| StartupFailure::new(StartupStage::CaptureStream, error))
     })();
     let source = match setup {
         Ok(source) => source,
         Err(error) => {
             cleanup(&app, &control, &capture, owns_escape, None);
-            if !control.requests.lock().unwrap().cancelled {
-                crate::state::emit_notice(
-                    &app,
-                    if error
-                        .contains("Select a scrolling area fully inside one application window.")
-                    {
-                        "Select a scrolling area fully inside one application window.".into()
-                    } else {
-                        "Could not start scrolling capture.".into()
-                    },
-                    "exclamationmark.triangle".into(),
-                );
+            let cancelled = control.requests.lock().unwrap().cancelled;
+            if let Some(message) = error.notice(cancelled) {
+                crate::state::emit_notice(&app, message.into(), "exclamationmark.triangle".into());
+                log::warn!("[scroll] startup failed: {}", error.diagnostic());
             }
-            log::warn!("[scroll] startup failed: {error}");
-            return Err(error);
+            return Err(if cancelled {
+                INACTIVE.into()
+            } else {
+                error.diagnostic()
+            });
         }
     };
     // Transfer ownership only after all fallible setup has completed. Keeping
@@ -1285,6 +1397,16 @@ fn cleanup(
         .release_closed(session.id, session_windows_gone(app, session));
 }
 
+// Keep native stage information inside the scheduled closure. Only a failure
+// to dispatch the closure itself is a window-dispatch failure.
+fn startup_ui<T: Send + 'static>(
+    app: &AppHandle,
+    task: impl FnOnce(AppHandle) -> Result<T, StartupFailure> + Send + 'static,
+) -> Result<T, StartupFailure> {
+    ui(app, move |app| Ok(task(app)))
+        .map_err(|error| StartupFailure::detail(StartupStage::WindowDispatch, error))?
+}
+
 // WebView2 construction belongs off the Windows event loop. AppKit/GTK window
 // creation belongs on it; callers of this helper are always background workers.
 fn ui<T: Send + 'static>(
@@ -1472,6 +1594,118 @@ fn panel_frame(screen: Rect, selection: Rect, allow_inside: bool) -> Option<(Rec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_diagnostic_retains_native_error_chain_and_failed_stage() {
+        let cause = anyhow::anyhow!("Win32 error 87 (HRESULT 0x80070057)")
+            .context("Could not exclude scrolling capture controls");
+        let failure = StartupFailure::new(StartupStage::RegionExclusion, cause);
+        let diagnostic = failure.diagnostic();
+        assert!(diagnostic.starts_with("Could not exclude Kiri controls from scrolling capture."));
+        assert!(diagnostic.contains("stage=exclude-region-window"));
+        assert!(diagnostic.contains(
+            "Could not exclude scrolling capture controls: Win32 error 87 (HRESULT 0x80070057)"
+        ));
+        assert_ne!(
+            StartupStage::PanelExclusion.label(),
+            StartupStage::RegionExclusion.label()
+        );
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("WebView2 initialization failed")]
+        struct NativeWindowFailure(#[source] std::io::Error);
+        let failure = StartupFailure::new(
+            StartupStage::RegionWindow,
+            NativeWindowFailure(std::io::Error::other("HRESULT 0x80004005")),
+        );
+        assert!(failure
+            .diagnostic()
+            .contains("WebView2 initialization failed: HRESULT 0x80004005"));
+    }
+
+    #[test]
+    fn startup_exclusion_errors_distinguish_windows_version_composition_and_api_failure() {
+        for stage in [StartupStage::RegionExclusion, StartupStage::PanelExclusion] {
+            for message in [
+                "Scrolling capture requires Windows 10 version 2004 or later.",
+                "Scrolling capture requires desktop composition to exclude its controls.",
+            ] {
+                let failure = StartupFailure::detail(stage, format!("native policy: {message}"));
+                assert_eq!(failure.notice(false), Some(message));
+            }
+            assert_eq!(
+                StartupFailure::detail(stage, "SetWindowDisplayAffinity failed: 0x80070057")
+                    .notice(false),
+                Some("Could not exclude Kiri controls from scrolling capture.")
+            );
+        }
+    }
+
+    #[test]
+    fn startup_window_and_stream_failures_produce_action_specific_notices() {
+        for stage in [
+            StartupStage::OverlayTransition,
+            StartupStage::RegionWindow,
+            StartupStage::RegionPlacement,
+            StartupStage::RegionPointerPassthrough,
+            StartupStage::PanelWindow,
+            StartupStage::PanelPlacement,
+            StartupStage::WindowDispatch,
+        ] {
+            let failure = StartupFailure::detail(stage, "WebView2 or native window failure");
+            assert_eq!(
+                failure.notice(false),
+                Some("Could not create scrolling capture controls.")
+            );
+            assert!(failure.diagnostic().contains(stage.label()));
+        }
+        let failure =
+            StartupFailure::detail(StartupStage::CaptureStream, "WGC start failed: 0x80004005");
+        assert_eq!(
+            failure.notice(false),
+            Some("Could not start the scrolling capture stream.")
+        );
+        assert!(failure.diagnostic().contains("stage=start-capture-stream"));
+        assert!(failure.diagnostic().contains("0x80004005"));
+    }
+
+    #[test]
+    fn startup_retains_existing_selection_and_escape_messages() {
+        let selection = "Select a scrolling area fully inside one application window.";
+        assert_eq!(
+            StartupFailure::detail(StartupStage::SourceSelection, selection).notice(false),
+            Some(selection)
+        );
+        assert_eq!(
+            StartupFailure::detail(
+                StartupStage::EscapeRegistration,
+                "RegisterHotKey failed: 1409"
+            )
+            .notice(false),
+            Some("Could not register Escape for scrolling capture.")
+        );
+        assert_eq!(
+            StartupFailure::detail(StartupStage::SourceSelection, "source lookup timed out")
+                .notice(false),
+            Some("Could not start scrolling capture.")
+        );
+    }
+
+    #[test]
+    fn cancellation_never_emits_a_startup_failure_notice() {
+        assert_eq!(StartupFailure::cancelled().notice(false), None);
+        let failure = StartupFailure::detail(
+            StartupStage::CaptureStream,
+            "native startup returned after Escape",
+        );
+        assert_eq!(failure.notice(true), None);
+        let session = lifecycle_session();
+        session.requests.lock().unwrap().cancel().unwrap();
+        assert_eq!(
+            failure.notice(session.requests.lock().unwrap().cancelled),
+            None
+        );
+    }
     fn test_panel_geometry() -> PanelGeometry {
         PanelGeometry {
             screen: Rect::new(0.0, 0.0, 1000.0, 800.0),

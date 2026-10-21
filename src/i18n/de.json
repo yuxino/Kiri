@@ -844,5 +844,10 @@
   "Fit width": "Breite einpassen",
   "Fit image": "Bild einpassen",
   "Actual size": "Originalgröße",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Betrachten scrollen. Mit zwei Fingern oder Strg/Command und Scrollen zoomen. Zum Verschieben die Leertaste halten und ziehen."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Betrachten scrollen. Mit zwei Fingern oder Strg/Command und Scrollen zoomen. Zum Verschieben die Leertaste halten und ziehen.",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "Scrollaufnahmen erfordern Windows 10 Version 2004 oder neuer.",
+  "Scrolling capture requires desktop composition to exclude its controls.": "Scrollaufnahmen erfordern Desktopkomposition, um die Bedienelemente auszublenden.",
+  "Could not exclude Kiri controls from scrolling capture.": "Kiri-Bedienelemente konnten nicht aus der Scrollaufnahme ausgeschlossen werden.",
+  "Could not create scrolling capture controls.": "Die Bedienelemente für die Scrollaufnahme konnten nicht erstellt werden.",
+  "Could not start the scrolling capture stream.": "Die Bildschirmaufnahme für die Scrollaufnahme konnte nicht gestartet werden."
 }

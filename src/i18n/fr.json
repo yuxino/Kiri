@@ -844,5 +844,10 @@
   "Fit width": "Adapter la largeur",
   "Fit image": "Image entière",
   "Actual size": "Taille réelle",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace et faites glisser pour déplacer l’image."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace et faites glisser pour déplacer l’image.",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "La capture défilante nécessite Windows 10 version 2004 ou une version ultérieure.",
+  "Scrolling capture requires desktop composition to exclude its controls.": "La capture défilante nécessite la composition du bureau pour masquer ses commandes.",
+  "Could not exclude Kiri controls from scrolling capture.": "Impossible d’exclure les commandes de Kiri de la capture défilante.",
+  "Could not create scrolling capture controls.": "Impossible de créer les commandes de capture défilante.",
+  "Could not start the scrolling capture stream.": "Impossible de démarrer la capture d’écran défilante."
 }
