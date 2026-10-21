@@ -23,6 +23,7 @@
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.
 - Recherchez, étiquetez, ajoutez aux favoris et exportez vos captures locales ; récupérez les suppressions accidentelles dans la corbeille.
 - Définissez, désactivez ou rétablissez les raccourcis globaux dans les réglages ; les commandes d’enregistrement ne sont actives que pendant celui-ci ([Wayland utilise les réglages du bureau](../linux.md)).
+- Activez le lancement à la connexion dans Réglages → Général si nécessaire. Désactivé par défaut, il démarre Kiri en arrière-plan sans ouvrir la bibliothèque.
 
 ## Premiers pas
 

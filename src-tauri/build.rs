@@ -16,10 +16,12 @@ fn main() {
         println!("cargo:rerun-if-changed=src/macos_media.m");
         println!("cargo:rerun-if-changed=src/macos_audio.m");
         println!("cargo:rerun-if-changed=src/video_export.m");
+        println!("cargo:rerun-if-changed=src/macos_startup.m");
         cc::Build::new()
             .file("src/macos_media.m")
             .file("src/macos_audio.m")
             .file("src/video_export.m")
+            .file("src/macos_startup.m")
             .flag("-fobjc-arc")
             .flag("-fmodules")
             .compile("kiri_macos_media");
@@ -32,6 +34,7 @@ fn main() {
             "Foundation",
             "ImageIO",
             "UniformTypeIdentifiers",
+            "ServiceManagement",
         ] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }

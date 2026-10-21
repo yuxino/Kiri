@@ -844,5 +844,13 @@
   "Fit width": "Adapter la largeur",
   "Fit image": "Image entière",
   "Actual size": "Taille réelle",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace et faites glisser pour déplacer l’image."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace et faites glisser pour déplacer l’image.",
+  "Start at login": "Lancer à la connexion",
+  "Start in the background without opening the library.": "Démarrer en arrière-plan sans ouvrir la bibliothèque.",
+  "Not active. Allow Kiri in your system's startup settings.": "Inactif. Autorisez Kiri dans les réglages de démarrage du système.",
+  "Startup is unavailable for this installation.": "Le démarrage à la connexion n’est pas disponible pour cette installation.",
+  "Couldn't load startup settings.": "Impossible de charger les réglages de démarrage.",
+  "Couldn't change startup settings.": "Impossible de modifier les réglages de démarrage.",
+  "Couldn't open system startup settings.": "Impossible d’ouvrir les réglages de démarrage du système.",
+  "Open System Settings": "Ouvrir les réglages système"
 }

@@ -844,5 +844,13 @@
   "Fit width": "Breite einpassen",
   "Fit image": "Bild einpassen",
   "Actual size": "Originalgröße",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Betrachten scrollen. Mit zwei Fingern oder Strg/Command und Scrollen zoomen. Zum Verschieben die Leertaste halten und ziehen."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Betrachten scrollen. Mit zwei Fingern oder Strg/Command und Scrollen zoomen. Zum Verschieben die Leertaste halten und ziehen.",
+  "Start at login": "Bei der Anmeldung starten",
+  "Start in the background without opening the library.": "Im Hintergrund starten, ohne die Mediathek zu öffnen.",
+  "Not active. Allow Kiri in your system's startup settings.": "Noch nicht aktiv. Erlaube Kiri in den Autostart-Einstellungen des Systems.",
+  "Startup is unavailable for this installation.": "Autostart ist für diese Installation nicht verfügbar.",
+  "Couldn't load startup settings.": "Autostart-Einstellungen konnten nicht geladen werden.",
+  "Couldn't change startup settings.": "Autostart-Einstellungen konnten nicht geändert werden.",
+  "Couldn't open system startup settings.": "Die Autostart-Einstellungen des Systems konnten nicht geöffnet werden.",
+  "Open System Settings": "Systemeinstellungen öffnen"
 }

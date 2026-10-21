@@ -844,5 +844,13 @@
   "Fit width": "幅に合わせる",
   "Fit image": "全体を表示",
   "Actual size": "実際のサイズ",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "スクロールで移動。ピンチ、または Ctrl/Command を押しながらスクロールで拡大・縮小。スペースを押しながらドラッグで移動。"
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "スクロールで移動。ピンチ、または Ctrl/Command を押しながらスクロールで拡大・縮小。スペースを押しながらドラッグで移動。",
+  "Start at login": "ログイン時に起動",
+  "Start in the background without opening the library.": "ライブラリを開かずにバックグラウンドで起動します。",
+  "Not active. Allow Kiri in your system's startup settings.": "まだ有効になっていません。システムの起動設定で Kiri を許可してください。",
+  "Startup is unavailable for this installation.": "このインストールではログイン時の起動を利用できません。",
+  "Couldn't load startup settings.": "起動設定を読み込めませんでした。",
+  "Couldn't change startup settings.": "起動設定を変更できませんでした。",
+  "Couldn't open system startup settings.": "システムの起動設定を開けませんでした。",
+  "Open System Settings": "システム設定を開く"
 }

@@ -23,6 +23,7 @@
 - Clips eines Videos kürzen und umordnen, dann eine neue MP4-Datei exportieren.
 - Lokale Aufnahmen suchen, mit Tags versehen, favorisieren und exportieren; versehentlich Gelöschtes aus dem Papierkorb wiederherstellen.
 - Globale Tastenkürzel direkt in den Einstellungen festlegen, deaktivieren oder zurücksetzen; Aufnahmesteuerungen gelten nur während einer Aufnahme ([Wayland nutzt Desktop-Einstellungen](../linux.md)).
+- Unter Einstellungen → Allgemein lässt sich der Start bei der Anmeldung aktivieren. Er ist standardmäßig aus und startet Kiri im Hintergrund, ohne die Bibliothek zu öffnen.
 
 ## Erste Schritte
 

@@ -844,5 +844,13 @@
   "Fit width": "Fit width",
   "Fit image": "Fit image",
   "Actual size": "Actual size",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.",
+  "Start at login": "Start at login",
+  "Start in the background without opening the library.": "Start in the background without opening the library.",
+  "Not active. Allow Kiri in your system's startup settings.": "Not active. Allow Kiri in your system's startup settings.",
+  "Startup is unavailable for this installation.": "Startup is unavailable for this installation.",
+  "Couldn't load startup settings.": "Couldn't load startup settings.",
+  "Couldn't change startup settings.": "Couldn't change startup settings.",
+  "Couldn't open system startup settings.": "Couldn't open system startup settings.",
+  "Open System Settings": "Open System Settings"
 }

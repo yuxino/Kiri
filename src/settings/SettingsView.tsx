@@ -15,6 +15,7 @@ import {
 import { OcrProfileDialog } from "./OcrProfileDialog";
 import { ShortcutsSettings } from "./ShortcutsSettings";
 import { DockVisibilityRow } from "./DockVisibilityRow";
+import { StartupSettingsRow } from "./StartupSettingsRow";
 import { SupportLinks } from "./SupportLinks";
 import { OcrSettingsSection } from "./OcrSettingsSection";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
@@ -492,6 +493,7 @@ function GeneralSettingsSection() {
         />
       </div>
       <DockVisibilityRow />
+      <StartupSettingsRow />
       <div className="kiri-settings-card kiri-storage-row">
         <div className="kiri-storage-copy">
           <div className="kiri-storage-title">

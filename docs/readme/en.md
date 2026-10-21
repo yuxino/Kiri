@@ -23,6 +23,7 @@
 - Trim and reorder clips from one video, then export a new MP4.
 - Search, tag, favorite and export local captures, with Trash for accidental deletions.
 - Set, disable or restore global shortcuts directly in Settings; recording controls are active only while recording ([Wayland uses desktop settings](../linux.md)).
+- Enable Start at login in Settings → General when needed. It is off by default and starts Kiri in the background without opening the library.
 
 ## Get started
 

@@ -228,3 +228,5 @@ development.
 - [ADR 0112: Free bidirectional scrolling capture](adr/0112-free-bidirectional-scroll-capture.md) — natural up/down scrolling, verified original-pixel strips, explicit partial saving and platform limits.
 
 - [ADR 0113: Contextual image editor and zoom](adr/0113-contextual-image-editor-and-zoom.md)
+
+- [`adr/0114-opt-in-login-startup.md`](adr/0114-opt-in-login-startup.md) — opt-in system login startup and resident launch behavior.

@@ -10,6 +10,7 @@ mod core;
 mod diagnostics;
 mod support_info;
 mod dock_settings;
+mod startup_settings;
 mod gif;
 mod video_export;
 mod video_project_commands;
@@ -65,7 +66,7 @@ pub fn run() {
                 args.len(),
                 !cwd.is_empty()
             );
-            if handle_desktop_action(app, &args) { return; }
+            if handle_desktop_action(app, &args) || startup_settings::has_autostart_arg(&args) { return; }
             if let Err(error) = show_library_window(app, "single-instance") {
                 log::error!("[single-instance] library reopen failed: {error}");
             }
@@ -137,7 +138,9 @@ pub fn run() {
                 shortcut_settings::load(app.handle()),
             ));
             let launch_args = std::env::args().collect::<Vec<_>>();
-            if desktop_launch_opens_library(&launch_args) {
+            if desktop_launch_opens_library(&launch_args)
+                && !startup_settings::is_autostart_launch(&launch_args)
+            {
                 show_library_window(app.handle(), "startup").map_err(anyhow::Error::msg)?;
             }
 
@@ -233,6 +236,9 @@ pub fn run() {
             commands::list_assets,
             commands::get_asset,
             commands::get_library_status,
+            startup_settings::get_startup_settings,
+            startup_settings::set_startup_enabled,
+            startup_settings::open_system_startup_settings,
             dock_settings::get_dock_visibility,
             dock_settings::set_dock_visibility,
             commands::get_asset_availability,
@@ -358,7 +364,10 @@ pub fn run() {
             }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
-                // Dock icon click (macOS): bring the library back.
+                // A system login event can target an already-running app.
+                // Only its explicit login-item marker suppresses presentation;
+                // ordinary Dock clicks still bring the library back.
+                if startup_settings::is_autostart_launch(&[]) { return; }
                 if let Err(error) = show_library_window(app, "dock-reopen") {
                     log::error!("[app] Dock reopen failed: {error}");
                 }
@@ -564,7 +573,8 @@ fn desktop_scroll_action(args: &[String]) -> Option<DesktopScrollAction> {
 }
 
 fn desktop_launch_opens_library(args: &[String]) -> bool {
-    desktop_scroll_action(args).is_none()
+    !startup_settings::has_autostart_arg(args)
+        && desktop_scroll_action(args).is_none()
         && !matches!(
             desktop_shortcut_action(args),
             Some(
@@ -972,7 +982,7 @@ mod tests {
 
     #[test]
     fn desktop_controls_and_capture_launch_without_opening_library() {
-        for flag in ["--finish-scroll-capture", "--cancel-scroll-capture", "--capture", "--record", "--ocr"] {
+        for flag in ["--autostart", "--finish-scroll-capture", "--cancel-scroll-capture", "--capture", "--record", "--ocr"] {
             assert!(!super::desktop_launch_opens_library(&["kiri".into(), flag.into()]));
         }
         assert!(!super::desktop_launch_opens_library(&[

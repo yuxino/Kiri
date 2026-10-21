@@ -844,5 +844,13 @@
   "Fit width": "适应宽度",
   "Fit image": "适应窗口",
   "Actual size": "原始大小",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "滚动查看；双指捏合或按住 Ctrl/Command 滚动缩放；按住空格拖动画面。"
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "滚动查看；双指捏合或按住 Ctrl/Command 滚动缩放；按住空格拖动画面。",
+  "Start at login": "登录时启动",
+  "Start in the background without opening the library.": "在后台启动，不打开素材库。",
+  "Not active. Allow Kiri in your system's startup settings.": "尚未生效，请在系统启动设置中允许 Kiri 启动。",
+  "Startup is unavailable for this installation.": "当前安装方式不支持登录时启动。",
+  "Couldn't load startup settings.": "无法读取启动设置。",
+  "Couldn't change startup settings.": "无法更改启动设置。",
+  "Couldn't open system startup settings.": "无法打开系统启动设置。",
+  "Open System Settings": "打开系统设置"
 }

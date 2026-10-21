@@ -93,6 +93,12 @@ export interface LibraryStatusDto {
   isDefault: boolean;
 }
 
+export interface StartupSettingsDto {
+  supported: boolean;
+  enabled: boolean;
+  requiresApproval: boolean;
+}
+
 export interface DockVisibilityDto {
   supported: boolean;
   visible: boolean;
@@ -311,6 +317,9 @@ export const api = {
     invoke<AssetDto[]>("list_assets", { query, showingTrash }),
   getAsset: (id: string) => invoke<AssetDto>("get_asset", { id }),
   getLibraryStatus: () => invoke<LibraryStatusDto>("get_library_status"),
+  getStartupSettings: () => invoke<StartupSettingsDto>("get_startup_settings"),
+  setStartupEnabled: (enabled: boolean) => invoke<StartupSettingsDto>("set_startup_enabled", { enabled }),
+  openSystemStartupSettings: () => invoke<void>("open_system_startup_settings"),
   getDockVisibility: () => invoke<DockVisibilityDto>("get_dock_visibility"),
   setDockVisibility: (visible: boolean) => invoke<void>("set_dock_visibility", { visible }),
   chooseLibraryLocation: () => invoke<LibraryStatusDto>("choose_library_location"),
