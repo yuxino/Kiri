@@ -833,6 +833,11 @@
   "Stop scrolling briefly, then choose Done.": "Arrêtez de défiler, puis choisissez Terminé.",
   "No scrolling content has been captured yet.": "Aucun contenu n’a encore été capturé.",
   "Could not start scrolling capture.": "Impossible de démarrer la capture défilante.",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "La capture défilante nécessite Windows 10 version 2004 ou une version ultérieure.",
+  "Scrolling capture requires desktop composition to exclude its controls.": "La capture défilante nécessite la composition du bureau pour masquer ses commandes.",
+  "Could not exclude Kiri controls from scrolling capture.": "Impossible d’exclure les commandes de Kiri de la capture défilante.",
+  "Could not create scrolling capture controls.": "Impossible de créer les commandes de capture défilante.",
+  "Could not start the scrolling capture stream.": "Impossible de démarrer la capture d’écran défilante.",
   "Leave room outside the selection for scrolling capture controls.": "Réduisez la sélection pour laisser de la place aux commandes.",
   "Finish the current scrolling capture first.": "Terminez d’abord la capture en cours.",
   "Scrolling capture is unavailable in this desktop session.": "La capture défilante n’est pas disponible dans cette session.",
@@ -844,10 +849,5 @@
   "Fit width": "Adapter la largeur",
   "Fit image": "Image entière",
   "Actual size": "Taille réelle",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace et faites glisser pour déplacer l’image.",
-  "Scrolling capture requires Windows 10 version 2004 or later.": "La capture défilante nécessite Windows 10 version 2004 ou une version ultérieure.",
-  "Scrolling capture requires desktop composition to exclude its controls.": "La capture défilante nécessite la composition du bureau pour masquer ses commandes.",
-  "Could not exclude Kiri controls from scrolling capture.": "Impossible d’exclure les commandes de Kiri de la capture défilante.",
-  "Could not create scrolling capture controls.": "Impossible de créer les commandes de capture défilante.",
-  "Could not start the scrolling capture stream.": "Impossible de démarrer la capture d’écran défilante."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace et faites glisser pour déplacer l’image."
 }

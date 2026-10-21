@@ -833,6 +833,11 @@
   "Stop scrolling briefly, then choose Done.": "スクロールを止めてから「完了」を選んでください。",
   "No scrolling content has been captured yet.": "まだ内容を撮影していません。",
   "Could not start scrolling capture.": "スクロール撮影を開始できません。",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "スクロール撮影には Windows 10 バージョン 2004 以降が必要です。",
+  "Scrolling capture requires desktop composition to exclude its controls.": "撮影に操作パネルが入らないようにするには、デスクトップコンポジションが必要です。",
+  "Could not exclude Kiri controls from scrolling capture.": "スクロール撮影から Kiri の操作パネルを除外できませんでした。",
+  "Could not create scrolling capture controls.": "スクロール撮影の操作ウィンドウを作成できませんでした。",
+  "Could not start the scrolling capture stream.": "スクロール撮影の画面取得を開始できませんでした。",
   "Leave room outside the selection for scrolling capture controls.": "選択範囲を小さくして、撮影ボタンの表示場所を確保してください。",
   "Finish the current scrolling capture first.": "現在のスクロール撮影を先に完了してください。",
   "Scrolling capture is unavailable in this desktop session.": "このデスクトップ環境ではスクロール撮影を利用できません。",
@@ -844,10 +849,5 @@
   "Fit width": "幅に合わせる",
   "Fit image": "全体を表示",
   "Actual size": "実際のサイズ",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "スクロールで移動。ピンチ、または Ctrl/Command を押しながらスクロールで拡大・縮小。スペースを押しながらドラッグで移動。",
-  "Scrolling capture requires Windows 10 version 2004 or later.": "スクロール撮影には Windows 10 バージョン 2004 以降が必要です。",
-  "Scrolling capture requires desktop composition to exclude its controls.": "撮影に操作パネルが入らないようにするには、デスクトップコンポジションが必要です。",
-  "Could not exclude Kiri controls from scrolling capture.": "スクロール撮影から Kiri の操作パネルを除外できませんでした。",
-  "Could not create scrolling capture controls.": "スクロール撮影の操作ウィンドウを作成できませんでした。",
-  "Could not start the scrolling capture stream.": "スクロール撮影の画面取得を開始できませんでした。"
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "スクロールで移動。ピンチ、または Ctrl/Command を押しながらスクロールで拡大・縮小。スペースを押しながらドラッグで移動。"
 }

@@ -833,6 +833,11 @@
   "Stop scrolling briefly, then choose Done.": "스크롤을 잠시 멈추고 완료를 선택하세요.",
   "No scrolling content has been captured yet.": "아직 캡처한 내용이 없습니다.",
   "Could not start scrolling capture.": "스크롤 캡처를 시작하지 못했습니다.",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "스크롤 캡처에는 Windows 10 버전 2004 이상이 필요합니다.",
+  "Scrolling capture requires desktop composition to exclude its controls.": "캡처에서 제어창을 숨기려면 데스크톱 합성이 필요합니다.",
+  "Could not exclude Kiri controls from scrolling capture.": "스크롤 캡처에서 Kiri 제어창을 제외하지 못했습니다.",
+  "Could not create scrolling capture controls.": "스크롤 캡처 제어창을 만들지 못했습니다.",
+  "Could not start the scrolling capture stream.": "스크롤 캡처의 화면 수집을 시작하지 못했습니다.",
   "Leave room outside the selection for scrolling capture controls.": "캡처 컨트롤을 놓을 수 있도록 선택 영역 밖에 공간을 남겨 주세요.",
   "Finish the current scrolling capture first.": "현재 스크롤 캡처를 먼저 완료하세요.",
   "Scrolling capture is unavailable in this desktop session.": "현재 데스크톱 환경에서는 스크롤 캡처를 사용할 수 없습니다.",
@@ -844,10 +849,5 @@
   "Fit width": "너비 맞춤",
   "Fit image": "전체 보기",
   "Actual size": "실제 크기",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "스크롤하여 보세요. 두 손가락으로 오므리거나 벌리거나 Ctrl/Command를 누른 채 스크롤하면 확대·축소됩니다. 스페이스 키를 누른 채 드래그하면 이동합니다.",
-  "Scrolling capture requires Windows 10 version 2004 or later.": "스크롤 캡처에는 Windows 10 버전 2004 이상이 필요합니다.",
-  "Scrolling capture requires desktop composition to exclude its controls.": "캡처에서 제어창을 숨기려면 데스크톱 합성이 필요합니다.",
-  "Could not exclude Kiri controls from scrolling capture.": "스크롤 캡처에서 Kiri 제어창을 제외하지 못했습니다.",
-  "Could not create scrolling capture controls.": "스크롤 캡처 제어창을 만들지 못했습니다.",
-  "Could not start the scrolling capture stream.": "스크롤 캡처의 화면 수집을 시작하지 못했습니다."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "스크롤하여 보세요. 두 손가락으로 오므리거나 벌리거나 Ctrl/Command를 누른 채 스크롤하면 확대·축소됩니다. 스페이스 키를 누른 채 드래그하면 이동합니다."
 }

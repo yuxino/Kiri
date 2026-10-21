@@ -833,6 +833,11 @@
   "Stop scrolling briefly, then choose Done.": "请停一下滚动，再点击完成。",
   "No scrolling content has been captured yet.": "还没有截取到内容。",
   "Could not start scrolling capture.": "无法启动滚动截图。",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "滚动截图需要 Windows 10 2004 或更高版本。",
+  "Scrolling capture requires desktop composition to exclude its controls.": "滚动截图需要启用桌面合成，以隐藏捕获控制条。",
+  "Could not exclude Kiri controls from scrolling capture.": "无法在滚动截图中隐藏 Kiri 控制条。",
+  "Could not create scrolling capture controls.": "无法创建滚动截图控制窗。",
+  "Could not start the scrolling capture stream.": "无法启动滚动截图的画面采集。",
   "Leave room outside the selection for scrolling capture controls.": "请缩小选区，为滚动截图控件留出空间。",
   "Finish the current scrolling capture first.": "请先完成当前滚动截图。",
   "Scrolling capture is unavailable in this desktop session.": "当前桌面环境不支持滚动截图。",
@@ -844,10 +849,5 @@
   "Fit width": "适应宽度",
   "Fit image": "适应窗口",
   "Actual size": "原始大小",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "滚动查看；双指捏合或按住 Ctrl/Command 滚动缩放；按住空格拖动画面。",
-  "Scrolling capture requires Windows 10 version 2004 or later.": "滚动截图需要 Windows 10 2004 或更高版本。",
-  "Scrolling capture requires desktop composition to exclude its controls.": "滚动截图需要启用桌面合成，以隐藏捕获控制条。",
-  "Could not exclude Kiri controls from scrolling capture.": "无法在滚动截图中隐藏 Kiri 控制条。",
-  "Could not create scrolling capture controls.": "无法创建滚动截图控制窗。",
-  "Could not start the scrolling capture stream.": "无法启动滚动截图的画面采集。"
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "滚动查看；双指捏合或按住 Ctrl/Command 滚动缩放；按住空格拖动画面。"
 }

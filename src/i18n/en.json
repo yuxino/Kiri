@@ -833,6 +833,11 @@
   "Stop scrolling briefly, then choose Done.": "Stop scrolling briefly, then choose Done.",
   "No scrolling content has been captured yet.": "No scrolling content has been captured yet.",
   "Could not start scrolling capture.": "Could not start scrolling capture.",
+  "Scrolling capture requires Windows 10 version 2004 or later.": "Scrolling capture requires Windows 10 version 2004 or later.",
+  "Scrolling capture requires desktop composition to exclude its controls.": "Scrolling capture requires desktop composition to exclude its controls.",
+  "Could not exclude Kiri controls from scrolling capture.": "Could not exclude Kiri controls from scrolling capture.",
+  "Could not create scrolling capture controls.": "Could not create scrolling capture controls.",
+  "Could not start the scrolling capture stream.": "Could not start the scrolling capture stream.",
   "Leave room outside the selection for scrolling capture controls.": "Leave room outside the selection for scrolling capture controls.",
   "Finish the current scrolling capture first.": "Finish the current scrolling capture first.",
   "Scrolling capture is unavailable in this desktop session.": "Scrolling capture is unavailable in this desktop session.",
@@ -844,10 +849,5 @@
   "Fit width": "Fit width",
   "Fit image": "Fit image",
   "Actual size": "Actual size",
-  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.",
-  "Scrolling capture requires Windows 10 version 2004 or later.": "Scrolling capture requires Windows 10 version 2004 or later.",
-  "Scrolling capture requires desktop composition to exclude its controls.": "Scrolling capture requires desktop composition to exclude its controls.",
-  "Could not exclude Kiri controls from scrolling capture.": "Could not exclude Kiri controls from scrolling capture.",
-  "Could not create scrolling capture controls.": "Could not create scrolling capture controls.",
-  "Could not start the scrolling capture stream.": "Could not start the scrolling capture stream."
+  "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan."
 }
