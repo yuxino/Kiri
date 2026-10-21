@@ -13,3 +13,11 @@ the known native displacement is 786 pixels. Both contain only generated test
 content and the page's fixed header/composer. They reproduce a large first
 movement followed by a return, but do not represent every frame of a live
 scrolling session or establish general native/cross-platform acceptance.
+
+`scroll-notepad-dark.png` is a lossless 754×645 crop of numbered text generated
+only for Windows cloud QA in Notepad. It contains no private capture content.
+The regression inserts one or two stale top rows into a viewport crop, then
+checks recovery from independent clean observations, including a return to the
+original position. This models a transient repaint; it is not a saved sequence
+of frames from the native capture backend and does not establish native
+acceptance by itself.

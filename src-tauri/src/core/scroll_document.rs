@@ -748,13 +748,25 @@ impl ScrollDocument {
         for strip in &mut self.strips {
             for y in start.max(strip.start)..end.min(strip.end()) {
                 let local_y = (y - strip.start) as usize;
-                if strip.confirmed[local_y] || strip.observed_at[local_y] == position {
+                if strip.confirmed[local_y] {
                     continue;
                 }
                 let offset = local_y * stride;
                 let source = (y - position) as usize * stride;
                 let known = &mut strip.image.as_mut()[offset..offset + stride];
                 let incoming = &frame.as_raw()[source..source + stride];
+                // Returning to the original noisy position is not new proof.
+                // It may confirm a clean repair retained at a different
+                // position, but must not confirm the old noisy pixels.
+                if strip.observed_at[local_y] == position
+                    && !self.unresolved.get(&y).is_some_and(|observation| {
+                        observation.position != position
+                            && observation.pixels.as_deref() == Some(incoming)
+                            && known != incoming
+                    })
+                {
+                    continue;
+                }
                 if known == incoming {
                     strip.confirmed[local_y] = true;
                     strip.provisional_edge[local_y] = false;
@@ -2176,5 +2188,58 @@ mod tests {
         large.push(RgbaImage::new(2048, 2049)).unwrap();
         assert!(large.preview_region(0, 0, 2048, 2048).is_some());
         assert!(large.preview_region(0, 0, 2048, 2049).is_none());
+    }
+
+    #[test]
+    fn revisiting_initial_noisy_position_confirms_a_displaced_clean_repair() {
+        // Real anonymous QA text rendered by Windows Notepad at native pixels.
+        let source = image::load_from_memory(include_bytes!("testdata/scroll-notepad-dark.png"))
+            .unwrap()
+            .to_rgba8();
+        for stale_rows in [24, 48] {
+            let mut document = ScrollDocument::new(754, 525).unwrap();
+            // Lock the moving body before a newly exposed top edge briefly
+            // retains one or two old text rows during a native repaint.
+            for y in [96, 120, 96] {
+                document.push(frame(&source, y, 525)).unwrap();
+            }
+            let mut dirty = frame(&source, 24, 525);
+            let stale = image::imageops::crop_imm(&source, 0, 96, 754, stale_rows).to_image();
+            image::imageops::replace(&mut dirty, &stale, 0, 0);
+            assert!(!matches!(
+                document.push(dirty.clone()).unwrap(),
+                ScrollUpdate::Unmatched
+            ));
+            assert!(!matches!(
+                document.push(frame(&source, 0, 525)).unwrap(),
+                ScrollUpdate::Unmatched
+            ));
+            assert!(document.has_unresolved_patches());
+            let unresolved = document.unresolved.len();
+            let before = document.image().unwrap();
+
+            // Repeating one clean viewport is not independent evidence.
+            for _ in 0..4 {
+                document.push(frame(&source, 0, 525)).unwrap();
+                assert_eq!(document.unresolved.len(), unresolved);
+                assert!(document.image().unwrap() == before);
+            }
+            // Nor may returning to the original dirty pixels confirm them and
+            // discard the clean observation from the displaced viewport.
+            assert!(!matches!(
+                document.push(dirty.clone()).unwrap(),
+                ScrollUpdate::Unmatched
+            ));
+            assert_eq!(document.unresolved.len(), unresolved);
+            assert!(document.image().unwrap() == before);
+
+            document.push(frame(&source, 0, 525)).unwrap();
+            document.push(frame(&source, 24, 525)).unwrap();
+            assert!(
+                !document.has_unresolved_patches(),
+                "stale_rows={stale_rows}"
+            );
+            assert!(document.image().unwrap() == source);
+        }
     }
 }
