@@ -2096,6 +2096,49 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn exported_library_video_survives_original_trash_and_permanent_deletion() {
+        use crate::core::{asset::CaptureKind, library::AssetLibrary};
+        use crate::macos_media::MacosSegmentEncoder;
+
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.mp4");
+        let mut encoder = MacosSegmentEncoder::new(&source, 64, 48, 30, 500_000, false).unwrap();
+        let frame = [40, 100, 200, 255].repeat(64 * 48);
+        for index in 0..30 {
+            assert!(encoder.append_video(&frame, index).unwrap());
+        }
+        encoder.finish().unwrap();
+        let root = directory.path().join("library");
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let original = library.import_file(&source, CaptureKind::Video, "mp4", 64, 48,
+            Some(1.0), None).unwrap();
+        std::fs::remove_file(source).unwrap();
+        let (output, width, height, duration) = export_video(&library.asset_url(&original),
+            &[VideoSegment { start: 0.2, end: 0.8, speed: 1.0 }], &[],
+            VideoExportPreset::Original).unwrap();
+        let output = tempfile::TempPath::try_from_path(output).unwrap();
+        let copy = library.import_file(&output, CaptureKind::Video, "mp4", width, height,
+            Some(duration), None).unwrap();
+        drop(output);
+        assert_ne!(original.id, copy.id);
+        assert_ne!(original.filename, copy.filename);
+        let copy_path = library.asset_url(&copy);
+        let bytes = std::fs::read(&copy_path).unwrap();
+        let preview = crate::macos_media::video_first_frame_png(&copy_path, 64).unwrap();
+
+        library.move_to_trash(&original.id).unwrap();
+        assert_eq!(std::fs::read(&copy_path).unwrap(), bytes);
+        assert_eq!(crate::macos_media::video_first_frame_png(&copy_path, 64).unwrap(), preview);
+        library.permanently_delete(&original.id).unwrap();
+        drop(library);
+        let reopened = AssetLibrary::open_existing(root).unwrap();
+        let copy = reopened.asset_by_id(&copy.id).unwrap();
+        assert_eq!(std::fs::read(reopened.readable_asset_url(copy).unwrap()).unwrap(), bytes);
+        assert_eq!(crate::macos_media::video_first_frame_png(&copy_path, 64).unwrap(), preview);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn native_trim_preserves_source_and_audio_without_upscaling() {
         use crate::macos_media::MacosSegmentEncoder;
         use std::ffi::{c_char, CString};
