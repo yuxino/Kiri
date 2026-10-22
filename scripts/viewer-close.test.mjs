@@ -6,9 +6,10 @@ import { createLibraryHarness, deferred, nodes, settleRequests, testAsset } from
 import * as viewerState from "../src/windows/viewer-state.js";
 import { installVideoProjectShortcuts } from "../src/windows/video-project-shortcuts.js";
 
-const viewerSource = readFileSync(new URL("../src/windows/ViewerWindow.tsx", import.meta.url), "utf8");
-const guardSource = readFileSync(new URL("../src/windows/VideoCloseGuard.tsx", import.meta.url), "utf8");
-const playerSource = readFileSync(new URL("../src/windows/VideoTrimPlayer.tsx", import.meta.url), "utf8");
+const readSource = path => readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const viewerSource = readSource("../src/windows/ViewerWindow.tsx");
+const guardSource = readSource("../src/windows/VideoCloseGuard.tsx");
+const playerSource = readSource("../src/windows/VideoTrimPlayer.tsx");
 const closeRegistrationStart = playerSource.indexOf("  const flushProject=useCallback");
 assert.notEqual(closeRegistrationStart, -1);
 const closeRegistrationEnd = playerSource.indexOf("\n\n  useEffect", closeRegistrationStart);
