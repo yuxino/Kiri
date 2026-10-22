@@ -1,0 +1,325 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { createLibraryHarness, deferred, nodes, settleRequests, testAsset } from "./helpers/library-render-harness.mjs";
+import * as viewerState from "../src/windows/viewer-state.js";
+import { installVideoProjectShortcuts } from "../src/windows/video-project-shortcuts.js";
+
+const viewerSource = readFileSync(new URL("../src/windows/ViewerWindow.tsx", import.meta.url), "utf8");
+const guardSource = readFileSync(new URL("../src/windows/VideoCloseGuard.tsx", import.meta.url), "utf8");
+const playerSource = readFileSync(new URL("../src/windows/VideoTrimPlayer.tsx", import.meta.url), "utf8");
+const closeRegistrationStart = playerSource.indexOf("  const flushProject=useCallback");
+assert.notEqual(closeRegistrationStart, -1);
+const closeRegistrationEnd = playerSource.indexOf("\n\n  useEffect", closeRegistrationStart);
+assert.ok(closeRegistrationEnd > closeRegistrationStart);
+const closeRegistrationSource = playerSource.slice(closeRegistrationStart, closeRegistrationEnd);
+assert.match(closeRegistrationSource, /onClosePreparationChange/);
+// Use production Viewer, Guard and the player's close-registration hook slice.
+// The media/codec body is omitted; rendered player presence owns registration.
+const source = 'import React from "react";\n' + viewerSource +
+  '\nimport {installVideoProjectShortcuts} from "./video-project-shortcuts.js";\n' +
+  guardSource.replace(/^import\s[\s\S]*?;\s*/gm, "") +
+  '\nexport function PlayerCloseRegistration(props) {\n' +
+  'const busy=props.busy,project={flush:props.flush};\n' +
+  'const commitAnnotation=useRef(null),textDraft=useRef(null);\n' +
+  closeRegistrationSource + '\nreturn flushProject;\n}\n';
+const playerType = "test-video-player";
+const guardType = "test-video-close-guard";
+const closeEvent = "tauri://close-requested";
+
+/** Model the Rust close veto and registry; execute the installed JS SDK itself. */
+function nativeWindowModel() {
+  let nextCallback = 0, nextEvent = 0, destroyed = false;
+  const callbacks = new Map(), registrations = new Map(), pendingUnlistens = [];
+  const calls = { close: 0, destroy: 0, veto: 0, listen: 0, unlisten: 0 };
+  let delayUnlisten = false;
+  const metadata = { currentWindow: { label: `viewer-${testAsset.id}` } };
+  const matchingListeners = () => [...registrations.entries()].filter(([, entry]) =>
+    entry.event === closeEvent && entry.target.label === metadata.currentWindow.label);
+  const destroy = () => { if (!destroyed) { destroyed = true; calls.destroy++; } };
+  return {
+    calls,
+    get listenerCount() { return matchingListeners().length; },
+    get pendingUnlistenCount() { return pendingUnlistens.length; },
+    delayUnlisten() { delayUnlisten = true; },
+    finishUnlistens() { pendingUnlistens.splice(0).forEach(finish => finish()); },
+    internals: {
+      metadata,
+      transformCallback(callback) { const id = ++nextCallback; callbacks.set(id, callback); return id; },
+      async invoke(command, args) {
+        if (command === "plugin:event|listen") {
+          calls.listen++;
+          const id = ++nextEvent;
+          registrations.set(id, args);
+          return id;
+        }
+        if (command === "plugin:event|unlisten") {
+          calls.unlisten++;
+          const remove = () => registrations.delete(args.eventId);
+          if (!delayUnlisten) { remove(); return; }
+          return new Promise(resolve => pendingUnlistens.push(() => { remove(); resolve(); }));
+        }
+        if (command === "plugin:window|destroy") { destroy(); return; }
+        if (command === "plugin:window|close") {
+          calls.close++;
+          const listeners = matchingListeners();
+          if (!listeners.length) { destroy(); return; }
+          calls.veto++;
+          for (const [id, entry] of listeners) {
+            await callbacks.get(entry.handler)?.({ event: closeEvent, id, payload: null });
+          }
+          return;
+        }
+        throw new Error(`Unexpected native command: ${command}`);
+      },
+    },
+    eventInternals: {
+      // Tauri event._unlisten removes the JS callback before awaiting the Rust
+      // unlisten IPC. Rust may still veto close while that IPC is outstanding.
+      unregisterListener(_event, id) { callbacks.delete(registrations.get(id)?.handler); },
+    },
+  };
+}
+
+async function fixture(t, options = {}) {
+  const previousWindow = globalThis.window;
+  const native = nativeWindowModel();
+  let availability = "ready", prepareCalls = 0;
+  const asset = { ...testAsset, kind: options.kind ?? "video", filename: options.filename ?? "fixture.mp4",
+    duration: options.kind === "image" ? null : 3 };
+  let nextAssetLoad = null;
+  let guard = null, playerRegistration = null, playerKey = null, tree, player;
+  const playerFlushes = new Set();
+  const guardOptions = { busy: false, prepareClose: async () => true, ...options };
+  const flush = async () => { prepareCalls++; return guardOptions.prepareClose(); };
+  const dialog = { open: false, showModal() { this.open = true; }, close() { this.open = false; } };
+  const h = createLibraryHarness({
+    getAsset: async () => { const pending = nextAssetLoad; nextAssetLoad = null; return pending ?? asset; },
+    getAssetAvailability: async () => ({ status: availability }),
+    restoreMissingAsset: async () => true,
+    platformCapabilities: async () => ({ videoEditing: true }),
+  }, source, {
+    modules: {
+      "@tauri-apps/api/window": { getCurrentWindow },
+      "./VideoTrimPlayer": { VideoTrimPlayer: playerType },
+      "./VideoCloseGuard": { VideoCloseGuard: guardType },
+      "./viewer-state.js": viewerState,
+      "./video-project-shortcuts.js": { installVideoProjectShortcuts },
+    },
+    attachRef(node) { if (node.type === "dialog") node.props.ref.current = dialog; },
+  });
+  Object.assign(h.window, { __TAURI_INTERNALS__: native.internals, __TAURI_EVENT_PLUGIN_INTERNALS__: native.eventInternals });
+  globalThis.window = h.window;
+  const viewer = h.mount("ViewerWindow", { id: testAsset.id });
+  function render() {
+    // Reconcile child effects, then reflect their registration in Viewer props.
+    for (let pass = 0; pass < 2; pass++) {
+      tree = viewer.render();
+      player = nodes(tree).find(node => node.type === playerType);
+      if (!player || (playerRegistration && player.props.key !== playerKey)) {
+        playerRegistration?.unmount(); playerRegistration = null;
+      }
+      if (player && !playerRegistration) {
+        playerKey = player.props.key;
+        playerRegistration = h.mount("PlayerCloseRegistration", {});
+      }
+      if (playerRegistration) playerFlushes.add(playerRegistration.render({
+        busy: guardOptions.busy, flush, onClosePreparationChange: player.props.onClosePreparationChange,
+      }));
+      const guardNode = nodes(tree).find(node => node.type === guardType);
+      assert.ok(guardNode, "Viewer renders its persistent close guard in every content state");
+      guard ??= h.mount("VideoCloseGuard", {});
+      guard.render(guardNode.props);
+    }
+    return tree;
+  }
+  async function settle() { await settleRequests(); render(); await settleRequests(); render(); }
+  function assertPersistentGuard() {
+    assert.equal(native.listenerCount, 1);
+    assert.equal(native.calls.listen, 1, "the window keeps its original close listener");
+    assert.equal(native.calls.unlisten, 0, "media state never unregisters that listener");
+    assert.equal(native.pendingUnlistenCount, 0);
+  }
+  function delayNextLoad() {
+    const load = deferred(); nextAssetLoad = load.promise;
+    t.after(() => load.resolve(asset));
+    return async () => { load.resolve(asset); await settle(); assert.ok(player); assertPersistentGuard(); };
+  }
+  async function beginRestore() {
+    availability = "ready";
+    const finish = delayNextLoad();
+    const message = nodes(tree).find(node => node.props?.title === "File missing");
+    const restoreButton = nodes(message?.props.actions).find(node => node.props?.children?.includes("Restore File…"));
+    assert.ok(restoreButton, "missing viewer exposes restore");
+    restoreButton.props.onClick(); await settle();
+    assert.equal(player, undefined);
+    assert.ok(nodes(tree).some(node => node.props?.title === "Loading…"));
+    assertPersistentGuard();
+    return finish;
+  }
+  t.after(async () => {
+    viewer.unmount(); playerRegistration?.unmount(); guard?.unmount();
+    await settleRequests(); native.finishUnlistens(); await settleRequests();
+    globalThis.window = previousWindow;
+  });
+  render(); await settle();
+  if (asset.kind === "video") assert.ok(player, "fixture starts with a ready video");
+  else assert.ok(nodes(tree).some(node => node.type === "img"), "fixture starts with a ready image/GIF");
+  assert.equal(native.listenerCount, 1, "production guard registers through the real SDK");
+  return {
+    native, guardOptions, dialog,
+    get prepareCalls() { return prepareCalls; },
+    get playerFlushCount() { return playerFlushes.size; },
+    settle,
+    beginRestore,
+    async mediaFailure(status) {
+      availability = status;
+      player.props.onError();
+      await settle();
+      assert.equal(player, undefined, "the failed player unregisters its close preparation");
+      assert.equal(native.calls.listen, 1, "media failure does not replace the Viewer close listener");
+      assert.equal(native.calls.unlisten, 0, "the Viewer guard survives player cleanup");
+      assert.ok(nodes(tree).some(node => node.props?.title ===
+        (status === "missing" ? "File missing" : status === "libraryUnavailable" ? "Library unavailable" :
+          status === "unreadable" ? "Can't read this file" : "Couldn't play this video.")));
+    },
+    async restore() {
+      const finish = await beginRestore(); await finish();
+      assert.ok(player, "restoring the file registers the new player");
+    },
+    async close(action) {
+      if (action === "native") {
+        await getCurrentWindow().close();
+      } else if (action === "X") {
+        if (player) player.props.onClose();
+        else {
+          const button = nodes(tree).find(node => node.type === "button" && node.props["aria-label"] === "Close · Esc");
+          assert.ok(button, "unavailable viewer exposes its close button");
+          button.props.onClick();
+        }
+      } else {
+        const event = { type: "keydown", key: action === "Escape" ? "Escape" : "w",
+          metaKey: action === "Cmd+W", ctrlKey: action === "Ctrl+W", altKey: false, shiftKey: false,
+          repeat: false, isComposing: false, defaultPrevented: false, cancelBubble: false,
+          target: { closest: () => null },
+          preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.cancelBubble = true; },
+        };
+        h.window.dispatchThroughTarget(event, () => {});
+        assert.equal(event.defaultPrevented, true);
+      }
+      await settle();
+    },
+  };
+}
+
+for (const action of ["X", "Escape", "Cmd+W", "Ctrl+W"]) {
+  test(`missing video ${action} closes without detaching its native guard`, async t => {
+    const f = await fixture(t);
+    f.native.delayUnlisten();
+    await f.mediaFailure("missing");
+    assert.equal(f.native.pendingUnlistenCount, 0);
+    assert.equal(f.native.listenerCount, 1, "the Viewer listener remains registered");
+    await f.close(action);
+    assert.equal(f.native.calls.destroy, 1, "the Viewer guard permits close after player cleanup");
+    assert.equal(f.prepareCalls, 0, "unavailable media never flushes its removed player");
+  });
+}
+
+for (const [filename, action] of [
+  ["fixture.png", "X"], ["fixture.png", "native"],
+  ["fixture.gif", "X"], ["fixture.gif", "Escape"],
+]) {
+  test(`ready ${filename} ${action} closes without video preparation or a dialog`, async t => {
+    // These would block a registered video, but images/GIFs register neither.
+    const f = await fixture(t, { kind: "image", filename, busy: true, prepareClose: async () => false });
+    await f.close(action);
+    assert.equal(f.native.calls.destroy, 1); assert.equal(f.prepareCalls, 0);
+    assert.equal(f.dialog.open, false);
+  });
+}
+
+for (const status of ["unreadable", "libraryUnavailable", "ready"]) {
+  test(`${status} playback failure remains closable with the persistent native listener`, async t => {
+    const f = await fixture(t);
+    f.native.delayUnlisten(); await f.mediaFailure(status); await f.close("X");
+    assert.equal(f.native.calls.destroy, 1);
+    assert.equal(f.prepareCalls, 0);
+  });
+}
+
+test("missing video native title-bar close cannot be stranded by player cleanup", async t => {
+  const f = await fixture(t);
+  f.native.delayUnlisten(); await f.mediaFailure("missing"); await f.close("native");
+  assert.equal(f.native.calls.destroy, 1);
+});
+
+test("restoring video's loading state keeps the native guard and allows close", async t => {
+  const f = await fixture(t, { busy: true, prepareClose: async () => false });
+  await f.mediaFailure("missing");
+  const finishRestore = await f.beginRestore();
+  await f.close("native");
+  assert.equal(f.native.calls.destroy, 1); assert.equal(f.prepareCalls, 0);
+  await finishRestore();
+});
+
+test("failed and restored video keeps one native close listener", async t => {
+  const f = await fixture(t);
+  f.native.delayUnlisten(); await f.mediaFailure("missing");
+  await f.restore(); await f.settle();
+  assert.equal(f.native.listenerCount, 1);
+  assert.equal(f.native.calls.listen, 1); assert.equal(f.native.calls.unlisten, 0);
+  await f.close("X");
+  assert.equal(f.native.calls.destroy, 1);
+});
+
+test("ready video close waits for saving and closes only after it succeeds", async t => {
+  const save = deferred();
+  const f = await fixture(t, { prepareClose: () => save.promise });
+  await f.close("X");
+  assert.equal(f.prepareCalls, 1); assert.equal(f.native.calls.destroy, 0);
+  await f.close("Escape");
+  assert.equal(f.prepareCalls, 1, "repeated requests do not start a second save");
+  save.resolve(true); await f.settle();
+  assert.equal(f.native.calls.destroy, 1);
+});
+
+for (const action of ["X", "native"]) {
+  test(`ready video ${action} save failure keeps its close confirmation`, async t => {
+    const f = await fixture(t, { prepareClose: async () => false });
+    await f.close(action);
+    assert.equal(f.prepareCalls, 1); assert.equal(f.native.calls.destroy, 0);
+    assert.equal(f.dialog.open, true);
+  });
+
+  test(`ready video export blocks ${action} close without attempting autosave`, async t => {
+    const f = await fixture(t, { busy: true });
+    await f.close(action);
+    assert.equal(f.prepareCalls, 0); assert.equal(f.native.calls.destroy, 0);
+    assert.equal(f.dialog.open, true);
+  });
+}
+
+test("player flush stays stable across parent renders and busy registration changes", async t => {
+  const f = await fixture(t);
+  await f.settle(); f.guardOptions.busy = true; await f.settle();
+  f.guardOptions.busy = false; await f.settle();
+  assert.equal(f.playerFlushCount, 1);
+  assert.equal(f.native.calls.listen, 1);
+  assert.equal(f.native.calls.unlisten, 0);
+});
+
+test("player failure clears its export block before native close", async t => {
+  const f = await fixture(t, { busy: true, prepareClose: async () => false });
+  await f.mediaFailure("missing"); await f.close("native");
+  assert.equal(f.native.calls.destroy, 1); assert.equal(f.prepareCalls, 0);
+});
+
+for (const action of ["X", "Escape", "Cmd+W", "Ctrl+W"]) {
+  test(`restored ready video ${action} uses its current save guard`, async t => {
+    const f = await fixture(t, { prepareClose: async () => false });
+    await f.mediaFailure("missing"); await f.restore(); await f.close(action);
+    assert.equal(f.prepareCalls, 1, "restoration must not retain unavailable-state close behavior");
+    assert.equal(f.native.calls.destroy, 0); assert.equal(f.dialog.open, true);
+  });
+}

@@ -203,6 +203,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     "./library-card-interaction.js": cardInteraction,
     get "./gif-conversion"() { return gifConversion(); },
     "./viewer-copy-shortcut.js": viewerCopyShortcut,
+    "./VideoCloseGuard": { VideoCloseGuard: "close-guard" },
     "./video-capabilities.js": videoCapabilities,
     "../annotation/image-viewport.js": imageViewport,
     get "./useImageViewport"() {

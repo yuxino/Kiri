@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, mediaUrl, onAssetContentChanged, type AssetAvailability } from "../lib/ipc";
-import { VideoTrimPlayer } from "./VideoTrimPlayer";
+import { VideoTrimPlayer, type VideoClosePreparation } from "./VideoTrimPlayer";
+import { VideoCloseGuard } from "./VideoCloseGuard";
 import { videoEditingCapabilities } from "./video-capabilities.js";
 import { OcrDialog } from "../ocr/TextHistory";
 import { t } from "../i18n";
@@ -29,6 +30,10 @@ export function ViewerWindow(props: { id: string }) {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
   const [videoEditorOpen, setVideoEditorOpen] = useState(false);
+  const [videoClosePreparation, setVideoClosePreparation] = useState<VideoClosePreparation | null>(null);
+  const registerVideoClose = useCallback((preparation: VideoClosePreparation | null) => {
+    setVideoClosePreparation(preparation);
+  }, []);
   const copyInFlight = useRef(false);
   const mounted = useRef(true);
   const loadGeneration = useRef(0);
@@ -77,6 +82,15 @@ export function ViewerWindow(props: { id: string }) {
     };
   }, [loadAsset, props.id]);
 
+  const prepareClose = useCallback(async () => {
+    if (viewerMediaKind(state) !== "video" || !videoClosePreparation) return true;
+    return videoClosePreparation.prepareClose();
+  }, [state, videoClosePreparation]);
+
+  const close = useCallback(() => {
+    void getCurrentWindow().close();
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -85,12 +99,12 @@ export function ViewerWindow(props: { id: string }) {
         ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w")
       ) {
         event.preventDefault();
-        void getCurrentWindow().close();
+        close();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [close]);
 
   const copy = useCallback(async (file = false) => {
     if (copyInFlight.current || state.kind !== "ready" || videoEditorOpen) return;
@@ -115,10 +129,6 @@ export function ViewerWindow(props: { id: string }) {
     hasTextSelection: () => !!window.getSelection()?.toString(),
     copy: () => void copy(),
   }), [state, copying, videoEditorOpen, ocrOpen, copy]);
-
-  const close = () => {
-    void getCurrentWindow().close();
-  };
 
   const retry = async () => {
     if (busy) return;
@@ -208,6 +218,8 @@ export function ViewerWindow(props: { id: string }) {
         overflow: "hidden",
       }}
     >
+      {/* Keep the native close listener alive when failed media unmounts its player. */}
+      <VideoCloseGuard busy={mediaKind === "video" && !!videoClosePreparation?.busy} prepareClose={prepareClose} />
       {state.kind === "loading" ? (
         <ViewerMessage title={t("Loading…")} />
       ) : state.kind === "missing" && confirmRemove ? (
@@ -301,6 +313,7 @@ export function ViewerWindow(props: { id: string }) {
           capabilities={videoCapabilities}
           previewActions={copyButton}
           onEditingChange={setVideoEditorOpen}
+          onClosePreparationChange={registerVideoClose}
           onClose={close}
           onError={() => void handleMediaError()}
         />

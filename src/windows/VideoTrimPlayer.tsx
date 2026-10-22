@@ -16,7 +16,6 @@ import {VideoPlaybackControls} from "./VideoPlaybackControls";
 import {videoResourceCrossOrigin} from "../lib/kiri-resource-url.js";
 import {VideoTimeInput} from "./VideoTimeInput";
 import {VideoExportPanel} from "./VideoExportPanel";
-import {VideoCloseGuard} from "./VideoCloseGuard";
 import {VideoVisibleTime} from "./VideoVisibleTime";
 import {useVideoProject} from "./useVideoProject";
 import {sameVideoProjectValue} from "./video-project-save.js";
@@ -53,7 +52,9 @@ async function makeRoomForVideoEditor() {
   await window.setPosition(new PhysicalPosition(Math.round(x), Math.round(y)));
 }
 
-export function VideoTrimPlayer(props: { id: string; src: string; editable: boolean; capabilities: VideoEditingCapabilities; previewActions?: ReactNode; onEditingChange?(editing: boolean): void; onClose(): void; onError(): void }) {
+export type VideoClosePreparation = { busy: boolean; prepareClose(): Promise<boolean> };
+
+export function VideoTrimPlayer(props: { id: string; src: string; editable: boolean; capabilities: VideoEditingCapabilities; previewActions?: ReactNode; onEditingChange?(editing: boolean): void; onClosePreparationChange(preparation: VideoClosePreparation | null): void; onClose(): void; onError(): void }) {
   const capabilities=videoEditingCapabilities(props.capabilities);
   const video = useRef<HTMLVideoElement>(null);
   const container=useRef<HTMLDivElement>(null);
@@ -175,10 +176,14 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   const project=useVideoProject({id:props.id,enabled:props.editable&&capabilities.videoEditing,duration,getProject:projectSnapshot,restore:restoreProject});
   scheduleProject.current=project.schedule;
   useEffect(()=>{if(project.ready)project.schedule();},[doc,preset,project.ready,project.schedule]);
-  async function flushProject(){
+  const flushProject=useCallback(async()=>{
     commitAnnotation.current?.();textDraft.current=null;
     return project.flush();
-  }
+  },[project.flush]);
+  useEffect(()=>{
+    props.onClosePreparationChange({busy,prepareClose:flushProject});
+    return()=>props.onClosePreparationChange(null);
+  },[busy,flushProject,props.onClosePreparationChange]);
 
   useEffect(()=>{
     const id=annotating?annotationId:effectId;if(!id)return;
@@ -602,7 +607,6 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   }
 
   return <div ref={container} className={`kiri-video-player ${editing ? "kiri-video-player--editing" : ""}`}>
-    <VideoCloseGuard busy={busy} prepareClose={flushProject}/>
     <header className="kiri-video-editor-heading">
       <div><strong>{t(editing ? "Video editor" : "Video")}</strong><span>{t(editing ? "Your original recording stays unchanged." : "Esc to close")}</span></div>
       <div className="kiri-video-header-actions">

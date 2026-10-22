@@ -41,7 +41,6 @@ export function createVideoPlayerHarness(caps) {
       "../lib/kiri-resource-url.js": { videoResourceCrossOrigin: () => undefined },
       "./VideoTimeInput": { VideoTimeInput: "time-input" },
       "./VideoExportPanel": { VideoExportPanel: "export-panel" },
-      "./VideoCloseGuard": { VideoCloseGuard: "close-guard" },
       "./VideoVisibleTime": { VideoVisibleTime: "visible-time" },
       "./useVideoProject": { useVideoProject: value => {
         options = value;
@@ -59,7 +58,7 @@ export function createVideoPlayerHarness(caps) {
       "./video-annotation-render": {},
     },
   });
-  const component = harness.mount("VideoTrimPlayer", { id: "video", src: "media:video", editable: caps.videoEditing, capabilities: caps, onClose() {}, onError() {} });
+  const component = harness.mount("VideoTrimPlayer", { id: "video", src: "media:video", editable: caps.videoEditing, capabilities: caps, onClosePreparationChange() {}, onClose() {}, onError() {} });
   const initial = component.render();
   nodes(initial).find(node => node?.type === "video").props.onLoadedMetadata({ currentTarget: player });
   component.render();
