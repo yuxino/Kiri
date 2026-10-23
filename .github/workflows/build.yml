@@ -84,6 +84,8 @@ jobs:
           python3 scripts/qa/test_windows_native_candidate.py
           python3 scripts/qa/test_linux_native.py
           python3 scripts/qa/test_countdown_native.py
+          python3 scripts/qa/test_windows_scroll_capture_native.py
+          python3 scripts/qa/test_image_crop_pointer.py
       - name: Verify the formal release tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/release-version.mjs "$GITHUB_REF_NAME"
@@ -594,6 +596,19 @@ jobs:
           $env:KIRI_QA_PORTABLE_EXE = Join-Path $env:RUNNER_TEMP 'kiri-portable-verify/kiri.exe'
           $env:KIRI_QA_INSTALLED_EXE = Join-Path $install 'kiri.exe'
           python scripts/qa/windows-release-native.py
+      - name: Verify scrolling capture on the installed Windows app
+        if: ${{ !cancelled() && needs.plan.outputs.package_windows == 'true' && hashFiles('src-tauri/target/release/bundle/nsis/*-setup.exe') != '' }}
+        timeout-minutes: 5
+        env:
+          KIRI_QA_INSTALLED_EXE: ${{ runner.temp }}/kiri-installed-review/kiri.exe
+        run: python scripts/qa/windows-scroll-capture-native.py
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && needs.plan.outputs.package_windows == 'true' }}
+        with:
+          name: windows-scroll-capture-review
+          path: windows-scroll-capture-review/
+          retention-days: 5
+          if-no-files-found: warn
       - name: Verify library file actions on the installed Windows app
         if: ${{ !cancelled() && needs.plan.outputs.package_windows == 'true' && hashFiles('src-tauri/target/release/bundle/nsis/*-setup.exe') != '' }}
         timeout-minutes: 10
@@ -718,6 +733,7 @@ jobs:
             countdown-native-review/
             confirmation-native-review/
             windows-capture-color-review/
+            windows-scroll-capture-review/
           retention-days: 5
           if-no-files-found: error
 

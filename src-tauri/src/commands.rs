@@ -2363,7 +2363,22 @@ pub(crate) fn restore_capture_origin(
         if let Some(window) = app.get_webview_window(label) {
             #[cfg(target_os = "linux")]
             platform::linux::show_window_without_activation(app, label);
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(windows)]
+            {
+                // Off the UI thread show() only queues a request. This getter
+                // acknowledges it on the same queue before native focus returns
+                // to the source, so a delayed show cannot activate Kiri afterward.
+                match window.show().and_then(|()| window.is_visible()) {
+                    Ok(true) => {}
+                    Ok(false) => log::warn!(
+                        "restore_capture_origin: window remained hidden label={label}"
+                    ),
+                    Err(_) => log::warn!(
+                        "restore_capture_origin: window show acknowledgement failed label={label}"
+                    ),
+                }
+            }
+            #[cfg(not(any(target_os = "linux", windows)))]
             let _ = window.show();
             #[cfg(target_os = "linux")]
             let _ = window;

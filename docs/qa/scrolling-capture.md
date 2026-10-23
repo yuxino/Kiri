@@ -188,8 +188,101 @@ candidate. Leave unexecuted items explicitly unverified.
 
 ## Windows startup follow-up (#152)
 
-The v1.6.26 report describes failure before scrolling begins. The attachment does not show the native error. The reporter previously supplied Windows 10 build 19045, x86_64 and two 1920 × 1080 displays at 100% in #159; confirm the current environment rather than assuming it is unchanged. That previous build meets the 19041 capture-exclusion gate.
+The [2026-10-23 reporter follow-up](https://github.com/yuxino/Kiri/issues/152#issuecomment-6361292704)
+confirms Kiri 1.6.27 on Windows 10 build 19045, x86_64, with two
+1920 × 1080 displays at 100%. Startup fails at `exclude-region-window` with
+`0x80070008` (`ERROR_NOT_ENOUGH_MEMORY`). Region creation, placement and
+pointer-passthrough setup have already returned successfully; the region has
+not been shown, the control panel has not been created, and WGC has not started.
+This is an affinity failure, not evidence of exhausted physical memory or a
+stitching failure. The reported OS meets the 19041 capture-exclusion gate.
 
-Startup now records the failed stage and the native error details that the upstream API retains. The visible notice distinguishes OS/composition requirements, control exclusion, control creation and capture-stream startup. This diagnostic change does not establish the cause of the reported failure or repair Windows compatibility.
+The locked Tao 0.35.3 implementation adds `WS_EX_LAYERED | WS_EX_TRANSPARENT`
+for `set_ignore_cursor_events(true)`, without initializing layered attributes.
+This is a compatibility lead, not a proven cause. Microsoft's [upstream investigation](https://github.com/microsoft/Windows.UI.Composition-Win32-Samples/issues/56#issuecomment-765166987)
+records error 8 for the different WPF `UpdateLayeredWindow` rendering path;
+Kiri does not directly call that API. Do not apply constant-alpha initialization
+as a presumed fix: [Wails #6088](https://github.com/wailsapp/wails/issues/6088)
+reports a transparent WebView2 surface becoming solid white with that change.
 
-On the installed Windows candidate, use one public text document and record: start, first preview frame, downward scrolling, reversal, finish, then cancel and start again. Inspect the saved pixels for gaps, duplicate content, black regions and captured controls. Preserve the `[scroll] startup failed:` log line with its stage, plus Kiri's copied support information, on failure. Repeat the same sample after a cause-specific fix. Do not reset permissions, remove control exclusion or substitute compilation results for this native retest.
+The candidate instead leaves the optional region guide hidden if exclusion
+fails. Startup must confirm native invisibility, and repeated capture shortcuts
+must not reveal it. The panel still requires `WDA_EXCLUDEFROMCAPTURE`; no visible
+control is allowed to bypass exclusion, and hidden-state failure aborts startup.
+This deliberately omits the border and outer dimming for that session instead
+of changing window compositing. Preserve the diagnostic reason for this fallback.
+See [ADR 0117](../adr/0117-windows-scroll-guide-fallback.md).
+
+The Windows workflow uses Server 2025. Its prior native checks did not start
+scrolling capture. The new installed-app gate exercises startup, required
+capture affinity for visible controls, source-window input passthrough,
+cancellation and restart on an isolated desktop. If the guide is hidden, verify
+it stays hidden after repeating the global capture shortcut. Passing it cannot establish Windows 10 compatibility.
+The candidate still requires a Windows 10 build 19045/WebView2 native retest;
+macOS checks and API signature checks do not establish transparent selection
+rendering, actual input routing or WGC control exclusion.
+
+On the installed Windows candidate, use one public text document and record:
+start, first preview frame, downward scrolling, reversal, finish, then cancel
+and start again. When the guide is available, verify the selection remains visually transparent
+and its painted border passes mouse input to the source process. When it is
+omitted, verify the same selected pixels are captured without a full-screen
+mask, and repeated shortcuts do not restore the guide. The source must retain
+focus in both cases.
+Inspect the saved pixels for gaps, duplicate content, black regions and captured
+controls, including the compact in-selection control placement. Preserve the
+`[scroll] startup failed:` log line with its stage, plus Kiri's copied support
+information, on failure. Repeat the same sample after the candidate change.
+Do not reset permissions, remove control exclusion or substitute compilation
+results for this native retest. Keep #152 open until the reported environment
+has been verified; v1.6.28 did not include this candidate.
+
+Local verification on 2026-10-23, candidate based on `d21e6d4` (v1.6.28):
+495 Rust tests passed, 3 existing tests ignored; `cargo check`, strict Clippy,
+frontend production build and 58 scrolling/runtime-boundary checks passed.
+The new native-driver guard suite passed 11 tests; related CI/provenance checks
+passed 101 tests. These checks did not launch a desktop application or execute
+Windows capture. Windows package/desktop acceptance and the reported Windows 10
+machine remain unverified at this point.
+
+### Candidate native run and focus-order follow-up
+
+The Windows Server 2025 native gate in
+[run 39933888140](https://github.com/yuxino/Kiri/actions/runs/39933888140)
+tested source `794f7192433a333de10986994adfcba97bba9fae`. The visible guide and
+panel both reported affinity `0x11`, cross-process source clicks passed,
+and the repeated capture shortcut preserved the guide. After Cancel,
+both scrolling HWNDs were destroyed and the library became visible, but source
+foreground restoration timed out. The hidden-guide fallback was not exercised;
+the second-session wheel, completion and saved-pixel checks were not reached. This run is not a native
+acceptance pass or evidence that Windows 10 issue #152 is resolved.
+
+Inspection found Windows cleanup calling the shared restoration path from its
+worker: `window.show()` queues the library show, then native source activation
+can run before that queued show activates Kiri. The correction acknowledges
+each Windows show through a same-queue `is_visible()` response before restoring
+the original focus. Repeat the existing Cancel assertion without weakening it,
+then complete the finish/restart and saved-pixel checks. Record source PID,
+foreground PID/HWND and remaining Kiri HWNDs on any new failure; the first run
+did not record the saved return PID, so it cannot isolate every possible cause.
+Ordinary Screenshot/OCR cancellation and completion, startup failure, and QR
+link preparation share the corrected restoration path. Recording's countdown
+and stop restoration do not enqueue library shows through this helper and
+retain their existing behavior.
+
+
+### Verified candidate before v1.6.29
+
+Source `c0099baee78f22871a65cab7c4b8b97fcbe1458b` passed all checks in
+[PR run 39938264801](https://github.com/yuxino/Kiri/actions/runs/39938264801)
+and [Windows package run 39938261900](https://github.com/yuxino/Kiri/actions/runs/39938261900).
+The latter used Windows Server 2025 build 26100. Both scrolling sessions used
+the visible, excluded guide; Cancel and Done restored the expected source
+HWND/PID. Four clicks and three wheel events reached the separate source
+process, scrolling 288 pixels. With the compact panel moved inside the
+selection, the saved 615 × 672 PNG matched the reference pixel for pixel.
+The full package gates and all 24 renderer crop/language/scale cases passed.
+
+This does not establish the reporter's Windows 10 build 19045 dual-display
+hidden-guide path. v1.6.29 includes the compatibility change for that follow-up;
+keep #152 open for the reporter's same-sample confirmation.

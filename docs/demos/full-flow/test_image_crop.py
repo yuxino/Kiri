@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from PIL import Image, ImageDraw
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 from record import Handler, MEDIA, OUT
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -24,6 +24,39 @@ PROJECT = {
     'sourcePixels': {'width': 1000, 'height': 600},
     'marks': [],
 }
+
+
+async def drag_image_document(page, image, start, end):
+    """Prepare input against one stable, hit-tested image, before pressing."""
+    for _ in range(5):
+        # Tool changes can reflow the toolbar, then ResizeObserver updates fit.
+        # Locator actionability waits for stable geometry and actual hit testing.
+        await image.hover(trial=True)
+        box = await image.bounding_box()
+        if box is None or box['width'] <= 4 or box['height'] <= 4:
+            raise AssertionError(f'Image has no usable pointer geometry: {box}')
+        position = {
+            # Stay inside edge handles instead of depending on fractional-edge
+            # rounding; the drag destination still uses exact document pixels.
+            'x': max(2, min(box['width'] - 2, start[0] * box['width'] / 500)),
+            'y': max(2, min(box['height'] - 2, start[1] * box['height'] / 300)),
+        }
+        await image.hover(position=position)
+        observed = await image.bounding_box()
+        if observed == box:
+            break
+    else:
+        raise AssertionError('Image pointer geometry did not settle before dragging')
+    # Playwright 1.55 locator hover truncates its point to 0.01 CSS pixels.
+    # Keep its hit/stability checks, then preserve document-coordinate precision
+    # for the actual pointer-down (matching the direct mouse-move endpoint).
+    await page.mouse.move(box['x'] + position['x'], box['y'] + position['y'])
+    await page.mouse.down()
+    try:
+        await page.mouse.move(box['x'] + end[0] * box['width'] / 500,
+                              box['y'] + end[1] * box['height'] / 300, steps=8)
+    finally:
+        await page.mouse.up()
 
 
 async def main():
@@ -116,32 +149,34 @@ async def main():
                                     }''')
                                     return f
 
-                                async def drag_doc(f, start, end):
-                                    # The raster canvas can cover only a scrolled visible
-                                    # portion. Pointer geometry belongs to the full image.
-                                    image = f.locator('canvas').first if before else f.locator('.annotation-canvas-root')
-                                    box = await image.bounding_box()
-                                    hit = await image.evaluate('''(image, p) => {
-                                        const r=image.getBoundingClientRect();
-                                        const target=document.elementFromPoint(r.x+p[0]*r.width/500, r.y+p[1]*r.height/300);
-                                        return {inside:target?.closest('.kiri-image-editor-picture')===image.closest('.kiri-image-editor-picture'),
-                                            target:target?.outerHTML.slice(0,200)};
-                                    }''', start)
-                                    if not before:
-                                        assert hit['inside'], hit
-                                    def point(p):
-                                        return box['x'] + p[0] * box['width'] / 500, box['y'] + p[1] * box['height'] / 300
-                                    await page.mouse.move(*point(start))
-                                    await page.mouse.down()
-                                    await page.mouse.move(*point(end), steps=8)
-                                    await page.mouse.up()
+                                async def drag_doc(f, start, end, cropping=False):
+                                    if before:
+                                        image = f.locator('canvas').first
+                                        box = await image.bounding_box()
+                                        def point(p):
+                                            return box['x'] + p[0] * box['width'] / 500, box['y'] + p[1] * box['height'] / 300
+                                        await page.mouse.move(*point(start))
+                                        await page.mouse.down()
+                                        await page.mouse.move(*point(end), steps=8)
+                                        await page.mouse.up()
+                                        return
+                                    # Crop input belongs to the active overlay, not the canvas
+                                    # underneath it. Both cover the full document, including
+                                    # areas outside the raster canvas's visible viewport.
+                                    image = (f.get_by_label(strings['Crop area'], exact=True) if cropping
+                                             else f.locator('.annotation-canvas-root'))
+                                    await drag_image_document(page, image, start, end)
 
                                 async def crop(f):
                                     await f.get_by_role('button',name=strings['Crop (C)'], exact=True).click()
                                     if not before:
                                         assert await f.locator('.kiri-image-editor-properties').count() == 0, 'Crop controls must not cover its image handles'
-                                    await drag_doc(f, (0, 0), (50, 40))
-                                    await drag_doc(f, (499, 299), (350, 220))
+                                    await drag_doc(f, (0, 0), (50, 40), cropping=True)
+                                    if not before:
+                                        await expect(f.get_by_label(strings['Crop area'], exact=True)).to_contain_text('900 × 520')
+                                    await drag_doc(f, (499, 299), (350, 220), cropping=True)
+                                    if not before:
+                                        await expect(f.get_by_label(strings['Crop area'], exact=True)).to_contain_text('600 × 360')
 
                                 async def output_size(index, expected):
                                     # PNG export is asynchronous and can exceed a fixed 120ms
