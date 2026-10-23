@@ -90,7 +90,11 @@ function groupByDay<T extends { createdAt: number | string }>(assets: T[]): { ke
 export function LibraryWindow() {
   const updater = useAppUpdater();
   const [ocrAsset, setOcrAsset] = useState<AssetDto | null>(null);
-  const [assets, setAssets] = useState<AssetDto[]>([]);
+  const [assetSnapshot, setAssetSnapshot] = useState<{
+    query: string;
+    showingTrash: boolean;
+    assets: AssetDto[];
+  } | null>(null);
   const [section, setSection] = useState<Section>("library");
   const [destination, setDestination] = useState<Destination>("captures");
   const [query, setQuery] = useState("");
@@ -143,6 +147,14 @@ export function LibraryWindow() {
   queryRef.current = query;
   // Card id → DOM element, registered while rendering, used for hit tests.
   const cardElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // A snapshot belongs to the query and section that requested it. Switching
+  // scope must never give old captures the new page's actions; background
+  // refreshes within the same scope can keep their last complete snapshot.
+  const assetsMatchScope = assetSnapshot?.query === query.trim() &&
+    assetSnapshot.showingTrash === (section === "trash");
+  const assets = useMemo(() => assetsMatchScope && assetSnapshot
+    ? assetSnapshot.assets : [], [assetSnapshot, assetsMatchScope]);
 
   // View-layer filters shared by Library and Trash, applied on top of the
   // backend text search.
@@ -408,6 +420,8 @@ export function LibraryWindow() {
 
   const refresh = useCallback(async () => {
     const generation = ++refreshGenerationRef.current;
+    const searchQuery = queryRef.current.trim();
+    const searchShowingTrash = showingTrashRef.current;
     try {
       const status = await api.getLibraryStatus();
       if (generation !== refreshGenerationRef.current) return;
@@ -415,18 +429,17 @@ export function LibraryWindow() {
       setLibraryStatusError(false);
 
       if (status.availability !== "ready") {
-        setAssets([]);
+        setAssetSnapshot(null);
         setPendingRecordingCount(0);
         return;
       }
 
-      const searchQuery = queryRef.current.trim();
       const [list, pending] = await Promise.all([
-        api.listAssets(searchQuery, showingTrashRef.current),
+        api.listAssets(searchQuery, searchShowingTrash),
         api.listPendingRecordings().catch(() => []),
       ]);
       if (generation !== refreshGenerationRef.current) return;
-      setAssets(list);
+      setAssetSnapshot({ query: searchQuery, showingTrash: searchShowingTrash, assets: list });
       // Only an unsearched snapshot proves a tag no longer exists. A search
       // can temporarily hide tagged assets without removing their category.
       if (!searchQuery) {
@@ -441,7 +454,7 @@ export function LibraryWindow() {
     } catch {
       if (generation !== refreshGenerationRef.current) return;
       setLibraryStatusError(true);
-      setAssets([]);
+      setAssetSnapshot(null);
       setPendingRecordingCount(0);
     } finally {
       if (generation === refreshGenerationRef.current) setLoaded(true);
@@ -572,6 +585,8 @@ export function LibraryWindow() {
 
   const hasActiveFilter =
     query.trim().length > 0 || kindFilter !== "all" || favoritesOnly || tagFilter !== null;
+  const loadingAssets = !loaded || (libraryStatus?.availability === "ready" &&
+    !libraryStatusError && !assetsMatchScope);
   const isEmpty = visibleEntries.length === 0 && loaded && !hasActiveFilter;
   const isFilterEmpty = visibleEntries.length === 0 && loaded && hasActiveFilter;
   const libraryUnavailable =
@@ -861,13 +876,13 @@ export function LibraryWindow() {
           <MenuRow
             icon="arrow.uturn.backward"
             label={t("Restore")}
-            onClick={run(() => void api.restoreAsset(asset.id).catch(() => {}))}
+            onClick={run(() => void api.restoreAsset(asset.id).catch(() => setError({ message: "Couldn't complete this action", recovery: null })))}
           />
         ) : (
           <MenuRow
             icon="trash.fill"
             label={t("Move to Trash")}
-            onClick={run(() => void api.moveToTrash(asset.id).catch(() => {}))}
+            onClick={run(() => void api.moveToTrash(asset.id).catch(() => setError({ message: "Couldn't complete this action", recovery: null })))}
           />
         )}
         <MenuRow
@@ -1015,7 +1030,9 @@ export function LibraryWindow() {
                     ? t("Unavailable")
                     : libraryMigrating
                       ? t("Moving…")
-                      : fmt(assets.length === 1 ? "%d capture" : "%d captures", assets.length)}
+                      : loadingAssets
+                        ? t("Loading Library…")
+                        : fmt(assets.length === 1 ? "%d capture" : "%d captures", assets.length)}
               </span>}
             </div>
 
@@ -1185,7 +1202,7 @@ export function LibraryWindow() {
           onClear={clearSelection}
         />
       )}
-      {!loaded ? (
+      {loadingAssets ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--kiri-secondary-label)" }}>
           {t("Loading Library…")}
         </div>
@@ -1319,7 +1336,7 @@ export function LibraryWindow() {
                     }}
                     onRestoreMissing={() => restoreMissing(asset.id)}
                     onCopy={() => void copyCapture(asset.id)}
-                    onRenameError={(message) => setError({ message, recovery: null })}
+                    onActionError={(message) => setError({ message, recovery: null })}
                     onOpen={() =>
                       assetAvailability[asset.id] === undefined ||
                       assetAvailability[asset.id] === "ready"
@@ -1635,7 +1652,7 @@ function AssetCard(props: {
   onAvailability(availability: AssetAvailability): void;
   onRestoreMissing(): Promise<void>;
   onCopy(): void;
-  onRenameError(message: string): void;
+  onActionError(message: string): void;
 }) {
   const {
     asset,
@@ -1653,7 +1670,7 @@ function AssetCard(props: {
     onAvailability,
     onRestoreMissing,
     onCopy,
-    onRenameError,
+    onActionError,
   } = props;
   const fileSize = formatFileSize(asset.fileSize);
   const [hovered, setHovered] = useState(false);
@@ -1665,6 +1682,8 @@ function AssetCard(props: {
   const [previewFailed, setPreviewFailed] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const favoriteMutationLock = useRef(false);
   const previewKey = `${asset.id}:${thumbnailRevision}`;
   const previewKeyRef = useRef<string | null>(previewKey);
   const previewRequestRef = useRef(0);
@@ -1835,7 +1854,7 @@ function AssetCard(props: {
       const expected = ["Use a valid file name.", "A file with that name already exists.",
         "Renamed; the old file could not be removed.", "Renamed; disk synchronization failed.",
         "Wait for GIF conversion to finish before renaming."];
-      onRenameError(typeof error === "string" && expected.includes(error) ? error : "Couldn't rename this capture.");
+      onActionError(typeof error === "string" && expected.includes(error) ? error : "Couldn't rename this capture.");
     }).finally(() => { renameBusy.current = false; });
   };
 
@@ -1858,6 +1877,20 @@ function AssetCard(props: {
     transform: highlighted ? "scale(1.018)" : "scale(1)",
     transition: "transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)",
   };
+  const toggleFavorite = async () => {
+    if (favoriteMutationLock.current) return;
+    favoriteMutationLock.current = true;
+    setFavoriteBusy(true);
+    try {
+      await api.setFavorite(asset.id, !asset.isFavorite);
+    } catch {
+      onActionError("Couldn't update this item");
+    } finally {
+      favoriteMutationLock.current = false;
+      setFavoriteBusy(false);
+    }
+  };
+
   const contentAvailable = availability === undefined || availability === "ready";
   return (
     <div
@@ -2184,15 +2217,17 @@ function AssetCard(props: {
             aria-label={asset.isFavorite ? t("Remove Favorite") : t("Favorite")}
             aria-pressed={asset.isFavorite}
             data-favorite={asset.isFavorite || undefined}
+            disabled={favoriteBusy}
+            aria-busy={favoriteBusy || undefined}
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => {
               e.stopPropagation();
-              void api.setFavorite(asset.id, !asset.isFavorite).catch(() => {});
+              void toggleFavorite();
             }}
             onDoubleClick={(e) => {
-              // Rapid double-click must not open the asset.
+              // Click already handled the action; a double-click must not
+              // submit a third mutation or open the asset.
               e.stopPropagation();
-              void api.setFavorite(asset.id, !asset.isFavorite).catch(() => {});
             }}
             style={{
               width: 26,

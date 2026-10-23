@@ -3,6 +3,7 @@ import {Play, Pause, Volume2, VolumeX, Maximize, Minimize, Check} from "lucide-r
 import {getCurrentWindow} from "@tauri-apps/api/window";
 import {t} from "../i18n";
 import {videoTimeLabel} from "./video-trim.js";
+import {isTextComposition} from "../annotation/text-composition.js";
 import "./video-playback.css";
 
 function PlaybackSlider({value,max=1,label,onChange,preview=false,onScrubStart,onScrubEnd}:{value:number;max?:number;label:string;onChange:(value:number)=>void;preview?:boolean;onScrubStart?:()=>void;onScrubEnd?:()=>void}) {
@@ -76,7 +77,8 @@ export function VideoPlaybackControls({video}: {video: RefObject<HTMLVideoElemen
   }
   useEffect(()=>{
     const keyboard=(event:KeyboardEvent)=>{
-      if((event.target as HTMLElement).closest("input,button,select,textarea,[contenteditable=true]"))return;
+      if(event.defaultPrevented||isTextComposition(event)||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey)return;
+      if((event.target as HTMLElement).closest("input,button,select,textarea,[contenteditable],[role=button],[role=listbox],[role=menu],dialog,[role=dialog],a[href],summary"))return;
       const player=video.current;if(!player)return;
       if(event.code==="Space"){event.preventDefault();togglePlay();}
       if(event.key==="ArrowLeft"||event.key==="ArrowRight"){

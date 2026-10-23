@@ -22,8 +22,8 @@ const source = 'import React from "react";\n' + viewerSource +
   '\nimport {installVideoProjectShortcuts} from "./video-project-shortcuts.js";\n' +
   guardSource.replace(/^import\s[\s\S]*?;\s*/gm, "") +
   '\nexport function PlayerCloseRegistration(props) {\n' +
-  'const busy=props.busy,project={flush:props.flush};\n' +
-  'const commitAnnotation=useRef(null),textDraft=useRef(null);\n' +
+  'const exporting=props.busy,project={flush:props.flush};\n' +
+  'const commitAnnotation=useRef(null),textDraft=useRef(null),stickerImport=useRef(null);\n' +
   closeRegistrationSource + '\nreturn flushProject;\n}\n';
 const playerType = "test-video-player";
 const guardType = "test-video-close-guard";

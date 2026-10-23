@@ -16,13 +16,21 @@ pub const ACTIONS: [(&str, &str, &str); 3] = [
 #[serde(rename_all = "camelCase")]
 pub enum Status {
     Unsupported,
+    #[cfg(any(target_os = "linux", test))]
     Checking,
+    #[cfg(any(target_os = "linux", test))]
     Unavailable,
+    #[cfg(any(target_os = "linux", test))]
     Ready,
+    #[cfg(any(target_os = "linux", test))]
     Connecting,
+    #[cfg(any(target_os = "linux", test))]
     Active,
+    #[cfg(any(target_os = "linux", test))]
     Declined,
+    #[cfg(any(target_os = "linux", test))]
     Failed,
+    #[cfg(any(target_os = "linux", test))]
     Closed,
 }
 
@@ -65,7 +73,11 @@ impl Snapshot {
                 .collect(),
         }
     }
+}
 
+// Non-Linux platforms report Unsupported; only the portal actor mutates bindings.
+#[cfg(any(target_os = "linux", test))]
+impl Snapshot {
     pub fn clear(&mut self, status: Status) {
         self.status = status;
         self.can_configure = false;

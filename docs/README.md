@@ -231,3 +231,4 @@ development.
 
 - [`adr/0114-opt-in-login-startup.md`](adr/0114-opt-in-login-startup.md) — opt-in system login startup and resident launch behavior.
 - [ADR 0115: Control focus and retryable library tags](adr/0115-control-focus-and-retryable-library-tags.md) — keyboard ownership, modal navigation and acknowledged tag updates.
+- [ADR 0116: Pending library and editor actions](adr/0116-pending-library-and-editor-actions.md) — scoped library loading, explicit failures, correction drafts and pending sticker imports.

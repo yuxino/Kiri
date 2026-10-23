@@ -280,7 +280,7 @@ impl RecordingFlow {
     /// Check at the command's mutation lock, not only when its event is queued.
     /// A delayed shortcut must never act on a replacement recording/countdown.
     pub fn accepts_recording_action(&self, expected_session: Option<uuid::Uuid>) -> bool {
-        expected_session.map_or(true, |id| self.session_id == id && self.shortcuts_active())
+        expected_session.is_none_or(|id| self.session_id == id && self.shortcuts_active())
     }
 
     pub fn claim_controls_presentation(&mut self, session_id: uuid::Uuid) -> bool {

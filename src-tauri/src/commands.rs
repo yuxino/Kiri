@@ -1523,7 +1523,6 @@ pub async fn paste_clipboard_image(window: WebviewWindow, app: AppHandle) -> Res
 
 #[tauri::command]
 pub async fn export_video_copy(
-    app: AppHandle,
     window: WebviewWindow,
     id: String,
     segments: Vec<crate::video_export::VideoSegment>,
@@ -1532,6 +1531,7 @@ pub async fn export_video_copy(
     preset: crate::video_export::VideoExportPreset,
     request_id: Option<String>,
 ) -> Result<String, String> {
+    let app = window.app_handle().clone();
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     if window.label() != format!("viewer-{parsed}") {
         return Err("Video export requires its own viewer.".into());

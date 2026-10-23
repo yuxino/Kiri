@@ -5,8 +5,9 @@
 .text-history__search input { background: transparent; color: var(--kiri-label); border: 0; outline: 0; width: 100%; min-width: 0; font: inherit; font-size: 13px; }
 .text-history__list { overflow: auto; flex: 1; min-height: 0; padding: 0 8px; }
 .ocr-history__item { display: flex; flex-direction: column; width: 100%; gap: 8px; border: 0; border-bottom: 1px solid var(--kiri-surface-border); background: transparent; color: var(--kiri-label); text-align: left; padding: 14px 12px; cursor: pointer; font: inherit; }
-.ocr-history__item:hover { background: var(--kiri-group-fill); }
+.ocr-history__item:hover:not(:disabled) { background: var(--kiri-group-fill); }
 .ocr-history__item[aria-current] { background: var(--kiri-card); box-shadow: inset 3px 0 var(--kiri-label); }
+.ocr-history__item:disabled, .ocr-history__item:disabled time { color: var(--kiri-disabled-label); cursor: default; }
 .text-history__excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.5; font-size: 14px; }
 .ocr-history__item time, .text-history__record-header, .text-reader__caption { font-size: 13px; color: var(--kiri-secondary-label); }
 .text-history__detail { flex: 1; min-width: 0; overflow: auto; padding: 20px var(--kiri-space-page); container-type: inline-size; background: var(--kiri-card); }
@@ -15,6 +16,8 @@
 .text-history__record-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .text-reader__editor { display: block; box-sizing: border-box; width: 100%; min-height: 220px; resize: vertical; padding: 12px; margin-bottom: 24px; border: 1px solid var(--kiri-surface-border); border-radius: 8px; background: var(--kiri-card); color: var(--kiri-label); font: inherit; line-height: 1.65; }
 .text-reader__editor:focus-visible { outline: 2px solid var(--kiri-label); outline-offset: 2px; }
+.text-history__search input:disabled, .text-reader__editor:disabled { color: var(--kiri-disabled-label); -webkit-text-fill-color: var(--kiri-disabled-label); opacity: 1; cursor: default; }
+.text-history__search input:disabled::placeholder { color: var(--kiri-disabled-label); }
 .text-reader { min-width: 0; }
 .text-reader__actions { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 36px; padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid var(--kiri-surface-border); }
 .text-reader__caption { font-weight: 600; letter-spacing: 0; }

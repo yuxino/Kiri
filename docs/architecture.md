@@ -459,6 +459,9 @@ serialize pending actions; recoverable movement is labelled Move to Trash
 Inline tags preserve failed drafts and display acknowledged changes while the
 library refresh catches up. Shared choice menus, settings modals and video
 controls retain their own keyboard focus and activation boundaries (ADR 0115).
+Library snapshots stay bound to their search and Library/Trash scope. OCR
+corrections survive in-view refreshes, and pending sticker imports gate export
+and normal viewer close (ADR 0116).
 
 `AppState` owns one mutex-guarded library context containing the active root,
 library UUID, copy generation, availability, and loaded `AssetLibrary`.

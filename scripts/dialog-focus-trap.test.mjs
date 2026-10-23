@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import * as textComposition from "../src/annotation/text-composition.js";
 import { createLibraryHarness, nodes } from "./helpers/library-render-harness.mjs";
 
 const hookSource = readFileSync(new URL("../src/settings/useDialogFocusTrap.ts", import.meta.url), "utf8");
@@ -113,7 +114,8 @@ test("nested controls keep their handled Tab events and non-Tab shortcuts", () =
 test("OCR profile modal has a focusable fallback while saving disables every form control", () => {
   const source = 'import React from "react";\n' + readFileSync(new URL("../src/settings/OcrProfileDialog.tsx", import.meta.url), "utf8");
   const harness = createLibraryHarness({}, source, {
-    modules: { "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) } },
+    modules: { "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) },
+      "../annotation/text-composition.js": textComposition },
   });
   const component = harness.mount("OcrProfileDialog", { profile: null, busy: true, error: null, onCancel() {}, onSave() {} });
   const tree = component.render();
@@ -131,12 +133,48 @@ test("OCR delete confirmation shares the focusable busy fallback", () => {
     import {useDialogFocusTrap} from "./useDialogFocusTrap";
     export ${settings.slice(settings.indexOf("function DeleteProfileDialog("))}`;
   const harness = createLibraryHarness({}, source, {
-    modules: { "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) } },
+    modules: { "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) },
+      "../annotation/text-composition.js": textComposition },
   });
   const component = harness.mount("DeleteProfileDialog", { profile: { name: "Fixture" }, active: false,
     busy: true, error: null, onCancel() {}, onDelete() {} });
   const tree = component.render();
   assert.equal(nodes(tree).find(node => node?.props?.role === "alertdialog").props.tabIndex, -1);
   assert.ok(nodes(tree).filter(node => node?.type === "button").every(node => node.props.disabled));
+  component.unmount();
+});
+
+
+test("OCR profile Escape preserves IME composition and child-owned keys, then cancels normally", () => {
+  const source = 'import React from "react";\n' + readFileSync(new URL("../src/settings/OcrProfileDialog.tsx", import.meta.url), "utf8");
+  let cancelled = 0;
+  const harness = createLibraryHarness({}, source, {
+    modules: { "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) },
+      "../annotation/text-composition.js": textComposition },
+  });
+  const component = harness.mount("OcrProfileDialog", { profile: null, busy: false, error: null,
+    onCancel() { cancelled++; }, onSave() {} });
+  component.render();
+  const pressEscape = (extra = {}) => {
+    const event = { type: "keydown", key: "Escape", defaultPrevented: false,
+      preventDefault() { this.defaultPrevented = true; }, ...extra };
+    harness.window.dispatchEvent(event);
+    return event;
+  };
+  for (const signal of [{ isComposing: true }, { keyCode: 229 }, { defaultPrevented: true }]) {
+    pressEscape(signal);
+    assert.equal(cancelled, 0, "canceling composition or a child control must preserve the profile draft");
+  }
+  const modal = nodes(component.render()).find(node => node?.props?.role === "dialog");
+  const target = {};
+  modal.props.onCompositionStartCapture({ target });
+  pressEscape({ target, isComposing: false });
+  assert.equal(cancelled, 0, "WebView keydowns with missing IME flags still honor the composition lifecycle");
+  modal.props.onCompositionEndCapture({ target });
+  assert.equal(pressEscape({ target }).defaultPrevented, true);
+  assert.equal(cancelled, 1, "ordinary Escape still dismisses the modal");
+  component.render({ profile: null, busy: true, error: null, onCancel() { cancelled++; }, onSave() {} });
+  pressEscape();
+  assert.equal(cancelled, 1, "saving remains protected from dismissal");
   component.unmount();
 });

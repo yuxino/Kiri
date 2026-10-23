@@ -75,6 +75,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   const stickerImages=useRef(new Map<string,HTMLImageElement>());
   const alive=useRef(true);useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   const [importing,setImporting]=useState(false);
+  const stickerImport=useRef<Promise<void>|null>(null);
   const [stickerError,setStickerError]=useState(false);
   const commitAnnotation = useRef<(() => void) | null>(null);
   const textDraft=useRef<{mark:AnnotationMark|null;previousId:number|null;start:number;end:number;layer:number}|null>(null);
@@ -106,7 +107,8 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   const [sourceImage,setSourceImage]=useState<HTMLImageElement|null>(null);
   const [effectId, setEffectId] = useState<string | null>(null);
   const [preset, setPreset] = useState<"original" | "share" | "small">("original");
-  const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const busy=exporting||importing;
   const [error, setError] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [exportProgress,setExportProgress]=useState<VideoExportProgress|null>(null);
@@ -177,13 +179,18 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   scheduleProject.current=project.schedule;
   useEffect(()=>{if(project.ready)project.schedule();},[doc,preset,project.ready,project.schedule]);
   const flushProject=useCallback(async()=>{
-    commitAnnotation.current?.();textDraft.current=null;
-    return project.flush();
+    for(;;){
+      await stickerImport.current;
+      commitAnnotation.current?.();textDraft.current=null;
+      const saved=await project.flush();
+      // A new selection can start while the previous document is saving.
+      if(!saved||!stickerImport.current)return saved;
+    }
   },[project.flush]);
   useEffect(()=>{
-    props.onClosePreparationChange({busy,prepareClose:flushProject});
+    props.onClosePreparationChange({busy:exporting,prepareClose:flushProject});
     return()=>props.onClosePreparationChange(null);
-  },[busy,flushProject,props.onClosePreparationChange]);
+  },[exporting,flushProject,props.onClosePreparationChange]);
 
   useEffect(()=>{
     const id=annotating?annotationId:effectId;if(!id)return;
@@ -443,27 +450,37 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   }
 
   async function addSticker(file:File){
-    if(importing||busy||!capabilities.videoAnnotationsEditing)return;setImporting(true);setStickerError(false);commitAnnotation.current?.();
-    try{
-      const {dataUrl,image}=await importVideoSticker(file);if(!alive.current)return;
-      const current=docRef.current;
-      if([...stickerImages.current.values()].reduce((sum,image)=>sum+image.naturalWidth*image.naturalHeight*4,0)+image.naturalWidth*image.naturalHeight*4>128*1024*1024)throw Error("Sticker memory limit");
-      if(current.annotations.length+current.stickers.length>=128||current.stickers.reduce((sum,item)=>sum+item.dataUrl.length,0)+dataUrl.length>32*1024*1024)throw Error("Sticker limit");
-      const ratio=image.naturalWidth/image.naturalHeight,sourceRatio=sourceSize.width/sourceSize.height;
-      const width=Math.min(.3,.3*ratio/sourceRatio),height=width*sourceRatio/ratio;
-      const {start,end}=defaultOverlayRange(video.current?.currentTime??time,duration);
-      const item:VideoSticker={layer:nextVideoLayer([...current.effects,...current.annotations,...current.stickers]),id:`sticker-${crypto.randomUUID()}`,start,end,x:(1-width)/2,y:(1-height)/2,width,height,dataUrl};
-      stickerImages.current.set(item.id,image);apply({...current,stickers:[...current.stickers,item]});setAnnotating(false);setAnnotationId(null);setEffectId(item.id);seek(videoLayerPreviewTime(start,end));
-    }catch{if(alive.current)setStickerError(true);}finally{if(alive.current)setImporting(false);}
+    if(stickerImport.current||saving.current||busy||!capabilities.videoAnnotationsEditing)return;
+    setImporting(true);setStickerError(false);commitAnnotation.current?.();
+    const baseline=docRef.current;
+    const pending=(async()=>{
+      try{
+        const {dataUrl,image}=await importVideoSticker(file);
+        if(!alive.current||docRef.current!==baseline)return;
+        const current=docRef.current;
+        if([...stickerImages.current.values()].reduce((sum,image)=>sum+image.naturalWidth*image.naturalHeight*4,0)+image.naturalWidth*image.naturalHeight*4>128*1024*1024)throw Error("Sticker memory limit");
+        if(current.annotations.length+current.stickers.length>=128||current.stickers.reduce((sum,item)=>sum+item.dataUrl.length,0)+dataUrl.length>32*1024*1024)throw Error("Sticker limit");
+        const ratio=image.naturalWidth/image.naturalHeight,sourceRatio=sourceSize.width/sourceSize.height;
+        const width=Math.min(.3,.3*ratio/sourceRatio),height=width*sourceRatio/ratio;
+        const {start,end}=defaultOverlayRange(video.current?.currentTime??time,duration);
+        const item:VideoSticker={layer:nextVideoLayer([...current.effects,...current.annotations,...current.stickers]),id:`sticker-${crypto.randomUUID()}`,start,end,x:(1-width)/2,y:(1-height)/2,width,height,dataUrl};
+        stickerImages.current.set(item.id,image);apply({...current,stickers:[...current.stickers,item]});setAnnotating(false);setAnnotationId(null);setEffectId(item.id);seek(videoLayerPreviewTime(start,end));
+      }catch{if(alive.current&&docRef.current===baseline)setStickerError(true);}
+    })();
+    stickerImport.current=pending;
+    try{await pending;}finally{
+      if(stickerImport.current===pending)stickerImport.current=null;
+      if(alive.current)setImporting(false);
+    }
   }
 
   async function saveCopy() {
-    if(saving.current||!valid||!props.editable||!capabilities.videoEditing||project.state.status==="blocked"||project.state.status==="loading"||project.state.error?.includes("SOURCE_CHANGED")) return;
+    if(saving.current||stickerImport.current||!valid||!props.editable||!capabilities.videoEditing||project.state.status==="blocked"||project.state.status==="loading"||project.state.error?.includes("SOURCE_CHANGED")) return;
     commitAnnotation.current?.();
     if(unsupportedVideoProjectFeatures(projectSnapshot(),capabilities).length)return;
     textDraft.current=null;project.schedule();
     const snapshot=docRef.current;
-    saving.current=true;setBusy(true);setError(false);setSavedId(null);setAnnotating(false);
+    saving.current=true;setExporting(true);setError(false);setSavedId(null);setAnnotating(false);
     const requestId=crypto.randomUUID();exportRequest.current=requestId;exportStarted.current=false;cancelRequested.current=false;
     setExportProgress({requestId,phase:"preparing",progress:null});setCancelling(false);setExportCancelled(false);setCancelFailed(false);
     previewing.current=false;video.current?.pause();setEffectId(null);
@@ -483,7 +500,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
       setSavedId(await api.exportVideoCopy(props.id,snapshot.segments,snapshot.effects,rasterized,preset,requestId));
     }
     catch(reason) {if(String(reason)==="VIDEO_EXPORT_CANCELLED")setExportCancelled(true);else setError(true);}
-    finally {stop?.();exportRequest.current=null;exportStarted.current=false;cancelRequested.current=false;saving.current=false;setBusy(false);setCancelling(false);setExportProgress(null);}
+    finally {stop?.();exportRequest.current=null;exportStarted.current=false;cancelRequested.current=false;saving.current=false;setExporting(false);setCancelling(false);setExportProgress(null);}
   }
   async function cancelExport(){
     const requestId=exportRequest.current;if(!requestId||cancelling||exportProgress?.phase==="saving")return;
@@ -612,8 +629,8 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
       <div><strong>{t(editing ? "Video editor" : "Video")}</strong><span>{t(editing ? "Your original recording stays unchanged." : "Esc to close")}</span></div>
       <div className="kiri-video-header-actions">
         {!editing && props.previewActions}
-        {editing&&<div className="kiri-video-project-status" role="status" aria-live="polite">{project.state.status==="error"?<button type="button" className="kiri-video-save-retry" onClick={project.retry}>{t("Not saved · Retry")}</button>:t(project.state.status==="saved"?"Edit saved":project.state.status==="saving"||project.state.status==="waiting"?"Saving edit…":"Edits save automatically")}</div>}
-        {editing&&<VideoExportPanel preset={preset} supportsPresets={capabilities.videoExportPresets} onPreset={next=>{if(!capabilities.videoExportPresets&&next!=="original")return;setPreset(next);projectContext.current.preset=next;project.schedule();setSavedId(null);}} sourceSize={sourceSize} duration={total} valid={valid&&!unsupportedFeatures.length&&project.state.status!=="blocked"&&project.state.status!=="loading"&&!project.state.error?.includes("SOURCE_CHANGED")} busy={busy} error={error} saved={!!savedId} progress={exportProgress} cancelling={cancelling} cancelled={exportCancelled} cancelFailed={cancelFailed} onCancel={()=>void cancelExport()} onSave={()=>void saveCopy()} onOpen={()=>{if(savedId)void api.openAsset(savedId).catch(()=>setError(true));}}/>}
+        {editing&&<div className="kiri-video-project-status" role="status" aria-live="polite">{importing?t("Loading…"):project.state.status==="error"?<button type="button" className="kiri-video-save-retry" onClick={project.retry}>{t("Not saved · Retry")}</button>:t(project.state.status==="saved"?"Edit saved":project.state.status==="saving"||project.state.status==="waiting"?"Saving edit…":"Edits save automatically")}</div>}
+        {editing&&<VideoExportPanel preset={preset} supportsPresets={capabilities.videoExportPresets} onPreset={next=>{if(!capabilities.videoExportPresets&&next!=="original")return;setPreset(next);projectContext.current.preset=next;project.schedule();setSavedId(null);}} sourceSize={sourceSize} duration={total} valid={!importing&&valid&&!unsupportedFeatures.length&&project.state.status!=="blocked"&&project.state.status!=="loading"&&!project.state.error?.includes("SOURCE_CHANGED")} busy={exporting} error={error} saved={!!savedId} progress={exportProgress} cancelling={cancelling} cancelled={exportCancelled} cancelFailed={cancelFailed} onCancel={()=>void cancelExport()} onSave={()=>void saveCopy()} onOpen={()=>{if(savedId)void api.openAsset(savedId).catch(()=>setError(true));}}/>}
 
 
         {editing ? <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={()=>{commitAnnotation.current?.();previewing.current=false;video.current?.pause();setEditing(false);setAnnotating(false);}}>{t("Close editor")}</button>

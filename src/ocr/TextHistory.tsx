@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, mediaUrl, onLibraryChanged, type AssetDto, type OcrRecognitionDto } from "../lib/ipc";
 import { KiriIcon } from "../components/KiriIcons";
 import { t } from "../i18n";
+import { isTextComposition, setTextComposition } from "../annotation/text-composition.js";
 import "./text-history.css";
 
 export function TextReader({ text, imageId, saved = true, editor, heading, actions }: {
@@ -103,7 +104,9 @@ export function TextHistory() {
   const [mutationError, setMutationError] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editBase, setEditBase] = useState<{ id: string; text: string } | null>(null);
+  const [editBase, setEditBase] = useState<{ id: string; text: string; asset: AssetDto } | null>(null);
+  const editingRef = useRef(false);
+  const savingRef = useRef(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState(false);
@@ -120,7 +123,7 @@ export function TextHistory() {
       void api.listOcrRecords(query).then((items) => {
         if (!current) return;
         setRecords(items);
-        setSelectedId((id) => items.some((item) => item.id === id) ? id : items[0]?.id ?? null);
+        setSelectedId((id) => editingRef.current ? id : items.some((item) => item.id === id) ? id : items[0]?.id ?? null);
         setLoading(false);
       }, () => { if (current) { setLoadError(true); setLoading(false); setRecords([]); } });
     }, query ? 150 : 0);
@@ -128,28 +131,39 @@ export function TextHistory() {
   }, [query, revision]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+      if (!isTextComposition(event) && !editingRef.current && !savingRef.current &&
+          (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
         event.preventDefault(); search.current?.focus();
       }
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, []);
-  const selected = records.find((item) => item.id === selectedId);
-  useEffect(() => { setEditing(false); setEditBase(null); setEditError(false); }, [selectedId]);
+  // Keep the edited record visible even if an earlier search or a library
+  // refresh no longer returns it. Its original text remains the save revision.
+  const selected = editing && editBase ? editBase.asset : records.find((item) => item.id === selectedId);
+  useEffect(() => {
+    if (!editing) setSelectedId(id => records.some(item => item.id === id) ? id : records[0]?.id ?? null);
+  }, [editing, records]);
+  useEffect(() => { setEditError(false); }, [selectedId]);
+  const finishEditing = () => {
+    editingRef.current = false;
+    setEditing(false); setEditBase(null);
+  };
   const saveCorrection = async (replacement: string | null) => {
-    if (!selected || saving || !selected.ocrText) return;
+    if (!selected || savingRef.current || !selected.ocrText) return;
     // A live library refresh must not silently rebase an in-progress draft over
     // another window's correction. Keep the text the user began editing.
     if (replacement !== null && editBase?.id !== selected.id) return;
     const expectedText = replacement === null ? selected.ocrText : editBase!.text;
+    savingRef.current = true;
     setSaving(true); setEditError(false);
     try {
       const updated = await api.updateOcrHistoryText(selected.id, expectedText, replacement);
       setRecords((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setEditing(false);
+      finishEditing();
     } catch { setEditError(true); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   };
   const remove = async () => {
     if (!selected || deleting) return;
@@ -161,21 +175,23 @@ export function TextHistory() {
   return <section className="text-history" aria-label={t("Text History")}>
     <aside className="text-history__sidebar">
       <label className="text-history__search"><KiriIcon name="magnifyingglass" size={15} />
-        <input ref={search} type="search" value={query} onChange={(event) => setQuery(event.target.value)}
+        <input ref={search} type="search" value={query} disabled={editing || saving}
+          onChange={(event) => { if (!editingRef.current && !savingRef.current) setQuery(event.target.value); }}
           placeholder={t("Search recognized text")} aria-label={t("Search recognized text")} />
       </label>
       <div className="text-history__list" aria-label={t("Text History")} aria-busy={loading}>
         {records.map((record) => <button type="button" key={record.id} className="ocr-history__item"
-          aria-current={selectedId === record.id ? "true" : undefined}
-          onClick={() => { if (saving) return; setSelectedId(record.id); setMutationError(false); }}>
+          aria-current={selectedId === record.id ? "true" : undefined} disabled={editing || saving}
+          onClick={() => { if (editingRef.current || savingRef.current) return; setSelectedId(record.id); setMutationError(false); }}>
           <span className="text-history__excerpt">{record.ocrText}</span>
           <time dateTime={new Date(record.createdAt).toISOString()}>{new Date(record.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
         </button>)}
       </div>
     </aside>
     <main className="text-history__detail">
-      {loadError ? <div className="text-history__empty" role="alert"><p>{t("Couldn't load Text History.")}</p><button type="button" className="kiri-button kiri-button--secondary" onClick={() => setRevision((v) => v + 1)}>{t("Retry")}</button></div> :
+      {loadError && !editing ? <div className="text-history__empty" role="alert"><p>{t("Couldn't load Text History.")}</p><button type="button" className="kiri-button kiri-button--secondary" onClick={() => setRevision((v) => v + 1)}>{t("Retry")}</button></div> :
         selected ? <>
+          {loadError && <p role="alert" className="text-history__error">{t("Couldn't load Text History.")}</p>}
           {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
           {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
           <TextReader key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
@@ -184,15 +200,23 @@ export function TextHistory() {
               <time>{new Date(selected.createdAt).toLocaleString()}</time>
             </div>}
             actions={editing ? <>
-                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { setEditing(false); setEditError(false); }}>{t("Cancel")}</button>
+                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { if (savingRef.current) return; finishEditing(); setEditError(false); }}>{t("Cancel")}</button>
                 <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}>{t("Save")}</button>
               </> : <>
                 {selected.ocrOriginalText != null && <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => void saveCorrection(null)}>{t("Restore Original Text")}</button>}
-                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => { setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "" }); setEditing(true); setEditError(false); }}>{t("Edit Text")}</button>
+                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => { if (savingRef.current) return; editingRef.current = true; setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected }); setEditing(true); setEditError(false); }}>{t("Edit Text")}</button>
                 <button type="button" className="kiri-icon-button" disabled={deleting || loading || saving} onClick={() => void remove()} title={t("Move to Trash")} aria-label={t("Move to Trash")}><KiriIcon name="trash" size={16} /></button>
               </>}
-            editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setEditing(false); setEditError(false); } }}
+            editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} disabled={saving}
+              onChange={(event) => { if (!savingRef.current) setDraft(event.target.value); }}
+              onCompositionStart={event => setTextComposition(event.currentTarget, true)}
+              onCompositionEnd={event => setTextComposition(event.currentTarget, false)}
+              onBlur={event => setTextComposition(event.currentTarget, false)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || isTextComposition(event)) return;
+                event.preventDefault(); event.stopPropagation();
+                if (!savingRef.current) { finishEditing(); setEditError(false); }
+              }}
               aria-label={t("Edit recognized text")} maxLength={1024 * 1024} /> : undefined} />
         </> : <div className="text-history__empty" role="status"><KiriIcon name="text.viewfinder" size={32} />
           <h2>{t(loading ? "Loading…" : query ? "No matching text" : "Your text, ready to revisit")}</h2>

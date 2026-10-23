@@ -5,6 +5,7 @@ import * as cardInteraction from "../../src/windows/library-card-interaction.js"
 import * as viewerCopyShortcut from "../../src/windows/viewer-copy-shortcut.js";
 import * as videoCapabilities from "../../src/windows/video-capabilities.js";
 import * as imageViewport from "../../src/annotation/image-viewport.js";
+import * as textComposition from "../../src/annotation/text-composition.js";
 
 // Exercise the real component handlers without a WebView, native IPC, or a
 // user's library. This models hook state/effect cleanup, not DOM or layout.
@@ -146,6 +147,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
   };
   const modules = {
     react: React,
+    "../annotation/text-composition.js": textComposition,
     "@tauri-apps/api/app": { getVersion: apiOverrides.getVersion ?? (async () => "1.6.17") },
     "@tauri-apps/api/window": { getCurrentWindow: () => ({
       isVisible: environment.isVisible ?? (async () => false),

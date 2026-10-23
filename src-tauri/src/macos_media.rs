@@ -318,6 +318,7 @@ pub fn export_gif(
     export_gif_with_progress(source, max_long_edge, fps, &mut |_| {})
 }
 
+#[cfg(test)]
 pub fn export_gif_with_progress(
     source: &Path,
     max_long_edge: u32,

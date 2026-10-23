@@ -132,3 +132,60 @@ test("focused buttons keep document undo shortcuts", t => {
   assert.equal(event.defaultPrevented, true);
   assert.equal(f.calls.undo, 1);
 });
+
+function playbackFixture(t) {
+  const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/VideoPlaybackControls.tsx", import.meta.url), "utf8");
+  const calls = { play: 0, pause: 0 };
+  const media = { duration: 60, currentTime: 10, paused: true, volume: 1, muted: false, playbackRate: 1,
+    addEventListener() {}, removeEventListener() {},
+    play() { calls.play++; return Promise.resolve(); }, pause() { calls.pause++; } };
+  const h = createLibraryHarness({}, source, {
+    modules: {
+      "./video-trim.js": { videoTimeLabel: String },
+      "../annotation/text-composition.js": composition,
+      "@tauri-apps/api/window": { getCurrentWindow: () => ({
+        isFullscreen: async () => false, onResized: async () => () => {},
+      }) },
+    },
+    globals: { localStorage: { getItem: () => null } },
+  });
+  const component = h.mount("VideoPlaybackControls", { video: { current: media } });
+  component.render(); t.after(() => component.unmount());
+  return { window: h.window, media, calls };
+}
+
+test("preview playback ignores handled, composing and modified shortcut keys", t => {
+  const f = playbackFixture(t);
+  for (const flags of [{ defaultPrevented: true }, { isComposing: true }, { keyCode: 229 },
+    { metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }]) {
+    for (const key of [" ", "ArrowLeft", "ArrowRight"]) {
+      const event = keyEvent(key, new FocusTarget(), flags);
+      f.window.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, !!flags.defaultPrevented);
+    }
+  }
+  assert.deepEqual(f.calls, { play: 0, pause: 0 });
+  assert.equal(f.media.currentTime, 10);
+});
+
+test("preview fields, focused actions, menus and dialogs keep their own keys", t => {
+  const f = playbackFixture(t);
+  for (const selector of [...activators, ...controls]) for (const key of [" ", "ArrowLeft", "ArrowRight"]) {
+    const event = keyEvent(key, new FocusTarget(selector));
+    f.window.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, false, `${selector}: ${key}`);
+  }
+  assert.deepEqual(f.calls, { play: 0, pause: 0 });
+  assert.equal(f.media.currentTime, 10);
+});
+
+test("plain preview shortcuts still toggle playback and seek within the video", t => {
+  const f = playbackFixture(t);
+  const key = value => { const event = keyEvent(value); f.window.dispatchEvent(event); assert.equal(event.defaultPrevented, true); };
+  key(" "); assert.equal(f.calls.play, 1);
+  f.media.paused = false; key(" "); assert.equal(f.calls.pause, 1);
+  key("ArrowRight"); assert.equal(f.media.currentTime, 15);
+  key("ArrowLeft"); assert.equal(f.media.currentTime, 10);
+  f.media.currentTime = 58; key("ArrowRight"); assert.equal(f.media.currentTime, 60);
+  f.media.currentTime = 2; key("ArrowLeft"); assert.equal(f.media.currentTime, 0);
+});

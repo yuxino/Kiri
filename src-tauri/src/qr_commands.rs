@@ -176,7 +176,7 @@ fn validate_editor_revision_request(
     let Some(revision) = expected_revision else {
         return Ok(());
     };
-    if has_selection || !asset_id.is_some_and(|id| label == format!("editor-{id}")) {
+    if has_selection || asset_id.is_none_or(|id| label != format!("editor-{id}")) {
         return Err("QR recognition is unavailable from this window.".into());
     }
     if revision.len() != 64

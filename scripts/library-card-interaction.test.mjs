@@ -1062,3 +1062,167 @@ test("selected Library captures confirm direct permanent deletion with the exact
   assert.equal(batchBar(library.render()).props.count, 2, "requesting confirmation preserves selection");
   bar.unmount(); library.unmount();
 });
+
+
+for (const [method, label, trashed] of [
+  ["moveToTrash", "Move to Trash", false],
+  ["restoreAsset", "Restore", true],
+]) {
+  test(`single-item ${method} failure reports an error and preserves the capture for retry`, async () => {
+    let calls = 0;
+    const harness = createLibraryHarness({ [method]: async () => {
+      if (++calls === 1) throw new Error("private filesystem diagnostic");
+    } });
+    const library = harness.mount("LibraryWindow", {});
+    library.render(); await settleRequests();
+    if (trashed) {
+      nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(3);
+      library.render(); await settleRequests();
+    }
+    const openAction = () => {
+      assetCards(library.render())[0].props.onMenu(100, 100);
+      return nodes(assetCards(library.render())[0].props.menu).find(node => node?.props?.label === label);
+    };
+    openAction().props.onClick();
+    await settleRequests();
+    let tree = library.render();
+    assert.equal(calls, 1);
+    assert.ok(nodes(tree).includes("Couldn't complete this action"));
+    assert.ok(!nodes(tree).includes("private filesystem diagnostic"));
+    assert.equal(assetCards(tree).length, 1, "a failed mutation keeps its original capture actionable");
+    assert.equal(assetCards(tree)[0].props.menuOpen, false);
+    nodes(tree).find(node => node?.type === "button" && node.props["aria-label"] === "Close").props.onClick();
+    openAction().props.onClick();
+    await settleRequests();
+    tree = library.render();
+    assert.equal(calls, 2);
+    assert.ok(!nodes(tree).includes("Couldn't complete this action"), "successful retry does not report a new error");
+    library.unmount();
+  });
+}
+
+test("favorite failure is visible in the library and a retry stays single-flight", async () => {
+  const first = deferred();
+  const second = deferred();
+  const requests = [first, second];
+  const calls = [];
+  const harness = createLibraryHarness({ setFavorite: (...args) => {
+    calls.push(args);
+    return requests.shift()?.promise ?? Promise.resolve();
+  } });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  const card = harness.mount("AssetCard", assetCards(library.render())[0].props);
+  const favorite = () => nodes(card.render()).find(node => node?.type === "button" && node.props.className?.includes("kiri-card-favorite"));
+  const click = favorite().props.onClick;
+  const event = { stopPropagation() {} };
+  click(event); click(event);
+  favorite().props.onDoubleClick(event);
+  assert.deepEqual(calls, [[testAsset.id, true]], "repeat clicks and double-click must not duplicate a pending write");
+  assert.equal(favorite().props.disabled, true);
+  first.reject(new Error("private filesystem diagnostic"));
+  await settleRequests();
+  assert.equal(favorite().props.disabled, false);
+  assert.equal(favorite().props["aria-pressed"], false, "failed writes retain the saved favorite state");
+  assert.ok(nodes(library.render()).includes("Couldn't update this item"));
+  assert.ok(!nodes(library.render()).includes("private filesystem diagnostic"));
+  nodes(library.render()).find(node => node?.type === "button" && node.props["aria-label"] === "Close").props.onClick();
+  favorite().props.onClick(event);
+  second.resolve(); await settleRequests();
+  assert.deepEqual(calls, [[testAsset.id, true], [testAsset.id, true]]);
+  assert.equal(favorite().props.disabled, false);
+  assert.ok(!nodes(library.render()).includes("Couldn't update this item"));
+  card.unmount(); library.unmount();
+});
+
+
+const navigateLibrary = (library, index) => {
+  nodes(library.render()).find(node => node?.type?.name === "SegmentedPicker").props.onChange(index);
+  return library.render();
+};
+const searchLibrary = (library, query) => {
+  nodes(library.render()).find(node => node?.type === "input" && node.props.type === "search")
+    .props.onChange({ target: { value: query } });
+  return library.render();
+};
+
+test("pending Trash navigation never gives Library captures Trash actions", async () => {
+  const pending = deferred();
+  const trashed = { ...testAsset, id: "trashed-capture" };
+  const harness = createLibraryHarness({ listAssets: async (_query, showingTrash) =>
+    showingTrash ? pending.promise : [testAsset] });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  let tree = navigateLibrary(library, 3);
+  assert.deepEqual(assetCards(tree), [], "the previous Library snapshot must not appear in Trash");
+  assert.ok(nodes(tree).includes("Loading Library…"));
+  assert.equal(selectButton(tree).props.disabled, true);
+  assert.ok(!nodes(tree).some(node => node?.props?.className?.includes("library-empty-trash")));
+  await settleRequests();
+  pending.resolve([trashed]); await settleRequests();
+  tree = library.render();
+  assert.deepEqual(assetCards(tree).map(node => node.props.asset.id), [trashed.id]);
+  assetCards(tree)[0].props.onMenu(100, 100);
+  const menu = nodes(assetCards(library.render())[0].props.menu);
+  assert.ok(menu.some(node => node?.props?.label === "Restore"));
+  assert.ok(!menu.some(node => node?.props?.label === "Move to Trash"));
+  library.unmount();
+});
+
+test("pending search hides old results and out-of-order queries cannot replace the current scope", async () => {
+  const first = deferred(), second = deferred();
+  const harness = createLibraryHarness({ listAssets: async query =>
+    query === "first" ? first.promise : query === "second" ? second.promise : [testAsset] });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  let tree = searchLibrary(library, "first");
+  assert.deepEqual(assetCards(tree), []);
+  assert.ok(nodes(tree).includes("Loading Library…"));
+  await settleRequests();
+  tree = searchLibrary(library, "second");
+  assert.deepEqual(assetCards(tree), []);
+  await settleRequests();
+  second.resolve([{ ...testAsset, id: "second-result" }]); await settleRequests();
+  assert.deepEqual(assetCards(library.render()).map(node => node.props.asset.id), ["second-result"]);
+  first.resolve([{ ...testAsset, id: "stale-first-result" }]); await settleRequests();
+  assert.deepEqual(assetCards(library.render()).map(node => node.props.asset.id), ["second-result"]);
+  library.unmount();
+});
+
+test("returning quickly to Library reuses only its own snapshot and ignores the late Trash reply", async () => {
+  const trash = deferred(), returned = deferred();
+  let delayLibrary = false;
+  const harness = createLibraryHarness({ listAssets: async (_query, showingTrash) =>
+    showingTrash ? trash.promise : delayLibrary ? returned.promise : [testAsset] });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests(); library.render(); await settleRequests();
+  navigateLibrary(library, 3); await settleRequests();
+  delayLibrary = true;
+  let tree = navigateLibrary(library, 0);
+  assert.deepEqual(assetCards(tree).map(node => node.props.asset.id), [testAsset.id]);
+  assert.ok(!nodes(tree).includes("Loading Library…"), "an existing matching snapshot stays visible");
+  await settleRequests();
+  trash.resolve([{ ...testAsset, id: "late-trash-capture" }]); await settleRequests();
+  assert.deepEqual(assetCards(library.render()).map(node => node.props.asset.id), [testAsset.id]);
+  returned.resolve([{ ...testAsset, id: "updated-library-capture" }]); await settleRequests();
+  tree = library.render();
+  assert.deepEqual(assetCards(tree).map(node => node.props.asset.id), ["updated-library-capture"]);
+  library.unmount();
+});
+
+test("ordinary same-scope refresh retains actionable captures until the replacement is ready", async () => {
+  const pending = deferred();
+  let delayRefresh = false;
+  const harness = createLibraryHarness({ listAssets: async () => delayRefresh ? pending.promise : [testAsset] });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests(); library.render(); await settleRequests();
+  delayRefresh = true;
+  harness.emit("libraryChanged"); await settleRequests();
+  let tree = library.render();
+  assert.deepEqual(assetCards(tree).map(node => node.props.asset.id), [testAsset.id]);
+  assert.ok(!nodes(tree).includes("Loading Library…"));
+  pending.resolve([{ ...testAsset, id: "updated-capture" }]); await settleRequests();
+  tree = library.render();
+  assert.deepEqual(assetCards(tree).map(node => node.props.asset.id), ["updated-capture"]);
+  library.unmount();
+});

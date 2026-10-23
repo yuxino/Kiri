@@ -393,8 +393,7 @@ fn prepare_annotations_controlled(annotations: &[VideoAnnotation], control: &Exp
                 || height <= 0.0
                 || x + width > 1.000001
                 || y + height > 1.000001
-                || amount < 0.0
-                || amount > 1.0
+                || !(0.0..=1.0).contains(&amount)
                 || (annotation.kind != VideoAnnotationKind::Overlay && amount <= 0.0)
             {
                 bail!("Invalid video annotation timing, rectangle or amount");
@@ -494,10 +493,8 @@ fn validate_effects(effects: &[VideoEffect], duration: Option<f64>) -> Result<()
         {
             bail!("Invalid video effect strength, transition or color");
         }
-        if effect.kind == VideoEffectKind::Zoom {
-            if (width - height).abs() > 0.000001 {
-                bail!("Zoom must preserve the video aspect ratio");
-            }
+        if effect.kind == VideoEffectKind::Zoom && (width - height).abs() > 0.000001 {
+            bail!("Zoom must preserve the video aspect ratio");
         }
         if matches!(
             effect.kind,
@@ -1674,7 +1671,7 @@ mod tests {
             )),
         };
         assert_eq!(
-            prepare_annotations(&[annotation.clone()]).unwrap()[0]
+            prepare_annotations(std::slice::from_ref(&annotation)).unwrap()[0]
                 .image
                 .dimensions(),
             (2, 2)

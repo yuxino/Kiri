@@ -18,11 +18,11 @@ const project = await pureModule("video-project");
 const source = 'import React from "react";\n' + readFileSync(new URL("../../src/windows/VideoTrimPlayer.tsx", import.meta.url), "utf8");
 
 /** Render real editor handlers while replacing only native/DOM/media boundaries. */
-export function createVideoPlayerHarness(caps) {
+export function createVideoPlayerHarness(caps, configuration = {}) {
   let options;
   const player = { duration: 10, currentTime: 0, videoWidth: 1920, videoHeight: 1080, readyState: 1,
     pause() {}, addEventListener() {}, removeEventListener() {} };
-  const harness = createLibraryHarness({}, source, {
+  const harness = createLibraryHarness(configuration.api ?? {}, source, {
     attachRef(node) { if (node.type === "video") node.props.ref.current = player; },
     modules: {
       "@tauri-apps/api/window": { getCurrentWindow: () => ({ isMaximized: async () => true }) },
@@ -56,9 +56,10 @@ export function createVideoPlayerHarness(caps) {
       "../annotation/geom": {},
       "./VideoAnnotationsEditor": { VideoAnnotationsEditor: "annotations-editor" },
       "./video-annotation-render": {},
+      ...configuration.modules,
     },
   });
-  const component = harness.mount("VideoTrimPlayer", { id: "video", src: "media:video", editable: caps.videoEditing, capabilities: caps, onClosePreparationChange() {}, onClose() {}, onError() {} });
+  const component = harness.mount("VideoTrimPlayer", { id: "video", src: "media:video", editable: caps.videoEditing, capabilities: caps, onClosePreparationChange: configuration.onClosePreparationChange ?? (() => {}), onClose() {}, onError() {} });
   const initial = component.render();
   nodes(initial).find(node => node?.type === "video").props.onLoadedMetadata({ currentTarget: player });
   component.render();

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type FormEvent, type MouseEvent } from "react";
 import { t } from "../i18n";
+import { isTextComposition, setTextComposition } from "../annotation/text-composition.js";
 import type {
   OcrProviderPreset,
   OcrProviderProfileDto,
@@ -60,7 +61,7 @@ export function OcrProfileDialog({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) {
+      if (event.key === "Escape" && !busy && !event.defaultPrevented && !isTextComposition(event)) {
         event.preventDefault();
         onCancel();
       }
@@ -111,6 +112,9 @@ export function OcrProfileDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        onCompositionStartCapture={(event) => setTextComposition(event.target, true)}
+        onCompositionEndCapture={(event) => setTextComposition(event.target, false)}
+        onBlurCapture={(event) => setTextComposition(event.target, false)}
       >
         <form onSubmit={submit}>
           <div className="kiri-settings-dialog__header">

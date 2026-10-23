@@ -8,7 +8,9 @@ mod portal;
 pub use model::Snapshot;
 use model::Status;
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, Manager, WebviewWindow};
+#[cfg(target_os = "linux")]
+use tauri::Emitter;
+use tauri::{Manager, WebviewWindow};
 
 pub struct Controller {
     snapshot: Arc<Mutex<Snapshot>>,
@@ -152,6 +154,7 @@ pub fn cancel_portal_shortcut_setup(window: WebviewWindow) -> Result<(), String>
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn publish(
     app: &tauri::AppHandle,
     state: &Mutex<Snapshot>,

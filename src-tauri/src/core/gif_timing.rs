@@ -39,7 +39,7 @@ mod tests {
             let mut clock = GifFrameClock::new(fps).unwrap();
             for frames in 1..=12_001 {
                 let delay = clock.next_delay_ms();
-                assert!(delay > 0 && delay % 10 == 0);
+                assert!(delay > 0 && delay.is_multiple_of(10));
                 let expected = f64::from(frames) / f64::from(fps);
                 assert!((clock.duration_seconds() - expected).abs() <= 0.005_000_001);
             }
