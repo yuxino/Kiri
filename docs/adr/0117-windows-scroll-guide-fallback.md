@@ -50,4 +50,6 @@ do not move all scrolling UI work onto the main thread or add focus retries.
 The installed-app gate must still prove source foreground after cancellation
 and completion, with the library restored and no scrolling windows remaining.
 The failed run demonstrates the symptom and source inspection establishes the
-ordering defect; successful native verification of this correction is pending.
+ordering defect. The corrected candidate passed native Server 2025 checks;
+the Windows 10 fallback remains pending reporter confirmation. See the
+[acceptance record](../qa/scrolling-capture.md#verified-candidate-before-v1629).

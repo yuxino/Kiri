@@ -269,3 +269,20 @@ Ordinary Screenshot/OCR cancellation and completion, startup failure, and QR
 link preparation share the corrected restoration path. Recording's countdown
 and stop restoration do not enqueue library shows through this helper and
 retain their existing behavior.
+
+
+### Verified candidate before v1.6.29
+
+Source `c0099baee78f22871a65cab7c4b8b97fcbe1458b` passed all checks in
+[PR run 39938264801](https://github.com/yuxino/Kiri/actions/runs/39938264801)
+and [Windows package run 39938261900](https://github.com/yuxino/Kiri/actions/runs/39938261900).
+The latter used Windows Server 2025 build 26100. Both scrolling sessions used
+the visible, excluded guide; Cancel and Done restored the expected source
+HWND/PID. Four clicks and three wheel events reached the separate source
+process, scrolling 288 pixels. With the compact panel moved inside the
+selection, the saved 615 × 672 PNG matched the reference pixel for pixel.
+The full package gates and all 24 renderer crop/language/scale cases passed.
+
+This does not establish the reporter's Windows 10 build 19045 dual-display
+hidden-guide path. v1.6.29 includes the compatibility change for that follow-up;
+keep #152 open for the reporter's same-sample confirmation.
