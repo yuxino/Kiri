@@ -47,6 +47,10 @@ async def drag_image_document(page, image, start, end):
             break
     else:
         raise AssertionError('Image pointer geometry did not settle before dragging')
+    # Playwright 1.55 locator hover truncates its point to 0.01 CSS pixels.
+    # Keep its hit/stability checks, then preserve document-coordinate precision
+    # for the actual pointer-down (matching the direct mouse-move endpoint).
+    await page.mouse.move(box['x'] + position['x'], box['y'] + position['y'])
     await page.mouse.down()
     try:
         await page.mouse.move(box['x'] + end[0] * box['width'] / 500,
