@@ -101,6 +101,10 @@ jobs:
         timeout-minutes: 3
         run: python scripts/qa/shortcut-native.py
 
+      - name: Verify release scrolling capture on the actual desktop
+        timeout-minutes: 5
+        run: python scripts/qa/windows-scroll-capture-native.py
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -122,6 +126,14 @@ jobs:
         with:
           name: shortcut-native-review
           path: shortcut-native-review/
+          retention-days: 5
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-scroll-capture-review
+          path: windows-scroll-capture-review/
           retention-days: 5
           if-no-files-found: warn
 
