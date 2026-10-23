@@ -130,8 +130,10 @@ Linux. Preserve these decisions:
 
 ## Required verification
 
-Run the smallest relevant check while editing, then all of the following
-before handoff:
+For code, build or dependency changes, run the smallest relevant check while
+editing, then all of the following before handoff. Documentation-only or
+agent-instruction changes need exact diff, relevant link and formatting checks
+(`git diff --check`); do not compile, package or install solely for those changes.
 
 ```bash
 cargo test --manifest-path src-tauri/Cargo.toml
@@ -140,11 +142,22 @@ pnpm build
 git diff --check
 ```
 
-`src-tauri/target` is disposable Cargo build cache, not application or user
-data. Keep it after builds by default so later verification does not require a
-full multi-gigabyte rebuild. Remove it only when the user explicitly requests
-cleanup or disk pressure makes cleanup necessary. Never remove the shared
-Cargo registry as part of repository cleanup.
+`src-tauri/target` is disposable build cache, not application or user data.
+Keep the current usable build and dependencies with a concrete next use, not
+all historical variants by default. At task completion, inspect old binaries,
+object files and incremental state; remove superseded variants only after
+checking current build references, running tasks and file use. File age alone
+does not prove a dependency is unused. Build caches can speed later builds,
+not the installed app's runtime; performance claims need comparable timing.
+
+Reuse canonical output directories for each necessary platform, architecture
+and profile. Avoid per-task copies of full checkouts, dependencies and targets
+unless isolation is required. After verification, remove task-owned temporary
+environments, obsolete installers and duplicate build/test bundles. Preserve
+source, dirty work, credentials, capture libraries, signing identities and
+necessary evidence. Distinguish project caches from shared runtimes; never
+remove another project's active Cargo registry or toolchain during cleanup.
+Git history and recovery snapshots are not disposable build cache.
 
 Do not add a runtime synthetic-capture mode to the user-facing application.
 Capture QA must use unit-level injected data or an isolated test harness, never
@@ -221,6 +234,11 @@ the separate checklist in `docs/linux.md` and report those limits explicitly.
   merge, push, tag, or publish a release unless the user asks.
 - When asked to commit, inspect the exact diff and keep unrelated user work
   out of the commit when possible.
+- After an authorized merge, remove the completed task's local and remote
+  branch only after checking the latest main, PR state and worktree use.
+  Preserve main, protected branches, unmerged unique commits and active
+  worktrees. Use Git to prune registrations only when their paths are verified
+  absent; never remove another checkout's source to make a branch deletable.
 - Do not delete capture data, reset privacy permissions, or replace signing
   identities as a troubleshooting shortcut.
 - Never include private captures, credentials, personal absolute paths, or the
