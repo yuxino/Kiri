@@ -244,3 +244,28 @@ The new native-driver guard suite passed 11 tests; related CI/provenance checks
 passed 101 tests. These checks did not launch a desktop application or execute
 Windows capture. Windows package/desktop acceptance and the reported Windows 10
 machine remain unverified at this point.
+
+### Candidate native run and focus-order follow-up
+
+The Windows Server 2025 native gate in
+[run 39933888140](https://github.com/yuxino/Kiri/actions/runs/39933888140)
+tested source `794f7192433a333de10986994adfcba97bba9fae`. The visible guide and
+panel both reported affinity `0x11`, cross-process source clicks passed,
+and the repeated capture shortcut preserved the guide. After Cancel,
+both scrolling HWNDs were destroyed and the library became visible, but source
+foreground restoration timed out. The hidden-guide fallback was not exercised;
+the second-session wheel, completion and saved-pixel checks were not reached. This run is not a native
+acceptance pass or evidence that Windows 10 issue #152 is resolved.
+
+Inspection found Windows cleanup calling the shared restoration path from its
+worker: `window.show()` queues the library show, then native source activation
+can run before that queued show activates Kiri. The correction acknowledges
+each Windows show through a same-queue `is_visible()` response before restoring
+the original focus. Repeat the existing Cancel assertion without weakening it,
+then complete the finish/restart and saved-pixel checks. Record source PID,
+foreground PID/HWND and remaining Kiri HWNDs on any new failure; the first run
+did not record the saved return PID, so it cannot isolate every possible cause.
+Ordinary Screenshot/OCR cancellation and completion, startup failure, and QR
+link preparation share the corrected restoration path. Recording's countdown
+and stop restoration do not enqueue library shows through this helper and
+retain their existing behavior.

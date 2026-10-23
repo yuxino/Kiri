@@ -223,9 +223,22 @@ def begin():
     return panel, [region["hwnd"], panel.handle]
 
 
+def foreground_evidence():
+    foreground = user32.GetForegroundWindow()
+    root = user32.GetAncestor(foreground, 2)
+    return {"expected": {"hwnd": int(source.handle), "pid": fixture.pid},
+            "actual": {"hwnd": int(foreground or 0), "pid": owner(foreground),
+                       "root_hwnd": int(root or 0), "root_pid": owner(root)}}
+
+
 def assert_closed(handles):
     wait_for("all scrolling windows destroyed", lambda: all(not user32.IsWindow(hwnd) for hwnd in handles))
-    wait_for("source foreground after scrolling ends", lambda: user32.GetForegroundWindow() == source.handle)
+    try:
+        wait_for("source foreground after scrolling ends", lambda: user32.GetForegroundWindow() == source.handle)
+    finally:
+        # Keep the same strict focus assertion; record only HWND/PID metadata
+        # so a failed return can be distinguished from fixture/window identity.
+        report.setdefault("focus_after_scrolling", []).append(foreground_evidence())
 
 
 def require_pixels(actual, expected):
@@ -323,6 +336,8 @@ try:
             except Exception:
                 try:
                     report["windows_at_failure"] = native_windows() if app and app.poll() is None else []
+                    if source is not None and fixture is not None:
+                        report["focus_at_failure"] = foreground_evidence()
                     ImageGrab.grab().save(output / "failure-desktop.png")
                 except Exception as diagnostic_error:
                     report["diagnostic_error"] = str(diagnostic_error)

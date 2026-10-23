@@ -81,13 +81,33 @@ class NativeScrollGuards(unittest.TestCase):
         predicates = []
         native = Mock(IsWindow=lambda hwnd: hwnd == 12, GetForegroundWindow=lambda: 42)
         functions("assert_closed", wait_for=lambda _name, test: predicates.append(test),
-                  user32=native, source=Mock(handle=42))["assert_closed"]([12, 13])
+                  user32=native, source=Mock(handle=42), report={},
+                  foreground_evidence=lambda: {})["assert_closed"]([12, 13])
         self.assertFalse(predicates[0]())
         native.IsWindow = lambda _: False
         self.assertTrue(predicates[0]())
         self.assertTrue(predicates[1]())
         native.GetForegroundWindow = lambda: 99
         self.assertFalse(predicates[1]())
+
+    def test_focus_diagnostic_identifies_source_and_actual_foreground_without_content(self):
+        native = Mock(GetForegroundWindow=lambda: 99, GetAncestor=lambda _hwnd, _kind: 98)
+        proof = functions("foreground_evidence", user32=native, source=Mock(handle=42),
+            fixture=Mock(pid=100), owner=lambda hwnd: {99: 200, 98: 201}[hwnd])["foreground_evidence"]()
+        self.assertEqual(proof, {"expected": {"hwnd": 42, "pid": 100},
+            "actual": {"hwnd": 99, "pid": 200, "root_hwnd": 98, "root_pid": 201}})
+
+    def test_focus_timeout_remains_a_failure_and_retains_diagnostic(self):
+        report = {}
+        def wait_for(description, predicate):
+            if not predicate():
+                raise RuntimeError("Timed out waiting for " + description)
+        check = functions("assert_closed", wait_for=wait_for, report=report,
+            user32=Mock(IsWindow=lambda _hwnd: False, GetForegroundWindow=lambda: 99),
+            source=Mock(handle=42), foreground_evidence=lambda: {"actual": {"hwnd": 99}})["assert_closed"]
+        with self.assertRaisesRegex(RuntimeError, "source foreground"):
+            check([12, 13])
+        self.assertEqual(report["focus_after_scrolling"], [{"actual": {"hwnd": 99}}])
 
     def test_fallback_log_requires_current_session_and_exact_region_stage(self):
         evidence = functions("fallback_evidence")["fallback_evidence"]
