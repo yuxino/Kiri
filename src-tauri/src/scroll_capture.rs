@@ -183,8 +183,57 @@ struct Session {
     status: Mutex<ScrollStatus>,
     panel_geometry: PanelGeometry,
     window_labels: Vec<String>,
+    // No startup or shortcut path may show a window before its capture policy
+    // is ready. A Windows region guide can remain hidden for the whole session.
+    region_showable: AtomicBool,
+    panel_showable: AtomicBool,
     closing: AtomicBool,
     cleanup_complete: AtomicBool,
+}
+
+impl Session {
+    #[cfg(any(windows, test))]
+    fn prepare_windows_region_guide(
+        &self,
+        exclude: impl FnOnce() -> anyhow::Result<()>,
+        hide: impl FnOnce() -> anyhow::Result<()>,
+    ) -> Result<(), StartupFailure> {
+        self.region_showable.store(false, Ordering::Release);
+        match exclude() {
+            Ok(()) => self.region_showable.store(true, Ordering::Release),
+            Err(error) => {
+                let failure = StartupFailure::new(StartupStage::RegionExclusion, error);
+                // Keep the watched window alive until normal teardown. Closing
+                // it here would cancel the session through its Destroyed event.
+                hide().map_err(|error| {
+                    StartupFailure::detail(
+                        StartupStage::RegionExclusion,
+                        format!(
+                            "{}; could not keep region guide hidden: {error:#}",
+                            failure.detail
+                        ),
+                    )
+                })?;
+                log::warn!(
+                    "[scroll] region guide hidden fallback: {}",
+                    failure.diagnostic()
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn show_windows(&self, mut show: impl FnMut(&str, TransientWindowRole)) {
+        if self.closing.load(Ordering::Acquire) {
+            return;
+        }
+        if self.region_showable.load(Ordering::Acquire) {
+            show(REGION, TransientWindowRole::ScrollCaptureRegion);
+        }
+        if self.panel_showable.load(Ordering::Acquire) {
+            show(PANEL, TransientWindowRole::RecordingControls);
+        }
+    }
 }
 
 /// Fixed geometry of the source display, in global logical coordinates.
@@ -334,12 +383,11 @@ pub(crate) fn show_if_active(app: &AppHandle) -> bool {
     let Some(session) = active_session(app) else {
         return false;
     };
-    // A repeated shortcut must not reshow a mask that is being torn down.
-    if session.closing.load(Ordering::Acquire) {
-        return true;
-    }
-    platform::show_window_without_activation(app, REGION, TransientWindowRole::ScrollCaptureRegion);
-    platform::show_window_without_activation(app, PANEL, TransientWindowRole::RecordingControls);
+    // Repeat shortcuts use the same capture-policy gate as startup, including
+    // a region guide that stayed hidden after native exclusion failed.
+    session.show_windows(|label, role| {
+        platform::show_window_without_activation(app, label, role);
+    });
     true
 }
 
@@ -566,6 +614,8 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
                 .cloned()
                 .chain([PANEL.to_string(), REGION.to_string()])
                 .collect(),
+            region_showable: AtomicBool::new(false),
+            panel_showable: AtomicBool::new(false),
             closing: AtomicBool::new(false),
             cleanup_complete: AtomicBool::new(false),
             panel_geometry: PanelGeometry {
@@ -615,6 +665,7 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
         let session_id = control.id;
         let scale = capture.display.backing_scale;
         let screen = capture.display.screen_frame;
+        let window_control = Arc::clone(&control);
         startup_ui(&app, move |app| {
             for label in labels {
                 if let Some(window) = app.get_webview_window(&label) {
@@ -662,17 +713,19 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
             })?;
             #[cfg(windows)]
             {
-                platform::windows::require_window_capture_exclusion(&region)
-                    .map_err(|error| StartupFailure::new(StartupStage::RegionExclusion, error))?;
+                window_control.prepare_windows_region_guide(
+                    || platform::windows::require_window_capture_exclusion(&region),
+                    || platform::windows::hide_window_for_capture(&region),
+                )?;
                 platform::windows::pin_webview_to_display_scale(&region, scale);
             }
             #[cfg(not(windows))]
-            platform::set_window_capture_excluded(&app, REGION, true);
-            platform::show_window_without_activation(
-                &app,
-                REGION,
-                TransientWindowRole::ScrollCaptureRegion,
-            );
+            {
+                platform::set_window_capture_excluded(&app, REGION, true);
+                window_control
+                    .region_showable
+                    .store(true, Ordering::Release);
+            }
             let panel = WebviewWindowBuilder::new(
                 &app,
                 PANEL,
@@ -706,11 +759,10 @@ fn start(app: AppHandle, label: String, id: uuid::Uuid, selection: Rect) -> Resu
                 .map_err(|error| StartupFailure::new(StartupStage::PanelExclusion, error))?;
             #[cfg(not(windows))]
             platform::set_window_capture_excluded(&app, PANEL, true);
-            platform::show_window_without_activation(
-                &app,
-                PANEL,
-                TransientWindowRole::RecordingControls,
-            );
+            window_control.panel_showable.store(true, Ordering::Release);
+            window_control.show_windows(|label, role| {
+                platform::show_window_without_activation(&app, label, role);
+            });
             if let Some(pid) = source_pid {
                 platform::activate_application(pid);
             }
@@ -1724,9 +1776,80 @@ mod tests {
             status: Mutex::new(ScrollStatus::new(id)),
             panel_geometry: test_panel_geometry(),
             window_labels: vec![PANEL.to_string(), REGION.to_string()],
+            region_showable: AtomicBool::new(false),
+            panel_showable: AtomicBool::new(false),
             closing: AtomicBool::new(false),
             cleanup_complete: AtomicBool::new(false),
         })
+    }
+
+    #[test]
+    fn unexcluded_region_stays_hidden_when_session_windows_are_reshown() {
+        let session = lifecycle_session();
+        let mut hides = 0;
+        assert!(session
+            .prepare_windows_region_guide(
+                || anyhow::bail!("Could not exclude scrolling capture controls: 0x80070008"),
+                || {
+                    hides += 1;
+                    Ok(())
+                },
+            )
+            .is_ok());
+        assert_eq!(hides, 1);
+        session.panel_showable.store(true, Ordering::Release);
+        let mut shown = Vec::new();
+        for _ in 0..2 {
+            session.show_windows(|label, role| shown.push((label.to_string(), role)));
+        }
+        assert_eq!(
+            shown,
+            vec![(PANEL.to_string(), TransientWindowRole::RecordingControls); 2]
+        );
+    }
+
+    #[test]
+    fn region_exclusion_failure_cannot_continue_without_confirmed_hide() {
+        let session = lifecycle_session();
+        let failure = session
+            .prepare_windows_region_guide(
+                || anyhow::bail!("Could not exclude scrolling capture controls: 0x80070008"),
+                || anyhow::bail!("HideWindow failed: 0x80070057"),
+            )
+            .expect_err("an unconfirmed hidden region must abort startup");
+        let diagnostic = failure.diagnostic();
+        assert!(diagnostic.contains("stage=exclude-region-window"));
+        assert!(diagnostic.contains("0x80070008"));
+        assert!(diagnostic
+            .contains("could not keep region guide hidden: HideWindow failed: 0x80070057"));
+        session.show_windows(|_, _| panic!("failed startup must not show either window"));
+    }
+
+    #[test]
+    fn window_show_policy_waits_for_exclusion_and_preserves_normal_teardown() {
+        let session = lifecycle_session();
+        session.show_windows(|_, _| panic!("pending windows must stay hidden"));
+        assert!(session
+            .prepare_windows_region_guide(|| Ok(()), || panic!("excluded guide needs no hiding"))
+            .is_ok());
+        let mut shown = Vec::new();
+        session.show_windows(|label, role| shown.push((label.to_string(), role)));
+        assert_eq!(
+            shown,
+            vec![(REGION.to_string(), TransientWindowRole::ScrollCaptureRegion)]
+        );
+        session.panel_showable.store(true, Ordering::Release);
+        shown.clear();
+        session.show_windows(|label, role| shown.push((label.to_string(), role)));
+        assert_eq!(
+            shown,
+            vec![
+                (REGION.to_string(), TransientWindowRole::ScrollCaptureRegion),
+                (PANEL.to_string(), TransientWindowRole::RecordingControls),
+            ]
+        );
+        session.closing.store(true, Ordering::Release);
+        session.show_windows(|_, _| panic!("teardown must not reshow either window"));
     }
 
     #[test]
@@ -2174,6 +2297,8 @@ mod tests {
             status: Mutex::new(ScrollStatus::new(id)),
             panel_geometry: test_panel_geometry(),
             window_labels: vec![PANEL.to_string(), REGION.to_string()],
+            region_showable: AtomicBool::new(false),
+            panel_showable: AtomicBool::new(false),
             closing: AtomicBool::new(false),
             cleanup_complete: AtomicBool::new(false),
         };
@@ -2217,6 +2342,8 @@ mod tests {
             status: Mutex::new(ScrollStatus::new(id)),
             panel_geometry: test_panel_geometry(),
             window_labels: vec![PANEL.to_string(), REGION.to_string()],
+            region_showable: AtomicBool::new(false),
+            panel_showable: AtomicBool::new(false),
             closing: AtomicBool::new(false),
             cleanup_complete: AtomicBool::new(false),
         };

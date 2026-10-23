@@ -290,8 +290,13 @@ inside the preview holds the displayed region; leaving it resumes following.
 A single encoder handles crops of at most 4 Mi pixels. Its reservation avoids
 rebuilding previews while encoding is busy.
 Controls prefer outside placement; macOS/Windows may use native capture exclusion
-for a compact in-selection fallback. X11 requires outside space for 220 × 76
-controls plus a gap. Wayland is unavailable.
+for a compact in-selection fallback. On Windows, a region guide that cannot be
+excluded stays natively hidden for the whole session, including repeated capture
+shortcuts. This fallback omits the border and surrounding dimming; it does not
+alter layered-window rendering or relax capture protection for visible controls.
+The control panel must still pass native exclusion, and failure to confirm the
+guide hidden aborts startup. See [ADR 0117](adr/0117-windows-scroll-guide-fallback.md).
+X11 requires outside space for 220 × 76 controls plus a gap. Wayland is unavailable.
 
 Done waits for settling, stops and drains the native source and rechecks the
 last view and unresolved row contradictions before saving. Known contradictions

@@ -17,7 +17,8 @@ report = {"success": False, "source_sha": manifest["source_sha"],
           "compiled_matches_installed": manifest["compiled_matches_installed"], "gates": []}
 timeouts = {"countdown-native.py": 240, "shortcut-native.py": 180,
             "confirmation-native.py": 180, "windows-release-native.py": 480,
-            "windows-capture-color-native.py": 240, "windows-library-files-native.py": 600}
+            "windows-capture-color-native.py": 240, "windows-library-files-native.py": 600,
+            "windows-scroll-capture-native.py": 300}
 
 
 def replay(gate):

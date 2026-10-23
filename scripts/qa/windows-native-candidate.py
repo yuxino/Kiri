@@ -24,6 +24,7 @@ NATIVE_STEPS = {
     "Verify configurable shortcuts on the actual desktop": "shortcut-native.py",
     "Verify destructive confirmation windows on the actual desktop": "confirmation-native.py",
     "Install and smoke-test both Windows packages": "windows-release-native.py",
+    "Verify scrolling capture on the installed Windows app": "windows-scroll-capture-native.py",
     "Verify library file actions on the installed Windows app": "windows-library-files-native.py",
     "Verify hover colors and native clipboard on the installed Windows app": "windows-capture-color-native.py",
 }
@@ -254,6 +255,7 @@ def main():
     with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
         env.write(f"KIRI_QA_PORTABLE_EXE={portable}\nKIRI_QA_INSTALLED_EXE={installed}\n"
                   f"KIRI_COLOR_QA_EXE={installed}\nKIRI_COLOR_CANDIDATE_SHA={source_sha}\n"
+                  f"KIRI_SCROLL_CANDIDATE_SHA={source_sha}\n"
                   f"KIRI_LIBRARY_FILES_QA_EXE={installed}\nKIRI_LIBRARY_FILES_CANDIDATE_SHA={source_sha}\n"
                   f"KIRI_LIBRARY_FILES_QA_VIDEO_DIR={candidate / 'video-fixtures'}\n")
 
