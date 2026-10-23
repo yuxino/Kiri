@@ -78,8 +78,10 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
     const key=(event:KeyboardEvent)=>{
       if(props.disabled||event.defaultPrevented||isTextComposition(event))return;
       if(event.target instanceof HTMLElement&&event.target.closest(".kiri-label-dot"))return;
-      if(event.target instanceof HTMLElement&&event.target.closest("[role=listbox],[role=dialog]"))return;
+      if(event.target instanceof HTMLElement&&event.target.closest("[role=listbox],[role=menu],dialog,[role=dialog]"))return;
       if(event.target instanceof HTMLElement&&event.target.closest("input,textarea,select,[contenteditable]"))return;
+      // This runs in capture, before a focused toolbar button can stop bubbling.
+      if((event.key==="Enter"||event.key===" ")&&event.target instanceof HTMLElement&&event.target.closest("button,[role=button],a[href],summary"))return;
       if(!props.active){const entry=tools.find(item=>item.key===event.key.toLowerCase());if(entry&&!event.metaKey&&!event.ctrlKey&&!event.altKey){event.preventDefault();event.stopImmediatePropagation();selectTool(entry.tool);}return;}
       if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="z"){event.preventDefault();event.stopImmediatePropagation();canvas.current?.finishAppearanceAdjustment();event.shiftKey?canvas.current?.redo():canvas.current?.undo();return;}
       if(event.metaKey||event.ctrlKey||event.altKey)return;

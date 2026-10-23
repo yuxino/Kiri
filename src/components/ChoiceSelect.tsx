@@ -8,21 +8,22 @@ export type ChoiceOption<T extends string = string> = { value: T; label: string;
 export type ChoiceSelectProps<T extends string> = {
   value: T; onChange(value: T): void; options: ChoiceOption<T>[]; label: string;
   disabled?: boolean; className?: string; menuClassName?: string; menuMinWidth?: number;
-  onOpen?(): void; menuHeader?: string; menuStatus?: string;
+  onOpen?(): void; menuHeader?: string; menuStatus?: string; missingValueLabel?: string;
 };
 
 export function ChoiceSelect<T extends string>({ value, onChange, options, label, disabled = false,
-  className = "", menuClassName = "", menuMinWidth = 280, onOpen, menuHeader, menuStatus }: ChoiceSelectProps<T>) {
+  className = "", menuClassName = "", menuMinWidth = 280, onOpen, menuHeader, menuStatus, missingValueLabel }: ChoiceSelectProps<T>) {
   const [open, setOpen] = useState(false), [active, setActive] = useState<string>(value);
   const [position, setPosition] = useState<CSSProperties>({});
   const trigger = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
   const id = useId();
-  const selected = options.find(option => option.value === value) ?? options[0];
+  const selected = options.find(option => option.value === value);
+  const selectedLabel = selected?.label ?? missingValueLabel ?? label;
   const optionValues = JSON.stringify(options.map(option => option.value));
   function close(restore = false) { setOpen(false); if (restore) trigger.current?.focus(); }
   function show() {
     if (disabled || !options.length) return;
-    onOpen?.(); setActive(selected.value); setOpen(true);
+    onOpen?.(); setActive(selected?.value ?? options[0].value); setOpen(true);
   }
   function choose(index: number) {
     const option = options[index]; if (!option) return;
@@ -63,6 +64,36 @@ export function ChoiceSelect<T extends string>({ value, onChange, options, label
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   function navigate(event: KeyboardEvent) {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); return; }
+    if (event.key === "Tab") {
+      // The menu is portalled after the page. Continue from its trigger's
+      // position instead, respecting a containing modal's focus boundary.
+      const button = trigger.current;
+      if (!button) { close(); return; }
+      const modal = button.closest("dialog[open], [aria-modal='true']");
+      const candidates = Array.from((modal ?? document).querySelectorAll<HTMLElement>(
+        "a[href],button,input,select,textarea,summary,[tabindex],[contenteditable='true']",
+      )).filter(element => {
+        if (element.tabIndex < 0 || element.matches(":disabled") || element.closest("[inert]") ||
+          element.getClientRects().length === 0 || menu.current?.contains(element)) return false;
+        const { visibility } = window.getComputedStyle(element);
+        if (visibility === "hidden" || visibility === "collapse") return false;
+        for (let details = element.closest("details:not([open])"); details;
+          details = details.parentElement?.closest("details:not([open])") ?? null) {
+          if (!details.querySelector(":scope > summary")?.contains(element)) return false;
+        }
+        return true;
+      })
+        .sort((a, b) => (a.tabIndex > 0 ? a.tabIndex : Infinity) - (b.tabIndex > 0 ? b.tabIndex : Infinity));
+      const index = candidates.indexOf(button);
+      const next = index + (event.shiftKey ? -1 : 1);
+      const target = index < 0 ? undefined : candidates[modal
+        ? (next + candidates.length) % candidates.length : next];
+      close(true);
+      event.stopPropagation();
+      if (target) { event.preventDefault(); target.focus(); }
+      // At a non-modal document edge, let the browser move out of the WebView.
+      return;
+    }
     const index = Math.max(0, options.findIndex(option => option.value === active));
     const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
     if (delta && options.length) {
@@ -74,7 +105,7 @@ export function ChoiceSelect<T extends string>({ value, onChange, options, label
     }
   }
   return <><button ref={trigger} type="button" className={`kiri-choice-trigger ${className}`} disabled={disabled}
-    title={selected?.label} aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? id : undefined}
+    title={selectedLabel} aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? id : undefined}
     onClick={() => open ? close() : show()} onKeyDown={event => {
       if (open && event.key === "Escape") { navigate(event); return; }
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
@@ -83,7 +114,7 @@ export function ChoiceSelect<T extends string>({ value, onChange, options, label
         if (event.key === "Home") setActive(options[0]?.value ?? "");
       }
     }}>
-    <span className="kiri-choice-trigger-label">{selected?.label}</span>
+    <span className="kiri-choice-trigger-label">{selectedLabel}</span>
     {selected?.trailing && <span className="kiri-choice-trailing">{selected.trailing}</span>}<ChevronDown size={14} />
   </button>{open && createPortal(<div ref={menu} id={id} role="listbox" aria-label={label}
     className={`kiri-choice-menu ${menuClassName}`} style={position} onKeyDown={navigate}>

@@ -1352,8 +1352,13 @@ button:active:not(:disabled) {
   cursor: pointer;
 }
 
-.kiri-tag-remove-button:hover {
+.kiri-tag-remove-button:hover:not(:disabled) {
   background: var(--kiri-accent-alpha-18);
+}
+
+.kiri-tag-remove-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .kiri-card-favorite {

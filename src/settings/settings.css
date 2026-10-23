@@ -581,6 +581,7 @@
   gap: 8px;
 }
 
+.kiri-settings-dialog:focus-visible,
 .kiri-settings button:focus-visible,
 .kiri-settings input:focus-visible,
 .kiri-settings select:focus-visible {

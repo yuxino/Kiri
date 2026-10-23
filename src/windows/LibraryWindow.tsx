@@ -1751,9 +1751,10 @@ function AssetCard(props: {
     onOpen();
   };
   const handleClick = (event: React.MouseEvent) => {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented ||
+        (event.target as HTMLElement | null)?.closest?.("button,input,textarea,select,a,[contenteditable]")) return;
     if (selectionActive) {
-      if (!selectionBusy && !(event.target as HTMLElement | null)?.closest?.("button,input,a,[contenteditable]")) onToggleSelection?.();
+      if (!selectionBusy) onToggleSelection?.();
       return;
     }
     openCard();
@@ -1762,6 +1763,56 @@ function AssetCard(props: {
   const titleFinished = useRef(false);
   const renameBusy = useRef(false);
   const [addingTag, setAddingTag] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
+  const [tagBusy, setTagBusy] = useState(false);
+  const [tagError, setTagError] = useState(false);
+  const tagMutationLock = useRef(false);
+  const [visibleTags, setVisibleTags] = useState(asset.tags);
+  const confirmedTags = useRef(asset.tags);
+  const awaitingTags = useRef<string[] | null>(null);
+  const incomingTags = useRef(asset.tags);
+  incomingTags.current = asset.tags;
+  const sameTags = (left: string[], right: string[]) =>
+    left.length === right.length && left.every((tag, index) => tag === right[index]);
+
+  useEffect(() => {
+    // A successful command can precede library-changed's asynchronous fetch.
+    // Keep its confirmed list until the parent snapshot catches up with it.
+    if (awaitingTags.current && !sameTags(awaitingTags.current, asset.tags)) return;
+    awaitingTags.current = null;
+    confirmedTags.current = asset.tags;
+    setVisibleTags(asset.tags);
+  }, [asset.tags]);
+
+  const saveTags = async (update: (current: string[]) => string[], finishAdding = false) => {
+    if (tagMutationLock.current) return;
+    // Match AssetLibrary::set_tags before displaying the acknowledged list.
+    const tags: string[] = [];
+    const keys = new Set<string>();
+    for (const candidate of update(confirmedTags.current)) {
+      const tag = candidate.trim();
+      const key = tag.replace(/[A-Z]/g, letter => letter.toLowerCase());
+      if (tag && !keys.has(key)) { tags.push(tag); keys.add(key); }
+    }
+    tagMutationLock.current = true;
+    setTagBusy(true);
+    setTagError(false);
+    try {
+      await api.setTags(asset.id, tags);
+      confirmedTags.current = tags;
+      awaitingTags.current = sameTags(incomingTags.current, tags) ? null : tags;
+      setVisibleTags(tags);
+      if (finishAdding) {
+        setTagDraft("");
+        setAddingTag(false);
+      }
+    } catch {
+      setTagError(true);
+    } finally {
+      tagMutationLock.current = false;
+      setTagBusy(false);
+    }
+  };
 
   // "Rename" menu item dispatches a custom event to enter edit mode.
   useEffect(() => {
@@ -1790,7 +1841,11 @@ function AssetCard(props: {
 
   // "Add Tag" menu item opens the inline tag input.
   useEffect(() => {
-    const handler = () => setAddingTag(true);
+    const handler = () => {
+      if (tagMutationLock.current) return;
+      setTagError(false);
+      setAddingTag(true);
+    };
     window.addEventListener(`kiri-addtag:${asset.id}`, handler);
     return () => window.removeEventListener(`kiri-addtag:${asset.id}`, handler);
   }, [asset.id]);
@@ -2203,9 +2258,9 @@ function AssetCard(props: {
           )}
       </div>
       {/* Tag chips */}
-      {(asset.tags.length > 0 || addingTag) && (
+      {(visibleTags.length > 0 || addingTag || tagError) && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-          {asset.tags.map((tag) => (
+          {visibleTags.map((tag) => (
             <span
               key={tag}
               title={tag}
@@ -2231,14 +2286,10 @@ function AssetCard(props: {
                 className="kiri-tag-remove-button"
                 aria-label={`${t("Remove tag")}: ${tag}`}
                 title={t("Remove tag")}
+                disabled={tagBusy}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void api
-                    .setTags(
-                      asset.id,
-                      asset.tags.filter((existing) => existing !== tag),
-                    )
-                    .catch(() => {});
+                  void saveTags(current => current.filter((existing) => existing !== tag));
                 }}
               >
                 <KiriIcon name="xmark" size={8} />
@@ -2248,21 +2299,35 @@ function AssetCard(props: {
           {addingTag && (
             <input
               autoFocus
+              value={tagDraft}
+              readOnly={tagBusy}
+              aria-busy={tagBusy || undefined}
+              aria-invalid={tagError || undefined}
+              aria-describedby={tagError ? `kiri-tag-error-${asset.id}` : undefined}
+              aria-label={t("Add tag…")}
               placeholder={t("Add tag…")}
-              onBlur={() => setAddingTag(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const value = e.currentTarget.value.trim();
-                  if (value) {
-                    void api
-                      .setTags(asset.id, [...asset.tags, value])
-                      .catch(() => {});
-                  }
+              onChange={(event) => setTagDraft(event.target.value)}
+              onBlur={() => {
+                if (!tagMutationLock.current && !tagError) {
                   setAddingTag(false);
-                } else if (e.key === "Escape") {
+                  setTagDraft("");
+                }
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (e.repeat || tagMutationLock.current) return;
+                  const value = tagDraft.trim();
+                  if (value) void saveTags(current => [...current, value], true);
+                  else setAddingTag(false);
+                } else if (e.key === "Escape" && !tagMutationLock.current) {
+                  e.preventDefault();
+                  setTagDraft("");
+                  setTagError(false);
                   setAddingTag(false);
                 }
-                e.stopPropagation();
               }}
               style={{
                 width: 70,
@@ -2276,6 +2341,10 @@ function AssetCard(props: {
               }}
             />
           )}
+          {tagError && <span id={`kiri-tag-error-${asset.id}`} role="alert"
+            style={{ flexBasis: "100%", fontSize: 13, color: "var(--kiri-coral)" }}>
+            {t("Couldn't update this item")}
+          </span>}
         </div>
       )}
     </div>

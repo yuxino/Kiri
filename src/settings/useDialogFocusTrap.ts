@@ -23,7 +23,7 @@ export function useDialogFocusTrap<T extends HTMLElement>() {
     if (!dialog) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
+      if (event.key !== "Tab" || event.defaultPrevented) return;
       const focusable = Array.from(
         dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
       ).filter((element) => element.offsetParent !== null);
@@ -34,7 +34,10 @@ export function useDialogFocusTrap<T extends HTMLElement>() {
       }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      if (document.activeElement === dialog || !dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
@@ -43,9 +46,12 @@ export function useDialogFocusTrap<T extends HTMLElement>() {
       }
     };
 
-    dialog.addEventListener("keydown", onKeyDown);
+    // Disabling the focused Save/Delete button can move native focus to body.
+    // Listen at document level so that next Tab still stays in this modal.
+    // Use bubbling so nested controls can handle their own Tab first.
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      dialog.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown);
       if (openerRef.current?.isConnected) {
         openerRef.current.focus();
       }

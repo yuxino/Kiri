@@ -7,7 +7,7 @@ export default function RecordingMicrophoneSelect({ options, disabled, onChange 
   options: RecordingOptions; disabled: boolean; onChange(options: RecordingOptions): void;
 }) {
   const [devices, setDevices] = useState<{ id: string; name: string }[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "failed">("idle");
+  const [status, setStatus] = useState<"unloaded" | "loading" | "ready" | "failed">("unloaded");
   const request = useRef(0);
   useEffect(() => () => { request.current++; }, []);
   const refresh = () => {
@@ -16,13 +16,17 @@ export default function RecordingMicrophoneSelect({ options, disabled, onChange 
     void api.listMicrophoneDevices().then(value => {
       if (current !== request.current) return;
       setDevices(value);
-      setStatus("idle");
+      setStatus("ready");
     }).catch(() => {
       if (current === request.current) setStatus("failed");
     });
   };
-  const selectedUnavailable = !!options.microphoneDeviceId && !devices.some(device => device.id === options.microphoneDeviceId);
+  const selectedUnavailable = status === "ready" && !!options.microphoneDeviceId && !devices.some(device => device.id === options.microphoneDeviceId);
+  const missingValueLabel = status === "loading" ? t("Loading microphones…")
+    : status === "failed" ? t("Unable to load microphones")
+      : selectedUnavailable ? t("Selected microphone is unavailable") : t("Choose microphone");
   return <ChoiceSelect value={options.microphoneDeviceId ?? ""} disabled={disabled}
+    missingValueLabel={missingValueLabel}
     label={t("Choose microphone")} menuHeader={t("Choose microphone")}
     className="kiri-record-options__microphone" menuClassName="kiri-record-device-menu" menuMinWidth={280}
     menuStatus={status === "loading" ? t("Loading microphones…") : status === "failed" ? t("Unable to load microphones")

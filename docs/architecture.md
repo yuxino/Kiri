@@ -456,6 +456,10 @@ direct opening. Batch mutations keep a retryable selection on failure and
 serialize pending actions; recoverable movement is labelled Move to Trash
 (ADR 0097).
 
+Inline tags preserve failed drafts and display acknowledged changes while the
+library refresh catches up. Shared choice menus, settings modals and video
+controls retain their own keyboard focus and activation boundaries (ADR 0115).
+
 `AppState` owns one mutex-guarded library context containing the active root,
 library UUID, copy generation, availability, and loaded `AssetLibrary`.
 Commands and custom protocol reads resolve metadata and files through that

@@ -230,3 +230,4 @@ development.
 - [ADR 0113: Contextual image editor and zoom](adr/0113-contextual-image-editor-and-zoom.md)
 
 - [`adr/0114-opt-in-login-startup.md`](adr/0114-opt-in-login-startup.md) — opt-in system login startup and resident launch behavior.
+- [ADR 0115: Control focus and retryable library tags](adr/0115-control-focus-and-retryable-library-tags.md) — keyboard ownership, modal navigation and acknowledged tag updates.

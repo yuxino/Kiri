@@ -57,6 +57,7 @@ const emit = (event: string, payload: unknown) => {
 };
 Object.assign(window, {
   __qaActions: actions,
+  __qaTagFailure: params.has("tagFailure"),
   __qaResolveUpdate: () => resolveLateUpdate?.(),
   __qaGifState: (job: unknown) => emit("gif-conversion-state", job),
   __qaCompleteSave: () => {
@@ -87,6 +88,7 @@ Object.assign(window, {
         case "get_library_status": return { availability: "ready", isDefault: true, locationLabel: "Test Library" };
         case "get_shortcut_status": return { status: "enabled", label: "⇧⌘A" };
         case "get_dock_visibility": return {supported:true,visible:true};
+        case "get_startup_settings": return {supported:true,enabled:false,requiresApproval:false};
         case "platform_capabilities": return {manualUpdates:false,videoEditing:true};
         case "plugin:app|version": return version;
         case "plugin:window|is_visible": return true;
@@ -106,6 +108,11 @@ Object.assign(window, {
         case "get_ocr_provider_settings":
           if(params.has("settingsFailure")) throw new Error("Controlled OCR settings load failure");
           return {schemaVersion:1,activeEngine:{kind:"local"},profiles:params.has("profiles") ? [{id:"public-ocr",revision:1,name:"PublicLayoutProfileWithALongNameForWrappingChecks",provider:"customOpenAi",protocol:"openAiChat",baseUrl:"https://example.org/v1",model:"public-model",hasApiKey:false}] : [],warning:null};
+        case "save_ocr_provider_profile":
+          actions.push(command);
+          return new Promise((_resolve, reject) => Object.assign(window, {
+            __qaRejectOcrSave: () => reject(new Error("Controlled OCR profile save failure")),
+          }));
         case "get_gif_conversion_states": return [];
         case "cancel_gif_conversion": actions.push(command); return true;
         case "get_recording_save_jobs": return [...savingJobs];
@@ -134,7 +141,15 @@ Object.assign(window, {
           actions.push(command);
           if (params.has("copyFailure")) throw new Error("Test clipboard unavailable");
           return null;
-        case "copy_asset": actions.push(command); return null;
+        case "copy_asset": case "open_editor": case "open_viewer": actions.push(command); return null;
+        case "set_tags": {
+          actions.push(command);
+          if ((window as unknown as {__qaTagFailure: boolean}).__qaTagFailure) throw new Error("Controlled tag save failure");
+          const asset = assets.find((item: any) => item.id === args.id) as {tags: string[]} | undefined;
+          if (asset) asset.tags = args.tags as string[];
+          emit("library-changed", null);
+          return null;
+        }
         case "list_pending_recordings": case "list_text_history": return [];
         case "import_media": actions.push(command); return { ids: [], failed: 0 };
         case "paste_clipboard_image":

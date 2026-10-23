@@ -228,6 +228,184 @@ test("explicit selection toggles cards and checkboxes without opening their edit
   card.unmount();
 });
 
+const tagInput = tree => nodes(tree).find(node => node?.type === "input" && node.props.placeholder === "Add tag…");
+const tagKey = (overrides = {}) => ({
+  key: "Enter", nativeEvent: {}, keyCode: 13, repeat: false,
+  preventDefault() {}, stopPropagation() {}, ...overrides,
+});
+
+test("clicking an inline tag field never opens or selects its parent capture", () => {
+  for (const selectionActive of [false, true]) {
+    let opens = 0, selections = 0;
+    const harness = createLibraryHarness();
+    const card = harness.mount("AssetCard", cardProps({
+      selectionActive, onOpen: () => opens++, onToggleSelection: () => selections++,
+    }));
+    card.render();
+    harness.window.dispatchEvent({ type: `kiri-addtag:${testAsset.id}` });
+    const tree = card.render();
+    assert.ok(tagInput(tree));
+    // React bubbles the input click to the card; the card must leave the
+    // field's normal focus/selection behavior alone.
+    tree.props.onClick({ defaultPrevented: false, target: { closest: selector => selector.includes("input") ? {} : null } });
+    assert.equal(opens, 0);
+    assert.equal(selections, 0);
+    assert.ok(tagInput(card.render()));
+    card.unmount();
+  }
+});
+
+test("tag candidate confirmation and composition Escape preserve IME editing", async () => {
+  const writes = [];
+  const harness = createLibraryHarness({ setTags: async (...args) => { writes.push(args); } });
+  const card = harness.mount("AssetCard", cardProps());
+  card.render();
+  harness.window.dispatchEvent({ type: `kiri-addtag:${testAsset.id}` });
+  tagInput(card.render()).props.onChange({ target: { value: "zhong" } });
+  for (const key of ["Enter", "Escape"]) {
+    for (const composition of [{ nativeEvent: { isComposing: true } }, { keyCode: 229 }]) {
+      tagInput(card.render()).props.onKeyDown(tagKey({ key, ...composition }));
+      assert.equal(tagInput(card.render()).props.value, "zhong");
+    }
+  }
+  assert.deepEqual(writes, []);
+  tagInput(card.render()).props.onChange({ target: { value: " 中文 " } });
+  tagInput(card.render()).props.onKeyDown(tagKey());
+  await settleRequests();
+  assert.deepEqual(writes, [[testAsset.id, ["中文"]]]);
+  assert.equal(tagInput(card.render()), undefined);
+  card.unmount();
+});
+
+test("failed tag saves preserve the draft and report an error until one retry succeeds", async () => {
+  const first = deferred();
+  const writes = [];
+  const harness = createLibraryHarness({ setTags: (...args) => {
+    writes.push(args);
+    return writes.length === 1 ? first.promise : Promise.resolve();
+  } });
+  const card = harness.mount("AssetCard", cardProps());
+  card.render();
+  harness.window.dispatchEvent({ type: `kiri-addtag:${testAsset.id}` });
+  tagInput(card.render()).props.onChange({ target: { value: "project" } });
+  const submit = tagInput(card.render()).props.onKeyDown;
+  submit(tagKey());
+  submit(tagKey());
+  let input = tagInput(card.render());
+  assert.equal(input.props.readOnly, true);
+  input.props.onBlur();
+  assert.ok(tagInput(card.render()), "pending writes must retain their editor");
+  assert.equal(writes.length, 1);
+  first.reject(new Error("controlled write failure"));
+  await settleRequests();
+  input = tagInput(card.render());
+  assert.equal(input.props.value, "project");
+  assert.equal(input.props.readOnly, false);
+  assert.equal(input.props["aria-invalid"], true);
+  assert.ok(nodes(card.render()).some(node => node?.props?.role === "alert" && nodes(node).includes("Couldn't update this item")));
+  input.props.onBlur();
+  assert.equal(tagInput(card.render()).props.value, "project", "failed drafts survive blur for retry");
+  tagInput(card.render()).props.onKeyDown(tagKey({ repeat: true }));
+  assert.equal(writes.length, 1);
+  tagInput(card.render()).props.onKeyDown(tagKey());
+  await settleRequests();
+  assert.deepEqual(writes, [[testAsset.id, ["project"]], [testAsset.id, ["project"]]]);
+  assert.equal(tagInput(card.render()), undefined);
+  assert.ok(!nodes(card.render()).includes("Couldn't update this item"));
+  card.unmount();
+});
+
+test("failed tag removal retains the tag and reports the same retryable error", async () => {
+  const pending = deferred();
+  let writes = 0;
+  const harness = createLibraryHarness({ setTags: () => { writes++; return pending.promise; } });
+  const card = harness.mount("AssetCard", cardProps({ asset: { ...testAsset, tags: ["project"] } }));
+  const removeButton = () => nodes(card.render()).find(node => node?.type === "button" && node.props["aria-label"] === "Remove tag: project");
+  const remove = removeButton().props.onClick;
+  remove({ stopPropagation() {} });
+  remove({ stopPropagation() {} });
+  assert.equal(writes, 1);
+  assert.equal(removeButton().props.disabled, true);
+  pending.reject(new Error("controlled write failure"));
+  await settleRequests();
+  assert.equal(removeButton().props.disabled, false);
+  assert.ok(nodes(card.render()).includes("project"));
+  assert.ok(nodes(card.render()).includes("Couldn't update this item"));
+  card.unmount();
+});
+
+test("successive tag removals use the confirmed list before library refresh catches up", async () => {
+  const writes = [];
+  const harness = createLibraryHarness({ setTags: async (_id, tags) => { writes.push(tags); } });
+  const props = cardProps({ asset: { ...testAsset, tags: ["first", "second"] } });
+  const card = harness.mount("AssetCard", props);
+  const remove = tag => nodes(card.render()).find(node => node?.type === "button" && node.props["aria-label"] === `Remove tag: ${tag}`);
+  remove("first").props.onClick({ stopPropagation() {} });
+  await settleRequests();
+  assert.equal(remove("first"), undefined, "a confirmed removal is visible before refreshed props");
+  remove("second").props.onClick({ stopPropagation() {} });
+  await settleRequests();
+  assert.deepEqual(writes, [["second"], []]);
+  assert.equal(remove("second"), undefined);
+
+  // An older fetch can publish after both acknowledgements. Its chips must
+  // not reappear or become the baseline for a subsequent edit.
+  card.render({ ...props, asset: { ...props.asset, tags: ["second"] } });
+  assert.equal(remove("second"), undefined);
+  card.render({ ...props, asset: { ...props.asset, tags: [] } });
+  card.render({ ...props, asset: { ...props.asset, tags: ["later"] } });
+  assert.ok(remove("later"), "ordinary snapshots resume after catching up with the confirmed list");
+  card.unmount();
+});
+
+test("successive tag additions keep confirmed tags and failed drafts before refresh", async () => {
+  const writes = [], second = deferred();
+  const harness = createLibraryHarness({ setTags: (_id, tags) => {
+    writes.push(tags);
+    return writes.length === 2 ? second.promise : Promise.resolve();
+  } });
+  const card = harness.mount("AssetCard", cardProps());
+  const add = text => {
+    card.render();
+    harness.window.dispatchEvent({ type: `kiri-addtag:${testAsset.id}` });
+    tagInput(card.render()).props.onChange({ target: { value: text } });
+    tagInput(card.render()).props.onKeyDown(tagKey());
+  };
+  add("first"); await settleRequests();
+  add("second");
+  assert.deepEqual(writes, [["first"], ["first", "second"]]);
+  second.reject(new Error("controlled failure")); await settleRequests();
+  assert.equal(tagInput(card.render()).props.value, "second");
+  assert.ok(nodes(card.render()).includes("first"));
+  assert.ok(!nodes(card.render()).includes("second"), "failed writes do not publish a new chip");
+  tagInput(card.render()).props.onKeyDown(tagKey()); await settleRequests();
+  assert.deepEqual(writes[2], ["first", "second"]);
+  assert.ok(nodes(card.render()).includes("first"));
+  assert.ok(nodes(card.render()).includes("second"));
+  card.unmount();
+});
+
+test("confirmed tag chips match the backend's trimmed ASCII-case deduplication", async () => {
+  const writes = [];
+  const harness = createLibraryHarness({ setTags: async (_id, tags) => { writes.push(tags); } });
+  const card = harness.mount("AssetCard", cardProps({ asset: { ...testAsset, tags: ["Project", "Ä"] } }));
+  const add = async text => {
+    card.render();
+    harness.window.dispatchEvent({ type: `kiri-addtag:${testAsset.id}` });
+    tagInput(card.render()).props.onChange({ target: { value: text } });
+    tagInput(card.render()).props.onKeyDown(tagKey());
+    await settleRequests();
+  };
+  await add(" project ");
+  assert.deepEqual(writes[0], ["Project", "Ä"]);
+  await add("ä");
+  assert.deepEqual(writes[1], ["Project", "Ä", "ä"], "non-ASCII tags retain the native storage semantics");
+  const labels = nodes(card.render()).filter(node => node?.type === "button" && node.props.className === "kiri-tag-remove-button")
+    .map(node => node.props["aria-label"]);
+  assert.deepEqual(labels, ["Remove tag: Project", "Remove tag: Ä", "Remove tag: ä"]);
+  card.unmount();
+});
+
 test("Select All targets filtered finished assets, keeps text-select shortcuts, and Escape exits empty selection", async () => {
   const assets=[{...testAsset,id:"image"},{...testAsset,id:"video",kind:"video"}];
   const harness=createLibraryHarness({listAssets:async()=>assets,getRecordingSaveJobs:async()=>[{id:"saving",kind:"video",createdAt:testAsset.createdAt,isSaving:true}]});

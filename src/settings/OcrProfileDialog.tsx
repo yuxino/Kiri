@@ -110,6 +110,7 @@ export function OcrProfileDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
       >
         <form onSubmit={submit}>
           <div className="kiri-settings-dialog__header">

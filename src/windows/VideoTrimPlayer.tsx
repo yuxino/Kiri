@@ -367,9 +367,10 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
     if(!editing) return;
     const onKey=(event:KeyboardEvent)=>{
       const target=event.target as HTMLElement;
-      if(event.defaultPrevented||isTextComposition(event)||target.closest("input,select,textarea,[contenteditable],[role=listbox],[role=dialog]")) return;
+      if(event.defaultPrevented||isTextComposition(event)||target.closest("input,select,textarea,[contenteditable],[role=listbox],[role=menu],dialog,[role=dialog]")) return;
       if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="z") {event.preventDefault();undo(event.shiftKey);}
-      else if(event.code==="Space" && !target.closest("[role=dialog],summary")) {event.preventDefault();playEdit();}
+      // Focused actions own Space activation, including the clip-speed picker.
+      else if(event.code==="Space" && !target.closest("button,[role=button],a[href],summary")) {event.preventDefault();playEdit();}
       else if(event.key.toLowerCase()==="s" && !event.metaKey && !event.ctrlKey) {event.preventDefault();split();}
       else if(!event.metaKey&&!event.ctrlKey&&!event.altKey&&(event.key==="Delete"||event.key==="Backspace")) {event.preventDefault();removeSelection();}
     };
