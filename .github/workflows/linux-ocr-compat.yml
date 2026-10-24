@@ -1,0 +1,90 @@
+name: Linux OCR package compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful build.yml run containing the Linux candidate package
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  kali:
+    name: Installed Ubuntu package on Kali rolling / X11 OCR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KIRI_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate candidate run ID
+        run: '[[ "$KIRI_CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]'
+      - uses: actions/download-artifact@v8
+        with:
+          name: kiri-linux-deb
+          path: ${{ runner.temp }}/kiri-ocr-candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run_id }}
+          digest-mismatch: error
+      - name: Verify the exact candidate package and source
+        run: |
+          python3 scripts/qa/linux-package-provenance.py verify \
+            --package-dir "$RUNNER_TEMP/kiri-ocr-candidate" \
+            --run-id "$KIRI_CANDIDATE_RUN_ID" \
+            --output "$RUNNER_TEMP/kiri-kali-ocr-review/package-provenance.json"
+      - name: Install the same package and exercise real Kiri OCR on Kali
+        run: |
+          docker pull kalilinux/kali-rolling
+          docker image inspect kalilinux/kali-rolling > "$RUNNER_TEMP/kiri-kali-ocr-review/container-image.json"
+          docker run --rm --shm-size=1g \
+            -v "$PWD:/workspace:ro" \
+            -v "$RUNNER_TEMP/kiri-ocr-candidate:/candidate:ro" \
+            -v "$RUNNER_TEMP/kiri-kali-ocr-review:/evidence" \
+            kalilinux/kali-rolling bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                /candidate/*.deb binutils ca-certificates xvfb xauth openbox \
+                xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
+                python3-gi python3-pyatspi at-spi2-core fonts-dejavu-core
+              cp /etc/os-release /evidence/os-release.txt
+              dpkg-query -W kiri tesseract-ocr libtesseract5 libleptonica6 > /evidence/package-versions.txt
+              tesseract --version > /evidence/tesseract-version.txt 2>&1
+              ldconfig -p > /evidence/system-libraries.txt
+              grep -q "libleptonica\.so\.6" /evidence/system-libraries.txt
+              if grep -q "liblept\.so\.5" /evidence/system-libraries.txt; then
+                echo "Expected Kali Leptonica 6 without the old liblept.so.5 compatibility library" >&2
+                exit 1
+              fi
+              LC_ALL=C readelf -d /usr/bin/kiri > /evidence/dynamic-section.txt
+              if grep -Eq "\(NEEDED\).*\[lib(tesseract|lept|leptonica)\.so" /evidence/dynamic-section.txt; then
+                echo "Kiri must not link OCR libraries directly" >&2
+                exit 1
+              fi
+              ldd /usr/bin/kiri > /evidence/linked-libraries.txt
+              if grep -q "not found" /evidence/linked-libraries.txt; then exit 1; fi
+              sha256sum /usr/bin/kiri > /evidence/installed-executable-sha256.txt
+              useradd --create-home --uid 1000 kiri-qa
+              chown -R kiri-qa:kiri-qa /evidence
+              # Docker does not expose WebKit user namespaces. This override is
+              # confined to the throwaway QA container and recorded in its report.
+              runuser -u kiri-qa -- env KIRI_LINUX_OCR_QA_DIR=/evidence \
+                WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
+                bash /workspace/scripts/qa/linux-ocr-compat.sh /usr/bin/kiri
+            '
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: kali-ocr-review
+          path: ${{ runner.temp }}/kiri-kali-ocr-review/
+          retention-days: 5
+          if-no-files-found: warn
