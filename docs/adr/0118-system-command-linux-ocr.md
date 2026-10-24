@@ -1,7 +1,7 @@
 # 0118 — System-command Linux OCR
 
-Status: accepted for implementation; installed Ubuntu and Kali candidate
-acceptance pending.
+Status: accepted. The packaged Ubuntu/X11 and Kali rolling container checks
+passed; the reporter's VMware desktop retest remains open.
 
 ## Context
 
@@ -48,3 +48,6 @@ Kali additionally needs installation, linked-library inspection, startup and
 local OCR checks with Leptonica 6. This removes the reported OCR ABI coupling;
 it does not establish support for every Kali desktop, capture backend, or
 hardware configuration.
+
+See the [candidate acceptance record](../qa/linux-ocr-compat.md) for the exact
+package checksum, source revisions, successful runs and remaining limits.

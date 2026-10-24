@@ -36,6 +36,8 @@ Linux QA, and contribution records retain their original language.
   Windows multi-display screenshot acceptance and remaining hardware limits.
 - [`qa/issue-82-retest.md`](qa/issue-82-retest.md) — verified repair scope and
   the numbered editor, OCR, QR and Linux desktop retest checklist.
+- [`qa/linux-ocr-compat.md`](qa/linux-ocr-compat.md) — exact Ubuntu/Kali OCR
+  candidate, package provenance and remaining VMware desktop acceptance.
 - [`architecture.md`](architecture.md) — runtime structure, data boundaries,
   and platform responsibilities.
 - [`../AGENTS.md`](../AGENTS.md) — product contract and repository rules.

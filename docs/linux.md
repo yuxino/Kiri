@@ -35,8 +35,10 @@ implementation, normally GNOME Keyring on Ubuntu.
 An older Kiri binary may still require `liblept.so.5` on distributions that
 provide `libleptonica.so.6`. Use a build with the system-command OCR backend or
 rebuild from its source on that distribution; do not alias the two ABI versions
-with a symbolic link. Packages and desktop behavior outside Ubuntu 24.04 still
-need separate verification, including on Kali.
+with a symbolic link. The same Ubuntu candidate passed startup and local OCR
+checks on Kali rolling with Leptonica 6; see the
+[package compatibility record](qa/linux-ocr-compat.md). This container check
+does not establish the reporter's VMware desktop or full Kali feature support.
 
 Linux has no in-app installer or signed updater artifacts. Download a newer
 `.deb`, quit Kiri, and install the replacement with the same command. Library
