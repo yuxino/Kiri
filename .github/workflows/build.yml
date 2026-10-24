@@ -197,8 +197,6 @@ jobs:
             libxcb-randr0-dev \
             libgbm-dev \
             libclang-dev \
-            libtesseract-dev \
-            libleptonica-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base \
@@ -207,6 +205,7 @@ jobs:
             gstreamer1.0-plugins-ugly \
             gstreamer1.0-libav \
             gstreamer1.0-pipewire \
+            tesseract-ocr \
             tesseract-ocr-eng \
             tesseract-ocr-chi-sim \
             tesseract-ocr-jpn \
@@ -288,6 +287,11 @@ jobs:
           test -f /usr/share/applications/io.yuxino.kiri.desktop
           grep -qx "Exec=kiri" /usr/share/applications/io.yuxino.kiri.desktop
           grep -qx "NoDisplay=true" /usr/share/applications/io.yuxino.kiri.desktop
+          LC_ALL=C readelf -d /usr/bin/kiri > linux-native-review/dynamic-section.txt
+          if grep -Eq '\(NEEDED\).*\[lib(tesseract|lept|leptonica)\.so' linux-native-review/dynamic-section.txt; then
+            echo "Kiri must use the system Tesseract command without linking its OCR libraries."
+            exit 1
+          fi
           ldd /usr/bin/kiri > linux-native-review/linked-libraries.txt
           if grep -q 'not found' linux-native-review/linked-libraries.txt; then exit 1; fi
       - name: Exercise the installed app on an isolated X11 desktop

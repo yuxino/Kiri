@@ -192,7 +192,6 @@ zbus = { version = "5", default-features = false, features = ["tokio"] }
 futures-util = "0.3"
 gtk = "0.18"
 x11rb = "0.13"
-tesseract = "0.15.2"
 cpal = "0.18"
 xcap = { version = "0.9", default-features = false, features = ["image"] }
 arboard = { version = "3", default-features = true, features = ["wayland-data-control"] }

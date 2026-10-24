@@ -2,7 +2,14 @@
 //! Uses accurate recognition with language correction and automatic language
 //! detection, returning the top candidate per line.
 
+#[cfg(any(target_os = "macos", windows))]
 use anyhow::{anyhow, Result};
+
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod linux;
+
+#[cfg(target_os = "linux")]
+pub use linux::recognize_text;
 
 #[cfg(windows)]
 fn rgba_to_bgra_in_place(bytes: &mut [u8]) {
@@ -139,119 +146,5 @@ mod windows_tests {
         let mut pixels = vec![1, 2, 3, 4, 10, 20, 30, 40];
         rgba_to_bgra_in_place(&mut pixels);
         assert_eq!(pixels, [3, 2, 1, 4, 30, 20, 10, 40]);
-    }
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn linux_ocr_languages(directory: &std::path::Path) -> Option<String> {
-    let installed: Vec<_> = ["eng", "chi_sim", "jpn"]
-        .into_iter()
-        .filter(|language| directory.join(format!("{language}.traineddata")).is_file())
-        .collect();
-    (!installed.is_empty()).then(|| installed.join("+"))
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn linux_ocr_data(
-    explicit_directory: Option<std::ffi::OsString>,
-) -> Option<(std::path::PathBuf, String)> {
-    let directories = if let Some(directory) = explicit_directory.filter(|value| !value.is_empty())
-    {
-        // Respect an explicit local installation without silently changing the
-        // user's configured model directory or fetching missing data.
-        vec![std::path::PathBuf::from(directory)]
-    } else {
-        [
-            "/usr/share/tesseract-ocr/5/tessdata",
-            "/usr/share/tesseract-ocr/4.00/tessdata",
-            "/usr/share/tesseract-ocr/tessdata",
-            "/usr/share/tessdata",
-            "/usr/local/share/tessdata",
-        ]
-        .into_iter()
-        .map(std::path::PathBuf::from)
-        .collect()
-    };
-    directories.into_iter().find_map(|directory| {
-        linux_ocr_languages(&directory).map(|languages| (directory, languages))
-    })
-}
-
-#[cfg(target_os = "linux")]
-pub fn recognize_text(png: &[u8]) -> Result<String> {
-    let (directory, languages) = linux_ocr_data(std::env::var_os("TESSDATA_PREFIX"))
-        .ok_or_else(|| anyhow!("Local OCR needs a Tesseract language pack. Install English, Simplified Chinese, or Japanese language data."))?;
-    let data_path = directory
-        .to_str()
-        .ok_or_else(|| anyhow!("The installed Tesseract language data could not be loaded."))?;
-    // Bind to the system library and already-installed models. Neither this
-    // engine nor its error path launches a program or contacts a provider.
-    let mut engine = tesseract::Tesseract::new(Some(data_path), Some(&languages))
-        .map_err(|_| anyhow!("The installed Tesseract language data could not be loaded."))?
-        .set_image_from_mem(png)
-        .map_err(|_| anyhow!("Text Recognition Failed"))?;
-    engine.set_page_seg_mode(tesseract::PageSegMode::PsmSparseText);
-    let text = engine
-        .get_text()
-        .map_err(|_| anyhow!("Text Recognition Failed"))?;
-    let text = text
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n");
-    Ok(text)
-}
-
-#[cfg(test)]
-mod linux_model_tests {
-    use super::{linux_ocr_data, linux_ocr_languages};
-
-    #[test]
-    fn local_ocr_only_selects_installed_supported_language_models() {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(directory.path().join("eng.traineddata"), []).unwrap();
-        std::fs::write(directory.path().join("jpn.traineddata"), []).unwrap();
-        std::fs::write(directory.path().join("osd.traineddata"), []).unwrap();
-        assert_eq!(
-            linux_ocr_languages(directory.path()).as_deref(),
-            Some("eng+jpn")
-        );
-    }
-
-    #[test]
-    fn local_ocr_honors_the_explicit_data_directory() {
-        let directory = tempfile::tempdir().unwrap();
-        let explicit = directory.path().as_os_str().to_owned();
-        assert!(linux_ocr_data(Some(explicit.clone())).is_none());
-        std::fs::write(directory.path().join("chi_sim.traineddata"), []).unwrap();
-        assert_eq!(
-            linux_ocr_data(Some(explicit)),
-            Some((directory.path().to_owned(), "chi_sim".into()))
-        );
-    }
-
-    #[test]
-    fn local_ocr_does_not_mistake_a_model_directory_for_a_model_file() {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::create_dir(directory.path().join("eng.traineddata")).unwrap();
-        assert!(linux_ocr_languages(directory.path()).is_none());
-    }
-}
-
-#[cfg(all(test, target_os = "linux"))]
-mod linux_recognition_tests {
-    #[test]
-    fn system_tesseract_recognizes_the_local_png_fixture() {
-        // Fixed black text on white, generated solely for this test. Exercise
-        // PNG decoding, the linked engine, installed models and returned text.
-        let png = include_bytes!("../tests/fixtures/linux-ocr.png");
-        let text = super::recognize_text(png)
-            .expect("Linux OCR requires installed Tesseract language data");
-        let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(
-            normalized.contains("KIRI LINUX 123"),
-            "unexpected OCR output: {normalized:?}"
-        );
     }
 }

@@ -556,7 +556,6 @@
   "Linux updates are installed manually from a downloaded package.": "Linux 업데이트는 다운로드한 패키지로 직접 설치합니다.",
   "Use the tray menu to pause, resume, or stop recording.": "트레이 메뉴에서 녹화를 일시 정지, 재개하거나 중지하세요.",
   "Local OCR needs a Tesseract language pack. Install English, Simplified Chinese, or Japanese language data.": "로컬 OCR에는 Tesseract 언어 팩이 필요합니다. 영어, 중국어 간체 또는 일본어 언어 데이터를 설치하세요.",
-  "The installed Tesseract language data could not be loaded.": "설치된 Tesseract 언어 데이터를 불러오지 못했습니다.",
   "The desktop clipboard is not available.": "데스크톱 클립보드를 사용할 수 없습니다.",
   "The desktop clipboard did not respond.": "데스크톱 클립보드가 응답하지 않았습니다.",
   "The image could not be copied to the clipboard.": "이미지를 클립보드에 복사하지 못했습니다.",

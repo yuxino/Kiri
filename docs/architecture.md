@@ -543,8 +543,13 @@ markers to the editor and library menu while preserving pending edits.
 ## OCR flow
 
 Local OCR is the default and runs through macOS Vision, Windows.Media.Ocr, or
-system Tesseract on Linux. Linux selects installed `eng`, `chi_sim`, and `jpn`
-models from the configured or system data directory; it never downloads models.
+the system `/usr/bin/tesseract` command on Linux. Linux selects installed `eng`,
+`chi_sim`, and `jpn` models from the configured or system data directory; it
+never downloads models. PNG input and text output use concurrent local pipes,
+with a 60-second process deadline and a 1 MiB text limit. The process is reaped
+on completion or failure, and native diagnostics are not retained. Kiri does
+not link Tesseract or Leptonica, so the distribution owns their matching ABI
+versions (ADR 0118).
 The normal local path does not use the network. OCR crop preparation waits for
 pointer release and uses that final endpoint, never an intermediate drag
 frame. Explicitly switching a completed screenshot selection to OCR reuses

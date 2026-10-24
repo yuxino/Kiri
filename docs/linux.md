@@ -25,10 +25,18 @@ session. On Ubuntu GNOME, the relevant packages are:
 sudo apt install xdg-desktop-portal xdg-desktop-portal-gnome pipewire
 ```
 
-The `.deb` declares the GStreamer plugins and Tesseract English, Simplified
-Chinese, and Japanese language data. Optional remote OCR requires an unlocked
-Secret Service implementation, normally GNOME Keyring on Ubuntu. Local OCR
-does not require an account or a network connection.
+The `.deb` declares the GStreamer plugins, the system `tesseract` command,
+and Tesseract English, Simplified Chinese, and Japanese language data.
+Local OCR uses that command, so the distribution manages its matching
+Tesseract and Leptonica libraries. It does not require an account or a network
+connection. Optional remote OCR requires an unlocked Secret Service
+implementation, normally GNOME Keyring on Ubuntu.
+
+An older Kiri binary may still require `liblept.so.5` on distributions that
+provide `libleptonica.so.6`. Use a build with the system-command OCR backend or
+rebuild from its source on that distribution; do not alias the two ABI versions
+with a symbolic link. Packages and desktop behavior outside Ubuntu 24.04 still
+need separate verification, including on Kali.
 
 Linux has no in-app installer or signed updater artifacts. Download a newer
 `.deb`, quit Kiri, and install the replacement with the same command. Library
@@ -215,12 +223,11 @@ sudo apt install -y \
   libxdo-dev libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
   libayatana-appindicator3-dev librsvg2-dev patchelf \
   libpipewire-0.3-dev libasound2-dev libpulse-dev libxcb-randr0-dev libgbm-dev libclang-dev \
-  libtesseract-dev libleptonica-dev \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pulseaudio \
   gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
   gstreamer1.0-libav gstreamer1.0-pipewire \
-  tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-jpn
+  tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim tesseract-ocr-jpn
 
 pnpm install --frozen-lockfile
 pnpm tauri dev

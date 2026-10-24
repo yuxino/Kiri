@@ -556,7 +556,6 @@
   "Linux updates are installed manually from a downloaded package.": "Linux 更新需要下載軟件包後手動安裝。",
   "Use the tray menu to pause, resume, or stop recording.": "使用托盤菜單暫停、繼續或停止錄影。",
   "Local OCR needs a Tesseract language pack. Install English, Simplified Chinese, or Japanese language data.": "本地 OCR 需要 Tesseract 語言包。請安裝英文、簡體中文或日文語言資料。",
-  "The installed Tesseract language data could not be loaded.": "無法加載已安裝的 Tesseract 語言資料。",
   "The desktop clipboard is not available.": "系統剪貼簿不可用。",
   "The desktop clipboard did not respond.": "系統剪貼簿沒有響應。",
   "The image could not be copied to the clipboard.": "無法將圖片複製到剪貼簿。",

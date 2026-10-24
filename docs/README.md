@@ -235,3 +235,6 @@ development.
 
 - [`adr/0117-windows-scroll-guide-fallback.md`](adr/0117-windows-scroll-guide-fallback.md)
   — preserve Windows scrolling capture with an incompatible region guide hidden.
+
+- [ADR 0118: System-command Linux OCR](adr/0118-system-command-linux-ocr.md)
+  — let the distribution manage Tesseract and Leptonica compatibility.

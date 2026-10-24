@@ -14,7 +14,7 @@
           "libxcb1",
           "libxcb-randr0",
           "libxdo3",
-          "libtesseract5",
+          "tesseract-ocr",
           "gstreamer1.0-plugins-base",
           "gstreamer1.0-plugins-good",
           "gstreamer1.0-plugins-bad",

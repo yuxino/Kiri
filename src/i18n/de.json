@@ -556,7 +556,6 @@
   "Linux updates are installed manually from a downloaded package.": "Linux-Updates werden manuell aus einem heruntergeladenen Paket installiert.",
   "Use the tray menu to pause, resume, or stop recording.": "Im Tray-Menü die Aufnahme pausieren, fortsetzen oder beenden.",
   "Local OCR needs a Tesseract language pack. Install English, Simplified Chinese, or Japanese language data.": "Lokales OCR benötigt ein Tesseract-Sprachpaket. Sprachdaten für Englisch, vereinfachtes Chinesisch oder Japanisch installieren.",
-  "The installed Tesseract language data could not be loaded.": "Die installierten Tesseract-Sprachdaten konnten nicht geladen werden.",
   "The desktop clipboard is not available.": "Die Desktop-Zwischenablage ist nicht verfügbar.",
   "The desktop clipboard did not respond.": "Die Desktop-Zwischenablage hat nicht geantwortet.",
   "The image could not be copied to the clipboard.": "Das Bild konnte nicht in die Zwischenablage kopiert werden.",
