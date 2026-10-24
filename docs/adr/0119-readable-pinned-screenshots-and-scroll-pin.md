@@ -71,3 +71,28 @@ compact controls and all seven languages. These checks do not establish native
 topmost behavior, physical trackpad feel, mixed-DPI display movement or Windows
 10 dual-display acceptance. Scrolling capture retains ADR 0112's platform and
 matching limits; this decision does not assert that native checks have passed.
+
+## CI acceptance follow-up — 2026-10-24
+
+[Full verification](https://github.com/yuxino/Kiri/actions/runs/40096369738)
+passed on [8d41f6f](https://github.com/yuxino/Kiri/commit/8d41f6f061209598a973155d71cc4e2c2f9f5049),
+attempt 2. These were acceptance packages; the run did not publish a release.
+
+- Windows Server 2025: installed and portable package checks passed. Direct
+  scrolling-capture Pin saved one 615 × 864 image; saved, expected and clipboard
+  RGB pixels were identical. Both capture windows were destroyed before the
+  single reference opened. Its source-sized window showed the long image at a
+  readable width, with its controls inside the frame; closing retained the asset.
+- Ubuntu 24.04 / X11: the actual `.deb` installed without missing libraries.
+  Ordinary pin placement, image pixels, native dragging, proportional window
+  resizing, above-window stacking and closing passed, along with recording and
+  audio regressions.
+- GNOME 46 / Wayland: existing portal, screenshot, clipboard, OCR and recording
+  checks passed at scales 1, 1.25, 1.5 and 2. This headless, single-display suite
+  does not exercise pin interactions.
+
+Zoom and pan input checks used the actual built UI in an isolated browser
+harness. Physical trackpad feel, native long-image gestures, Windows 10
+dual-display and mixed-DPI acceptance remain unverified. Local macOS runtime
+acceptance remains deferred at the user's request to leave the installed app
+alone.
