@@ -17,6 +17,7 @@ ARTIFACT = "kiri-linux-deb"
 SHA = re.compile(r"[0-9a-f]{40}")
 ALLOWED_FILES = {
     WORKFLOW, "AGENTS.md", "README.md", "CONTRIBUTING.md", "SECURITY.md",
+    ".github/workflows/linux-ocr-compat.yml",
     # Historical paths remain valid when comparing an older package checkout.
     # Current translated overviews and policies are covered by docs/*.md below.
     "README_ZH.md", "ROADMAP.md", "PRIVACY.md",

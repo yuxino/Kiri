@@ -11,6 +11,16 @@ provenance = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(provenance)
 
 
+class HarnessSourceBoundaries(unittest.TestCase):
+    def test_only_the_named_kali_ocr_workflow_is_allowed_for_candidate_reuse(self):
+        self.assertTrue(provenance.allowed_change(".github/workflows/linux-ocr-compat.yml"))
+        for path in (".github/workflows/linux-ocr-compat.yml.backup",
+                     ".github/workflows/other.yml", ".github/workflows/release.yml",
+                     "src-tauri/src/ocr/linux.rs", "src-tauri/tauri.linux.conf.json"):
+            with self.subTest(path=path):
+                self.assertFalse(provenance.allowed_change(path))
+
+
 class OriginalBuildAttempt(unittest.TestCase):
     def setUp(self):
         self.run = {"id": 123, "run_attempt": 2, "head_sha": "a" * 40,

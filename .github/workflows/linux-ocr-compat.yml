@@ -51,12 +51,22 @@ jobs:
             -v "$RUNNER_TEMP/kiri-kali-ocr-review:/evidence" \
             kalilinux/kali-rolling bash -euo pipefail -c '
               export DEBIAN_FRONTEND=noninteractive
+              # Avoid the redirector selecting an unreachable community mirror.
+              # Bootstrap CA roots through signed APT metadata before HTTPS.
+              printf "%s\n" "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list
+              printf "%s\n" "Acquire::Retries \"3\";" \
+                "Acquire::http::Timeout \"30\";" "Acquire::https::Timeout \"30\";" \
+                "APT::Update::Error-Mode \"any\";" > /etc/apt/apt.conf.d/80-kiri-qa-network
+              apt-get update
+              apt-get install -y --no-install-recommends ca-certificates
+              sed -i "s|http://kali.download/kali|https://kali.download/kali|" /etc/apt/sources.list
               apt-get update
               apt-get install -y --no-install-recommends \
                 /candidate/*.deb binutils ca-certificates xvfb xauth openbox \
                 xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
                 python3-gi python3-pyatspi at-spi2-core fonts-dejavu-core
               cp /etc/os-release /evidence/os-release.txt
+              cp /etc/apt/sources.list /evidence/apt-sources.txt
               dpkg-query -W kiri tesseract-ocr libtesseract5 libleptonica6 > /evidence/package-versions.txt
               tesseract --version > /evidence/tesseract-version.txt 2>&1
               ldconfig -p > /evidence/system-libraries.txt
