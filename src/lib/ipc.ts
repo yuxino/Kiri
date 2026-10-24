@@ -387,8 +387,8 @@ export const api = {
     invoke<{ x: number; y: number }>("move_scroll_capture_panel", { sessionId, x, y }),
   scrollCaptureStatus: (sessionId: string) =>
     invoke<ScrollCaptureStatusDto>("scroll_capture_status", { sessionId }),
-  finishScrollCapture: (sessionId: string, allowPartial = false) =>
-    invoke<void>("finish_scroll_capture", { sessionId, allowPartial }),
+  finishScrollCapture: (sessionId: string, allowPartial = false, pinOnTop = false) =>
+    invoke<void>("finish_scroll_capture", { sessionId, allowPartial, pinOnTop }),
   cancelScrollCapture: (sessionId: string) =>
     invoke<void>("cancel_scroll_capture", { sessionId }),
   confirmCapture: async (

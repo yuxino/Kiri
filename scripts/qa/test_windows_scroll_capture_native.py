@@ -1,7 +1,9 @@
 """Portable checks that the native scroll gate cannot accept false success."""
 import ast
+import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -136,6 +138,54 @@ class NativeScrollGuards(unittest.TestCase):
                 self.assertEqual(list(Path(temporary).iterdir()), [])
 
 
+class DirectPinGuards(unittest.TestCase):
+    def setUp(self):
+        self.closed = [{"hwnd": 12, "exists": False}, {"hwnd": 13, "exists": False}]
+        self.pin = {"hwnd": 21, "visible": True, "pid": 200, "extended_style": 0x8}
+        self.check = functions("require_pin_cleanup")["require_pin_cleanup"]
+
+    def test_only_this_source_or_the_single_topmost_reference_may_keep_focus(self):
+        for foreground in (42, 21):
+            proof = self.check(self.closed, [self.pin], foreground, 42, 200)
+            self.assertTrue(proof["only_source_or_reference_foreground"])
+            self.assertEqual(proof["foreground_hwnd"], foreground)
+        with self.assertRaisesRegex(RuntimeError, "unrelated window"):
+            self.check(self.closed, [self.pin], 99, 42, 200)
+
+    def test_live_or_missing_scroll_windows_and_wrong_reference_identity_fail(self):
+        for windows in ([], self.closed[:1], [self.closed[0], self.closed[0]],
+                        [{"hwnd": 12, "exists": True}, self.closed[1]]):
+            with self.subTest(windows=windows), self.assertRaisesRegex(RuntimeError, "scrolling|scrolling HWND"):
+                self.check(windows, [self.pin], 21, 42, 200)
+        for pins in ([], [self.pin, {**self.pin, "hwnd": 22}], [{**self.pin, "visible": False}],
+                     [{**self.pin, "pid": 201}], [{**self.pin, "extended_style": 0}]):
+            with self.subTest(pins=pins), self.assertRaisesRegex(RuntimeError, "reference"):
+                self.check(self.closed, pins, 21, 42, 200)
+
+    def test_direct_pin_needs_one_new_image_without_mutating_existing_assets(self):
+        check = functions("require_one_pinned_asset", Path=Path)["require_one_pinned_asset"]
+        old = {"id": "old", "kind": "image", "filename": "old.png"}
+        image = {"id": "new", "kind": "image", "filename": "new.png"}
+        self.assertEqual(check([old, image], {"old"}), image)
+        for items in ([old], [old, image, {**image, "id": "another"}],
+                      [old, {**image, "kind": "video"}], [old, {**image, "filename": "../escape.png"}], [image]):
+            with self.subTest(items=items), self.assertRaisesRegex(RuntimeError, "screenshot|isolated library"):
+                check(items, {"old"})
+
+    def test_pin_evidence_requires_both_native_destructions_before_the_matching_open(self):
+        check = functions("require_pin_lifecycle", re=re)["require_pin_lifecycle"]
+        region = "[window] destroyed label=scroll-capture-region\n"
+        panel = "[window] destroyed label=scroll-capture\n"
+        opened = "[pin] screenshot opened asset_id=744c9acd-645c-4211-8901-093193625282\n"
+        asset = "744C9ACD-645C-4211-8901-093193625282"
+        self.assertEqual(check(region + panel + opened, asset), {
+            "opened_once": True, "pin_after_scroll_windows_destroyed": True})
+        for log in (panel + opened, region + region + opened, region + panel + opened + opened,
+                    region + opened + panel, opened + region + panel, region + panel):
+            with self.subTest(log=log), self.assertRaisesRegex(RuntimeError, "Direct scrolling pin"):
+                check(log, asset)
+
+
 class FixturePublication(unittest.TestCase):
     def test_sharing_violation_retries_then_atomically_publishes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -192,6 +242,19 @@ class PixelGuards(unittest.TestCase):
                     actual = actual.crop((0, 0, 300, 450))
                 with self.assertRaisesRegex(RuntimeError, "Saved scrolling"):
                     self.check(actual, self.reference)
+
+    def test_direct_pin_clipboard_keeps_the_exact_full_resolution_saved_image(self):
+        check = functions("require_clipboard_image", Image=Image, ImageChops=ImageChops,
+                          hashlib=hashlib)["require_clipboard_image"]
+        proof = check(self.reference, self.reference.copy())
+        self.assertEqual(proof["dimensions"], [300, 500])
+        self.assertTrue(proof["saved_clipboard_pixels_identical"])
+        self.assertEqual(proof["rgb_sha256"], hashlib.sha256(self.reference.tobytes()).hexdigest())
+        changed = self.reference.copy()
+        changed.putpixel((150, 250), (0, 0, 0))
+        for copied in (None, ["image.png"], self.reference.resize((150, 250)), changed):
+            with self.subTest(copied=type(copied)), self.assertRaisesRegex(RuntimeError, "clipboard|full-resolution"):
+                check(self.reference, copied)
 
 
 if __name__ == "__main__":

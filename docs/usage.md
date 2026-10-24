@@ -120,6 +120,8 @@ On macOS and Windows, recording controls follow the selection and adapt near dis
 
 Select the scrolling content, then choose **Scrolling Screenshot** in the screenshot toolbar before adding annotations. Start anywhere and scroll naturally up or down; captured content is not added twice when you return to it. Pausing to read does not end capture. Choose **Done** to copy and save, or **Esc** to cancel before saving starts. Enter remains available to the original application.
 
+Choose **Pin** to finish, copy and save the image, then open it above other windows in one action. If the reference cannot open, the saved image remains available in the completion preview for retry. When only **Save captured area** is available, save that partial result first, then use Pin in its completion preview.
+
 While scrolling capture is active, `kiri --finish-scroll-capture` performs the same complete-save check as **Done**; it never falls back to saving a partial result. `kiri --cancel-scroll-capture` cancels before saving begins. Both commands control only the current session and do not start a new capture.
 
 The selected area stays visibly marked during capture. The area outside it is dimmed, while clicks, wheel input and trackpad gestures pass through to the original application. This guide does not change the capture area or appear in the saved image.
@@ -152,7 +154,9 @@ Annotations stack in creation order. Mosaic added later processes earlier text, 
 
 ## References and colors
 
-Double-click an unmarked part of the screenshot selection to finish; double-clicking existing text still edits it. The toolbar pin saves and pins a screenshot, and Pin on the completion card opens the same kind of reference. The reference has a thin black rounded border. Drag the image to move it, resize proportionally from the lower-right corner, and hover to unpin or close.
+Double-click an unmarked part of the screenshot selection to finish; double-clicking existing text still edits it. The toolbar pin saves and pins a screenshot, and Pin on the completion card opens the same kind of reference. The reference has a thin black rounded border. Drag the image to move its window, resize proportionally from the lower-right corner, and hover or focus the controls to unpin or close.
+
+Long references open from the top at a readable width; scroll to see the rest. Wheel and trackpad scrolling browse the image. Pinch or Ctrl/Command-scroll zooms around the pointer without resizing the window. Space-drag or middle-drag pans the image; plain drag still moves the window. Hover or keyboard focus reveals the zoom controls; open the percentage menu for **Fit width**, **Fit image**, or **Actual size**. Ctrl/Command +/− zooms; Ctrl/Command+0 fits the image and Ctrl/Command+1 restores actual pixel density. Esc or Ctrl/Command+W closes the reference. Viewing does not change the saved image.
 
 In Screenshot mode, hover to magnify the original pixels and see their coordinates and HEX color. Press `⌘C` on macOS or `Ctrl+C` to copy the color while keeping the selection. The loupe hides once annotation starts.
 

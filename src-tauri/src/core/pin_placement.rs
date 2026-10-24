@@ -7,6 +7,41 @@ use super::geometry::Rect;
 
 const MAX_RECENT_CAPTURES: usize = 64;
 
+/// Older and imported images have no capture region. Long images need a
+/// readable viewport rather than a thumbnail fitted by the full image height.
+pub fn fitted_reference_frame(pixel_size: (i64, i64), backing_scale: f64, work_area: Rect) -> Rect {
+    let density = if backing_scale.is_finite() && backing_scale > 0.0 {
+        backing_scale.max(1.0)
+    } else {
+        1.0
+    };
+    let source_width = pixel_size.0.max(1) as f64;
+    let source_height = pixel_size.1.max(1) as f64;
+    let available_width = work_area.width.max(1.0);
+    let available_height = work_area.height.max(1.0);
+    let max_width = 680.0_f64.min(available_width);
+    let max_height = 480.0_f64.min(available_height);
+    let (width, height) = if source_height > source_width * 2.0 {
+        (
+            (source_width / density).min(max_width),
+            (source_height / density).min(max_height),
+        )
+    } else {
+        let scale = (max_width / source_width)
+            .min(max_height / source_height)
+            .min(1.0 / density);
+        (source_width * scale, source_height * scale)
+    };
+    let width = width.max(80.0_f64.min(available_width));
+    let height = height.max(60.0_f64.min(available_height));
+    Rect::new(
+        work_area.x + (available_width - width) / 2.0,
+        work_area.y + (available_height - height) / 2.0,
+        width,
+        height,
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CapturePinPlacement {
     pub frame: Rect,
@@ -67,6 +102,38 @@ impl RecentCapturePinPlacements {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn old_long_reference_has_readable_width_instead_of_a_thin_thumbnail() {
+        let frame = fitted_reference_frame((1080, 12000), 1.0, Rect::new(0.0, 0.0, 1920.0, 1040.0));
+        assert_eq!(frame, Rect::new(620.0, 280.0, 680.0, 480.0));
+    }
+
+    #[test]
+    fn fallback_respects_source_pixel_density_and_negative_monitor_work_area() {
+        let frame =
+            fitted_reference_frame((1200, 800), 2.0, Rect::new(-1440.0, -80.0, 1440.0, 860.0));
+        assert_eq!(frame, Rect::new(-1020.0, 150.0, 600.0, 400.0));
+    }
+
+    #[test]
+    fn long_reference_never_opens_outside_a_small_work_area() {
+        let area = Rect::new(200.0, 30.0, 260.0, 180.0);
+        let frame = fitted_reference_frame((1000, 9000), 1.25, area);
+        assert_eq!(frame, area);
+    }
+
+    #[test]
+    fn tiny_fallback_keeps_room_for_controls_without_enlarging_the_image() {
+        let frame = fitted_reference_frame((12, 8), 2.0, Rect::new(0.0, 0.0, 1000.0, 800.0));
+        assert_eq!(frame, Rect::new(460.0, 370.0, 80.0, 60.0));
+    }
+
+    #[test]
+    fn ordinary_fallback_still_fits_the_whole_image() {
+        let frame = fitted_reference_frame((1280, 960), 1.0, Rect::new(0.0, 0.0, 1920.0, 1040.0));
+        assert_eq!((frame.width, frame.height), (640.0, 480.0));
+    }
 
     #[test]
     fn retina_reference_keeps_logical_selection_size_and_negative_display_origin() {

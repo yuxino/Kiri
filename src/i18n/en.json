@@ -856,5 +856,8 @@
   "Couldn't load startup settings.": "Couldn't load startup settings.",
   "Couldn't change startup settings.": "Couldn't change startup settings.",
   "Couldn't open system startup settings.": "Couldn't open system startup settings.",
-  "Open System Settings": "Open System Settings"
+  "Open System Settings": "Open System Settings",
+  "Save the captured area first, then pin it from the completion preview.": "Save the captured area first, then pin it from the completion preview.",
+  "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.",
+  "Zoom level": "Zoom level"
 }

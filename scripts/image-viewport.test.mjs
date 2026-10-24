@@ -107,3 +107,80 @@ test("visible raster covers every on-screen image pixel with bounded overscan th
     }
   }
 });
+
+const pinOptions = {padding: 0, allowUpscale: true, alignLongImagesToTop: true, fitWidthWhenOverflowing: true};
+
+test("ordinary references have no inset and keep fitting their proportionally resized frame", () => {
+  for (const dpr of [1, 1.25, 2]) {
+    const image = {width: 800, height: 400};
+    for (const factor of [1, 1.5, 3]) {
+      const size = {width: 400 * factor, height: 200 * factor};
+      const pin = imageViewport(image, size, "auto", 1, dpr, pinOptions);
+      assert.equal(pin.width, size.width); assert.equal(pin.height, size.height);
+      assert.equal(pin.x, 0); assert.equal(pin.y, 0);
+      assert.deepEqual([pin.surfaceWidth, pin.surfaceHeight], [size.width, size.height]);
+    }
+  }
+  const tiny = imageViewport({width: 8, height: 6}, {width: 80, height: 60}, "auto", 1, 2, pinOptions);
+  assert.equal(tiny.width, 80); assert.equal(tiny.height, 60);
+  const editor = imageViewport({width: 8, height: 6}, {width: 80, height: 60}, "auto", 1, 2);
+  assert.equal(editor.width, 4); assert.equal(editor.height, 3);
+});
+
+test("long references fill their reading width from the first row instead of fitting the whole image", () => {
+  const image = {width: 1080, height: 10000}, size = {width: 640, height: 720};
+  const layout = imageViewport(image, size, "auto", 1, 2, pinOptions);
+  near(layout.width, 640); near(layout.height, 10000 * 640 / 1080);
+  assert.equal(layout.x, 0); assert.equal(layout.y, 0);
+  assert.equal(layout.surfaceWidth, 640); assert.ok(layout.surfaceHeight > 5000);
+  const tallFrame = imageViewport({width: 100, height: 300}, {width: 80, height: 600}, "auto", 1, 1, pinOptions);
+  assert.equal(tallFrame.y, 0, "a tall reading frame must still begin with the first row");
+  const whole = imageViewport(image, size, "fit", 1, 2, pinOptions);
+  assert.ok(whole.height <= 720); assert.ok(whole.width < 80);
+  assert.equal(whole.surfaceHeight, 720);
+});
+
+test("a moderately stitched reference reads at its original region width when it overflows the source frame", () => {
+  const image = {width: 768, height: 840};
+  for (const dpr of [1, 2]) {
+    const frame = {width: 768 / dpr, height: 360 / dpr};
+    const pin = imageViewport(image, frame, "auto", 1, dpr, pinOptions);
+    near(pin.width, frame.width); near(pin.height, image.height / dpr);
+    assert.equal(pin.x, 0); assert.equal(pin.y, 0);
+    assert.ok(pin.surfaceHeight > frame.height);
+  }
+  const editor = imageViewport(image, {width: 768, height: 360}, "auto", 1, 1);
+  assert.equal(editor.height, 336, "the editor retains its existing fit behavior for this aspect ratio");
+});
+
+test("a reference matching its frame aspect still fits, centers spare height and tolerates subpixel overflow", () => {
+  const image = {width: 768, height: 840};
+  const matched = imageViewport(image, {width: 384, height: 420}, "auto", 1, 2, pinOptions);
+  assert.deepEqual([matched.width, matched.height, matched.x, matched.y], [384, 420, 0, 0]);
+  const taller = imageViewport(image, {width: 768, height: 900}, "auto", 1, 1, pinOptions);
+  assert.deepEqual([taller.width, taller.height, taller.y], [768, 840, 30]);
+  const subpixel = imageViewport({width: 768, height: 360.5}, {width: 768, height: 360}, "auto", 1, 1, pinOptions);
+  near(subpixel.height, 360); assert.ok(subpixel.width < 768);
+  assert.equal(subpixel.surfaceHeight, 360);
+});
+
+test("manual reference zoom retains source-pixel density when only the frame changes", () => {
+  const image = {width: 1600, height: 1200};
+  for (const dpr of [1, 1.25, 2]) {
+    const small = imageViewport(image, {width: 400, height: 300}, "manual", 1, dpr, pinOptions);
+    const large = imageViewport(image, {width: 800, height: 600}, "manual", 1, dpr, pinOptions);
+    near(small.width * dpr, 1600); near(small.height * dpr, 1200);
+    assert.equal(small.width, large.width); assert.equal(small.height, large.height);
+  }
+});
+
+test("zero-padding reference zoom preserves cursor and center anchors across display-density changes", () => {
+  const image = {width: 4000, height: 30000}, size = {width: 700, height: 600};
+  const old = imageViewport(image, size, "manual", 1, 1, pinOptions);
+  for (const point of [{x: 125, y: 75}, {x: 350, y: 300}]) {
+    const source = imageZoomAnchor(old, {x: 800, y: 9000}, point);
+    const next = imageViewport(image, size, "manual", 1.5, 2, pinOptions);
+    const scroll = scrollToImageAnchor(next, size, source, point);
+    pointNear(imageZoomAnchor(next, scroll, point), source);
+  }
+});

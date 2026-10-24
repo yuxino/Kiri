@@ -856,5 +856,8 @@
   "Couldn't load startup settings.": "Autostart-Einstellungen konnten nicht geladen werden.",
   "Couldn't change startup settings.": "Autostart-Einstellungen konnten nicht geändert werden.",
   "Couldn't open system startup settings.": "Die Autostart-Einstellungen des Systems konnten nicht geöffnet werden.",
-  "Open System Settings": "Systemeinstellungen öffnen"
+  "Open System Settings": "Systemeinstellungen öffnen",
+  "Save the captured area first, then pin it from the completion preview.": "Speichern Sie zuerst den erfassten Bereich und heften Sie ihn dann über die Abschlussvorschau an.",
+  "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Verschieben des Fensters ziehen. Zum Betrachten scrollen. Per Pinch oder mit Strg/Command und Scrollen zoomen. Zum Verschieben des Bildausschnitts beim Ziehen die Leertaste gedrückt halten.",
+  "Zoom level": "Zoomstufe"
 }

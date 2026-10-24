@@ -55,7 +55,7 @@ report = {"success": False, "native": True, "checks": [], "sessions": [],
           "acceptance_scope": "This CI desktop only; not Windows 10 or physical-device acceptance"}
 app = fixture = source = None
 desktop = Desktop(backend="uia")
-deadline = time.monotonic() + 210
+deadline = time.monotonic() + 240
 
 
 def wait_for(description, predicate, timeout=25):
@@ -256,6 +256,81 @@ def require_pixels(actual, expected):
     return {"size": actual.size, "max_channel_mean_error": mean, "changed_channel_fraction": fraction}
 
 
+def require_one_pinned_asset(items, before_ids):
+    if not before_ids.issubset({item["id"] for item in items}):
+        raise RuntimeError("Direct scrolling pin changed an existing screenshot")
+    created = [item for item in items if item["id"] not in before_ids]
+    if len(created) != 1 or created[0]["kind"] != "image":
+        raise RuntimeError("Direct scrolling pin must save exactly one screenshot")
+    if Path(created[0]["filename"]).name != created[0]["filename"]:
+        raise RuntimeError("Pinned screenshot must stay inside the isolated library")
+    return created[0]
+
+
+def require_pin_cleanup(scrolling_windows, pins, foreground, source_handle, app_pid):
+    if (len(scrolling_windows) != 2 or len({window["hwnd"] for window in scrolling_windows}) != 2
+            or any(window["hwnd"] <= 0 for window in scrolling_windows)):
+        raise RuntimeError("Direct pin needs both captured scrolling HWND identities")
+    if any(window["exists"] for window in scrolling_windows):
+        raise RuntimeError("Direct pin left a scrolling window alive")
+    if len(pins) != 1:
+        raise RuntimeError("Direct pin must open exactly one visible reference window")
+    pin = pins[0]
+    if not pin["visible"] or pin["pid"] != app_pid or not pin["extended_style"] & 0x8:
+        raise RuntimeError("Direct pin requires its visible native topmost reference")
+    if foreground not in (source_handle, pin["hwnd"]):
+        raise RuntimeError("Direct pin left an unrelated window in the foreground")
+    return {"scrolling_windows": scrolling_windows, "reference": pin,
+            "foreground_hwnd": int(foreground), "source_hwnd": int(source_handle),
+            "only_source_or_reference_foreground": True}
+
+
+def require_pin_lifecycle(log, asset_id):
+    opened = list(re.finditer(re.escape(f"[pin] screenshot opened asset_id={asset_id.lower()}") + r"\b", log))
+    destroyed = list(re.finditer(
+        r"\[window\] destroyed label=(scroll-capture(?:-region)?)(?=\s|$)", log))
+    if len(opened) != 1 or len(destroyed) != 2 or {item.group(1) for item in destroyed} != {
+            "scroll-capture", "scroll-capture-region"}:
+        raise RuntimeError("Direct scrolling pin needs one saved reference and both destroyed controls")
+    if any(item.start() >= opened[0].start() for item in destroyed):
+        raise RuntimeError("Direct scrolling pin opened before its capture windows were destroyed")
+    return {"opened_once": True, "pin_after_scroll_windows_destroyed": True}
+
+
+def require_clipboard_image(actual, copied):
+    if not isinstance(copied, Image.Image) or copied.size != actual.size:
+        raise RuntimeError("Direct scrolling pin must copy its full-resolution image")
+    actual, copied = actual.convert("RGB"), copied.convert("RGB")
+    if ImageChops.difference(actual, copied).getbbox() is not None:
+        raise RuntimeError("Direct scrolling pin's clipboard differs from its saved image")
+    return {"dimensions": list(actual.size), "saved_clipboard_pixels_identical": True,
+            "rgb_sha256": hashlib.sha256(actual.tobytes()).hexdigest()}
+
+
+def pinned_window():
+    pins = desktop.windows(process=app.pid, title_re="Pinned Screenshot.*", visible_only=True)
+    if len(pins) > 1:
+        raise RuntimeError("Direct pin opened duplicate native references")
+    return pins[0] if pins else None
+
+
+def assert_pinned(handles):
+    wait_for("all scrolling windows destroyed before pin", lambda: all(not user32.IsWindow(hwnd) for hwnd in handles))
+    pin = wait_for("direct scrolling pin opens reference", pinned_window)
+    wait_for("scroll reference native topmost", lambda: get_style(pin.handle, -20) & 0x8)
+    wait_for("source or its reference foreground after pin", lambda:
+             user32.GetForegroundWindow() in (source.handle, pin.handle))
+    proof = require_pin_cleanup(
+        [{"hwnd": int(hwnd), "exists": bool(user32.IsWindow(hwnd))} for hwnd in handles],
+        [{"hwnd": int(window.handle), "pid": owner(window.handle),
+          "visible": bool(user32.IsWindowVisible(window.handle)),
+          "extended_style": int(get_style(window.handle, -20))}
+         for window in desktop.windows(process=app.pid, title_re="Pinned Screenshot.*", visible_only=True)],
+        int(user32.GetForegroundWindow() or 0), source.handle, app.pid,
+    )
+    return pin, proof
+
+
 def stop(process):
     if process is not None and process.poll() is None:
         subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=15)
@@ -333,6 +408,63 @@ try:
                     report["saved_pixels"] = require_pixels(actual, expected)
                 report["source_events"] = state()
                 report["checks"].append("restart, real wheel scrolling, moved controls excluded, exact connected saved pixels")
+
+                # A new real capture owns its own baseline and source offset.
+                # Ordinary Done above retains the strict source-focus check.
+                pin_before_ids = {asset["id"] for asset in assets()}
+                pin_start_offset = state()["offset"]
+                panel, handles = begin()
+                source.set_focus()
+                wait_for("source foreground before direct-pin scroll", lambda:
+                         user32.GetForegroundWindow() == source.handle)
+                for _ in range(5):
+                    before = state()
+                    mouse.scroll(coords=point, wheel_dist=-1)
+                    wait_for("new scrolling session receives real wheel", lambda:
+                             state()["offset"] > before["offset"])
+                    time.sleep(0.7)
+                pin_end_offset = state()["offset"]
+                mouse.move(coords=(width - 8, height - 8))
+                find("Pin Screenshot on Top", scope=panel).click_input()
+                pin, cleanup_proof = assert_pinned(handles)
+                pinned_asset = require_one_pinned_asset(assets(), pin_before_ids)
+                report["direct_pin"] = {"asset_id": pinned_asset["id"], "cleanup": cleanup_proof,
+                    "source_offsets": [pin_start_offset, pin_end_offset]}
+                with Image.open(library / "Assets" / pinned_asset["filename"]) as actual, \
+                        Image.open(workspace / "reference.png") as reference:
+                    expected = reference.crop((selection[0], selection[1] + pin_start_offset,
+                                               selection[2], selection[3] + pin_end_offset))
+                    actual.save(output / "direct-scroll-pin-saved.png")
+                    expected.save(output / "direct-scroll-pin-expected.png")
+                    pixel_proof = require_pixels(actual, expected)
+                    report["direct_pin"]["saved_pixels"] = pixel_proof
+                    copied = ImageGrab.grabclipboard()
+                    clipboard_proof = require_clipboard_image(actual, copied)
+                    report["direct_pin"]["clipboard"] = clipboard_proof
+                    copied.save(output / "direct-scroll-pin-clipboard.png")
+                log_offset = report["sessions"][-1]["log_offset"]
+                trace = wait_for("direct scrolling pin lifecycle log", lambda:
+                    (text := native_log.read_bytes()[log_offset:].decode("utf-8", errors="replace"))
+                    and f"[pin] screenshot opened asset_id={pinned_asset['id'].lower()}" in text and text)
+                (output / "direct-scroll-pin-lifecycle.log").write_text(trace, encoding="utf-8")
+                lifecycle = require_pin_lifecycle(trace, pinned_asset["id"])
+                report["direct_pin"]["lifecycle"] = lifecycle
+                bounds = window_rect(pin.handle)
+                mouse.move(coords=((bounds[0] + bounds[2]) // 2, (bounds[1] + bounds[3]) // 2))
+                find("Unpin", scope=pin)
+                # Zoom is enabled only after this asset's real image has loaded;
+                # a mounted but empty reference must not pass the native gate.
+                find(r"Zoom level: [0-9.]+%", scope=pin)
+                report["direct_pin"]["reference_rect"] = bounds
+                report["direct_pin"]["image_ready"] = True
+                ImageGrab.grab().save(output / "direct-scroll-pin-reference.png")
+                find("Close", scope=pin).click_input()
+                wait_for("direct scrolling reference closes", lambda: not user32.IsWindow(pin.handle))
+                retained = require_one_pinned_asset(assets(), pin_before_ids)
+                if retained["id"] != pinned_asset["id"]:
+                    raise RuntimeError("Closing a scrolling reference changed its saved screenshot")
+                report["direct_pin"].update(reference_closed=True, saved_asset_retained=True)
+                report["checks"].append("direct scrolling Pin saves one full-resolution image, copies it, destroys controls before pinning and closes without deleting it")
             except Exception:
                 try:
                     report["windows_at_failure"] = native_windows() if app and app.poll() is None else []

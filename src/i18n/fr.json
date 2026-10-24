@@ -856,5 +856,8 @@
   "Couldn't load startup settings.": "Impossible de charger les réglages de démarrage.",
   "Couldn't change startup settings.": "Impossible de modifier les réglages de démarrage.",
   "Couldn't open system startup settings.": "Impossible d’ouvrir les réglages de démarrage du système.",
-  "Open System Settings": "Ouvrir les réglages système"
+  "Open System Settings": "Ouvrir les réglages système",
+  "Save the captured area first, then pin it from the completion preview.": "Enregistrez d’abord la zone capturée, puis épinglez-la depuis l’aperçu de fin.",
+  "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites glisser pour déplacer la fenêtre et défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace en faisant glisser pour déplacer l’image.",
+  "Zoom level": "Niveau de zoom"
 }

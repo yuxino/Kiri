@@ -856,5 +856,8 @@
   "Couldn't load startup settings.": "起動設定を読み込めませんでした。",
   "Couldn't change startup settings.": "起動設定を変更できませんでした。",
   "Couldn't open system startup settings.": "システムの起動設定を開けませんでした。",
-  "Open System Settings": "システム設定を開く"
+  "Open System Settings": "システム設定を開く",
+  "Save the captured area first, then pin it from the completion preview.": "先に撮影済みの範囲を保存し、完了プレビューから固定してください。",
+  "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "ドラッグでウインドウを移動し、スクロールで画像を閲覧できます。ピンチまたは Ctrl/Command を押しながらスクロールで拡大縮小し、スペースを押しながらドラッグで画像内を移動します。",
+  "Zoom level": "ズーム倍率"
 }

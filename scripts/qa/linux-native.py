@@ -545,6 +545,9 @@ def native_pin_acceptance():
     # Native mapping precedes WebKit navigation/React handlers. Require a
     # painted hover action before attempting the one real image drag.
     wait_for_control("Unpin")
+    # Compare the image with hover controls hidden; the new zoom bar is UI,
+    # not saved pixels. Keep the strict full-content comparison unchanged.
+    command("xdotool", "mousemove", "10", "790")
     def initial_image_painted():
         x, y, width, height = (int(before[key]) for key in ("X", "Y", "WIDTH", "HEIGHT"))
         actual = ImageGrab.grab().convert("RGB").crop((x, y, x + width, y + height))

@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { imageViewport, imageZoomAnchor, scrollToImageAnchor, visibleImageViewport, type ImageViewMode } from "../annotation/image-viewport.js";
+import { imageViewport, imageZoomAnchor, scrollToImageAnchor, visibleImageViewport, type ImageViewMode, type ImageViewportOptions } from "../annotation/image-viewport.js";
 import { isTextComposition } from "../annotation/text-composition.js";
 
 const editable = (target: EventTarget | null) => target instanceof Element && !!target.closest("input,textarea,select,[contenteditable]");
 
-export function useImageViewport(image: {w: number; h: number} | null, identity: string, disabled: boolean) {
+// Native scrollbars belong to the scroll view, never to a window/image drag.
+export function isImageViewportScrollbar(event: {clientX: number; clientY: number}, element: HTMLElement | null) {
+  if (!element || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+  const rect = element.getBoundingClientRect();
+  const x = event.clientX - rect.left - element.clientLeft, y = event.clientY - rect.top - element.clientTop;
+  return x >= 0 && y >= 0 && x <= rect.width && y <= rect.height && (x >= element.clientWidth || y >= element.clientHeight);
+}
+
+type ViewportOptions = ImageViewportOptions & {isInteracting?: () => boolean};
+
+export function useImageViewport(image: {w: number; h: number} | null, identity: string, disabled: boolean, options: ViewportOptions = {}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({width: 800, height: 560});
   const [scroll, setScroll] = useState({x: 0, y: 0});
@@ -15,9 +25,11 @@ export function useImageViewport(image: {w: number; h: number} | null, identity:
   const gesture = useRef(false);
   const pan = useRef<{id: number; x: number; y: number; left: number; top: number} | null>(null);
   const pending = useRef<{source: {x: number; y: number}; point: {x: number; y: number}} | null>(null);
-  const layout = useMemo(() => imageViewport({width: image?.w ?? 1, height: image?.h ?? 1}, size, view.mode, view.zoom, dpr), [image, size, view, dpr]);
-  const latest = useRef({layout, size, disabled, dpr});
-  latest.current = {layout, size, disabled, dpr};
+  const {padding, allowUpscale, alignLongImagesToTop, fitWidthWhenOverflowing} = options;
+  const layout = useMemo(() => imageViewport({width: image?.w ?? 1, height: image?.h ?? 1}, size, view.mode, view.zoom, dpr,
+    {padding, allowUpscale, alignLongImagesToTop, fitWidthWhenOverflowing}), [image, size, view, dpr, padding, allowUpscale, alignLongImagesToTop, fitWidthWhenOverflowing]);
+  const latest = useRef({layout, size, disabled, dpr, isInteracting: options.isInteracting});
+  latest.current = {layout, size, disabled, dpr, isInteracting: options.isInteracting};
   const readScroll = useCallback(() => {
     const element = containerRef.current;
     if (element) setScroll(previous => previous.x === element.scrollLeft && previous.y === element.scrollTop ? previous : {x: element.scrollLeft, y: element.scrollTop});
@@ -30,7 +42,7 @@ export function useImageViewport(image: {w: number; h: number} | null, identity:
     pending.current = {source: imageZoomAnchor(current.layout, {x: element.scrollLeft, y: element.scrollTop}, anchor), point: anchor};
   }, []);
   const changeView = useCallback((mode: ImageViewMode, zoom?: number, point?: {x: number; y: number}) => {
-    if (latest.current.disabled || gesture.current) return;
+    if (latest.current.disabled || gesture.current || latest.current.isInteracting?.()) return;
     preserveAnchor(point);
     setView({mode, zoom: Math.max(Math.min(0.005, latest.current.layout.zoom), Math.min(Math.max(8, latest.current.layout.zoom), zoom ?? latest.current.layout.zoom))});
   }, [preserveAnchor]);
@@ -58,7 +70,15 @@ export function useImageViewport(image: {w: number; h: number} | null, identity:
     const observer = new ResizeObserver(publish);
     observer.observe(element);
     window.addEventListener("resize", publish);
-    return () => { observer.disconnect(); window.removeEventListener("resize", publish); };
+    let density: MediaQueryList | undefined;
+    const watchDensity = () => {
+      density?.removeEventListener("change", densityChanged);
+      density = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      density?.addEventListener("change", densityChanged);
+    };
+    const densityChanged = () => { publish(); watchDensity(); };
+    watchDensity();
+    return () => { observer.disconnect(); window.removeEventListener("resize", publish); density?.removeEventListener("change", densityChanged); };
   }, [preserveAnchor]);
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -74,7 +94,7 @@ export function useImageViewport(image: {w: number; h: number} | null, identity:
     const element = containerRef.current;
     if (!element) return;
     const wheel = (event: WheelEvent) => {
-      if (gesture.current || latest.current.disabled) { event.preventDefault(); return; }
+      if (gesture.current || latest.current.disabled || latest.current.isInteracting?.()) { event.preventDefault(); return; }
       if (!event.metaKey && !event.ctrlKey) return;
       event.preventDefault();
       const rect = element.getBoundingClientRect();
@@ -84,6 +104,7 @@ export function useImageViewport(image: {w: number; h: number} | null, identity:
     let pinchStart = 1;
     const pinch = (event: Event) => {
       event.preventDefault();
+      if (gesture.current || latest.current.disabled || latest.current.isInteracting?.()) return;
       const gestureEvent = event as Event & {scale: number; clientX: number; clientY: number};
       if (event.type === "gesturestart") pinchStart = latest.current.layout.zoom;
       const rect = element.getBoundingClientRect();
@@ -110,12 +131,14 @@ export function useImageViewport(image: {w: number; h: number} | null, identity:
     };
     const up = (event: KeyboardEvent) => { if (event.code === "Space") setSpace(false); };
     window.addEventListener("keydown", down); window.addEventListener("keyup", up, true);
-    window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", finish); window.addEventListener("blur", reset);
+    window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", finish);
+    window.addEventListener("lostpointercapture", finish, true); window.addEventListener("blur", reset);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up, true);
-      window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", finish); window.removeEventListener("blur", reset); };
+      window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("lostpointercapture", finish, true); window.removeEventListener("blur", reset); };
   }, [changeView, zoomBy]);
   const onPointerDownCapture = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (disabled) return;
+    if (disabled || isImageViewportScrollbar(event, event.currentTarget)) return;
     if (editable(event.target)) {
       // A callout text frame can promote its pointer into a canvas drag.
       // Preserve its geometry while text selection/IME still owns the input.

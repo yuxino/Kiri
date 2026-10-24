@@ -50,6 +50,8 @@ Der kleine Pfeil neben dem Mikrofon öffnet die Auswahl der verfügbaren Eingabe
 
 Wählen Sie den scrollenden Inhalt und vor dem Hinzufügen von Anmerkungen **Scrollaufnahme** in der Screenshot-Leiste. Beginnen Sie an beliebiger Stelle und scrollen Sie wie gewohnt nach oben oder unten. Bereits erfasster Inhalt wird beim Zurückscrollen nicht doppelt hinzugefügt. Lesepausen beenden die Aufnahme nicht. **Fertig** kopiert und speichert das Bild; vor dem Speichern bricht Esc ab. Enter bleibt für die ursprüngliche Anwendung verfügbar.
 
+**Anheften** beendet die Aufnahme, kopiert und speichert das Bild und öffnet es mit einer Aktion über anderen Fenstern. Kann die Referenz nicht geöffnet werden, bleibt das gespeicherte Bild erhalten und lässt sich über die Abschlussvorschau erneut anheften. Wird nur **Erfassten Bereich speichern** angeboten, speichern Sie zuerst dieses Teilergebnis und heften es dann über die Abschlussvorschau an.
+
 Während einer Scrollaufnahme führt `kiri --finish-scroll-capture` dieselbe Prüfung vor dem vollständigen Speichern wie **Fertig** aus; ein Teilergebnis wird nie automatisch stattdessen gespeichert. `kiri --cancel-scroll-capture` bricht vor Beginn des Speicherns ab. Beide Befehle steuern nur die laufende Sitzung und starten keine neue Aufnahme.
 
 Der ausgewählte Bereich bleibt während der Aufnahme sichtbar markiert; außerhalb wird der Bildschirm abgedunkelt. Klicks, Mausrad und Trackpad-Gesten erreichen weiterhin die ursprüngliche Anwendung. Diese Anzeige verändert die Auswahl nicht und erscheint nicht im gespeicherten Bild.
@@ -80,7 +82,9 @@ Anmerkungen liegen in der Reihenfolge ihrer Erstellung übereinander. Später ge
 
 ## Referenzen und Farben
 
-Ein Doppelklick auf eine freie Stelle im Screenshot-Bereich beendet die Aufnahme; vorhandener Text bleibt per Doppelklick bearbeitbar. Die Stecknadel in der Werkzeugleiste speichert und heftet den Screenshot an; Anheften auf der Abschlusskarte bleibt verfügbar. Ziehen verschiebt das Bild, die untere rechte Ecke ändert seine Größe proportional. Beim Darüberfahren erscheinen Lösen und Schließen.
+Ein Doppelklick auf eine freie Stelle im Screenshot-Bereich beendet die Aufnahme; vorhandener Text bleibt per Doppelklick bearbeitbar. Die Stecknadel in der Werkzeugleiste speichert und heftet den Screenshot an; Anheften auf der Abschlusskarte bleibt verfügbar. Ziehen am Bild verschiebt das Fenster, die untere rechte Ecke ändert die Fenstergröße proportional. Beim Darüberfahren oder Tastaturfokus erscheinen Lösen und Schließen.
+
+Lange Referenzen öffnen sich von oben in lesbarer Breite; der Rest lässt sich durch Scrollen ansehen. Mausrad und Trackpad scrollen durch das Bild. Pinch oder Strg/Command-Scrollen zoomt um den Zeiger, ohne die Fenstergröße zu ändern. Ziehen mit gedrückter Leertaste oder mittlerer Maustaste verschiebt den Bildausschnitt; normales Ziehen bewegt weiterhin das Fenster. Beim Darüberfahren mit dem Mauszeiger oder bei Tastaturfokus erscheinen die Zoomregler. Das Prozentmenü bietet **Breite einpassen**, **Bild einpassen** und **Originalgröße**. Strg/Command +/− zoomt; Strg/Command+0 passt das Bild ein und Strg/Command+1 stellt die ursprüngliche Pixeldichte wieder her. Esc oder Strg/Command+W schließt die Referenz. Die Ansicht ändert das gespeicherte Bild nicht.
 
 Im Screenshot-Modus zeigt die Lupe beim Bewegen des Mauszeigers die ursprünglichen Pixel, Koordinaten und den HEX-Farbwert. Mit `⌘C` auf macOS oder `Ctrl+C` kopierst du die Farbe; die Auswahl bleibt erhalten. Beim Annotieren wird die Lupe ausgeblendet.
 

@@ -204,6 +204,9 @@ def direct_pin_acceptance(source, expected, region, user32):
     before = client_bounds(pin)
     mouse.move(coords=(before[0] + 30, before[1] + 30))
     find("Unpin", scope=pin)  # React must have mounted before pointer input.
+    # Leave the image before comparing pixels so hover-only zoom controls do
+    # not become part of the reference. No comparison area is masked out.
+    mouse.move(coords=(10, user32.GetSystemMetrics(1) - 10))
     def initial_image_painted():
         actual = ImageGrab.grab(bbox=before).convert("RGB")
         expected_image = captured.resize(actual.size, Image.Resampling.LANCZOS)
@@ -379,6 +382,7 @@ def quick_capture_acceptance(library_window):
         Desktop(backend="win32").window(handle=pin_window.handle).move_window(max(300, width - 730), 180)
         source.set_focus()
         wait_for("another app owns keyboard focus", lambda: user32.GetForegroundWindow() == source.handle)
+        mouse.move(coords=(10, height - 10))
         def visible_pinned_image():
             for control in pin_window.descendants(control_type="Image"):
                 if control.window_text() != "Pinned screenshot" or not control.is_visible():

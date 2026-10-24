@@ -1,16 +1,20 @@
 // Image viewing uses source pixels; annotation geometry remains in its document.
-export function imageViewport(image, viewport, mode = "auto", zoom = 1, dpr = 1) {
-  const padding = 12;
+export function imageViewport(image, viewport, mode = "auto", zoom = 1, dpr = 1, options = {}) {
+  const padding = options.padding ?? 12;
   const width = Math.max(1, viewport.width), height = Math.max(1, viewport.height);
   const nativeScale = 1 / Math.max(1, dpr);
+  const maximumFitScale = options.allowUpscale ? Infinity : nativeScale;
+  const longImage = image.height > image.width * 2;
   const fitWidth = Math.max(1, width - padding * 2) / Math.max(1, image.width);
   const fit = Math.min(fitWidth, Math.max(1, height - padding * 2) / Math.max(1, image.height));
+  const readingWidth = longImage || (options.fitWidthWhenOverflowing && image.height * fitWidth > Math.max(1, height - padding * 2) + 1);
   const scale = mode === "manual" ? zoom * nativeScale : mode === "width" ? fitWidth
-    : mode === "fit" ? Math.min(fit, nativeScale)
-    : Math.min(image.height > image.width * 2 ? fitWidth : fit, nativeScale);
+    : mode === "fit" ? Math.min(fit, maximumFitScale)
+    : Math.min(readingWidth ? fitWidth : fit, maximumFitScale);
   const viewWidth = image.width * scale, viewHeight = image.height * scale;
   return { scale, zoom: scale / nativeScale, width: viewWidth, height: viewHeight,
-    x: Math.max(padding, (width - viewWidth) / 2), y: Math.max(padding, (height - viewHeight) / 2),
+    x: Math.max(padding, (width - viewWidth) / 2),
+    y: options.alignLongImagesToTop && mode === "auto" && readingWidth ? padding : Math.max(padding, (height - viewHeight) / 2),
     surfaceWidth: Math.max(width, viewWidth + padding * 2),
     surfaceHeight: Math.max(height, viewHeight + padding * 2) };
 }

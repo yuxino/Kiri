@@ -58,7 +58,12 @@ unrestricted filesystem path.
 
 Each active screenshot has at most one pin window. It reads the saved flattened
 image through the existing local media route. Unpinning or closing that window
-does not change the library asset.
+does not change the library asset. Its independent, zero-padding image viewport
+opens long references from the top at a readable width. Wheel scrolling browses;
+pinch or Ctrl/Command-wheel zooms around the pointer without changing the window
+frame. Space/middle dragging pans the image, while plain dragging still moves
+the window. Hover/focus controls offer zoom and width/image/actual-size views.
+View changes never alter saved pixels (ADR 0119).
 macOS and Windows move the image reference using captured pointer coordinates
 and serialized physical position updates; Linux retains native dragging
 (ADRs 0095 and 0107).
@@ -67,9 +72,10 @@ reusing the committed selection and remote-consent flow.
 
 Recent screenshot references retain the validated selection position and logical
 size rather than treating Retina pixels as window points. A bounded in-memory
-origin registry serves direct/completion pinning; changed dimensions or display
-geometry use the existing fitted fallback. Existing references keep their
-user-adjusted frame (ADR 0096). Wayland placement remains compositor-controlled.
+origin registry serves direct/completion pinning and recent scrolling results;
+changed dimensions or display geometry use a bounded fallback that keeps long
+images readable. Existing references keep their user-adjusted frame (ADRs 0096
+and 0119). Wayland placement remains compositor-controlled.
 
 Blank screenshot double-clicks also complete with any annotation tool. Native click counts identify the pair; a gesture checkpoint removes only its transient marks and preserves previous annotations plus undo/redo. Existing marks, active inputs and non-capture editors keep their behavior (ADR 0103).
 
@@ -303,9 +309,16 @@ last view and unresolved row contradictions before saving. Known contradictions
 block a complete save until revisiting the area verifies or repairs it. Unmatched
 or interrupted capture retains the connected result; saving only that portion
 requires explicit Save captured area and does not imply the missing or uncertain
-content was repaired. Save failure preserves the document for retry. Successful output uses the existing
-clipboard, managed-library and completion-preview path. Session checks reject
-stale commands; teardown releases native sources and the temporary Escape grab.
+content was repaired. Save failure preserves the document for retry. Successful
+output uses the existing clipboard and managed-library path. Pin binds a complete
+save and its reference-window destination to the first accepted finish request;
+competing actions cannot change that destination or save twice. Cleanup destroys
+the capture windows and restores the source before opening the same saved asset's
+reference. Successful pinning omits the completion card; a pin failure keeps the
+asset and offers the existing completion-card retry. Partial results require
+Save captured area before pinning from that card. Ordinary Done and CLI finish
+keep their completion behavior. Session checks reject stale commands; teardown
+releases native sources and the temporary Escape grab (ADR 0119).
 
 Fixed-edge handling depends on motion evidence; arbitrary sticky elements or
 in-window overlays are not universally reconstructed. Repeated/blank content,

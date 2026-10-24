@@ -1,16 +1,42 @@
-.pin-window { position: relative; width: 100vw; height: 100vh; overflow: hidden; border-radius: 8px; color: var(--kiri-label); }
+.pin-window { position: relative; width: 100vw; height: 100vh; overflow: hidden; border-radius: 8px; color: var(--kiri-label); container: pin / size; }
 .pin-window::after { content: ""; position: absolute; inset: 0; z-index: 4; border: 2px solid #111; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .8); pointer-events: none; }
-.pin-window__image { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; cursor: move; }
-.pin-window__image img { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; }
+.pin-window__image { width: 100%; height: 100%; cursor: move; }
+.pin-window__viewport { width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-x pan-y; }
+.pin-window__viewport[data-pan-ready], .pin-window__viewport[data-panning] { cursor: grab; }
+.pin-window__viewport[data-panning] { cursor: grabbing; }
+.pin-window__surface { position: relative; }
+.pin-window__image img { position: absolute; display: block; max-width: none; max-height: none; -webkit-user-drag: none; user-select: none; }
 .pin-window__actions { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 4px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }
-.pin-window:hover .pin-window__actions, .pin-window:focus-within .pin-window__actions { opacity: 1; pointer-events: auto; }
+.pin-window:hover .pin-window__actions, .pin-window:focus-within .pin-window__actions,
+.pin-window[data-view-menu-open] .pin-window__actions { opacity: 1; pointer-events: auto; }
 .kiri-pin-action { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--kiri-surface-border); border-radius: 6px; background: var(--kiri-card); color: var(--kiri-label); padding: 0; cursor: pointer; }
 .kiri-pin-action:hover:not(:disabled) { background: var(--kiri-group-fill); }
 .kiri-pin-action:focus-visible { outline: 2px solid var(--kiri-label); outline-offset: 2px; }
 .kiri-pin-action:disabled { opacity: .5; cursor: default; }
 .pin-window__image p, .pin-window__error { margin: 0; padding: 8px 12px; background: var(--kiri-card); color: var(--kiri-secondary-label); font-size: 12px; text-align: center; }
-.pin-window__error { position: absolute; bottom: 12px; left: 12px; right: 12px; z-index: 3; border-radius: 6px; }
+.pin-window__error { position: absolute; top: 44px; left: 8px; right: 8px; z-index: 3; border-radius: 6px; }
+.pin-window__viewbar { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--kiri-surface-border); border-radius: 7px; background: var(--kiri-card); opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }
+.pin-window:hover .pin-window__viewbar, .pin-window:focus-within .pin-window__viewbar,
+.pin-window[data-view-menu-open] .pin-window__viewbar { opacity: 1; pointer-events: auto; }
+.pin-window__viewbar .kiri-pin-action { border: 0; background: transparent; }
+.pin-window__viewbar .kiri-pin-action:hover:not(:disabled) { background: var(--kiri-group-fill); }
+.pin-window__zoom-value { min-width: 52px; width: auto; padding: 0 5px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.pin-window__menu { position: absolute; left: 50%; bottom: 48px; transform: translateX(-50%); z-index: 5; box-sizing: border-box; width: 176px; max-width: calc(100% - 16px); max-height: calc(100% - 56px); padding: 4px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--kiri-surface-border); border-radius: 7px; background: var(--kiri-card); scrollbar-width: thin; }
+.kiri-pin-view-choice { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 28px; padding: 5px 7px; border: 0; border-radius: 4px; background: transparent; color: var(--kiri-label); font: inherit; font-size: 12px; text-align: start; cursor: pointer; }
+.kiri-pin-view-choice:hover:not(:disabled), .kiri-pin-view-choice:focus-visible { outline: none; background: var(--kiri-group-fill); }
+.kiri-pin-view-choice:disabled { opacity: .5; cursor: default; }
+.kiri-pin-view-choice span:first-child { overflow-wrap: anywhere; }
+.kiri-pin-view-choice span:last-child { flex: 0 0 12px; text-align: center; }
 .pin-window__resize { position: absolute; bottom: 0; right: 0; width: 16px; height: 16px; z-index: 2; cursor: nwse-resize; }
 .pin-window__resize::after { content: ""; position: absolute; bottom: 3px; right: 3px; width: 6px; height: 6px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; filter: drop-shadow(0 0 1px #000); opacity: 0; }
 .pin-window:hover .pin-window__resize::after { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .pin-window__actions { transition: none; } }
+@container pin (max-width: 180px) or (max-height: 100px) {
+  .pin-window__actions { top: 4px; right: 4px; gap: 4px; }
+  .pin-window__actions .kiri-pin-action { width: 24px; height: 24px; }
+  .pin-window__viewbar { bottom: 4px; padding: 0; border-radius: 5px; }
+  .pin-window__viewbar .pin-window__zoom-step { display: none; }
+  .pin-window__zoom-value { min-width: 44px; height: 22px; }
+  .pin-window__menu { top: 4px; left: auto; right: 4px; bottom: auto; transform: none; width: 176px; max-width: calc(100% - 8px); max-height: calc(100% - 8px); padding: 2px; }
+  .kiri-pin-view-choice { padding: 4px; gap: 2px; font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) { .pin-window__actions, .pin-window__viewbar { transition: none; } }

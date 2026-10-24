@@ -25,6 +25,7 @@ const RECONNECT: &str = "Return to captured content to continue.";
 const SAVE_FAILED: &str = "Could not save scrolling capture. Try again.";
 const INACTIVE: &str = "This scrolling capture is no longer active.";
 const SOURCE_FAILED: &str = "Scrolling capture stopped. Save the captured area or cancel.";
+const PIN_PARTIAL: &str = "Save the captured area first, then pin it from the completion preview.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartupStage {
@@ -259,7 +260,19 @@ struct Requests {
 struct FinishRequest {
     since: Instant,
     allow_partial: bool,
+    destination: CompletionDestination,
     reply: mpsc::Sender<Result<(), String>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CompletionDestination {
+    Preview,
+    Pin,
+}
+
+struct CompletedCapture {
+    preview: CompletionPreviewDto,
+    destination: CompletionDestination,
 }
 impl Requests {
     fn cancel(&mut self) -> Result<(), String> {
@@ -279,6 +292,9 @@ impl Requests {
         }
         if self.saving || self.finishing {
             return Err("Scrolling capture is already finishing.".into());
+        }
+        if request.allow_partial && request.destination == CompletionDestination::Pin {
+            return Err(PIN_PARTIAL.into());
         }
         self.finishing = true;
         self.finish = Some(request);
@@ -504,8 +520,14 @@ pub async fn finish_scroll_capture(
     app: AppHandle,
     session_id: uuid::Uuid,
     allow_partial: bool,
+    pin_on_top: Option<bool>,
 ) -> Result<(), String> {
-    finish_session(owner(&window, &app, session_id)?, allow_partial).await
+    let destination = if pin_on_top.unwrap_or(false) {
+        CompletionDestination::Pin
+    } else {
+        CompletionDestination::Preview
+    };
+    finish_session(owner(&window, &app, session_id)?, allow_partial, destination).await
 }
 
 /// Local CLI controls bind the currently active session before scheduling work.
@@ -520,7 +542,7 @@ pub(crate) fn finish_active(
     app: AppHandle,
 ) -> impl std::future::Future<Output = Result<(), String>> + Send + 'static {
     let session = active_control_session(&app);
-    async move { finish_session(session?, false).await }
+    async move { finish_session(session?, false, CompletionDestination::Preview).await }
 }
 
 fn active_control_session(app: &AppHandle) -> Result<Arc<Session>, String> {
@@ -529,7 +551,11 @@ fn active_control_session(app: &AppHandle) -> Result<Arc<Session>, String> {
         .ok_or_else(|| INACTIVE.to_string())
 }
 
-async fn finish_session(session: Arc<Session>, allow_partial: bool) -> Result<(), String> {
+async fn finish_session(
+    session: Arc<Session>,
+    allow_partial: bool,
+    destination: CompletionDestination,
+) -> Result<(), String> {
     if session.closing.load(Ordering::Acquire) {
         return Err(INACTIVE.into());
     }
@@ -537,6 +563,7 @@ async fn finish_session(session: Arc<Session>, allow_partial: bool) -> Result<()
     session.requests.lock().unwrap().finish(FinishRequest {
         since: Instant::now(),
         allow_partial,
+        destination,
         reply,
     })?;
     session.status.lock().unwrap().phase = "finishing";
@@ -962,7 +989,7 @@ fn run(
     capture: &CaptureSession,
     selection: Rect,
     source: &mut ScrollSource,
-) -> Option<CompletionPreviewDto> {
+) -> Option<CompletedCapture> {
     let mut stitcher = Stitcher::new(source.width, source.height).ok()?;
     let preview = preview_worker(Arc::clone(session));
     let mut last_preview = Instant::now() - Duration::from_secs(1);
@@ -1188,8 +1215,26 @@ fn run(
             .and_then(|png| crate::commands::save_scroll_capture(app, capture, &png, size));
         match result {
             Ok(preview) => {
+                if let Some(asset_id) = preview.asset_id.as_ref()
+                    .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                {
+                    let geometry = session.panel_geometry;
+                    let selection = Rect::new(
+                        geometry.selection.x - geometry.screen.x,
+                        geometry.selection.y - geometry.screen.y,
+                        geometry.selection.width,
+                        geometry.selection.height,
+                    );
+                    app.state::<AppState>().capture_pin_placements.lock().unwrap().remember(
+                        asset_id,
+                        crate::core::pin_placement::CapturePinPlacement::new(
+                            geometry.screen, selection, geometry.backing_scale,
+                            (i64::from(size.0), i64::from(size.1)),
+                        ),
+                    );
+                }
                 let _ = request.reply.send(Ok(()));
-                return Some(preview);
+                return Some(CompletedCapture { preview, destination: request.destination });
             }
             Err(error) => {
                 log::warn!("[scroll] save failed: {error}");
@@ -1371,12 +1416,26 @@ fn wait_for_window_removal(mut gone: impl FnMut() -> bool, timeout: Duration) ->
     }
 }
 
+fn completion_after_teardown(
+    mut completed: CompletedCapture,
+    capture_windows_gone: bool,
+) -> CompletedCapture {
+    if completed.destination == CompletionDestination::Pin && !capture_windows_gone {
+        // Keep the saved asset available, but do not open a reference while
+        // capture windows still own their native resources. The completion
+        // card retains its ordinary Pin action for an explicit later retry.
+        completed.destination = CompletionDestination::Preview;
+        completed.preview.title = "Could not pin this screenshot.".into();
+    }
+    completed
+}
+
 fn cleanup(
     app: &AppHandle,
     session: &Session,
     capture: &CaptureSession,
     owns_escape: bool,
-    preview: Option<CompletionPreviewDto>,
+    completion: Option<CompletedCapture>,
 ) {
     session.closing.store(true, Ordering::Release);
     if owns_escape {
@@ -1431,13 +1490,25 @@ fn cleanup(
             log::warn!("[scroll] native window teardown is still pending");
         }
     }
+    let capture_windows_gone = session_windows_gone(app, session);
+    if !capture_windows_gone && completion.as_ref().is_some_and(|completed| {
+        completed.destination == CompletionDestination::Pin
+    }) {
+        log::warn!("[scroll] saved screenshot could not be pinned while capture window teardown is pending");
+    }
     let hidden = capture.hidden_windows.clone();
     let was_front = capture.was_kiri_frontmost;
     let pid = capture.return_pid;
     let _ = ui(app, move |app| {
         crate::commands::restore_capture_origin(&app, &hidden, was_front, pid);
-        if let Some(preview) = preview {
-            crate::state::show_completion_preview(&app, &preview, monitor);
+        if let Some(completed) = completion {
+            let completed = completion_after_teardown(completed, capture_windows_gone);
+            crate::commands::present_saved_capture(
+                &app,
+                completed.preview,
+                monitor,
+                completed.destination == CompletionDestination::Pin,
+            );
         }
         Ok(())
     });
@@ -1927,6 +1998,38 @@ mod tests {
     }
 
     #[test]
+    fn direct_pin_requires_removed_capture_windows_and_otherwise_retains_retryable_asset() {
+        for capture_windows_gone in [false, true] {
+            for destination in [CompletionDestination::Preview, CompletionDestination::Pin] {
+                for copied in [false, true] {
+                    let preview = CompletionPreviewDto {
+                        id: "completed-scroll".into(),
+                        phase: "ready".into(),
+                        asset_id: Some("744c9acd-645c-4211-8901-093193625282".into()),
+                        kind: "image".into(),
+                        title: if copied { "Copied and Saved" } else { "Saved — Copy Failed" }.into(),
+                        detail: "1200 × 5400".into(),
+                        gif_eligible: false,
+                        copied,
+                    };
+                    let mut expected_preview = serde_json::to_value(&preview).unwrap();
+                    let pin_blocked = destination == CompletionDestination::Pin && !capture_windows_gone;
+                    if pin_blocked {
+                        expected_preview["title"] = "Could not pin this screenshot.".into();
+                    }
+                    let completed = completion_after_teardown(
+                        CompletedCapture { preview, destination }, capture_windows_gone,
+                    );
+                    assert_eq!(completed.destination,
+                        if pin_blocked { CompletionDestination::Preview } else { destination });
+                    assert_eq!(serde_json::to_value(completed.preview).unwrap(), expected_preview,
+                        "teardown fallback must preserve the saved asset, copied state and ready card");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn panel_moves_use_physical_pixels_and_clamp_negative_origin_displays() {
         let geometry = PanelGeometry {
             screen: Rect::new(-1600.0, 80.0, 1600.0, 960.0),
@@ -2237,6 +2340,7 @@ mod tests {
             .finish(FinishRequest {
                 since: Instant::now(),
                 allow_partial: false,
+                destination: CompletionDestination::Preview,
                 reply,
             })
             .unwrap();
@@ -2247,6 +2351,7 @@ mod tests {
             .finish(FinishRequest {
                 since: Instant::now(),
                 allow_partial: false,
+                destination: CompletionDestination::Preview,
                 reply
             })
             .is_err());
@@ -2258,34 +2363,66 @@ mod tests {
     }
     #[test]
     fn pending_finish_stays_exclusive_while_native_stop_and_drain_owns_request() {
-        let mut requests = Requests::default();
-        let make_request = || {
+        let make_request = |destination| {
             let (reply, receive) = mpsc::channel();
             (
                 FinishRequest {
                     since: Instant::now(),
                     allow_partial: false,
+                    destination,
                     reply,
                 },
                 receive,
             )
         };
-        let (first, first_reply) = make_request();
-        requests.finish(first).unwrap();
-        let in_flight = requests.finish.take().unwrap();
-        let (duplicate, _) = make_request();
-        assert!(requests.finish(duplicate).is_err());
-        assert!(
-            requests.finish.is_none(),
-            "an in-flight request must not enqueue a second save"
-        );
-        requests.finish_failed();
-        in_flight.reply.send(Err("save failed".into())).unwrap();
-        assert!(first_reply.recv().unwrap().is_err());
-        let (retry, retry_reply) = make_request();
-        requests.finish(retry).unwrap();
-        requests.cancel().unwrap();
-        assert_eq!(retry_reply.recv().unwrap().unwrap_err(), INACTIVE);
+        for (first_destination, other_destination) in [
+            (CompletionDestination::Preview, CompletionDestination::Pin),
+            (CompletionDestination::Pin, CompletionDestination::Preview),
+        ] {
+            let mut requests = Requests::default();
+            let (first, first_reply) = make_request(first_destination);
+            requests.finish(first).unwrap();
+            let in_flight = requests.finish.take().unwrap();
+            let (duplicate, _) = make_request(other_destination);
+            assert!(requests.finish(duplicate).is_err());
+            assert_eq!(in_flight.destination, first_destination,
+                "a competing action cannot change the accepted completion destination");
+            assert!(
+                requests.finish.is_none(),
+                "an in-flight request must not enqueue a second save"
+            );
+            requests.finish_failed();
+            in_flight.reply.send(Err("save failed".into())).unwrap();
+            assert!(first_reply.recv().unwrap().is_err());
+            let (retry, retry_reply) = make_request(other_destination);
+            requests.finish(retry).unwrap();
+            assert_eq!(requests.finish.as_ref().unwrap().destination, other_destination);
+            requests.cancel().unwrap();
+            assert_eq!(retry_reply.recv().unwrap().unwrap_err(), INACTIVE);
+        }
+    }
+
+    #[test]
+    fn partial_pin_is_rejected_without_claiming_the_finish_gate() {
+        let mut requests = Requests::default();
+        let (reply, _) = mpsc::channel();
+        let error = requests.finish(FinishRequest {
+            since: Instant::now(),
+            allow_partial: true,
+            destination: CompletionDestination::Pin,
+            reply,
+        }).unwrap_err();
+        assert_eq!(error, PIN_PARTIAL);
+        assert!(!requests.finishing && requests.finish.is_none());
+
+        let (reply, _) = mpsc::channel();
+        requests.finish(FinishRequest {
+            since: Instant::now(),
+            allow_partial: true,
+            destination: CompletionDestination::Preview,
+            reply,
+        }).unwrap();
+        assert!(requests.finishing);
     }
 
     #[test]

@@ -856,5 +856,8 @@
   "Couldn't load startup settings.": "시작 설정을 불러오지 못했습니다.",
   "Couldn't change startup settings.": "시작 설정을 변경하지 못했습니다.",
   "Couldn't open system startup settings.": "시스템 시작 설정을 열지 못했습니다.",
-  "Open System Settings": "시스템 설정 열기"
+  "Open System Settings": "시스템 설정 열기",
+  "Save the captured area first, then pin it from the completion preview.": "먼저 캡처한 영역을 저장한 뒤 완료 미리 보기에서 고정하세요.",
+  "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "드래그하여 창을 이동하고 스크롤하여 이미지를 살펴보세요. 핀치하거나 Ctrl/Command를 누른 채 스크롤하면 확대/축소합니다. 스페이스를 누른 채 드래그하면 이미지 안을 이동합니다.",
+  "Zoom level": "확대/축소 배율"
 }

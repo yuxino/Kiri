@@ -66,8 +66,8 @@ function panel(t, options = {}) {
       requests.push(sessionId);
       return options.read ? options.read() : Promise.resolve(current);
     },
-    finishScrollCapture: (sessionId, allowPartial) => {
-      finishes.push({ sessionId, allowPartial });
+    finishScrollCapture: (sessionId, allowPartial, pinOnTop) => {
+      finishes.push({ sessionId, allowPartial, pinOnTop });
       return options.finish ? options.finish() : Promise.resolve();
     },
     cancelScrollCapture: sessionId => {
@@ -184,12 +184,61 @@ test("Done is single-flight and normal completion never authorizes partial savin
   const button = h.node("kiri-primary-button kiri-scroll-capture__done");
   assert.equal(button.props.disabled, false);
   button.props.onClick(); button.props.onClick();
-  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: false }]);
+  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: false, pinOnTop: false }]);
   assert.equal(h.node("kiri-scroll-capture__cancel").props.disabled, false, "finishing remains cancellable until persistence starts");
   pending.reject(new Error("Could not save scrolling capture. Try again."));
   await h.ready();
   assert.ok(nodes(h.render()).includes("Could not save scrolling capture. Try again."));
   assert.equal(h.node("kiri-primary-button kiri-scroll-capture__done").props.disabled, false);
+});
+
+test("Pin owns one complete-result request and a competing Done cannot change it", async t => {
+  const pending = deferred();
+  const h = panel(t, { finish: () => pending.promise });
+  await h.ready();
+  const pin = h.node("kiri-scroll-capture__pin");
+  assert.equal(pin.props.disabled, false);
+  pin.props.onClick(); pin.props.onClick();
+  h.node("kiri-primary-button kiri-scroll-capture__done").props.onClick();
+  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: false, pinOnTop: true }]);
+  assert.equal(h.node("kiri-scroll-capture__pin").props["aria-busy"], true);
+  assert.equal(h.node("kiri-scroll-capture__pin").props.disabled, true);
+  assert.equal(h.node("kiri-primary-button kiri-scroll-capture__done").props.disabled, true);
+  assert.equal(h.node("kiri-scroll-capture__cancel").props.disabled, false);
+  pending.resolve();
+  await h.ready();
+  assert.equal(h.node("kiri-scroll-capture__cancel").props.disabled, true);
+  const reads = h.requests.length;
+  await h.pump();
+  assert.equal(h.requests.length, reads, "successful pin stops status polling during native teardown");
+});
+
+test("an accepted Done cannot be changed into Pin by a later click", async t => {
+  const pending = deferred();
+  const h = panel(t, { finish: () => pending.promise });
+  await h.ready();
+  h.node("kiri-primary-button kiri-scroll-capture__done").props.onClick();
+  h.node("kiri-scroll-capture__pin").props.onClick();
+  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: false, pinOnTop: false }]);
+  pending.resolve();
+  await h.ready();
+});
+
+test("a failed Pin save releases its request and retry may choose ordinary completion", async t => {
+  let attempts = 0;
+  const h = panel(t, { finish: () => ++attempts === 1 ?
+    Promise.reject(new Error("Could not save scrolling capture. Try again.")) : Promise.resolve() });
+  await h.ready();
+  h.node("kiri-scroll-capture__pin").props.onClick();
+  await h.ready();
+  assert.ok(nodes(h.render()).includes("Could not save scrolling capture. Try again."));
+  assert.equal(h.node("kiri-scroll-capture__pin").props.disabled, false);
+  h.node("kiri-primary-button kiri-scroll-capture__done").props.onClick();
+  await h.ready();
+  assert.deepEqual(h.finishes, [
+    { sessionId: "scroll-1", allowPartial: false, pinOnTop: true },
+    { sessionId: "scroll-1", allowPartial: false, pinOnTop: false },
+  ]);
 });
 
 test("unconnected content blocks Done until explicit partial saving is offered", async t => {
@@ -201,7 +250,42 @@ test("unconnected content blocks Done until explicit partial saving is offered",
   const partial = h.node("kiri-primary-button kiri-scroll-capture__done");
   assert.ok(nodes(partial).includes("Save captured area"));
   partial.props.onClick();
-  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: true }]);
+  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: true, pinOnTop: false }]);
+});
+
+test("partial recovery disables Pin with guidance and cannot silently authorize a partial pin", async t => {
+  const h = panel(t);
+  await h.ready();
+  await h.update({ phase: "reconnecting", canSavePartial: true });
+  const pin = h.node("kiri-scroll-capture__pin");
+  assert.equal(pin.props.disabled, true);
+  assert.equal(pin.props.title, "Save the captured area first, then pin it from the completion preview.");
+  pin.props.onClick();
+  assert.equal(h.finishes.length, 0);
+  h.node("kiri-primary-button kiri-scroll-capture__done").props.onClick();
+  await h.ready();
+  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: true, pinOnTop: false }]);
+});
+
+test("Pin is available only for a complete captured result or its failed-save retry", async t => {
+  const h = panel(t);
+  await h.ready();
+  for (const state of [
+    { phase: "starting", width: 0, height: 0 },
+    { phase: "capturing", width: 0, height: 0 },
+    { phase: "reconnecting" },
+    { phase: "finishing" },
+    { phase: "saving" },
+    { phase: "failed", canSavePartial: true },
+    { phase: "limit", canSavePartial: true },
+  ]) {
+    await h.update(state);
+    assert.equal(h.node("kiri-scroll-capture__pin").props.disabled, true, JSON.stringify(state));
+  }
+  for (const phase of ["capturing", "failed"]) {
+    await h.update({ phase, canSavePartial: false });
+    assert.equal(h.node("kiri-scroll-capture__pin").props.disabled, false);
+  }
 });
 
 test("the panel never captures Enter and Escape ignores composition", async t => {
@@ -222,12 +306,13 @@ test("the panel never captures Enter and Escape ignores composition", async t =>
   assert.deepEqual(h.cancellations, ["scroll-1"]);
 });
 
-test("compact controls keep status and both actions without building a preview", async t => {
+test("compact controls keep status and all three actions without building a preview", async t => {
   const h = panel(t, { compact: true });
   await h.ready();
   assert.equal(h.node("kiri-scroll-capture__preview"), undefined);
   assert.ok(h.node("kiri-scroll-capture__status"));
   assert.ok(h.node("kiri-scroll-capture__cancel"));
+  assert.equal(h.node("kiri-scroll-capture__pin").props["aria-label"], "Pin Screenshot on Top");
   assert.ok(h.node("kiri-primary-button kiri-scroll-capture__done"));
 });
 
@@ -274,6 +359,38 @@ test("cancel can interrupt finishing and the old finish error cannot replace can
   assert.equal(h.node("kiri-scroll-capture__cancel").props.disabled, true);
 });
 
+test("cancel interrupts Pin before saving without exposing its stale finish error", async t => {
+  const finish = deferred(), cancel = deferred();
+  const h = panel(t, { finish: () => finish.promise, cancel: () => cancel.promise });
+  await h.ready();
+  h.node("kiri-scroll-capture__pin").props.onClick();
+  await h.update({ phase: "finishing" });
+  h.node("kiri-scroll-capture__cancel").props.onClick();
+  finish.reject(new Error("This scrolling capture is no longer active."));
+  await h.ready();
+  assert.ok(!nodes(h.render()).includes("Could not finish scrolling capture. Try again."));
+  assert.deepEqual(h.cancellations, ["scroll-1"]);
+  assert.equal(h.node("kiri-scroll-capture__pin").props.disabled, true);
+  cancel.resolve();
+  await h.ready();
+  assert.equal(h.node("kiri-scroll-capture__cancel").props.disabled, true);
+});
+
+test("Pin persistence cannot be interrupted by Cancel or a second completion", async t => {
+  const pending = deferred();
+  const h = panel(t, { finish: () => pending.promise });
+  await h.ready();
+  h.node("kiri-scroll-capture__pin").props.onClick();
+  await h.update({ phase: "saving" });
+  assert.equal(h.node("kiri-scroll-capture__cancel").props.disabled, true);
+  h.node("kiri-scroll-capture__cancel").props.onClick();
+  h.node("kiri-primary-button kiri-scroll-capture__done").props.onClick();
+  assert.equal(h.cancellations.length, 0);
+  assert.deepEqual(h.finishes, [{ sessionId: "scroll-1", allowPartial: false, pinOnTop: true }]);
+  pending.resolve();
+  await h.ready();
+});
+
 test("cancel failure can be retried but saving keeps cancellation unavailable", async t => {
   let attempts = 0;
   const h = panel(t, { cancel: () => ++attempts === 1 ? Promise.reject(new Error("temporary failure")) : Promise.resolve() });
@@ -318,9 +435,10 @@ test("one live preview fits the image width without mode or zoom controls", asyn
   assert.equal(h.viewport.scrollLeft, 0);
   closeTo(h.viewport.scrollTop, (800 * 200 / 1200 - 100) / 2);
   const buttons = nodes(h.render()).filter(node => node?.type === "button");
-  assert.equal(buttons.length, 2, "only Cancel and Done remain");
+  assert.equal(buttons.length, 3, "only Cancel, Pin and Done remain");
   assert.ok(nodes(buttons[0]).includes("Cancel"));
-  assert.ok(nodes(buttons[1]).includes("Done"));
+  assert.ok(nodes(buttons[1]).includes("Pin"));
+  assert.ok(nodes(buttons[2]).includes("Done"));
   assert.equal(h.finishes.length, 0);
   assert.equal(h.cancellations.length, 0);
 });

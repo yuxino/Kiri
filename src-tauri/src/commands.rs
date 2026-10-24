@@ -585,22 +585,40 @@ async fn open_pinned_screenshot(app: AppHandle, id: String) -> Result<(), String
         restore_pinned_window(&window)?;
         return Ok(());
     }
-    let source_width = asset.pixel_width.max(1) as f64;
-    let source_height = asset.pixel_height.max(1) as f64;
-    let scale = (680.0 / source_width).min(480.0 / source_height).min(1.0);
+    let pixel_size = (asset.pixel_width, asset.pixel_height);
     let origin = {
         let state = app.state::<AppState>();
         let placements = state.capture_pin_placements.lock().unwrap();
-        placements.get(asset.id, (asset.pixel_width, asset.pixel_height))
+        placements.get(asset.id, pixel_size)
     };
     // A native monitor query may dispatch to the event loop. Never retain
     // the origin mutex while waiting on that loop's capture confirmations.
-    let placement = origin.filter(|origin| app.available_monitors().is_ok_and(|monitors| monitors.iter().any(|monitor| {
+    let monitors = app.available_monitors().unwrap_or_default();
+    let placement = origin.filter(|origin| monitors.iter().any(|monitor| {
             origin.fits_monitor(Rect::new(f64::from(monitor.position().x), f64::from(monitor.position().y),
                 f64::from(monitor.size().width), f64::from(monitor.size().height)), monitor.scale_factor())
-        })));
+        })).or_else(|| {
+            // Old/imported images have no source selection. Open a readable
+            // reference within the current display's usable area instead of
+            // shrinking a long screenshot to its full-height thumbnail.
+            let monitor = app.cursor_position().ok()
+                .and_then(|point| app.monitor_from_point(point.x, point.y).ok().flatten())
+                .or_else(|| app.primary_monitor().ok().flatten())?;
+            let backing_scale = monitor.scale_factor();
+            let area = monitor.work_area();
+            let work_area = Rect::new(f64::from(area.position.x) / backing_scale,
+                f64::from(area.position.y) / backing_scale,
+                f64::from(area.size.width) / backing_scale,
+                f64::from(area.size.height) / backing_scale);
+            Some(crate::core::pin_placement::CapturePinPlacement {
+                frame: crate::core::pin_placement::fitted_reference_frame(pixel_size, backing_scale, work_area),
+                backing_scale,
+                pixel_size,
+            })
+        });
+    let fallback = crate::core::pin_placement::fitted_reference_frame(pixel_size, 1.0, Rect::new(0.0, 0.0, 680.0, 480.0));
     let (width, height) = placement.map(|origin| (origin.frame.width, origin.frame.height))
-        .unwrap_or(((source_width * scale).max(80.0), (source_height * scale).max(60.0)));
+        .unwrap_or((fallback.width, fallback.height));
     let asset_id = asset.id;
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(window) = app.get_webview_window(&label) {
@@ -3038,32 +3056,44 @@ pub(crate) fn finalize_confirmed_capture_after_overlay_destroyed(app: &AppHandle
 
     if let Some(completed) = completed {
         restore_focus(app, &completed.session);
-        if completed.pin_on_top {
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                let mut preview = completed.preview;
-                let result = match preview.asset_id.clone() {
-                    Some(id) => open_pinned_screenshot(app.clone(), id).await,
-                    None => Err("The saved screenshot is unavailable.".into()),
-                };
-                if let Err(error) = result {
-                    log::error!("confirm_capture: pin failed: {error}");
-                    preview.title = "Could not pin this screenshot.".into();
-                    show_completion_preview(&app, &preview, completed.monitor);
-                } else if !preview.copied {
-                    emit_notice_on_monitor(
-                        &app,
-                        "Saved — Copy Failed".into(),
-                        "exclamationmark.triangle.fill".into(),
-                        completed.monitor,
-                    );
-                }
-            });
-        } else {
-            show_completion_preview(app, &completed.preview, completed.monitor);
-        }
+        present_saved_capture(app, completed.preview, completed.monitor, completed.pin_on_top);
         log::info!("confirm_capture: completion flow returned after overlay destruction");
     }
+}
+
+/// Presents an already-saved capture after its capture windows have gone away
+/// and the source application has been restored. A failed pin retries the
+/// existing asset through its completion card rather than importing it again.
+pub(crate) fn present_saved_capture(
+    app: &AppHandle,
+    preview: CompletionPreviewDto,
+    monitor: Option<Monitor>,
+    pin_on_top: bool,
+) {
+    if !pin_on_top {
+        show_completion_preview(app, &preview, monitor);
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut preview = preview;
+        let result = match preview.asset_id.clone() {
+            Some(id) => open_pinned_screenshot(app.clone(), id).await,
+            None => Err("The saved screenshot is unavailable.".into()),
+        };
+        if let Err(error) = result {
+            log::error!("capture completion: pin failed: {error}");
+            preview.title = "Could not pin this screenshot.".into();
+            show_completion_preview(&app, &preview, monitor);
+        } else if !preview.copied {
+            emit_notice_on_monitor(
+                &app,
+                "Saved — Copy Failed".into(),
+                "exclamationmark.triangle.fill".into(),
+                monitor,
+            );
+        }
+    });
 }
 
 fn validate_staged_capture_annotation(

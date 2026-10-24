@@ -50,6 +50,8 @@ La petite flèche à côté du microphone permet de choisir un périphérique d�
 
 Sélectionnez le contenu à faire défiler, puis **Capture défilante** dans la barre de capture avant d’ajouter des annotations. Commencez où vous voulez et faites défiler normalement vers le haut ou le bas. Revenir sur du contenu capturé n’ajoute pas de doublons. Une pause pour lire ne termine pas la capture. **Terminé** copie et enregistre ; Échap annule avant le début de l’enregistrement. Entrée reste disponible dans l’application d’origine.
 
+**Épingler** termine la capture, copie et enregistre l’image, puis l’ouvre au-dessus des autres fenêtres en une seule action. Si la référence ne s’ouvre pas, l’image enregistrée reste disponible dans l’aperçu de fin pour réessayer. Lorsque seule l’action **Enregistrer la zone capturée** est proposée, enregistrez d’abord ce résultat partiel, puis épinglez-le depuis l’aperçu de fin.
+
 Pendant une capture défilante, `kiri --finish-scroll-capture` effectue les mêmes vérifications avant l’enregistrement complet que **Terminé**, sans enregistrer automatiquement un résultat partiel à la place. `kiri --cancel-scroll-capture` annule avant le début de l’enregistrement. Ces commandes contrôlent uniquement la session en cours et ne démarrent aucune capture.
 
 La sélection reste visible pendant la capture et l’extérieur est assombri. Les clics, la molette et les gestes du pavé tactile atteignent directement l’application d’origine. Ce repère ne change pas la sélection et n’apparaît pas dans l’image enregistrée.
@@ -80,7 +82,9 @@ Les annotations se superposent dans leur ordre de création. Une mosaïque ajout
 
 ## Références et couleurs
 
-Un double-clic sur une partie sans annotation de la sélection termine aussi la capture ; le texte existant reste modifiable par double-clic. L’épingle de la barre d’outils enregistre et épingle l’image, comme Épingler sur la carte de fin. Faites glisser l’image pour la déplacer et son coin inférieur droit pour la redimensionner proportionnellement. Le survol affiche les commandes pour désépingler et fermer.
+Un double-clic sur une partie sans annotation de la sélection termine aussi la capture ; le texte existant reste modifiable par double-clic. L’épingle de la barre d’outils enregistre et épingle l’image, comme Épingler sur la carte de fin. Faites glisser l’image pour déplacer sa fenêtre et son coin inférieur droit pour redimensionner la fenêtre proportionnellement. Le survol ou le focus clavier affiche les commandes pour désépingler et fermer.
+
+Les références longues s’ouvrent en haut, avec une largeur lisible ; faites défiler pour voir la suite. La molette et le pavé tactile parcourent l’image. Un pincement ou Ctrl/Command avec défilement zoome autour du pointeur sans redimensionner la fenêtre. Faites glisser en maintenant Espace ou le bouton du milieu pour déplacer l’image ; un glissement normal déplace toujours la fenêtre. Le survol ou le focus clavier affiche les commandes de zoom. Le menu du pourcentage propose **Adapter la largeur**, **Image entière** et **Taille réelle**. Ctrl/Command +/− règle le zoom ; Ctrl/Command+0 affiche l’image entière et Ctrl/Command+1 rétablit la densité d’origine. Échap ou Ctrl/Command+W ferme la référence. L’affichage ne modifie pas l’image enregistrée.
 
 En mode Capture, survolez l’écran pour agrandir les pixels d’origine et voir leurs coordonnées et leur couleur HEX. `⌘C` sur macOS ou `Ctrl+C` copie la couleur tout en conservant la sélection. La loupe disparaît pendant l’annotation.
 

@@ -44,6 +44,7 @@ function actionError(error: unknown, fallback: string): string {
     "Capture limit reached.",
     "Stop scrolling briefly, then choose Done.",
     "No scrolling content has been captured yet.",
+    "Save the captured area first, then pin it from the completion preview.",
   ]) if (message.includes(known)) return known;
   return fallback;
 }
@@ -53,9 +54,9 @@ export function ScrollCaptureWindow({ sessionId, compact = false }: { sessionId:
   const [status, setStatus] = useState<ScrollCaptureStatusDto | null>(null);
   const [pollFailed, setPollFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [action, setAction] = useState<"finish" | "cancel" | null>(null);
+  const [action, setAction] = useState<"finish" | "pin" | "cancel" | null>(null);
   const [previewFollowRevision, refreshPreview] = useState(0);
-  const actionRef = useRef<"finish" | "cancel" | null>(null);
+  const actionRef = useRef<"finish" | "pin" | "cancel" | null>(null);
   const actionGeneration = useRef(0);
   const settled = useRef(false);
   const stopPolling = useRef<() => void>(() => {});
@@ -244,21 +245,25 @@ export function ScrollCaptureWindow({ sessionId, compact = false }: { sessionId:
     refreshPreview(value => value + 1);
   };
 
-  const finish = useCallback(async (allowPartial = false) => {
+  const finish = useCallback(async (allowPartial = false, pinOnTop = false) => {
     if (actionRef.current || settled.current || !sessionId) return;
+    // Pin is a complete-result action. Partial saving stays an explicit,
+    // separately labelled choice, followed by the completion card's Pin.
+    if (pinOnTop && (allowPartial || statusRef.current?.canSavePartial)) return;
     const generation = ++actionGeneration.current;
-    actionRef.current = "finish";
+    const nextAction = pinOnTop ? "pin" : "finish";
+    actionRef.current = nextAction;
     recoveryError.current = null;
-    setAction("finish");
+    setAction(nextAction);
     setError(null);
     try {
-      await api.finishScrollCapture(sessionId, allowPartial);
+      await api.finishScrollCapture(sessionId, allowPartial, pinOnTop);
       // Keep the successful operation locked until the native panel closes.
       // Polls and repeated clicks must not target a session being torn down.
       settled.current = true;
       stopPolling.current();
-      actionRef.current = "finish";
-      if (mounted.current) setAction("finish");
+      actionRef.current = nextAction;
+      if (mounted.current) setAction(nextAction);
     } catch (failure) {
       if (!mounted.current || settled.current || generation !== actionGeneration.current) return;
       const message = actionError(failure, "Could not finish scrolling capture. Try again.");
@@ -296,6 +301,7 @@ export function ScrollCaptureWindow({ sessionId, compact = false }: { sessionId:
     (status.phase === "reconnecting" || status.phase === "failed" || status.phase === "limit");
   const canFinish = !busy && !!status && status.width > 0 && status.height > 0 &&
     (status.phase === "capturing" || status.phase === "limit" || status.phase === "failed" || partial);
+  const canPin = canFinish && !partial;
   const message = error ?? (pollFailed ? "Could not update scrolling capture. Try again." :
     status?.message || phaseMessage(status?.phase));
 
@@ -358,11 +364,19 @@ export function ScrollCaptureWindow({ sessionId, compact = false }: { sessionId:
           <KiriIcon name="xmark" size={15} />
           <span>{t("Cancel")}</span>
         </button>
+        <button type="button" className="kiri-scroll-capture__pin"
+          disabled={!canPin} onClick={() => void finish(false, true)}
+          aria-label={t("Pin Screenshot on Top")} aria-busy={action === "pin" || undefined}
+          title={partial ? t("Save the captured area first, then pin it from the completion preview.") :
+            t("Pin Screenshot on Top")}>
+          <KiriIcon name="pin" size={15} />
+          <span>{t("Pin")}</span>
+        </button>
         <button type="button" className="kiri-primary-button kiri-scroll-capture__done"
           disabled={!canFinish} onClick={() => void finish(partial)}
           title={partial ? t("Only the connected captured area will be saved.") : t("Done — Copy to clipboard")}>
           <KiriIcon name="checkmark" size={15} />
-          <span>{busy ? t(action === "cancel" ? "Cancelling…" : "Saving…") :
+          <span>{busy && action !== "pin" ? t(action === "cancel" ? "Cancelling…" : "Saving…") :
             t(partial ? "Save captured area" : "Done")}</span>
         </button>
       </footer>

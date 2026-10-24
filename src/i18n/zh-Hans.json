@@ -856,5 +856,8 @@
   "Couldn't load startup settings.": "无法读取启动设置。",
   "Couldn't change startup settings.": "无法更改启动设置。",
   "Couldn't open system startup settings.": "无法打开系统启动设置。",
-  "Open System Settings": "打开系统设置"
+  "Open System Settings": "打开系统设置",
+  "Save the captured area first, then pin it from the completion preview.": "先保存已截区域，再从完成卡中置顶。",
+  "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "拖动可移动窗口；滚动查看，双指捏合或按住 Ctrl/Command 滚动缩放；按住空格拖动画面。",
+  "Zoom level": "缩放比例"
 }

@@ -240,3 +240,6 @@ development.
 
 - [ADR 0118: System-command Linux OCR](adr/0118-system-command-linux-ocr.md)
   — let the distribution manage Tesseract and Leptonica compatibility.
+
+- [ADR 0119: Readable pinned screenshots and scrolling-capture pinning](adr/0119-readable-pinned-screenshots-and-scroll-pin.md)
+  — independent reference zoom and scrolling, plus one-step pinning after a complete scrolling capture.
