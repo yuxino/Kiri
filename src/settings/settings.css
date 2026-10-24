@@ -60,7 +60,6 @@
 
 .kiri-language-row,
 .kiri-dock-row,
-.kiri-version-row,
 .kiri-shortcut-row,
 .kiri-storage-row {
   min-height: 64px;
@@ -74,7 +73,6 @@
 
 .kiri-language-row > div:first-child,
 .kiri-dock-copy,
-.kiri-version-row > div:first-child,
 .kiri-shortcut-copy,
 .kiri-storage-copy {
   display: flex;
@@ -84,7 +82,6 @@
 
 .kiri-language-row strong,
 .kiri-dock-row strong,
-.kiri-version-row strong,
 .kiri-shortcut-row strong,
 .kiri-storage-row strong,
 .ocr-engine-copy strong {
@@ -95,7 +92,6 @@
 
 .kiri-language-row span,
 .kiri-dock-copy > span,
-.kiri-version-row > div:first-child > span,
 .kiri-shortcut-copy > span,
 .kiri-storage-copy > span,
 .ocr-engine-copy > span:not(.ocr-engine-title-row) {
@@ -211,7 +207,10 @@
 
 .kiri-update-copy {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .kiri-update-actions {
@@ -231,36 +230,8 @@
 .kiri-update-progress {
   width: min(100%, 360px);
   height: 6px;
-  margin-top: 5px;
-  accent-color: var(--kiri-accent-strong);
-}
-
-.kiri-update-notes {
-  width: min(100%, 460px);
-  max-height: 150px;
-  margin-top: 8px;
-  padding: 9px 11px;
-  overflow-y: auto;
-  box-sizing: border-box;
-  border: 1px solid var(--kiri-surface-border);
-  border-radius: var(--kiri-radius-control);
-  background: var(--kiri-group-fill);
-}
-
-.kiri-update-notes strong {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--kiri-label);
-  font-size: 13px;
-}
-
-.kiri-update-notes p {
   margin: 0;
-  color: var(--kiri-secondary-label);
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  accent-color: var(--kiri-accent-strong);
 }
 
 .kiri-settings-add-button {
@@ -606,7 +577,6 @@
 @media (max-width: 560px) {
   .kiri-settings-section__heading,
   .kiri-language-row,
-  .kiri-version-row,
   .kiri-shortcut-row,
   .kiri-storage-row {
     align-items: stretch;
@@ -702,32 +672,55 @@
 .kiri-language-menu .kiri-choice-option:focus-visible,
 .kiri-language-menu .kiri-choice-option[aria-selected=true] { background: var(--kiri-group-fill); }
 
-/* Version/update is the main row; support actions form a quieter footer. */
-.kiri-settings-section--about .kiri-version-row {
-  flex-wrap: wrap;
-  gap: 14px 18px;
-}
+/* Keep the action with its status, then let release notes use the reading width. */
+.kiri-version-row { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 20px; }
+.kiri-update-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 24px; min-width: 0; }
+.kiri-version-title { gap: 12px; }
+.kiri-version-title > strong { font-size: 19px; font-weight: 600; line-height: 1.2; letter-spacing: -.025em; }
+.kiri-version-number { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--kiri-secondary-label); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.kiri-version-target { color: var(--kiri-label); font-weight: 500; }
+.kiri-version-arrow { color: var(--kiri-disabled-label); }
+.kiri-update-status { display: flex; align-items: flex-start; gap: 7px; color: var(--kiri-secondary-label); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.kiri-update-status > svg, .kiri-update-status > .kiri-settings-spinner { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 2px; }
+.kiri-update-status[role="alert"] { color: var(--kiri-coral); }
+.kiri-update-actions { max-width: 100%; }
+.kiri-update-actions .kiri-update-button { min-height: 34px; padding: 7px 13px; line-height: 1.4; }
 
-.kiri-settings-section--about .kiri-update-copy {
-  flex: 1 1 240px;
-}
+.kiri-release-notes { min-width: 0; padding-top: 18px; border-top: 1px solid var(--kiri-surface-border); }
+.kiri-release-notes__heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+.kiri-release-notes__heading h3 { margin: 0; font-size: 12.5px; line-height: 1.5; font-weight: 600; }
+.kiri-release-notes__languages { display: flex; flex-wrap: wrap; gap: 3px; }
+.kiri-release-notes__language { border: 0; border-radius: 5px; padding: 4px 8px; background: transparent; color: var(--kiri-secondary-label); font: 400 11.5px/1.4 var(--kiri-font-ui); cursor: pointer; }
+.kiri-release-notes__language[aria-pressed="true"] { background: var(--kiri-group-fill); color: var(--kiri-label); font-weight: 500; }
+.kiri-release-notes__language:hover { color: var(--kiri-label); background: var(--kiri-group-fill); }
+.kiri-release-notes__language:focus-visible { outline: 1.5px solid var(--kiri-secondary-label); outline-offset: 2px; }
+.kiri-release-notes__content { max-width: 72ch; color: var(--kiri-secondary-label); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.kiri-release-notes__content p { margin: 0 0 10px; white-space: pre-wrap; }
+.kiri-release-notes__content strong { color: var(--kiri-label); font-weight: 500; }
+.kiri-release-notes__block-heading { margin: 18px 0 8px; color: var(--kiri-label); font-size: 12.5px; line-height: 1.5; font-weight: 600; }
+.kiri-release-notes__list { display: flex; flex-direction: column; gap: 7px; margin: 0 0 12px; padding-inline-start: 18px; }
+.kiri-release-notes__list li { padding-inline-start: 3px; }
+.kiri-release-notes__list li::marker { color: var(--kiri-disabled-label); }
+.kiri-release-notes__code, .kiri-release-notes__content :not(pre) > code { border-radius: 3px; padding: 1px 4px; background: var(--kiri-group-fill); color: var(--kiri-label); font-size: .92em; }
+.kiri-release-notes__code { margin: 10px 0; padding: 8px 10px; white-space: pre-wrap; }
+.kiri-release-notes__link { color: var(--kiri-label); }
+.kiri-release-notes__content > div + div { margin-top: 14px; }
+.kiri-release-notes__content > div > :first-child { margin-top: 0; }
+.kiri-release-notes__content > div > :last-child { margin-bottom: 0; }
 
-.kiri-settings-section--about .kiri-version-title strong { font-size: 16px; }
-.kiri-settings-section--about .kiri-version-title .kiri-settings-badge {
-  background: transparent;
-  padding: 0;
-  font-size: 12px;
-  font-weight: 400;
+@container settings-section (max-width: 520px) {
+  .kiri-version-row { padding: 16px; }
+  .kiri-update-summary { align-items: flex-start; gap: 14px; }
+  .kiri-update-copy { flex-basis: 100%; }
+  .kiri-update-actions { justify-content: flex-start; }
 }
 
 .kiri-support-actions {
-  flex: 1 1 100%;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--kiri-surface-border);
+  padding: 0 2px;
 }
 
 .kiri-settings .kiri-button {
@@ -749,8 +742,6 @@
 }
 
 @media (max-width: 560px) {
-  .kiri-settings-section--about .kiri-update-copy,
-  .kiri-support-actions { flex-basis: auto; }
   .kiri-shortcut-actions, .kiri-storage-actions { max-width: none; }
 }
 

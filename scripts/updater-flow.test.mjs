@@ -94,7 +94,7 @@ function updaterHarness(windows = true, portable = false, linux = false, options
     import {KiriIcon} from '../components/KiriIcons';
     import { useAppUpdater, stateDetails } from '../settings/useAppUpdater';
     const t = value => value, fmt = (value, arg) => value.replace('%@', arg);
-    const SupportLinks = 'support-links';
+    const SupportLinks = 'support-links', ReleaseNotes = 'release-notes';
     ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
     export function TestAbout() { return AboutSettingsSection({ updater: useAppUpdater() }); }`;
   const harness = createLibraryHarness({ check: async () => { checks++; return options.check ? options.check(update) : update; },
@@ -108,7 +108,7 @@ function updaterHarness(windows = true, portable = false, linux = false, options
     });
   const component = harness.mount('TestAbout');
   const render = () => component.render();
-  const button = () => nodes(render()).find(node => node?.type === 'button');
+  const button = () => nodes(render()).find(node => node?.type === 'button' && node.props.className?.split(' ').includes('kiri-update-button'));
   return { pending, installs, render, button, progress: event => progress(event),
     restarts: () => restarts, checks: () => checks, releaseOpens: () => releaseOpens,
     focus: () => harness.emit("libraryFocus", { payload: true }),
@@ -277,7 +277,7 @@ function supportInfoHarness(copySupportInfo) {
     import {api} from '../lib/ipc'; import {KiriIcon} from '../components/KiriIcons';
     import {stateDetails} from '../settings/useAppUpdater';
     const t=value=>value, fmt=(value,arg)=>value.replace('%@',arg);
-    const SupportLinks = 'support-links';
+    const SupportLinks = 'support-links', ReleaseNotes = 'release-notes';
     ${settings.slice(settings.indexOf('function AboutSettingsSection'), settings.indexOf('function GeneralSettingsSection'))}
     export function TestAbout() { return AboutSettingsSection({ updater: {
       currentVersion:'1.6.18', isWindows:true, isPortable:false, updateState:{kind:'idle'}, hasUpdate:false,

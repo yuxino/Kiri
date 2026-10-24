@@ -96,7 +96,7 @@ Object.assign(window, {
           actions.push("check-update");
           if (params.has("updateFailure")) throw new Error("Controlled offline update check");
           if (lateUpdate) await lateUpdate;
-          return params.has("update") ? {rid:7,currentVersion:version,version:"9.9.9",body:"Public update fixture — no package is downloaded.",rawJson:{}} : null;
+          return params.has("update") ? {rid:7,currentVersion:version,version:params.get("updateVersion") ?? "9.9.9",body:params.get("updateNotes") ?? "Public update fixture — no package is downloaded.",rawJson:{}} : null;
         case "plugin:resources|close": return null;
         case "set_capture_shortcut_editing": return null;
         case "set_capture_shortcut": return {status:"enabled",label:"⇧⌘A"};

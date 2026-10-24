@@ -17,6 +17,7 @@ import { ShortcutsSettings } from "./ShortcutsSettings";
 import { DockVisibilityRow } from "./DockVisibilityRow";
 import { StartupSettingsRow } from "./StartupSettingsRow";
 import { SupportLinks } from "./SupportLinks";
+import { ReleaseNotes } from "./ReleaseNotes";
 import { OcrSettingsSection } from "./OcrSettingsSection";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import "./settings.css";
@@ -320,67 +321,74 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
         </div>
       </div>
       <div className="kiri-settings-card kiri-version-row">
-        <div className="kiri-update-copy">
-          <div className="kiri-version-title">
-            <strong>Kiri</strong>
-            <span className="kiri-settings-badge">
-              {fmt("Version %@", currentVersion ? `v${currentVersion}` : "—")}
-            </span>
-          </div>
-          <span
-            id="kiri-update-status"
-            role={updateState.kind === "error" ? "alert" : "status"}
-            aria-live={updateState.kind === "error" ? "assertive" : "polite"}
-          >
-            {status}
-          </span>
-          {updateState.kind === "downloading" && (
-            <progress
-              className="kiri-update-progress"
-              max={updateState.total}
-              value={updateState.total ? Math.min(updateState.downloaded, updateState.total) : undefined}
-              aria-label={t("Update download progress")}
-            />
-          )}
-          {details?.notes && (
-            <div className="kiri-update-notes" aria-label={t("Release notes")}>
-              <strong>{t("What's new")}</strong>
-              <p>{details.notes}</p>
+        <div className="kiri-update-summary">
+          <div className="kiri-update-copy">
+            <div className="kiri-version-title">
+              <strong>Kiri</strong>
+              <span className="kiri-version-number">
+                {details ? <>
+                  <span aria-label={fmt("Version %@", currentVersion ? `v${currentVersion}` : "—")}>{currentVersion ? `v${currentVersion}` : "—"}</span>
+                  <span className="kiri-version-arrow" aria-hidden="true">→</span>
+                  <span className="kiri-version-target" aria-label={`${t("Update available")}: v${details.version}`}>v{details.version}</span>
+                </> : fmt("Version %@", currentVersion ? `v${currentVersion}` : "—")}
+              </span>
             </div>
-          )}
-        </div>
-        <div className="kiri-update-actions" role="group" aria-label={t("About")}>
-          <button
-            type="button"
-            className={updater.hasUpdate
-              ? "kiri-button kiri-button--primary kiri-update-button"
-              : "kiri-button kiri-button--secondary kiri-update-button"}
-            disabled={busy || isPortable === null}
-            aria-describedby="kiri-update-status"
-            onClick={runPrimaryAction}
-          >
-            {buttonLabel}
-          </button>
-        </div>
-        <div className="kiri-support-actions" role="group" aria-label={t("About")}>
-          <button type="button" className="kiri-button kiri-button--secondary"
-            disabled={copyState === "copying"} aria-label={t("Copy Info")}
-            onClick={() => void copyInfo()}>
-            <KiriIcon name={copyState === "copied" ? "checkmark" : "doc.on.doc"} size={15} />
-            <span aria-live="polite">{t(copyState === "copied" ? "Copied" : "Copy Info")}</span>
-          </button>
-          {copyState === "error" && <span className="kiri-support-copy-status" role="alert">{t("Couldn't copy info. Try again.")}</span>}
-          <SupportLinks isWindows={isWindows} />
-          {updateState.kind === "error" && (
+            <span
+              id="kiri-update-status"
+              className="kiri-update-status"
+              role={updateState.kind === "error" ? "alert" : "status"}
+              aria-live={updateState.kind === "error" ? "assertive" : "polite"}
+            >
+              {updateState.kind === "error"
+                ? <KiriIcon name="exclamationmark.triangle" size={14} />
+                : ["downloaded", "readyToRestart", "upToDate"].includes(updateState.kind)
+                  ? <KiriIcon name="checkmark.circle.fill" size={14} />
+                  : busy && <span className="kiri-settings-spinner" aria-hidden="true" />}
+              <span>{status}</span>
+            </span>
+            {updateState.kind === "downloading" && (
+              <progress
+                className="kiri-update-progress"
+                max={updateState.total}
+                value={updateState.total ? Math.min(updateState.downloaded, updateState.total) : undefined}
+                aria-label={t("Update download progress")}
+              />
+            )}
+          </div>
+          <div className="kiri-update-actions" role="group" aria-label={t("About")}>
             <button
               type="button"
-              className="kiri-button kiri-button--ghost"
-              onClick={() => void openRecoveryPage()}
+              className={updater.hasUpdate
+                ? "kiri-button kiri-button--primary kiri-update-button"
+                : "kiri-button kiri-button--secondary kiri-update-button"}
+              disabled={busy || isPortable === null}
+              aria-describedby="kiri-update-status"
+              onClick={runPrimaryAction}
             >
-              {t("Open Releases Page")}
+              {buttonLabel}
             </button>
-          )}
+          </div>
         </div>
+        {details?.notes && <ReleaseNotes notes={details.notes} />}
+      </div>
+      <div className="kiri-support-actions" role="group" aria-label={t("About")}>
+        <button type="button" className="kiri-button kiri-button--secondary"
+          disabled={copyState === "copying"} aria-label={t("Copy Info")}
+          onClick={() => void copyInfo()}>
+          <KiriIcon name={copyState === "copied" ? "checkmark" : "doc.on.doc"} size={15} />
+          <span aria-live="polite">{t(copyState === "copied" ? "Copied" : "Copy Info")}</span>
+        </button>
+        {copyState === "error" && <span className="kiri-support-copy-status" role="alert">{t("Couldn't copy info. Try again.")}</span>}
+        <SupportLinks isWindows={isWindows} />
+        {updateState.kind === "error" && (
+          <button
+            type="button"
+            className="kiri-button kiri-button--ghost"
+            onClick={() => void openRecoveryPage()}
+          >
+            {t("Open Releases Page")}
+          </button>
+        )}
       </div>
     </section>
   );

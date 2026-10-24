@@ -243,3 +243,6 @@ development.
 
 - [ADR 0119: Readable pinned screenshots and scrolling-capture pinning](adr/0119-readable-pinned-screenshots-and-scroll-pin.md)
   — independent reference zoom and scrolling, plus one-step pinning after a complete scrolling capture.
+
+- [ADR 0120: Readable update notes](adr/0120-readable-update-notes.md)
+  — compact update actions and safely formatted, language-aware release notes.
