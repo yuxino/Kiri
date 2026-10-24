@@ -54,19 +54,26 @@ jobs:
               # Avoid the redirector selecting an unreachable community mirror.
               # Bootstrap CA roots through signed APT metadata before HTTPS.
               printf "%s\n" "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list
+              mkdir -p /etc/apt/kiri-qa-empty-sources.list.d
               printf "%s\n" "Acquire::Retries \"3\";" \
                 "Acquire::http::Timeout \"30\";" "Acquire::https::Timeout \"30\";" \
-                "APT::Update::Error-Mode \"any\";" > /etc/apt/apt.conf.d/80-kiri-qa-network
+                "APT::Update::Error-Mode \"any\";" \
+                "Dir::Etc::sourcelist \"/etc/apt/sources.list\";" \
+                "Dir::Etc::sourceparts \"/etc/apt/kiri-qa-empty-sources.list.d\";" \
+                > /etc/apt/apt.conf.d/80-kiri-qa-network
+              cp /etc/apt/sources.list /evidence/apt-sources-bootstrap.txt
+              apt-config dump > /evidence/apt-config-bootstrap.txt
               apt-get update
               apt-get install -y --no-install-recommends ca-certificates
               sed -i "s|http://kali.download/kali|https://kali.download/kali|" /etc/apt/sources.list
+              cp /etc/apt/sources.list /evidence/apt-sources.txt
+              apt-config dump > /evidence/apt-config.txt
               apt-get update
               apt-get install -y --no-install-recommends \
                 /candidate/*.deb binutils ca-certificates xvfb xauth openbox \
                 xdotool xclip x11-utils dbus-x11 python3-tk python3-pil \
                 python3-gi python3-pyatspi at-spi2-core fonts-dejavu-core
               cp /etc/os-release /evidence/os-release.txt
-              cp /etc/apt/sources.list /evidence/apt-sources.txt
               dpkg-query -W kiri tesseract-ocr libtesseract5 libleptonica6 > /evidence/package-versions.txt
               tesseract --version > /evidence/tesseract-version.txt 2>&1
               ldconfig -p > /evidence/system-libraries.txt
