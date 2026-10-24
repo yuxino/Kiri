@@ -31,6 +31,23 @@ def stop(child):
             child.wait(timeout=5)
 
 
+def enable_accessibility(connection, variant, flags, report):
+    properties = connection.call_sync(
+        "org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "GetAll",
+        variant("(s)", ("org.a11y.Status",)), None, flags, 5000, None,
+    ).unpack()[0]
+    report["accessibility_properties"] = sorted(properties)
+    if "IsEnabled" not in properties:
+        raise RuntimeError("The accessibility bus does not expose required IsEnabled")
+    for property_name in ("IsEnabled", "ScreenReaderEnabled"):
+        if property_name in properties:
+            connection.call_sync(
+                "org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
+                variant("(ssv)", ("org.a11y.Status", property_name, variant("b", True))),
+                None, flags, 5000, None,
+            )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", required=True, type=Path)
@@ -120,10 +137,7 @@ def main():
 
     try:
         connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-        for property_name in ("IsEnabled", "ScreenReaderEnabled"):
-            connection.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties", "Set",
-                                 GLib.Variant("(ssv)", ("org.a11y.Status", property_name, GLib.Variant("b", True))),
-                                 None, Gio.DBusCallFlags.NONE, 5000, None)
+        enable_accessibility(connection, GLib.Variant, Gio.DBusCallFlags.NONE, report)
         Atspi.init()
         manager_log = (output / "openbox.log").open("wb")
         logs.append(manager_log)
