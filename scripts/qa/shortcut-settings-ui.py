@@ -117,8 +117,14 @@ GEOMETRY = r"""() => {
       }
     }
     for(const button of row.querySelectorAll('button')){
-      const q=rect(button), p=rect(panel), x=q.x+q.width/2,y=q.y+q.height/2;
-      if(visible(button)&&x>=p.x&&x<=p.right&&y>=p.y&&y<=p.bottom&&
+      const q=rect(button), p=rect(panel);
+      // A button's center can land exactly on the viewport's excluded bottom
+      // edge while part of it remains visible. Hit-test inside the visible
+      // intersection, including buttons whose center is below the fold.
+      const left=Math.max(q.x,p.x,0),right=Math.min(q.right,p.right,innerWidth);
+      const top=Math.max(q.y,p.y,0),bottom=Math.min(q.bottom,p.bottom,innerHeight);
+      const x=(left+right)/2,y=(top+bottom)/2;
+      if(visible(button)&&right>left&&bottom>top&&
         document.elementFromPoint(x,y)?.closest('button')!==button)failures.push(row.dataset.action+' button is covered: '+button.className);
     }
     const controls=row.querySelector('.kiri-global-shortcut__controls');
