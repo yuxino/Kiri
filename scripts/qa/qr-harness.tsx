@@ -29,7 +29,7 @@ function InlineHarness() {
     {open ? <QrOverlay scan={{...meta,requestId:"fixture-request",imageUrl:image}} failed={false} selection={selection} bounds={{x:0,y:0,width:innerWidth,height:innerHeight}} scale={scale} onClose={()=>setOpen(false)} onOpened={()=>setOpen(false)}/> : <p role="status">Mock capture canceled</p>}
   </>;
 }
-createRoot(document.getElementById("root")!).render(<div className="library-root kiri-canvas-surface" style={{height:"100vh",boxSizing:"border-box",padding:28}}>
+createRoot(document.getElementById("root")!).render(<div className="library-root kiri-canvas-surface" style={{height:"100vh",boxSizing:"border-box",padding:28,flexDirection:"column"}}>
   <header className="text-dialog__header"><div><h2>{scenario === "favorites" ? "二维码收藏" : "二维码"}</h2><p>隔离前端测试 · 公开生成的测试图片 · 模拟 IPC</p></div><a href="?scenario=favorites">查看收藏测试</a></header>
   {scenario === "favorites" ? <div style={{height:"calc(100vh - 112px)",display:"flex"}}><QrFavorites/></div> : <InlineHarness/>}
   <output id="qa-actions" style={{display:"block",marginTop:20,fontSize:12}}/>

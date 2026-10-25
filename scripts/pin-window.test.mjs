@@ -606,7 +606,7 @@ test("normal resize release retains its final ratio after automatic capture loss
 
 const overlaySource = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
 
-function captureCompletion() {
+function captureCompletion(options = {}) {
   const tree = ts.createSourceFile("overlay.tsx", overlaySource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let callback;
   const walk = node => {
@@ -618,19 +618,21 @@ function captureCompletion() {
   walk(tree);
   assert.ok(callback);
   const output = ts.transpileModule(`const complete = ${callback};`, {}).outputText;
-  const exported = deferred(), confirmed = deferred(), calls = [];
+  const exported = deferred(), confirmed = deferred(), calls = [], errors = [];
+  let confirmation = confirmed;
   const result = { png: new Uint8Array([1, 2, 3]), document: { marks: [{ kind: "text" }] } };
   const selection = { x: 10, y: 20, width: 100, height: 80 };
   const context = {
     completionLock: new AnnotationInteractionLock(), modeSelectorDragRef: { current: null },
-    setModeSelectorDragging: () => {}, setCompleting: () => {}, selection,
+    setModeSelectorDragging: () => {}, setCompleting: () => {}, setAnnotationError: error => errors.push(error), selection,
     canvasRef: { current: { exportResult: () => { calls.push("export"); return exported.promise; } } },
-    api: { confirmCapture: (...args) => { calls.push(args); return confirmed.promise; } },
-    getCurrentWindow: () => ({ close: async () => { calls.push("close"); } }),
+    api: { confirmCapture: (...args) => { calls.push(args); return confirmation.promise; } },
+    getCurrentWindow: () => ({ close: async () => { calls.push("close"); if (options.closeFails) throw new Error("close failed"); } }),
     reportFrontend: message => calls.push(message),
   };
   const complete = new Function(...Object.keys(context), `${output}; return complete;`)(...Object.values(context));
-  return { complete, exported, confirmed, calls, result, selection, lock: context.completionLock };
+  return { complete, exported, confirmed, calls, errors, result, selection, lock: context.completionLock,
+    nextConfirmation() { confirmation = deferred(); return confirmation; } };
 }
 
 test("direct pin exports annotations once and waits for confirmation before closing", async () => {
@@ -660,6 +662,14 @@ test("failed pin confirmation keeps the overlay open and releases completion for
   assert.ok(!h.calls.includes("close"));
   assert.equal(h.lock.locked, false);
   assert.match(h.calls.at(-1), /save failed/);
+  assert.equal(h.errors.at(-1), "Couldn't save the screenshot. Try again.");
+  const confirmed = h.nextConfirmation();
+  const retry = h.complete(true);
+  assert.equal(h.errors.at(-1), null, "retry clears the compact error");
+  await settleRequests();
+  confirmed.resolve();
+  await retry;
+  assert.equal(h.calls.filter(call => call === "close").length, 1);
 });
 
 test("normal completion retains its non-pinning action", async () => {
@@ -670,6 +680,16 @@ test("normal completion retains its non-pinning action", async () => {
   await pending;
   assert.equal(h.calls[1][2], false);
   assert.equal(h.calls[2], "close");
+});
+
+test("a failed close after saving does not offer to save the already committed screenshot again", async () => {
+  const h = captureCompletion({closeFails: true});
+  const pending = h.complete();
+  h.exported.resolve(h.result); h.confirmed.resolve();
+  await pending;
+  assert.deepEqual(h.errors, [null]);
+  assert.equal(h.calls.filter(call => call === "close").length, 1);
+  assert.equal(h.lock.locked, false);
 });
 
 test("the toolbar exposes direct pin, disables it while completing, and isolates keyboard activation", () => {

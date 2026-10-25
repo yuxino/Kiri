@@ -333,3 +333,81 @@ test("favorite search rejects a late previous response", async () => {
   assert.ok(has(component.render(),"Newest QR content"));assert.equal(has(component.render(),"Old QR content"),false);
   component.unmount();
 });
+
+test("favorite query changes hide old records and actions until their own snapshot arrives", async () => {
+  const pending = deferred(), calls = [];
+  const oldAsset = { ...testAsset, id: "old", qrText: "https://old.example/" };
+  const newAsset = { ...testAsset, id: "new", qrText: "https://new.example/" };
+  const harness = createLibraryHarness({
+    listQrFavorites: query => query ? pending.promise : Promise.resolve([oldAsset]),
+    qrFavoriteAction: async (...args) => calls.push(args),
+  }, source);
+  const component = harness.mount("QrFavorites");
+  const detail = tree => nodes(tree).find(node => node?.type?.name === "QrDetails");
+  try {
+    component.render(); await new Promise(resolve => setTimeout(resolve, 5)); await settleRequests();
+    assert.equal(detail(component.render()).props.code.text, oldAsset.qrText);
+    nodes(component.render()).find(node => node?.type === "input").props.onChange({ target: { value: "new" } });
+    let tree = component.render();
+    assert.equal(detail(tree), undefined, "an unmatched query cannot retain the previous detail's actions");
+    assert.equal(has(tree, oldAsset.qrText), false);
+    assert.ok(has(tree, "Loading…"));
+    await new Promise(resolve => setTimeout(resolve, 170));
+    tree = component.render();
+    assert.equal(detail(tree), undefined, "the old record must remain hidden while the new request is pending");
+    assert.deepEqual(calls, []);
+    pending.resolve([newAsset]); await settleRequests();
+    tree = component.render();
+    assert.equal(detail(tree).props.code.text, newAsset.qrText);
+    for (const action of ["copy", "open", "remove"]) await detail(tree).props.action(action);
+    assert.deepEqual(calls, [["new", "copy"], ["new", "open"], ["new", "remove"]]);
+  } finally { component.unmount(); }
+});
+
+test("favorite query failure cannot revive an earlier query's actionable records", async () => {
+  const pending = deferred();
+  const oldAsset = { ...testAsset, id: "old", qrText: "Old favorite content" };
+  const harness = createLibraryHarness({
+    listQrFavorites: query => query ? pending.promise : Promise.resolve([oldAsset]),
+  }, source);
+  const component = harness.mount("QrFavorites");
+  try {
+    component.render(); await new Promise(resolve => setTimeout(resolve, 5)); await settleRequests();
+    nodes(component.render()).find(node => node?.type === "input").props.onChange({ target: { value: "unavailable" } });
+    let tree = component.render();
+    assert.equal(has(tree, oldAsset.qrText), false);
+    await new Promise(resolve => setTimeout(resolve, 170));
+    pending.reject(new Error("private library diagnostic")); await settleRequests();
+    tree = component.render();
+    assert.ok(has(tree, "Could not load QR Favorites."));
+    assert.equal(nodes(tree).some(node => node?.type?.name === "QrDetails"), false);
+    assert.equal(has(tree, oldAsset.qrText), false);
+    assert.equal(has(tree, "private library diagnostic"), false);
+  } finally { component.unmount(); }
+});
+
+test("same-query favorite refresh retains its snapshot but cannot overwrite a newer query", async () => {
+  const refresh = deferred(), search = deferred();
+  const oldAsset = { ...testAsset, id: "old", qrText: "Old favorite content" };
+  const newAsset = { ...testAsset, id: "new", qrText: "New favorite content" };
+  let requests = 0;
+  const harness = createLibraryHarness({
+    listQrFavorites: query => query ? search.promise : ++requests === 1 ? Promise.resolve([oldAsset]) : refresh.promise,
+  }, source);
+  const component = harness.mount("QrFavorites");
+  const detail = tree => nodes(tree).find(node => node?.type?.name === "QrDetails");
+  try {
+    component.render(); await new Promise(resolve => setTimeout(resolve, 5)); await settleRequests();
+    harness.emit("libraryChanged"); component.render(); await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(detail(component.render()).props.code.text, oldAsset.qrText, "same-query refresh preserves the current snapshot");
+    nodes(component.render()).find(node => node?.type === "input").props.onChange({ target: { value: "new" } });
+    assert.equal(detail(component.render()), undefined);
+    await new Promise(resolve => setTimeout(resolve, 170));
+    search.resolve([newAsset]); await settleRequests();
+    assert.equal(detail(component.render()).props.code.text, newAsset.qrText);
+    refresh.resolve([{ ...oldAsset, qrText: "Late obsolete favorite" }]); await settleRequests();
+    const tree = component.render();
+    assert.equal(detail(tree).props.code.text, newAsset.qrText);
+    assert.equal(has(tree, "Late obsolete favorite"), false);
+  } finally { component.unmount(); }
+});

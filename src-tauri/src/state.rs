@@ -172,6 +172,7 @@ pub enum CaptureMode {
     Ocr,
 }
 
+#[derive(Clone)]
 pub struct CaptureSession {
     pub capture_id: uuid::Uuid,
     pub initial_mode: CaptureMode,

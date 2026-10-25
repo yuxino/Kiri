@@ -190,6 +190,10 @@ reads after a newer change. See ADR 0079.
    and decodes the PNG under capture-sized allocation limits. When marks exist,
    Rust also crops a pixel-aligned clean source from the still-live frozen
    display and stores it with the document without changing `library.json`.
+   The session, staged annotations and frozen resource remain available for
+   retry or cancellation until library saving succeeds. Only success consumes
+   them; the successful IPC response still precedes the live overlay's closing
+   and the existing completion flow (ADR 0121).
 6. Rust copies the flattened PNG to the clipboard, imports it into the local
    library, tears down the session, and restores focus where the platform allows
    it. GTK owns Linux clipboard contents beyond the overlay's lifetime. X11
@@ -545,6 +549,10 @@ QR Favorites stores an optional searchable `qrText` field and a selected-code PN
 crop through one atomic library import. Duplicate active payloads reuse a record;
 removal uses recoverable Trash. The normal capture grid excludes QR records while
 the QR Favorites destination provides search and content/image reuse.
+Favorite snapshots and actions belong to their search query. A query change
+hides old records and details until matching results arrive; same-query
+refreshes retain their acknowledged snapshot and ignore obsolete replies
+(ADR 0121).
 Standard square WeChat QR codes use this local path; circular Mini Program
 codes are unsupported. See [ADR 0061](adr/0061-local-qr-recognition-and-favorites.md)
 and [ADR 0063](adr/0063-qr-center-markers-and-supported-geometry.md).
@@ -646,6 +654,10 @@ A decode-only pass validates the requested frames before expensive GIF encoding.
 Saved-video conversions can cancel checking, encoding and finalization; native work
 stops between frames and incomplete temporary output is removed. Library import
 has an atomic commit boundary after which cancellation is unavailable.
+Completed GIF output has `TempPath` ownership through metadata lookup,
+recording-recovery preparation and import. Every exit cleans that temporary
+GIF without deleting the source MP4 on failure; existing MP4 fallback and
+recovery retain their ownership (ADR 0121).
 Saved-video conversions report measured frame progress on macOS,
 then finalization and library saving; unknown progress remains indeterminate.
 Operation-specific failures remain visible with retry and dismiss actions,

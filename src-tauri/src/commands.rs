@@ -1823,7 +1823,7 @@ fn convert_asset_to_gif(
 ) -> Result<CaptureAsset, String> {
     let state = app.state::<AppState>();
     control.check().map_err(|error| error.to_string())?;
-    let (gif_path, gif_width, gif_height, gif_duration) = export_gif_file(
+    let (output, gif_width, gif_height, gif_duration) = export_gif_file(
         app,
         source_path,
         asset.pixel_width,
@@ -1832,8 +1832,7 @@ fn convert_asset_to_gif(
         control,
         progress,
     )?;
-    let output = tempfile::TempPath::try_from_path(gif_path).map_err(|error| error.to_string())?;
-    let import_result = {
+    let import_result = with_owned_gif_output(output, |output| {
         let mut context = state.library.lock().unwrap();
         if (context.expected_library_id(), context.expected_library_generation()) != library_identity {
             return Err("Library changed during GIF conversion.".into());
@@ -1846,7 +1845,7 @@ fn convert_asset_to_gif(
             .and_then(|library| {
                 library
                     .import_file(
-                        &output,
+                        output,
                         CaptureKind::Gif,
                         "gif",
                         gif_width,
@@ -1856,10 +1855,28 @@ fn convert_asset_to_gif(
                     )
                     .map_err(|e| e.to_string())
             })
-    };
+    });
     let gif_asset = import_result.map_err(|error| format!("Could not save GIF: {error}"))?;
     emit_library_changed(app);
     Ok(gif_asset)
+}
+
+fn own_gif_export(
+    path: PathBuf,
+    metadata: impl FnOnce() -> Result<(i64, i64, Option<f64>), String>,
+) -> Result<(tempfile::TempPath, i64, i64, Option<f64>), String> {
+    // Own the completed file before any fallible post-encoding preparation.
+    let output = tempfile::TempPath::try_from_path(path).map_err(|error| error.to_string())?;
+    let (width, height, duration) = metadata()?;
+    Ok((output, width, height, duration))
+}
+
+fn with_owned_gif_output<T>(
+    output: tempfile::TempPath,
+    import: impl FnOnce(&Path) -> Result<T, String>,
+) -> Result<T, String> {
+    // Preparation and import borrow the file; every return cleans it up.
+    import(&output)
 }
 
 fn export_gif_file(
@@ -1870,7 +1887,7 @@ fn export_gif_file(
     source_duration: Option<f64>,
     control: &crate::gif::GifControl,
     progress: crate::gif::GifProgress<'_>,
-) -> Result<(PathBuf, i64, i64, Option<f64>), String> {
+) -> Result<(tempfile::TempPath, i64, i64, Option<f64>), String> {
     let max_long_edge = crate::core::policy::RecordingPolicy::MAXIMUM_GIF_LONG_EDGE;
     let fps = crate::core::policy::RecordingPolicy::GIF_FRAMES_PER_SECOND;
 
@@ -1879,38 +1896,142 @@ fn export_gif_file(
         let _ = (app, source_duration);
         let (gif_path, encoded_duration) = crate::gif::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
             .map_err(|error| format!("{error:#}"))?;
-        let (width, height) = if _source_width > 0 && _source_height > 0 {
-            (_source_width as u32, _source_height as u32)
-        } else {
-            crate::gif::video_dimensions(source_path).map_err(|error| format!("{error:#}"))?
-        };
-        let (width, height) = crate::gif::scaled_dimensions(width, height, max_long_edge);
-        Ok((
-            gif_path,
-            i64::from(width),
-            i64::from(height),
-            Some(encoded_duration),
-        ))
+        own_gif_export(gif_path, || {
+            let (width, height) = if _source_width > 0 && _source_height > 0 {
+                (_source_width as u32, _source_height as u32)
+            } else {
+                crate::gif::video_dimensions(source_path).map_err(|error| format!("{error:#}"))?
+            };
+            let (width, height) = crate::gif::scaled_dimensions(width, height, max_long_edge);
+            Ok((i64::from(width), i64::from(height), Some(encoded_duration)))
+        })
     }
 
     #[cfg(target_os = "macos")]
     {
         let _ = (app, &progress);
-        crate::macos_media::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
-            .map(|(path, width, height, duration)| {
-                (path, width, height, duration.or(source_duration))
-            })
-            .map_err(|error| format!("{error:#}"))
+        let (path, width, height, duration) = crate::macos_media::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
+            .map_err(|error| format!("{error:#}"))?;
+        own_gif_export(path, || Ok((width, height, duration.or(source_duration))))
     }
 
     #[cfg(target_os = "linux")]
     {
         let _ = (app, &progress);
-        crate::linux_media::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
-            .map(|(path, width, height, duration)| {
-                (path, width, height, duration.or(source_duration))
-            })
-            .map_err(|error| format!("{error:#}"))
+        let (path, width, height, duration) = crate::linux_media::export_gif_controlled(source_path, max_long_edge, fps, control, progress)
+            .map_err(|error| format!("{error:#}"))?;
+        own_gif_export(path, || Ok((width, height, duration.or(source_duration))))
+    }
+}
+
+#[cfg(test)]
+mod gif_output_lifecycle_tests {
+    use super::{own_gif_export, with_owned_gif_output};
+    use crate::core::asset::CaptureKind;
+    use crate::core::library::AssetLibrary;
+    use crate::core::recording_recovery::RecordingRecoveryStore;
+
+    #[test]
+    fn completed_gif_is_removed_when_post_encoding_metadata_fails() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.mp4");
+        let output = directory.path().join("encoded.gif");
+        std::fs::write(&source, b"original MP4").unwrap();
+        std::fs::write(&output, b"completed GIF").unwrap();
+
+        let result = own_gif_export(output.clone(), || {
+            assert_eq!(std::fs::read(&output).unwrap(), b"completed GIF");
+            Err("source metadata unavailable".to_string())
+        });
+
+        assert_eq!(result.unwrap_err(), "source metadata unavailable");
+        assert!(!output.exists());
+        assert_eq!(std::fs::read(source).unwrap(), b"original MP4");
+    }
+
+    #[test]
+    fn recording_prepare_import_failure_removes_gif_and_preserves_mp4() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.mp4");
+        let output = directory.path().join("encoded.gif");
+        let recovery_root = directory.path().join("recovery");
+        std::fs::write(&source, b"original MP4").unwrap();
+        std::fs::write(&output, b"completed GIF").unwrap();
+        let recovery = RecordingRecoveryStore::new(recovery_root.clone());
+        let mut pending = recovery.persist(&source, 64, 48, Some(1.0)).unwrap();
+        let recovered_mp4 = recovery.validate_video(&pending).unwrap();
+        let manifest = recovery_root.join(format!("{}.json", pending.id.simple()));
+        std::fs::remove_file(&manifest).unwrap();
+        std::fs::create_dir(&manifest).unwrap();
+        let (owned, _, _, _) =
+            own_gif_export(output.clone(), || Ok((64, 48, Some(1.0)))).unwrap();
+
+        let result = with_owned_gif_output(owned, |gif| {
+            recovery
+                .prepare_import(&mut pending, CaptureKind::Gif, gif)
+                .map_err(|error| error.to_string())?;
+            Err::<(), _>("unexpected successful preparation".to_string())
+        });
+
+        assert!(result.is_err());
+        assert_ne!(result.unwrap_err(), "unexpected successful preparation");
+        assert!(!output.exists());
+        assert_eq!(std::fs::read(source).unwrap(), b"original MP4");
+        assert_eq!(std::fs::read(recovered_mp4).unwrap(), b"original MP4");
+    }
+
+    #[test]
+    fn library_import_failure_removes_completed_gif_without_touching_source() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.mp4");
+        let output = directory.path().join("encoded.gif");
+        let library_root = directory.path().join("library");
+        std::fs::write(&source, b"original MP4").unwrap();
+        std::fs::write(&output, b"completed GIF").unwrap();
+        let mut library = AssetLibrary::open(library_root.clone()).unwrap();
+        let index = library_root.join("library.json");
+        if index.exists() {
+            std::fs::remove_file(&index).unwrap();
+        }
+        std::fs::create_dir(index).unwrap();
+        let (owned, _, _, _) =
+            own_gif_export(output.clone(), || Ok((64, 48, Some(1.0)))).unwrap();
+
+        let result = with_owned_gif_output(owned, |gif| {
+            library
+                .import_file(gif, CaptureKind::Gif, "gif", 64, 48, Some(1.0), None)
+                .map_err(|error| error.to_string())
+        });
+
+        assert!(result.is_err());
+        assert!(!output.exists());
+        assert!(library.all_assets(false).is_empty());
+        assert_eq!(std::fs::read(source).unwrap(), b"original MP4");
+    }
+
+    #[test]
+    fn successful_import_keeps_gif_until_copy_and_then_removes_temporary_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.mp4");
+        let output = directory.path().join("encoded.gif");
+        std::fs::write(&source, b"original MP4").unwrap();
+        std::fs::write(&output, b"completed GIF").unwrap();
+        let mut library = AssetLibrary::open(directory.path().join("library")).unwrap();
+        let (owned, _, _, _) =
+            own_gif_export(output.clone(), || Ok((64, 48, Some(1.0)))).unwrap();
+        assert!(output.exists());
+
+        let asset = with_owned_gif_output(owned, |gif| {
+            assert_eq!(std::fs::read(gif).unwrap(), b"completed GIF");
+            library
+                .import_file(gif, CaptureKind::Gif, "gif", 64, 48, Some(1.0), None)
+                .map_err(|error| error.to_string())
+        })
+        .unwrap();
+
+        assert!(!output.exists());
+        assert_eq!(std::fs::read(library.asset_url(&asset)).unwrap(), b"completed GIF");
+        assert_eq!(std::fs::read(source).unwrap(), b"original MP4");
     }
 }
 
@@ -2700,6 +2821,17 @@ pub fn prepare_capture_annotation(
     let document = AnnotationDocument::from_json(&request.document_json)?;
     let state = app.state::<AppState>();
     let mut capture = state.capture.lock().unwrap();
+    stage_capture_annotation(&mut capture, window.label(), Rect::new(
+        request.selection.x, request.selection.y, request.selection.width, request.selection.height,
+    ), document)
+}
+
+fn stage_capture_annotation(
+    capture: &mut crate::state::CaptureFlow,
+    owner: &str,
+    selection: Rect,
+    document: AnnotationDocument,
+) -> Result<String, String> {
     let session = capture
         .session
         .as_mut()
@@ -2707,17 +2839,11 @@ pub fn prepare_capture_annotation(
             session
                 .overlay_labels
                 .iter()
-                .any(|label| label == window.label())
+                .any(|label| label == owner)
         })
         .ok_or_else(|| {
             "This command is only available from the active capture overlay.".to_string()
         })?;
-    let selection = Rect::new(
-        request.selection.x,
-        request.selection.y,
-        request.selection.width,
-        request.selection.height,
-    );
     validate_staged_capture_annotation(&session.display, selection, &document)?;
     let token = uuid::Uuid::new_v4();
     session.annotation = Some(StagedCaptureAnnotation {
@@ -2812,28 +2938,13 @@ pub fn confirm_capture(
         None
     };
     let _transition = state.library_transition.lock().unwrap();
-    let session = {
-        let mut capture = state.capture.lock().unwrap();
-        if capture.session.as_ref().is_none_or(|session| {
-            session.capture_id != capture_id
-                || session
-                    .annotation
-                    .as_ref()
-                    .is_none_or(|staged| staged.token != annotation_token)
-        }) {
-            return Err("The capture session changed before confirmation.".into());
-        }
-        capture.session.take().unwrap()
-    };
-    log::info!(
-        "confirm_capture: session consumed capture_id={}",
-        session.capture_id
-    );
-    invalidate_capture_resources(&app, &session);
+    let has_pending = state.pending_capture_completion.lock().unwrap().is_some();
     // Errors must be visible: show the library window before emitting.
-    let session_feedback =
-        match confirm_capture_inner(&app, &state, &session, png, pixel_size, editable_project) {
-            Ok(feedback) => feedback,
+    let (session, session_feedback) =
+        match save_capture_confirmation(&state.capture, has_pending, capture_id, annotation_token,
+            |session| confirm_capture_inner(&app, &state, session, png, pixel_size, editable_project),
+            |session| invalidate_capture_resources(&app, session)) {
+            Ok(completed) => completed,
             Err(error) => {
                 if let Some(window) = app.get_webview_window("library") {
                     let _ = window.show();
@@ -2845,9 +2956,6 @@ pub fn confirm_capture(
             }
         };
     let mut pending = state.pending_capture_completion.lock().unwrap();
-    if pending.is_some() {
-        return Err("The previous capture is still completing.".into());
-    }
     log::info!(
         "confirm_capture: completion queued until overlay destruction labels={}",
         session.overlay_labels.len()
@@ -2864,6 +2972,13 @@ pub fn confirm_capture(
         monitor: session_feedback.monitor,
         pin_on_top,
     });
+    drop(pending);
+    // A native close during saving already delivered its Destroyed event.
+    // Only reconcile that gone owner here; a live caller must still receive
+    // its IPC response before the renderer closes it (WebView2).
+    if app.get_webview_window(window.label()).is_none() {
+        finalize_confirmed_capture_after_overlay_destroyed(&app, window.label());
+    }
     Ok(())
 }
 
@@ -2871,6 +2986,50 @@ pub fn confirm_capture(
 struct CaptureConfirmationFailure {
     message: String,
     copied: bool,
+}
+
+fn save_capture_confirmation<T>(
+    capture: &std::sync::Mutex<crate::state::CaptureFlow>,
+    has_pending: bool,
+    capture_id: uuid::Uuid,
+    annotation_token: uuid::Uuid,
+    save: impl FnOnce(&CaptureSession) -> Result<T, CaptureConfirmationFailure>,
+    invalidate: impl FnOnce(&CaptureSession),
+) -> Result<(CaptureSession, T), CaptureConfirmationFailure> {
+    // The caller holds library_transition for this entire transaction. Check
+    // completion before any clipboard/library work, and release both state
+    // mutexes before calling native APIs or doing disk I/O.
+    if has_pending {
+        return Err(CaptureConfirmationFailure {
+            message: "The previous capture is still completing.".into(), copied: false,
+        });
+    }
+    let session = {
+        let capture = capture.lock().unwrap();
+        if capture.session.as_ref().is_none_or(|session| {
+            session.capture_id != capture_id
+                || session.annotation.as_ref().is_none_or(|staged| staged.token != annotation_token)
+        }) {
+            return Err(CaptureConfirmationFailure {
+                message: "The capture session changed before confirmation.".into(), copied: false,
+            });
+        }
+        capture.session.as_ref().unwrap().clone()
+    };
+    let feedback = save(&session)?;
+    // A failed save leaves the original session, staged marks and resources
+    // untouched. After durable saving, consume only this capture: a destroyed
+    // owner or newer staged token must never turn success into a retry that
+    // imports the same image twice, or resurrect an already closed session.
+    {
+        let mut capture = capture.lock().unwrap();
+        if capture.session.as_ref().is_some_and(|active| active.capture_id == capture_id) {
+            capture.session.take();
+        }
+    }
+    invalidate(&session);
+    log::info!("confirm_capture: session consumed capture_id={}", session.capture_id);
+    Ok((session, feedback))
 }
 
 struct CaptureCompletionFeedback {
@@ -5740,26 +5899,26 @@ fn finalize_recording(
         let gif_result = (|| {
             let (gif_path, gif_width, gif_height, gif_duration) =
                 export_gif_file(app, &merged_path, pixel_width, pixel_height, duration, &crate::gif::GifControl::default(), &mut |_, _| {})?;
-            if let Some(pending) = pending.as_mut() {
-                state
-                    .recording_recovery
-                    .lock()
-                    .unwrap()
-                    .prepare_import(pending, CaptureKind::Gif, &gif_path)
-                    .map_err(|error| error.to_string())?;
-            }
-            let import_result = import_finalized_output(
-                &state,
-                &gif_path,
-                pending.as_ref(),
-                CaptureKind::Gif,
-                "gif",
-                gif_width,
-                gif_height,
-                gif_duration.or(duration),
-            );
-            let _ = std::fs::remove_file(&gif_path);
-            import_result
+            with_owned_gif_output(gif_path, |gif_path| {
+                if let Some(pending) = pending.as_mut() {
+                    state
+                        .recording_recovery
+                        .lock()
+                        .unwrap()
+                        .prepare_import(pending, CaptureKind::Gif, gif_path)
+                        .map_err(|error| error.to_string())?;
+                }
+                import_finalized_output(
+                    &state,
+                    gif_path,
+                    pending.as_ref(),
+                    CaptureKind::Gif,
+                    "gif",
+                    gif_width,
+                    gif_height,
+                    gif_duration.or(duration),
+                )
+            })
         })();
 
         match gif_result {
@@ -6533,6 +6692,164 @@ mod command_security_tests {
         let mut oversized_header = png.clone();
         oversized_header[16..20].copy_from_slice(&u32::MAX.to_be_bytes());
         assert!(validate_capture_png(&oversized_header, 8, 6).is_err());
+    }
+
+    fn retryable_capture_fixture() -> (std::sync::Mutex<crate::state::CaptureFlow>, crate::protocol::ProtocolStore, String, AnnotationDocument) {
+        let mut png = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::new(8, 6))
+            .write_to(&mut png, image::ImageFormat::Png).unwrap();
+        let session = crate::state::CaptureSession {
+            capture_id: uuid::Uuid::new_v4(),
+            initial_mode: crate::state::CaptureMode::Screenshot,
+            display: crate::capture::CapturedDisplay {
+                png_data: png.into_inner().into(), pixel_width: 8, pixel_height: 6,
+                screen_frame: Rect::new(0.0, 0.0, 4.0, 3.0), window_rects: Vec::new(),
+                display_id: 1, display_identity: None, backing_scale: 2.0,
+            },
+            source_application: Some("Test source".into()), return_pid: Some(123),
+            was_kiri_frontmost: false, hidden_windows: vec!["library".into()],
+            overlay_labels: vec!["overlay".into()], annotation: None,
+        };
+        let store = crate::protocol::ProtocolStore::new();
+        let token = crate::protocol::set_frozen_png(&store, session.capture_id, session.display.png_data.clone());
+        let document = AnnotationDocument::from_json(
+            r#"{"schemaVersion":1,"canvas":{"width":2,"height":1.5},"sourcePixels":{"width":4,"height":3},"marks":[{"kind":"mosaic","id":1,"points":[{"x":1,"y":1}],"brushDiameter":20,"intensity":"standard","style":"pixel"}]}"#,
+        ).unwrap();
+        (std::sync::Mutex::new(crate::state::CaptureFlow { session: Some(session) }), store, token, document)
+    }
+
+    #[test]
+    fn capture_confirmation_save_failure_preserves_session_resources_and_retry_saves_once() {
+        let (capture, store, frozen_token, document) = retryable_capture_fixture();
+        let selection = Rect::new(0.25, 0.5, 2.0, 1.5);
+        let capture_id = capture.lock().unwrap().session.as_ref().unwrap().capture_id;
+        let first_token = super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", selection, document.clone()).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let mut library = AssetLibrary::open(directory.path().to_path_buf()).unwrap();
+        let assets = directory.path().join("Assets");
+        let available_assets = directory.path().join("Assets-ready");
+        std::fs::rename(&assets, &available_assets).unwrap();
+        std::fs::write(&assets, b"injected unavailable asset directory").unwrap();
+        let invalidations = Cell::new(0);
+        let invalidate = |session: &crate::state::CaptureSession| {
+            invalidations.set(invalidations.get() + 1);
+            crate::protocol::clear_frozen_png_for_capture(&store, session.capture_id);
+        };
+        let save = |library: &mut AssetLibrary, session: &crate::state::CaptureSession| {
+            assert!(capture.try_lock().is_ok(), "native/library work must not retain the capture mutex");
+            let staged = session.annotation.as_ref().unwrap();
+            let source = crop_annotation_source(&session.display, staged.selection, staged.document.source_pixels).unwrap();
+            library.import_data_with_annotation_project(&source, CaptureKind::Image, "png", 4, 3,
+                None, session.source_application.clone(), None, &source, &serde_json::to_value(&staged.document).unwrap())
+                .map_err(|error| super::CaptureConfirmationFailure { message: error.to_string(), copied: false })
+        };
+        let first = super::save_capture_confirmation(&capture, false, capture_id, uuid::Uuid::parse_str(&first_token).unwrap(),
+            |session| save(&mut library, session), invalidate);
+        assert!(first.is_err());
+        assert!(capture.lock().unwrap().session.is_some(), "a failed save must retain the active capture for retry");
+        {
+            let flow = capture.lock().unwrap();
+            let retained = flow.session.as_ref().unwrap();
+            assert_eq!(retained.capture_id, capture_id);
+            assert_eq!(retained.annotation.as_ref().unwrap().token.to_string(), first_token);
+            assert_eq!(retained.annotation.as_ref().unwrap().document.to_json().unwrap(), document.to_json().unwrap());
+        }
+        assert_eq!(invalidations.get(), 0);
+        assert!(crate::protocol::frozen_png_for_path(&store, &format!("frozen/{frozen_token}.png")).is_some());
+        assert!(library.all_assets(false).is_empty());
+
+        std::fs::remove_file(&assets).unwrap();
+        std::fs::rename(&available_assets, &assets).unwrap();
+        let retry_token = super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", selection, document).unwrap();
+        assert_ne!(first_token, retry_token);
+        let (completed, asset) = super::save_capture_confirmation(&capture, false, capture_id, uuid::Uuid::parse_str(&retry_token).unwrap(),
+            |session| save(&mut library, session), invalidate).unwrap();
+        assert_eq!(completed.capture_id, capture_id);
+        assert!(completed.annotation.as_ref().unwrap().document.has_marks());
+        assert_eq!(completed.return_pid, Some(123));
+        assert_eq!(completed.hidden_windows, vec!["library"]);
+        assert!(capture.lock().unwrap().session.is_none());
+        assert_eq!(invalidations.get(), 1);
+        assert!(crate::protocol::frozen_png_for_path(&store, &format!("frozen/{frozen_token}.png")).is_none());
+        assert_eq!(library.all_assets(false).len(), 1);
+        assert!(library.asset_url(&asset).is_file());
+        let project = library.load_editor_snapshot(&asset.id).unwrap();
+        assert_eq!(project.state, crate::core::library::EditorAnnotationState::Valid);
+        assert_eq!(project.document, Some(serde_json::to_value(&completed.annotation.as_ref().unwrap().document).unwrap()));
+        assert!(super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", selection,
+            completed.annotation.unwrap().document).is_err(), "a completed capture cannot be imported again");
+    }
+
+    #[test]
+    fn capture_confirmation_pending_completion_rejects_before_saving_or_invalidating() {
+        let (capture, _, _, document) = retryable_capture_fixture();
+        let capture_id = capture.lock().unwrap().session.as_ref().unwrap().capture_id;
+        let token = super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", Rect::new(0.25, 0.5, 2.0, 1.5), document).unwrap();
+        let result = super::save_capture_confirmation(&capture, true, capture_id, uuid::Uuid::parse_str(&token).unwrap(),
+            |_| -> Result<(), super::CaptureConfirmationFailure> { panic!("pending completion must block clipboard/library work") },
+            |_| panic!("pending completion must retain resources"));
+        assert!(result.is_err());
+        assert!(capture.lock().unwrap().session.is_some());
+    }
+
+    #[test]
+    fn capture_confirmation_cancel_destroy_and_replacement_never_resurrect_or_overwrite_sessions() {
+        for ending in ["cancel", "destroy", "replace"] {
+            for saved in [false, true] {
+                let (capture, store, old_frozen_token, document) = retryable_capture_fixture();
+                let capture_id = capture.lock().unwrap().session.as_ref().unwrap().capture_id;
+                let token = super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", Rect::new(0.25, 0.5, 2.0, 1.5), document).unwrap();
+                let (replacement, _, _, _) = retryable_capture_fixture();
+                let replacement = replacement.lock().unwrap().session.take().unwrap();
+                let replacement_id = replacement.capture_id;
+                let replacement_token = std::cell::RefCell::new(None);
+                let invalidations = Cell::new(0);
+                let result = super::save_capture_confirmation(&capture, false, capture_id, uuid::Uuid::parse_str(&token).unwrap(), |_| {
+                    let ended = {
+                        let mut flow = capture.lock().unwrap();
+                        if ending == "destroy" { flow.destroy_overlay("overlay").unwrap().1.unwrap() }
+                        else { flow.session.take().unwrap() }
+                    };
+                    // The normal cancel/Destroyed handler clears only its resources.
+                    crate::protocol::clear_frozen_png_for_capture(&store, ended.capture_id);
+                    if ending == "replace" {
+                        *replacement_token.borrow_mut() = Some(crate::protocol::set_frozen_png(&store,
+                            replacement_id, replacement.display.png_data.clone()));
+                        capture.lock().unwrap().session = Some(replacement);
+                    }
+                    if saved { Ok(()) } else { Err(super::CaptureConfirmationFailure { message: "injected save failure".into(), copied: false }) }
+                }, |session| {
+                    invalidations.set(invalidations.get() + 1);
+                    crate::protocol::clear_frozen_png_for_capture(&store, session.capture_id);
+                });
+                assert_eq!(result.is_ok(), saved, "{ending}: durable success must not become a retry error");
+                assert_eq!(capture.lock().unwrap().session.as_ref().map(|s| s.capture_id),
+                    (ending == "replace").then_some(replacement_id), "{ending}: do not restore or consume another session");
+                assert_eq!(invalidations.get(), usize::from(saved));
+                assert!(crate::protocol::frozen_png_for_path(&store, &format!("frozen/{old_frozen_token}.png")).is_none());
+                if let Some(token) = replacement_token.borrow().as_ref() {
+                    assert!(crate::protocol::frozen_png_for_path(&store, &format!("frozen/{token}.png")).is_some());
+                }
+                if let Ok((session, ())) = result {
+                    assert_eq!(session.overlay_labels, vec!["overlay"], "retain the saved owner's identity for completion reconciliation");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn capture_confirmation_success_consumes_once_even_if_annotation_is_restaged_during_saving() {
+        let (capture, _, _, document) = retryable_capture_fixture();
+        let capture_id = capture.lock().unwrap().session.as_ref().unwrap().capture_id;
+        let selection = Rect::new(0.25, 0.5, 2.0, 1.5);
+        let token = super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", selection, document.clone()).unwrap();
+        let annotation_token = uuid::Uuid::parse_str(&token).unwrap();
+        let (session, ()) = super::save_capture_confirmation(&capture, false, capture_id, annotation_token, |_| {
+            super::stage_capture_annotation(&mut capture.lock().unwrap(), "overlay", selection, document).unwrap();
+            Ok(())
+        }, |_| {}).unwrap();
+        assert_eq!(session.annotation.unwrap().token, annotation_token);
+        assert!(capture.lock().unwrap().session.is_none());
     }
 
     #[test]

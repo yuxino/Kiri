@@ -110,6 +110,7 @@
   "Save As…": "Speichern unter…",
   "Save": "Speichern",
   "Couldn't save the edited image. Try again.": "Das bearbeitete Bild konnte nicht gespeichert werden. Versuchen Sie es erneut.",
+  "Couldn't save the screenshot. Try again.": "Der Screenshot konnte nicht gespeichert werden. Bitte erneut versuchen.",
   "Editable data couldn't be loaded. The current image is still available.": "Bearbeitungsdaten konnten nicht geladen werden. Das aktuelle Bild ist weiterhin verfügbar.",
   "The screenshot changed. Close and reopen the editor.": "Der Screenshot wurde geändert. Schließen und öffnen Sie den Editor erneut.",
   "Clear Annotations": "Anmerkungen löschen",

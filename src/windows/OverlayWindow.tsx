@@ -459,6 +459,8 @@ export function OverlayWindow() {
         setModeSelectorDragging(false);
       }
       setCompleting(true);
+      setAnnotationError(null);
+      let saved = false;
       try {
         const canvas = canvasRef.current;
         if (!canvas) {
@@ -475,6 +477,7 @@ export function OverlayWindow() {
           return;
         }
         await api.confirmCapture(result.png, { selection, document: result.document }, pinOnTop);
+        saved = true;
         // The backend confirmation is synchronous. Close this owner WebView
         // only after its IPC response has arrived; dispatching a backend
         // close while WebView2 is still waiting can deadlock the Windows UI
@@ -482,6 +485,7 @@ export function OverlayWindow() {
         await getCurrentWindow().close();
       } catch (error) {
         reportFrontend(`confirm_capture rejected: ${String(error)}`);
+        if (!saved) setAnnotationError("Couldn't save the screenshot. Try again.");
       } finally {
         completionLock.release();
         setCompleting(false);

@@ -110,6 +110,7 @@
   "Save As…": "另存為…",
   "Save": "儲存",
   "Couldn't save the edited image. Try again.": "無法儲存編輯後的圖片，請重試。",
+  "Couldn't save the screenshot. Try again.": "無法儲存截圖，請再試一次。",
   "Editable data couldn't be loaded. The current image is still available.": "無法加載可編輯資料，目前圖片仍可繼續使用。",
   "The screenshot changed. Close and reopen the editor.": "截圖已經發生變化，請關閉並重新打開編輯器。",
   "Clear Annotations": "清除標注",

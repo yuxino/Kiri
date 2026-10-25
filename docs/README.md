@@ -246,3 +246,6 @@ development.
 
 - [ADR 0120: Readable update notes](adr/0120-readable-update-notes.md)
   — compact update actions and safely formatted, language-aware release notes.
+
+- [ADR 0121: Failure recovery and action ownership](adr/0121-failure-recovery-and-action-ownership.md)
+  — retryable screenshot saving, query-owned QR actions and temporary GIF cleanup.

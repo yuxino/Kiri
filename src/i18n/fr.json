@@ -110,6 +110,7 @@
   "Save As…": "Enregistrer sous…",
   "Save": "Enregistrer",
   "Couldn't save the edited image. Try again.": "Impossible d’enregistrer l’image modifiée. Réessayez.",
+  "Couldn't save the screenshot. Try again.": "Impossible d’enregistrer la capture d’écran. Réessayez.",
   "Editable data couldn't be loaded. The current image is still available.": "Impossible de charger les données modifiables. L’image actuelle reste disponible.",
   "The screenshot changed. Close and reopen the editor.": "La capture d’écran a changé. Fermez puis rouvrez l’éditeur.",
   "Clear Annotations": "Effacer les annotations",

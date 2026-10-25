@@ -413,7 +413,7 @@ fn asset_preview_bytes(
     Some(thumbnail)
 }
 
-fn frozen_png_for_path(store: &ProtocolStore, path: &str) -> Option<Vec<u8>> {
+pub(crate) fn frozen_png_for_path(store: &ProtocolStore, path: &str) -> Option<Vec<u8>> {
     let requested_token = path.strip_prefix("frozen/")?.strip_suffix(".png")?;
     if requested_token.len() != 32 || !requested_token.bytes().all(|byte| byte.is_ascii_hexdigit())
     {

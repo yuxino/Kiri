@@ -198,20 +198,25 @@ export function QrResults({ scan, onOpened, sourceRect, viewport, onClose }: {
 
 export function QrFavorites() {
   const [query, setQuery] = useState("");
-  const [records, setRecords] = useState<AssetDto[]>([]);
+  const [snapshot, setSnapshot] = useState<{ query: string; records: AssetDto[] } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [error, setError] = useState(false);
+  const [failedQuery, setFailedQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   useEffect(() => { const subscription = onLibraryChanged(() => setRevision(n => n + 1)); return () => { void subscription.then(stop => stop()).catch(() => {}); }; }, []);
   useEffect(() => {
-    let current = true; setError(false); setLoading(true);
+    let current = true; setFailedQuery(null); setLoading(true);
     const timer = setTimeout(() => { void api.listQrFavorites(query).then(items => {
       if (!current) return;
-      setRecords(items); setSelected(id => items.some(a => a.id === id) ? id : items[0]?.id ?? null); setLoading(false);
-    }, () => { if (current) { setError(true); setLoading(false); setRecords([]); } }); }, query ? 150 : 0);
+      setSnapshot({ query, records: items }); setSelected(id => items.some(a => a.id === id) ? id : items[0]?.id ?? null); setLoading(false);
+    }, () => { if (current) { setFailedQuery(query); setLoading(false); setSnapshot(null); } }); }, query ? 150 : 0);
     return () => { current = false; clearTimeout(timer); };
   }, [query, revision]);
+  // A new search cannot inherit another query's selectable records or actions.
+  // Refreshes for the same query retain their last acknowledged snapshot.
+  const records = snapshot?.query === query ? snapshot.records : [];
+  const error = failedQuery === query;
+  const loadingResults = loading || snapshot?.query !== query;
   const asset = records.find(a => a.id === selected);
   return <div className="text-history">
     <aside className="text-history__sidebar"><label className="text-history__search"><QrCode size={15}/><input type="search" aria-label={t("Search QR Favorites")} placeholder={t("Search QR Favorites")} value={query} onChange={event => setQuery(event.target.value)}/></label>
@@ -220,7 +225,7 @@ export function QrFavorites() {
     <main className="text-history__detail">{asset ? <QrDetails key={asset.id} code={favoriteCode(asset.qrText ?? "")} saved removable
       meta={<time>{new Date(asset.createdAt).toLocaleString()}</time>}
       preview={<img className="qr-favorite-image" src={mediaUrl(asset.id)} alt={t("QR Source Image")} />}
-      action={action => api.qrFavoriteAction(asset.id, action)} /> : <div className="text-history__empty" role={error ? "alert" : "status"}><QrCode size={28}/><p>{t(error ? "Could not load QR Favorites." : loading ? "Loading…" : query ? "No QR favorites match this search." : "Save a QR code to find and reuse it here.")}</p></div>}</main>
+      action={action => api.qrFavoriteAction(asset.id, action)} /> : <div className="text-history__empty" role={error ? "alert" : "status"}><QrCode size={28}/><p>{t(error ? "Could not load QR Favorites." : loadingResults ? "Loading…" : query ? "No QR favorites match this search." : "Save a QR code to find and reuse it here.")}</p></div>}</main>
   </div>;
 }
 

@@ -110,6 +110,7 @@
   "Save As…": "Save As…",
   "Save": "Save",
   "Couldn't save the edited image. Try again.": "Couldn't save the edited image. Try again.",
+  "Couldn't save the screenshot. Try again.": "Couldn't save the screenshot. Try again.",
   "Editable data couldn't be loaded. The current image is still available.": "Editable data couldn't be loaded. The current image is still available.",
   "The screenshot changed. Close and reopen the editor.": "The screenshot changed. Close and reopen the editor.",
   "Clear Annotations": "Clear Annotations",
