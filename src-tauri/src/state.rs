@@ -1287,17 +1287,38 @@ mod tests {
     }
 
     #[test]
-    fn preference_replacement_keeps_open_readers_on_the_complete_previous_value() {
+    fn preference_replacement_preserves_complete_values_with_an_open_reader() {
         use std::io::Read;
 
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("language.json");
         super::save_preference_at(&path, "zh-Hans").unwrap();
         let mut reader = std::fs::File::open(&path).unwrap();
-        super::save_preference_at(&path, "en").unwrap();
+        let replacement = super::save_preference_at(&path, "en");
+        #[cfg(not(target_os = "windows"))]
+        assert!(replacement.is_ok(), "{replacement:?}");
+        #[cfg(target_os = "windows")]
+        if let Err(error) = &replacement {
+            // Windows can deny replacing an open destination. Only explicit
+            // access/sharing/lock conflicts are allowed, never arbitrary I/O.
+            assert!(matches!(error.raw_os_error(), Some(5 | 32 | 33)), "{error}");
+        }
         let mut previous = String::new();
         reader.read_to_string(&mut previous).unwrap();
         assert_eq!(serde_json::from_str::<String>(&previous).unwrap(), "zh-Hans");
+        if replacement.is_err() {
+            assert_eq!(
+                serde_json::from_slice::<String>(&std::fs::read(&path).unwrap()).unwrap(),
+                "zh-Hans"
+            );
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        }
+        drop(reader);
+        if replacement.is_err() {
+            // A rejected replacement keeps the old value and staging clean;
+            // retrying after the reader closes must publish the whole new value.
+            super::save_preference_at(&path, "en").unwrap();
+        }
         assert_eq!(
             serde_json::from_slice::<String>(&std::fs::read(&path).unwrap()).unwrap(),
             "en"

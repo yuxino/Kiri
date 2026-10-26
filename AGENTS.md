@@ -159,6 +159,11 @@ necessary evidence. Distinguish project caches from shared runtimes; never
 remove another project's active Cargo registry or toolchain during cleanup.
 Git history and recovery snapshots are not disposable build cache.
 
+Cross-target release builds still use `src-tauri/target/release` for host build
+scripts and procedural macros. A current Universal or architecture-specific
+output does not make that host profile obsolete; check those dependencies
+before removing a whole profile.
+
 Do not add a runtime synthetic-capture mode to the user-facing application.
 Capture QA must use unit-level injected data or an isolated test harness, never
 replace the visible desktop with a mock screen inside normal dev or prod Kiri.
