@@ -461,6 +461,17 @@ export function LibraryWindow() {
     }
   }, []);
 
+  const confirmFavorites = useCallback((ids: string[], isFavorite: boolean) => {
+    const changed = new Set(ids);
+    setAssetSnapshot((current) => current && {
+      ...current,
+      assets: current.assets.map((asset) => changed.has(asset.id) ? { ...asset, isFavorite } : asset),
+    });
+    // A command can finish before its library event's fetch. Publish the
+    // acknowledged value for cards/filters and invalidate all older reads.
+    void refresh();
+  }, [refresh]);
+
   useEffect(() => {
     void refresh().catch(() => {});
   }, [query, refresh, showingTrash]);
@@ -1196,7 +1207,10 @@ export function LibraryWindow() {
           }}
           onToggleFavorite={() => {
             const allFav = selectionIds.every((id) => assets.find((a) => a.id === id)?.isFavorite);
-            void performBatch(() => api.batchSetFavorite(selectionIds, !allFav),
+            void performBatch(async () => {
+              await api.batchSetFavorite(selectionIds, !allFav);
+              confirmFavorites(selectionIds, !allFav);
+            },
               t(allFav ? "Remove from Favorites" : "Add to Favorites"), "Couldn't complete this action");
           }}
           onClear={clearSelection}
@@ -1336,6 +1350,7 @@ export function LibraryWindow() {
                     }}
                     onRestoreMissing={() => restoreMissing(asset.id)}
                     onCopy={() => void copyCapture(asset.id)}
+                    onFavoriteChanged={(isFavorite) => confirmFavorites([asset.id], isFavorite)}
                     onActionError={(message) => setError({ message, recovery: null })}
                     onOpen={() =>
                       assetAvailability[asset.id] === undefined ||
@@ -1652,6 +1667,7 @@ function AssetCard(props: {
   onAvailability(availability: AssetAvailability): void;
   onRestoreMissing(): Promise<void>;
   onCopy(): void;
+  onFavoriteChanged(isFavorite: boolean): void;
   onActionError(message: string): void;
 }) {
   const {
@@ -1670,6 +1686,7 @@ function AssetCard(props: {
     onAvailability,
     onRestoreMissing,
     onCopy,
+    onFavoriteChanged,
     onActionError,
   } = props;
   const fileSize = formatFileSize(asset.fileSize);
@@ -1883,6 +1900,7 @@ function AssetCard(props: {
     setFavoriteBusy(true);
     try {
       await api.setFavorite(asset.id, !asset.isFavorite);
+      onFavoriteChanged(!asset.isFavorite);
     } catch {
       onActionError("Couldn't update this item");
     } finally {

@@ -249,3 +249,6 @@ development.
 
 - [ADR 0121: Failure recovery and action ownership](adr/0121-failure-recovery-and-action-ownership.md)
   — retryable screenshot saving, query-owned QR actions and temporary GIF cleanup.
+
+- [ADR 0122: Preserve local state during recovery](adr/0122-preserve-local-state-during-recovery.md)
+  — acknowledged favorites, atomic preferences, library recovery notifications and preserved video drafts.

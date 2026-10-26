@@ -200,6 +200,7 @@ function cardProps(overrides = {}) {
     onAvailability() {},
     async onRestoreMissing() {},
     onCopy() {},
+    onFavoriteChanged() {},
     ...overrides,
   };
 }
@@ -1133,6 +1134,73 @@ test("favorite failure is visible in the library and a retry stays single-flight
   assert.equal(favorite().props.disabled, false);
   assert.ok(!nodes(library.render()).includes("Couldn't update this item"));
   card.unmount(); library.unmount();
+});
+
+test("confirmed favorites update immediately and reverse before delayed snapshots settle", async () => {
+  const refreshes = [];
+  const writes = [];
+  let delayRefresh = false;
+  const harness = createLibraryHarness({
+    listAssets: () => {
+      if (!delayRefresh) return Promise.resolve([testAsset]);
+      const request = deferred(); refreshes.push(request); return request.promise;
+    },
+    setFavorite: (id, value) => {
+      const request = deferred(); writes.push({ id, value, request }); return request.promise;
+    },
+  });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  const card = harness.mount("AssetCard", assetCards(library.render())[0].props);
+  const favorite = () => nodes(card.render(assetCards(library.render())[0].props))
+    .find(node => node?.type === "button" && node.props.className?.includes("kiri-card-favorite"));
+  const click = () => favorite().props.onClick({ stopPropagation() {} });
+  delayRefresh = true;
+  harness.emit("libraryChanged"); await settleRequests();
+  click();
+  writes[0].request.resolve(); await settleRequests();
+  assert.equal(favorite().props["aria-pressed"], true, "a successful write must be visible before list refresh");
+  assert.equal(favorite().props["aria-label"], "Remove Favorite");
+  click();
+  assert.deepEqual(writes.map(({ id, value }) => [id, value]), [[testAsset.id, true], [testAsset.id, false]]);
+  writes[1].request.resolve(); await settleRequests();
+  assert.equal(favorite().props["aria-pressed"], false);
+  assert.equal(refreshes.length, 3, "each confirmed change starts a fresh authoritative read");
+  refreshes[0].resolve([testAsset]);
+  refreshes[1].resolve([{ ...testAsset, isFavorite: true }]);
+  await settleRequests();
+  assert.equal(favorite().props["aria-pressed"], false, "pre-confirmation reads cannot undo the acknowledged result");
+  refreshes[2].resolve([testAsset]); await settleRequests();
+  assert.equal(favorite().props["aria-pressed"], false);
+  harness.emit("libraryChanged"); await settleRequests();
+  refreshes[3].resolve([{ ...testAsset, isFavorite: true }]); await settleRequests();
+  assert.equal(favorite().props["aria-pressed"], true, "later authoritative changes still update the card");
+  card.unmount(); library.unmount();
+});
+
+test("batch favorite confirmation updates the shared filter before refresh", async () => {
+  const write = deferred();
+  const calls = [];
+  let delayRefresh = false;
+  const refresh = deferred();
+  const harness = createLibraryHarness({
+    listAssets: () => delayRefresh ? refresh.promise : Promise.resolve([testAsset]),
+    batchSetFavorite: (...args) => { calls.push(args); return write.promise; },
+  });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  selectButton(library.render()).props.onClick();
+  assetCards(library.render())[0].props.onToggleSelection();
+  delayRefresh = true;
+  batchBar(library.render()).props.onToggleFavorite();
+  assert.equal(assetCards(library.render())[0].props.asset.isFavorite, false, "pending writes are not optimistic");
+  write.resolve(); await settleRequests();
+  assert.deepEqual(calls, [[[testAsset.id], true]]);
+  assert.equal(assetCards(library.render())[0].props.asset.isFavorite, true);
+  nodes(library.render()).find(node => typeof node?.props?.onToggleFavorites === "function").props.onToggleFavorites();
+  assert.equal(assetCards(library.render()).length, 1, "the just-confirmed capture is immediately visible in Favorites");
+  refresh.resolve([{ ...testAsset, isFavorite: true }]); await settleRequests();
+  library.unmount();
 });
 
 

@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, mediaUrl, onAssetContentChanged, type AssetAvailability } from "../lib/ipc";
+import { api, mediaUrl, onAssetContentChanged, type AssetAvailability, type AssetDto } from "../lib/ipc";
 import { VideoTrimPlayer, type VideoClosePreparation } from "./VideoTrimPlayer";
 import { VideoCloseGuard } from "./VideoCloseGuard";
 import { videoEditingCapabilities } from "./video-capabilities.js";
@@ -22,6 +22,8 @@ import {
 export function ViewerWindow(props: { id: string }) {
   const [state, setState] = useState<ViewerState>(createViewerLoadingState());
   const [mediaRevision, setMediaRevision] = useState(0);
+  const [videoAsset, setVideoAsset] = useState<AssetDto | null>(null);
+  const videoAssetRef = useRef<AssetDto | null>(null);
   const [ocrOpen, setOcrOpen] = useState(false);
   const [videoCapabilities, setVideoCapabilities] = useState(() => videoEditingCapabilities());
   useEffect(() => { void api.platformCapabilities().then(caps => setVideoCapabilities(videoEditingCapabilities(caps))).catch(() => {}); }, []);
@@ -43,11 +45,16 @@ export function ViewerWindow(props: { id: string }) {
     setState(createViewerLoadingState());
     setConfirmRemove(false);
     setOperationError(null);
-    setVideoEditorOpen(false);
+    if (!videoAssetRef.current) setVideoEditorOpen(false);
     try {
       const asset = await api.getAsset(props.id);
       if (generation === loadGeneration.current) {
+        if (asset.kind === "video") {
+          videoAssetRef.current = asset;
+          setVideoAsset(asset);
+        }
         setState(createViewerReadyState(asset));
+        return true;
       }
     } catch {
       let availability: AssetAvailability | null = null;
@@ -57,13 +64,16 @@ export function ViewerWindow(props: { id: string }) {
         // Both metadata paths failed. Do not mislabel the file as missing.
       }
       if (generation === loadGeneration.current) {
-        setState(viewerStateAfterFailure(null, availability));
+        setState(viewerStateAfterFailure(videoAssetRef.current, availability));
       }
     }
+    return false;
   }, [props.id]);
 
   useEffect(() => {
     mounted.current = true;
+    videoAssetRef.current = null;
+    setVideoAsset(null);
     void loadAsset();
     return () => {
       mounted.current = false;
@@ -74,6 +84,14 @@ export function ViewerWindow(props: { id: string }) {
   useEffect(() => {
     const subscription = onAssetContentChanged((assetId) => {
       if (assetId !== props.id) return;
+      if (videoAssetRef.current) {
+        // The existing player owns a possibly unsaved draft. A changed source
+        // must pass its revision check before a decoder reload can reuse it.
+        loadGeneration.current += 1;
+        setState(viewerStateAfterFailure(videoAssetRef.current, "ready"));
+        setOperationError("The original video changed. The saved edit has been kept and cannot be applied to this file.");
+        return;
+      }
       setMediaRevision((revision) => revision + 1);
       void loadAsset();
     });
@@ -83,9 +101,9 @@ export function ViewerWindow(props: { id: string }) {
   }, [loadAsset, props.id]);
 
   const prepareClose = useCallback(async () => {
-    if (viewerMediaKind(state) !== "video" || !videoClosePreparation) return true;
+    if (!videoClosePreparation) return true;
     return videoClosePreparation.prepareClose();
-  }, [state, videoClosePreparation]);
+  }, [videoClosePreparation]);
 
   const close = useCallback(() => {
     void getCurrentWindow().close();
@@ -130,12 +148,22 @@ export function ViewerWindow(props: { id: string }) {
     copy: () => void copy(),
   }), [state, copying, videoEditorOpen, ocrOpen, copy]);
 
+  const reloadAsset = async () => {
+    if (videoClosePreparation && !await videoClosePreparation.prepareReload()) {
+      setOperationError((current) => current ?? "Couldn't save your latest changes");
+      return;
+    }
+    if (await loadAsset()) {
+      loadGeneration.current += 1;
+      setMediaRevision((revision) => revision + 1);
+    }
+  };
+
   const retry = async () => {
-    if (busy) return;
+    if (busy || videoClosePreparation?.busy) return;
     setBusy(true);
     try {
-      setMediaRevision((revision) => revision + 1);
-      await loadAsset();
+      await reloadAsset();
     } finally {
       setBusy(false);
     }
@@ -161,14 +189,13 @@ export function ViewerWindow(props: { id: string }) {
   };
 
   const restoreMissing = async () => {
-    if (busy) return;
+    if (busy || videoClosePreparation?.busy) return;
     setBusy(true);
     setOperationError(null);
     try {
       const restored = await api.restoreMissingAsset(props.id);
       if (restored) {
-        setMediaRevision((revision) => revision + 1);
-        await loadAsset();
+        await reloadAsset();
       }
     } catch {
       setOperationError("Couldn't restore this file");
@@ -178,10 +205,14 @@ export function ViewerWindow(props: { id: string }) {
   };
 
   const removeMissing = async () => {
-    if (busy) return;
+    if (busy || videoClosePreparation?.busy) return;
     setBusy(true);
     setOperationError(null);
     try {
+      if (!await prepareClose()) {
+        setOperationError("Couldn't save your latest changes");
+        return;
+      }
       await api.removeMissingAsset(props.id);
       close();
     } catch {
@@ -192,6 +223,7 @@ export function ViewerWindow(props: { id: string }) {
   };
 
   const mediaKind = viewerMediaKind(state);
+  const recoveryBusy = busy || !!videoClosePreparation?.busy;
   const copyButton = (
     <>
     <button type="button" className="kiri-button kiri-button--secondary" disabled={copying}
@@ -218,8 +250,22 @@ export function ViewerWindow(props: { id: string }) {
         overflow: "hidden",
       }}
     >
-      {/* Keep the native close listener alive when failed media unmounts its player. */}
-      <VideoCloseGuard busy={mediaKind === "video" && !!videoClosePreparation?.busy} prepareClose={prepareClose} />
+      {/* Media failure must not dispose the player's pending saves or close guard. */}
+      <VideoCloseGuard busy={!!videoClosePreparation?.busy} prepareClose={prepareClose} />
+      {videoAsset && <VideoTrimPlayer
+        key={props.id}
+        id={props.id}
+        src={mediaUrl(props.id, true)}
+        mediaRevision={mediaRevision}
+        suspended={state.kind !== "ready"}
+        editable={videoCapabilities.videoEditing && !videoAsset.trashedAt}
+        capabilities={videoCapabilities}
+        previewActions={copyButton}
+        onEditingChange={setVideoEditorOpen}
+        onClosePreparationChange={registerVideoClose}
+        onClose={close}
+        onError={() => void handleMediaError()}
+      />}
       {state.kind === "loading" ? (
         <ViewerMessage title={t("Loading…")} />
       ) : state.kind === "missing" && confirmRemove ? (
@@ -229,7 +275,7 @@ export function ViewerWindow(props: { id: string }) {
           actions={
             <>
               <ViewerButton
-                disabled={busy}
+                disabled={recoveryBusy}
                 onClick={() => {
                   setOperationError(null);
                   setConfirmRemove(false);
@@ -237,7 +283,7 @@ export function ViewerWindow(props: { id: string }) {
               >
                 {t("Cancel")}
               </ViewerButton>
-              <ViewerButton destructive disabled={busy} onClick={() => void removeMissing()}>
+              <ViewerButton destructive disabled={recoveryBusy} onClick={() => void removeMissing()}>
                 {t("Remove Record")}
               </ViewerButton>
             </>
@@ -249,11 +295,11 @@ export function ViewerWindow(props: { id: string }) {
           detail={operationError ? t(operationError) : undefined}
           actions={
             <>
-              <ViewerButton disabled={busy} onClick={() => void restoreMissing()}>
+              <ViewerButton disabled={recoveryBusy} onClick={() => void restoreMissing()}>
                 {t("Restore File…")}
               </ViewerButton>
               <ViewerButton
-                disabled={busy}
+                disabled={recoveryBusy}
                 onClick={() => {
                   setOperationError(null);
                   setConfirmRemove(true);
@@ -273,9 +319,10 @@ export function ViewerWindow(props: { id: string }) {
                 ? "Library unavailable"
                 : "Can't read this file",
           )}
+          detail={operationError ? t(operationError) : undefined}
           actions={
             <>
-              <ViewerButton disabled={busy} onClick={() => void retry()}>
+              <ViewerButton disabled={recoveryBusy} onClick={() => void retry()}>
                 {t("Retry")}
               </ViewerButton>
               {!state.libraryUnavailable && state.asset && (
@@ -293,9 +340,10 @@ export function ViewerWindow(props: { id: string }) {
               ? "Couldn't play this video."
               : "Couldn't open this image.",
           )}
+          detail={operationError ? t(operationError) : undefined}
           actions={
             <>
-              <ViewerButton disabled={busy} onClick={() => void retry()}>
+              <ViewerButton disabled={recoveryBusy} onClick={() => void retry()}>
                 {t("Retry")}
               </ViewerButton>
               <ViewerButton onClick={() => void api.revealAsset(state.asset.id).catch(() => {})}>
@@ -303,19 +351,6 @@ export function ViewerWindow(props: { id: string }) {
               </ViewerButton>
             </>
           }
-        />
-      ) : mediaKind === "video" ? (
-        <VideoTrimPlayer
-          key={`${props.id}:${mediaRevision}`}
-          id={props.id}
-          src={mediaUrl(props.id, true)}
-          editable={videoCapabilities.videoEditing && state.kind === "ready" && !state.asset.trashedAt}
-          capabilities={videoCapabilities}
-          previewActions={copyButton}
-          onEditingChange={setVideoEditorOpen}
-          onClosePreparationChange={registerVideoClose}
-          onClose={close}
-          onError={() => void handleMediaError()}
         />
       ) : mediaKind === "image" ? (
         <img

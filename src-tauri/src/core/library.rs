@@ -1163,7 +1163,15 @@ impl AssetLibrary {
 
     fn validated_batch_ids(&self, ids: &[uuid::Uuid]) -> Result<HashSet<uuid::Uuid>> {
         let requested = ids.iter().copied().collect::<HashSet<_>>();
-        if requested.iter().any(|id| self.asset_by_id(id).is_none()) {
+        // The index has unique IDs. Count matches in one pass rather than
+        // scanning the whole library once for every selected asset.
+        let found = self
+            .index
+            .iter()
+            .filter(|asset| requested.contains(&asset.id))
+            .take(requested.len())
+            .count();
+        if found != requested.len() {
             return Err(AssetLibraryError::AssetNotFound);
         }
         Ok(requested)
@@ -3867,6 +3875,41 @@ mod tests {
             .iter()
             .all(|asset| library.asset_by_id(&asset.id).is_some()));
         assert!(assets.iter().all(|asset| library.asset_url(asset).exists()));
+    }
+
+    #[test]
+    fn batch_validation_deduplicates_ids_and_keeps_empty_batches_unchanged() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let assets = import_test_assets(&mut library, 3);
+        let first = assets[0].id;
+        let last = assets[2].id;
+        let ids = [last, first, last, first];
+
+        library.persist_count.set(0);
+        library.batch_set_favorite(true, &ids).unwrap();
+        assert_eq!(library.persist_count.get(), 1);
+        assert!(library.asset_by_id(&first).unwrap().is_favorite);
+        assert!(!library.asset_by_id(&assets[1].id).unwrap().is_favorite);
+        assert!(library.asset_by_id(&last).unwrap().is_favorite);
+        let before = std::fs::read(root.join("library.json")).unwrap();
+
+        library.persist_count.set(0);
+        library.batch_set_favorite(false, &[]).unwrap();
+        library.batch_move_to_trash(&[]).unwrap();
+        library.batch_restore(&[]).unwrap();
+        library.batch_permanently_delete(&[]).unwrap();
+        assert_eq!(library.persist_count.get(), 0);
+        assert_eq!(std::fs::read(root.join("library.json")).unwrap(), before);
+
+        let missing = uuid::Uuid::new_v4();
+        assert!(matches!(
+            library.batch_move_to_trash(&[first, first, missing]),
+            Err(AssetLibraryError::AssetNotFound)
+        ));
+        assert_eq!(library.persist_count.get(), 0);
+        assert_eq!(std::fs::read(root.join("library.json")).unwrap(), before);
+        assert!(library.all_assets(true).is_empty());
     }
 
     #[test]

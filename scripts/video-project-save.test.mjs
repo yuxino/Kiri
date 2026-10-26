@@ -50,6 +50,41 @@ test('choosing an export preset on an untrimmed recording saves and restores the
   }
 });
 
+test('decoder recovery checks cannot publish after the project is disabled or unmounted',async t=>{
+  for(const action of ['disable','unmount']){
+    const pending=deferred();let reads=0;
+    const options={id:'video',enabled:true,duration:10,getProject:()=>null,restore:async()=>{}};
+    const harness=createLibraryHarness({loadVideoProject:()=>++reads===1
+      ?Promise.resolve({state:'none',revision:'base',project:null}):pending.promise},projectHookSource,
+      {modules:{'./video-project':projectModule,'./video-project-save.js':{createVideoProjectSaveQueue}}});
+    const hook=harness.mount('useVideoProject',options);t.after(()=>hook.unmount());
+    hook.render();await settleRequests();
+    const validation=hook.render().validateSource();
+    if(action==='disable')hook.render({...options,enabled:false});else hook.unmount();
+    pending.resolve({state:'none',revision:'base',project:null});
+    assert.equal(await validation,false);
+    if(action==='disable')assert.equal(hook.render().state.status,'idle');
+  }
+});
+
+test('blocked and disabled projects can retry decoding without restoring or creating a save queue',async t=>{
+  for(const enabled of [true,false]){
+    let restores=0,writes=0;
+    const harness=createLibraryHarness({
+      loadVideoProject:async()=>({state:'invalid',reason:'sourceChanged',revision:'changed',project:null}),
+      saveVideoProject:async()=>{writes++;throw Error('must not save');},
+    },projectHookSource,{modules:{'./video-project':projectModule,'./video-project-save.js':{createVideoProjectSaveQueue}}});
+    const hook=harness.mount('useVideoProject',{id:'video',enabled,duration:10,getProject:()=>null,restore:async()=>{restores++;}});
+    t.after(()=>hook.unmount());hook.render();await settleRequests();
+    const controller=hook.render();
+    assert.equal(controller.ready,false);
+    assert.equal(await controller.validateSource(),true);
+    assert.equal(await controller.flush(),true);
+    assert.equal(hook.render().state.status,enabled?'blocked':'idle');
+    assert.equal(restores,0);assert.equal(writes,0);
+  }
+});
+
 test('closing an untouched edit does not write an empty project',async t=>{
   const {queue,calls}=fixture(t,{project:null});
   assert.equal(await queue.flush(),true);assert.equal(calls.length,0);

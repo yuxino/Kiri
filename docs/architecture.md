@@ -484,6 +484,9 @@ controls retain their own keyboard focus and activation boundaries (ADR 0115).
 Library snapshots stay bound to their search and Library/Trash scope. OCR
 corrections survive in-view refreshes, and pending sticker imports gate export
 and normal viewer close (ADR 0116).
+Successful favorite changes update that shared snapshot before its refresh,
+and library-location activation failures notify every subscriber after restoring
+the previous context (ADR 0122).
 
 `AppState` owns one mutex-guarded library context containing the active root,
 library UUID, copy generation, availability, and loaded `AssetLibrary`.
@@ -946,6 +949,9 @@ Corrupt documents and changed sources are protected from automatic overwrite.
 The frontend uses a debounced serial save queue, includes pending text snapshots
 without committing IME edits, and flushes before normal close. Projects migrate
 with the library, survive Trash, and are cleaned after durable permanent deletion.
+Playback failures retain the editor and its save/close protection. Decoder retries
+preserve the document and validate the project/source revision before resuming;
+incompatible sources keep the draft protected (ADR 0122).
 
 Timed annotations carry cropped PNG overlays or mosaic alpha masks with source-time
 ranges and normalized geometry. Native validation limits annotations to 128, PNG

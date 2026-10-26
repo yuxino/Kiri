@@ -61,5 +61,18 @@ export function useVideoProject(options:Options) {
   const retry=useCallback(()=>{
     if(queue.current)void flush();else setRetryLoad(value=>value+1);
   },[flush]);
-  return{state,ready,schedule,flush,retry};
+  const validateSource=useCallback(async()=>{
+    const controller=queue.current;if(!controller)return true;
+    try {
+      const loaded=await api.loadVideoProject(latest.current.id);
+      if(queue.current!==controller)return false;
+      if(loaded.state==="invalid")throw new Error(loaded.reason==="sourceChanged"?"VIDEO_PROJECT_SOURCE_CHANGED":"VIDEO_PROJECT_INVALID");
+      if(loaded.revision!==controller.getState().revision)throw new Error("VIDEO_PROJECT_CONFLICT");
+      return true;
+    } catch(error) {
+      if(queue.current===controller)setState({status:"error",error:String(error)});
+      return false;
+    }
+  },[]);
+  return{state,ready,schedule,flush,retry,validateSource};
 }

@@ -46,6 +46,7 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState<OcrProviderProfileDto | null | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<OcrProviderProfileDto | null>(null);
+  const ocrLoadRequested = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,8 +61,12 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
   }, []);
 
   useEffect(() => {
+    // Reading OCR profiles consults system credential storage. Other settings
+    // pages do not need those secrets or the accompanying native work.
+    if (activeTab !== "ocr" || ocrLoadRequested.current) return;
+    ocrLoadRequested.current = true;
     void load();
-  }, [load]);
+  }, [activeTab, load]);
 
   const activate = async (engine: OcrEngineRef) => {
     if (busy) return;

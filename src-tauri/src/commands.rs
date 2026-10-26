@@ -914,14 +914,18 @@ async fn migrate_active_library(
     let mut context = state.library.lock().unwrap();
     match prepared {
         Ok(Ok(prepared)) => {
-            context
+            let activation = context
                 .activate_prepared(prepared)
-                .map_err(|error| error.to_string())?;
-            let status = context.status().into();
+                .map_err(|error| error.to_string());
+            let status = activation.map(|()| context.status().into());
             drop(context);
-            crate::protocol::clear_thumbnails(&app.state::<crate::protocol::ProtocolStore>());
+            if status.is_ok() {
+                crate::protocol::clear_thumbnails(&app.state::<crate::protocol::ProtocolStore>());
+            }
+            // Activation can restore the source after a configuration write
+            // failure. Every subscriber must leave the earlier Moving state.
             emit_library_changed(app);
-            Ok(status)
+            status
         }
         Ok(Err(error)) => {
             context.cancel_migration();
@@ -1032,14 +1036,16 @@ async fn switch_to_existing_library(
     let mut context = state.library.lock().unwrap();
     match prepared {
         Ok(Ok(prepared)) => {
-            context
+            let activation = context
                 .activate_prepared(prepared)
-                .map_err(|error| error.to_string())?;
-            let status = context.status().into();
+                .map_err(|error| error.to_string());
+            let status = activation.map(|()| context.status().into());
             drop(context);
-            crate::protocol::clear_thumbnails(&app.state::<crate::protocol::ProtocolStore>());
+            if status.is_ok() {
+                crate::protocol::clear_thumbnails(&app.state::<crate::protocol::ProtocolStore>());
+            }
             emit_library_changed(app);
-            Ok(status)
+            status
         }
         Ok(Err(error)) => {
             context.cancel_locating();
@@ -4106,7 +4112,6 @@ pub async fn start_recording_flow(
             app.get_webview_window(label)
                 .and_then(|window| window.current_monitor().ok().flatten())
         });
-        *state.saved_recording_options.lock().unwrap() = saved_options.clone();
         let mut recording = state.recording.lock().unwrap();
         *recording = RecordingFlow {
             session_id: uuid::Uuid::new_v4(),
@@ -4183,7 +4188,14 @@ pub async fn start_recording_flow(
     #[cfg(not(target_os = "linux"))]
     present_recording_ui()?;
 
-    crate::state::save_recording_options(&app, &saved_options);
+    {
+        let state = app.state::<AppState>();
+        let mut saved = state.saved_recording_options.lock().unwrap();
+        match crate::state::save_recording_options(&app, &saved_options) {
+            Ok(()) => *saved = saved_options,
+            Err(error) => log::warn!("Could not save recording preferences: {error}"),
+        }
+    }
 
     if !options.uses_countdown {
         // No countdown requested: start recording immediately.
@@ -7108,10 +7120,10 @@ pub fn set_annotation_appearance(
 #[tauri::command]
 pub fn set_recording_options(app: AppHandle, options: RecordingOptions) -> Result<(), String> {
     let normalized = options.normalized();
-    {
-        let state = app.state::<AppState>();
-        *state.saved_recording_options.lock().unwrap() = normalized.clone();
-    }
-    crate::state::save_recording_options(&app, &normalized);
+    let state = app.state::<AppState>();
+    let mut saved = state.saved_recording_options.lock().unwrap();
+    crate::state::save_recording_options(&app, &normalized)
+        .map_err(|_| "The recording preferences could not be saved.".to_string())?;
+    *saved = normalized;
     Ok(())
 }

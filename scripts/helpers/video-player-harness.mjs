@@ -21,7 +21,7 @@ const source = 'import React from "react";\n' + readFileSync(new URL("../../src/
 export function createVideoPlayerHarness(caps, configuration = {}) {
   let options;
   const player = { duration: 10, currentTime: 0, videoWidth: 1920, videoHeight: 1080, readyState: 1,
-    pause() {}, addEventListener() {}, removeEventListener() {} };
+    loads: 0, pauses: 0, pause() { this.pauses++; }, load() { this.loads++; this.currentTime = 0; }, addEventListener() {}, removeEventListener() {} };
   const harness = createLibraryHarness(configuration.api ?? {}, source, {
     attachRef(node) { if (node.type === "video") node.props.ref.current = player; },
     modules: {
@@ -44,7 +44,7 @@ export function createVideoPlayerHarness(caps, configuration = {}) {
       "./VideoVisibleTime": { VideoVisibleTime: "visible-time" },
       "./useVideoProject": { useVideoProject: value => {
         options = value;
-        return { ready: true, state: { status: "idle", error: null }, schedule() {}, flush: async () => true, retry() {} };
+        return { ready: true, state: { status: "idle", error: null }, schedule() {}, flush: async () => true, validateSource: async () => true, retry() {} };
       } },
       "./video-project-save.js": projectSave,
       "./video-project": project,
@@ -59,13 +59,15 @@ export function createVideoPlayerHarness(caps, configuration = {}) {
       ...configuration.modules,
     },
   });
-  const component = harness.mount("VideoTrimPlayer", { id: "video", src: "media:video", editable: caps.videoEditing, capabilities: caps, onClosePreparationChange: configuration.onClosePreparationChange ?? (() => {}), onClose() {}, onError() {} });
+  const props = { id: "video", src: "media:video", editable: caps.videoEditing, capabilities: caps, onClosePreparationChange: configuration.onClosePreparationChange ?? (() => {}), onClose() {}, onError: configuration.onError ?? (() => {}) };
+  const component = harness.mount("VideoTrimPlayer", props);
   const initial = component.render();
   nodes(initial).find(node => node?.type === "video").props.onLoadedMetadata({ currentTarget: player });
   component.render();
   return {
     ...component,
     window: harness.window,
+    updateProps(next) { Object.assign(props, next); return component.render(props); },
     projectOptions: () => options,
     openEditor() {
       const button = nodes(component.render()).find(node => node?.type === "button" && nodes(node).includes("Trim & Export"));

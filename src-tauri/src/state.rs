@@ -1174,11 +1174,11 @@ pub fn load_recording_options(app: &AppHandle) -> RecordingOptions {
         .normalized()
 }
 
-pub fn save_recording_options(app: &AppHandle, options: &RecordingOptions) {
-    let path = recording_options_path(app);
-    if let Ok(data) = serde_json::to_vec_pretty(&options.normalized()) {
-        let _ = std::fs::write(path, data);
-    }
+pub fn save_recording_options(
+    app: &AppHandle,
+    options: &RecordingOptions,
+) -> std::io::Result<()> {
+    save_preference_at(&recording_options_path(app), &options.normalized())
 }
 
 // Annotation appearance is shared by the capture overlay and editor. Keep it
@@ -1203,13 +1203,7 @@ pub fn save_annotation_appearance(
     app: &AppHandle,
     appearance: &AnnotationAppearance,
 ) -> std::io::Result<()> {
-    let path = annotation_appearance_path(app);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let data =
-        serde_json::to_vec_pretty(&appearance.normalized()).map_err(std::io::Error::other)?;
-    std::fs::write(path, data)
+    save_preference_at(&annotation_appearance_path(app), &appearance.normalized())
 }
 
 // ---------------------------------------------------------------------------
@@ -1237,12 +1231,31 @@ pub fn load_language(app: &AppHandle) -> String {
 }
 
 pub fn save_language(app: &AppHandle, language: &str) -> std::io::Result<()> {
-    let path = language_path(app);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+    save_preference_at(&language_path(app), language)
+}
+
+// Publish a complete file so a failed write cannot truncate the last saved
+// preference, and concurrent readers never observe partial JSON.
+fn save_preference_at(
+    path: &std::path::Path,
+    value: &(impl Serialize + ?Sized),
+) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("Missing preference directory"))?;
+    std::fs::create_dir_all(parent)?;
+    let mut staged = tempfile::NamedTempFile::new_in(parent)?;
+    serde_json::to_writer_pretty(&mut staged, value).map_err(std::io::Error::other)?;
+    staged.flush()?;
+    staged.as_file().sync_all()?;
+    staged.persist(path).map_err(|error| error.error)?;
+    #[cfg(unix)]
+    if let Ok(directory) = std::fs::File::open(parent) {
+        let _ = directory.sync_all();
     }
-    let data = serde_json::to_vec_pretty(language).map_err(std::io::Error::other)?;
-    std::fs::write(path, data)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1255,6 +1268,74 @@ mod tests {
     use crate::capture::CapturedDisplay;
     use crate::core::geometry::Rect;
     use crate::core::policy::RecordingOptions;
+
+    #[test]
+    fn preference_save_creates_the_configuration_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new-config/recording-options.json");
+        let options = RecordingOptions {
+            captures_system_audio: true,
+            microphone_device_id: Some("test-device".into()),
+            ..Default::default()
+        };
+        super::save_preference_at(&path, &options).unwrap();
+        let saved: RecordingOptions =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(saved.captures_system_audio);
+        assert_eq!(saved.microphone_device_id.as_deref(), Some("test-device"));
+        assert_eq!(std::fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn preference_replacement_keeps_open_readers_on_the_complete_previous_value() {
+        use std::io::Read;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("language.json");
+        super::save_preference_at(&path, "zh-Hans").unwrap();
+        let mut reader = std::fs::File::open(&path).unwrap();
+        super::save_preference_at(&path, "en").unwrap();
+        let mut previous = String::new();
+        reader.read_to_string(&mut previous).unwrap();
+        assert_eq!(serde_json::from_str::<String>(&previous).unwrap(), "zh-Hans");
+        assert_eq!(
+            serde_json::from_slice::<String>(&std::fs::read(&path).unwrap()).unwrap(),
+            "en"
+        );
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_preference_serialization_preserves_saved_bytes_and_cleans_staging() {
+        struct FailingPreference;
+        impl serde::Serialize for FailingPreference {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                use serde::ser::SerializeSeq;
+                let mut fields = serializer.serialize_seq(Some(2))?;
+                fields.serialize_element("partial value")?;
+                Err(serde::ser::Error::custom("injected serialization failure"))
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("annotation-appearance.json");
+        let original = br#"{"penWidth":12}"#;
+        std::fs::write(&path, original).unwrap();
+        assert!(super::save_preference_at(&path, &FailingPreference).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_preference_replacement_reports_error_and_cleans_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("language.json");
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(path.join("existing"), b"preserve").unwrap();
+        assert!(super::save_preference_at(&path, "en").is_err());
+        assert_eq!(std::fs::read(path.join("existing")).unwrap(), b"preserve");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
 
     fn save_job(id: &str, created_at: &str) -> RecordingSaveJobDto {
         RecordingSaveJobDto {

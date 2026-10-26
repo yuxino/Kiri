@@ -133,12 +133,13 @@ test("focused buttons keep document undo shortcuts", t => {
   assert.equal(f.calls.undo, 1);
 });
 
-function playbackFixture(t) {
+function playbackFixture(t, video = null) {
   const source = 'import React from "react";\n' + readFileSync(new URL("../src/windows/VideoPlaybackControls.tsx", import.meta.url), "utf8");
   const calls = { play: 0, pause: 0 };
-  const media = { duration: 60, currentTime: 10, paused: true, volume: 1, muted: false, playbackRate: 1,
-    addEventListener() {}, removeEventListener() {},
-    play() { calls.play++; return Promise.resolve(); }, pause() { calls.pause++; } };
+  const media = video?.current ?? { duration: 60, currentTime: 10,
+    addEventListener() {}, removeEventListener() {} };
+  Object.assign(media, { paused: true, volume: 1, muted: false, playbackRate: 1,
+    play() { calls.play++; return Promise.resolve(); }, pause() { calls.pause++; } });
   const h = createLibraryHarness({}, source, {
     modules: {
       "./video-trim.js": { videoTimeLabel: String },
@@ -151,8 +152,46 @@ function playbackFixture(t) {
   });
   const component = h.mount("VideoPlaybackControls", { video: { current: media } });
   component.render(); t.after(() => component.unmount());
-  return { window: h.window, media, calls };
+  return { component, window: h.window, media, calls };
 }
+
+test("failed preview removes playback shortcuts until the retained video recovers", t => {
+  const readonly = Object.fromEntries(Object.keys(capabilities).map(key => [key, false]));
+  const player = createVideoPlayerHarness(readonly);
+  t.after(() => player.unmount());
+  let playback = null;
+  const render = (props = {}) => {
+    const tree = player.updateProps(props);
+    const controls = nodes(tree).find(node => node?.type === "playback-controls");
+    if (!controls) {
+      playback?.component.unmount();
+      playback = null;
+    } else if (!playback) playback = playbackFixture(t, controls.props.video);
+    return tree;
+  };
+  const initial = render();
+  const media = nodes(initial).find(node => node?.type === "video").props.ref.current;
+  const previousPlayback = playback;
+  playback.window.dispatchEvent(keyEvent(" "));
+  assert.equal(playback.calls.play, 1);
+
+  const failed = render({ suspended: true });
+  assert.equal(playback, null, "failure must remove the hidden preview's keyboard owner");
+  assert.equal(nodes(failed).find(node => node?.type === "video").props.ref.current, media);
+  const time = media.currentTime;
+  for (const key of [" ", "ArrowLeft", "ArrowRight"]) {
+    const event = keyEvent(key);
+    previousPlayback.window.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, false, key);
+  }
+  assert.equal(previousPlayback.calls.play, 1, "error-page Space cannot restart hidden audio");
+  assert.equal(media.currentTime, time, "error-page arrows cannot seek the hidden video");
+
+  const recovered = render({ suspended: false, mediaRevision: 1 });
+  assert.equal(nodes(recovered).find(node => node?.type === "video").props.ref.current, media);
+  playback.window.dispatchEvent(keyEvent(" "));
+  assert.equal(playback.calls.play, 1, "playback shortcuts return after decoder recovery");
+});
 
 test("preview playback ignores handled, composing and modified shortcut keys", t => {
   const f = playbackFixture(t);

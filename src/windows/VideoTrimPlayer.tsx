@@ -52,9 +52,9 @@ async function makeRoomForVideoEditor() {
   await window.setPosition(new PhysicalPosition(Math.round(x), Math.round(y)));
 }
 
-export type VideoClosePreparation = { busy: boolean; prepareClose(): Promise<boolean> };
+export type VideoClosePreparation = { busy: boolean; prepareClose(): Promise<boolean>; prepareReload(): Promise<boolean> };
 
-export function VideoTrimPlayer(props: { id: string; src: string; editable: boolean; capabilities: VideoEditingCapabilities; previewActions?: ReactNode; onEditingChange?(editing: boolean): void; onClosePreparationChange(preparation: VideoClosePreparation | null): void; onClose(): void; onError(): void }) {
+export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?: number; suspended?: boolean; editable: boolean; capabilities: VideoEditingCapabilities; previewActions?: ReactNode; onEditingChange?(editing: boolean): void; onClosePreparationChange(preparation: VideoClosePreparation | null): void; onClose(): void; onError(): void }) {
   const capabilities=videoEditingCapabilities(props.capabilities);
   const video = useRef<HTMLVideoElement>(null);
   const container=useRef<HTMLDivElement>(null);
@@ -86,7 +86,8 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   const history = useRef<{ past: EditDocument[]; future: EditDocument[] }>({past:[],future:[]});
   const [doc, setDoc] = useState<EditDocument>({segments:[],effects:[],annotations:[],stickers:[]});
   const docRef = useRef(doc); docRef.current=doc;
-  const [editing, setEditing] = useState(false);
+  const [editingRequested, setEditing] = useState(false);
+  const editing=editingRequested&&props.editable&&capabilities.videoEditing;
   useEffect(() => { props.onEditingChange?.(editing); }, [editing, props.onEditingChange]);
   useEffect(() => {
     if (editing) void makeRoomForVideoEditor().catch(() => {});
@@ -95,6 +96,8 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   const [sourceSize, setSourceSize] = useState({width:16,height:9});
   const [fitted, setFitted] = useState({width:1,height:1});
   const [time, setTime] = useState(0);
+  const openedMedia=useRef<{duration:number;width:number;height:number}|null>(null);
+  const decoderRevision=useRef(props.mediaRevision),reloadTime=useRef<number|null>(null);
   const [playing, setPlaying] = useState(false);
   const [selected, setSelected] = useState(0);
   const [annotating,setAnnotating]=useState(false);
@@ -118,7 +121,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   const exportRequest=useRef<string|null>(null);
   const exportStarted=useRef(false);
   const cancelRequested=useRef(false);
-  const {frames,failed:thumbnailFailed} = useVideoThumbnails(props.src,duration,editing);
+  const {frames,failed:thumbnailFailed} = useVideoThumbnails(props.src,duration,editing,props.mediaRevision);
   const {segments,effects,annotations,stickers} = doc;
   const selectedSticker=stickers.find(item=>item.id===effectId);
   const selectedAnnotation=annotations.find(item=>item.id===annotationId);
@@ -187,10 +190,33 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
       if(!saved||!stickerImport.current)return saved;
     }
   },[project.flush]);
+  const prepareReload=useCallback(async()=>{
+    if(saving.current||!await flushProject())return false;
+    return project.validateSource();
+  },[flushProject,project.validateSource]);
   useEffect(()=>{
-    props.onClosePreparationChange({busy:exporting,prepareClose:flushProject});
+    props.onClosePreparationChange({busy:exporting,prepareClose:flushProject,prepareReload});
     return()=>props.onClosePreparationChange(null);
-  },[exporting,flushProject,props.onClosePreparationChange]);
+  },[exporting,flushProject,prepareReload,props.onClosePreparationChange]);
+
+  useEffect(()=>{
+    if(props.suspended){previewing.current=false;video.current?.pause();}
+  },[props.suspended]);
+
+  useEffect(()=>{
+    if((!props.editable||!capabilities.videoEditing)&&(editingRequested||annotating)){
+      setEditing(false);setAnnotating(false);previewing.current=false;video.current?.pause();
+    }
+  },[props.editable,capabilities.videoEditing,editingRequested,annotating]);
+
+  useEffect(()=>{
+    if(decoderRevision.current===props.mediaRevision)return;
+    decoderRevision.current=props.mediaRevision;
+    reloadTime.current=projectContext.current.time;
+    previewing.current=false;
+    // Reload the decoder in place: canvas/frame callbacks retain this element.
+    video.current?.pause();video.current?.load();
+  },[props.mediaRevision]);
 
   useEffect(()=>{
     const id=annotating?annotationId:effectId;if(!id)return;
@@ -371,7 +397,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
   },[editing,effectId,annotating,effects,annotations,stickers,sourceSize]);
 
   useEffect(()=>{
-    if(!editing) return;
+    if(!editing||props.suspended) return;
     const onKey=(event:KeyboardEvent)=>{
       const target=event.target as HTMLElement;
       if(event.defaultPrevented||isTextComposition(event)||target.closest("input,select,textarea,[contenteditable],[role=listbox],[role=menu],dialog,[role=dialog]")) return;
@@ -624,7 +650,8 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
     target.addEventListener("pointermove",move);target.addEventListener("pointerup",finish);target.addEventListener("pointercancel",cancel);window.addEventListener("keydown",key,true);
   }
 
-  return <div ref={container} className={`kiri-video-player ${editing ? "kiri-video-player--editing" : ""}`}>
+  return <div ref={container} className={`kiri-video-player ${editing ? "kiri-video-player--editing" : ""}`}
+    inert={props.suspended} style={{display:props.suspended?"none":undefined}}>
     <header className="kiri-video-editor-heading">
       <div><strong>{t(editing ? "Video editor" : "Video")}</strong><span>{t(editing ? "Your original recording stays unchanged." : "Esc to close")}</span></div>
       <div className="kiri-video-header-actions">
@@ -649,14 +676,23 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
     <div className="kiri-video-workspace">
       <div ref={stage} className="kiri-video-stage">
         <div className="kiri-video-surface" onPointerDownCapture={selectPictureObject} style={{width:fitted.width,height:fitted.height}}>
-          <video ref={video} src={props.src} crossOrigin={videoResourceCrossOrigin(props.src)} controls={false} playsInline autoPlay preload="metadata"
+          <video ref={video} src={props.src} crossOrigin={videoResourceCrossOrigin(props.src)} controls={false} playsInline autoPlay={!(props.mediaRevision??0)} preload="metadata"
             // Keep the decoder's presentation surface live for paused WebKit seeks;
             // the opaque edited canvas above it owns the visible picture.
             style={{pointerEvents:editing?"none":"auto"}}
             onLoadedMetadata={event=>{
               const player=event.currentTarget,value=player.duration;
-              const d=Number.isFinite(value)?value:0;setDuration(d);
-              setSourceSize({width:player.videoWidth||16,height:player.videoHeight||9});
+              const d=Number.isFinite(value)?value:0;
+              const width=player.videoWidth||16,height=player.videoHeight||9;
+              const opened=openedMedia.current;
+              if(opened){
+                // Decoder retries keep the edit, undo history and save revision.
+                if(Math.abs(opened.duration-d)>.1||opened.width!==width||opened.height!==height){props.onError();return;}
+                if(reloadTime.current!==null){player.currentTime=Math.min(d,reloadTime.current);reloadTime.current=null;}
+                return;
+              }
+              if(d>0)openedMedia.current={duration:d,width,height};
+              setDuration(d);setSourceSize({width,height});
               const initial={segments:d>0?[{start:0,end:d}]:[],effects:[],annotations:[],stickers:[]};docRef.current=initial;setDoc(initial);
             }}
             onTimeUpdate={updatePlayback} onSeeked={updatePlayback}
@@ -678,7 +714,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; editable: bool
         }}/></label>)}</details><button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={()=>{commitAnnotation.current?.();apply({...docRef.current,annotations:docRef.current.annotations.filter(item=>item.id!==selectedAnnotation.id)});setAnnotationId(null);setAnnotationRevision(v=>v+1);}}><Trash2 size={14}/>{t("Delete annotation")}</button></>}
         </section>:capabilities.videoEffectsEditing?<VideoEffectsControls segments={segments} sourceSize={sourceSize} effects={effects} onChange={changeEffects} selectedId={effectId} onSelect={id=>{video.current?.pause();previewing.current=false;setEffectId(id);}} time={time} duration={duration} disabled={busy} onSeek={seek} />:null}</aside>}
     </div>
-    {!editing&&<VideoPlaybackControls video={video}/>}
+    {!editing&&!props.suspended&&<VideoPlaybackControls video={video}/>}
     {editing&&<><div className="kiri-video-timeline-divider" role="separator" aria-label={t("Timeline height")} aria-orientation="horizontal" aria-valuemin={160} aria-valuemax={360} aria-valuenow={timelineHeight} tabIndex={0} onPointerDown={resizeTimeline} onDoubleClick={()=>setTimelineHeight(230)} onKeyDown={event=>{if(["ArrowUp","ArrowDown"].includes(event.key)){event.preventDefault();setTimelineHeight(value=>Math.max(160,Math.min(360,(container.current?.clientHeight??700)*.45,value+(event.key==="ArrowUp"?20:-20))));}}}/><section className="kiri-video-timeline" aria-label={t("Video timeline")} style={{height:timelineHeight}}>
       <div className="kiri-video-edit-tools">
         <button type="button" className="kiri-button kiri-button--secondary" disabled={!valid||busy} onClick={playEdit} title={t("Play edited video · Space")}>{playing?<Pause size={14}/>:<Play size={14}/>} {t(playing?"Pause":"Play")}</button>

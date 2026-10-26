@@ -1,15 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import ts from "typescript";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createLibraryHarness, deferred, nodes, settleRequests, testAsset } from "./helpers/library-render-harness.mjs";
 import * as viewerState from "../src/windows/viewer-state.js";
 import { installVideoProjectShortcuts } from "../src/windows/video-project-shortcuts.js";
+import { createVideoProjectSaveQueue } from "../src/windows/video-project-save.js";
 
 const readSource = path => readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const viewerSource = readSource("../src/windows/ViewerWindow.tsx");
 const guardSource = readSource("../src/windows/VideoCloseGuard.tsx");
 const playerSource = readSource("../src/windows/VideoTrimPlayer.tsx");
+const projectHookSource = readSource("../src/windows/useVideoProject.ts");
+const projectModule = await import(`data:text/javascript;base64,${Buffer.from(ts.transpileModule(
+  readSource("../src/windows/video-project.ts"), { compilerOptions: { module: ts.ModuleKind.ESNext } },
+).outputText).toString("base64")}`);
 const closeRegistrationStart = playerSource.indexOf("  const flushProject=useCallback");
 assert.notEqual(closeRegistrationStart, -1);
 const closeRegistrationEnd = playerSource.indexOf("\n\n  useEffect", closeRegistrationStart);
@@ -20,9 +26,15 @@ assert.match(closeRegistrationSource, /onClosePreparationChange/);
 // The media/codec body is omitted; rendered player presence owns registration.
 const source = 'import React from "react";\n' + viewerSource +
   '\nimport {installVideoProjectShortcuts} from "./video-project-shortcuts.js";\n' +
+  '\nimport {createVideoProjectSaveQueue} from "./video-project-save.js";\n' +
+  '\nimport {hasVideoEdits} from "./video-project";\n' +
+  projectHookSource.replace(/^import\s[\s\S]*?;\s*/gm, "") +
   guardSource.replace(/^import\s[\s\S]*?;\s*/gm, "") +
   '\nexport function PlayerCloseRegistration(props) {\n' +
-  'const exporting=props.busy,project={flush:props.flush};\n' +
+  'const savedProject=useVideoProject({id:props.id,enabled:props.useRealProject,duration:3,getProject:props.getProject,restore:async()=>{}});\n' +
+  'useEffect(()=>{if(savedProject.ready)savedProject.schedule();},[savedProject.ready,savedProject.schedule,props.snapshot]);\n' +
+  'const exporting=props.busy,project=props.useRealProject?savedProject:{flush:props.flush,validateSource:props.validateSource};\n' +
+  'const saving=useRef(props.busy);saving.current=props.busy;\n' +
   'const commitAnnotation=useRef(null),textDraft=useRef(null),stickerImport=useRef(null);\n' +
   closeRegistrationSource + '\nreturn flushProject;\n}\n';
 const playerType = "test-video-player";
@@ -90,9 +102,15 @@ async function fixture(t, options = {}) {
   const asset = { ...testAsset, kind: options.kind ?? "video", filename: options.filename ?? "fixture.mp4",
     duration: options.kind === "image" ? null : 3 };
   let nextAssetLoad = null;
+  let playerMounts = 0;
+  let snapshot = { schemaVersion: 1, sourceSize: { width: 1920, height: 1080 }, sourceDuration: 3,
+    edit: { segments: [{ start: 0, end: 3 }], effects: [], annotations: [], stickers: [] }, preset: "original", playhead: 0 };
+  let savedProject = null, savedRevision = "base";
+  const writes = [];
+  const getProject = () => snapshot;
   let guard = null, playerRegistration = null, playerKey = null, tree, player;
   const playerFlushes = new Set();
-  const guardOptions = { busy: false, prepareClose: async () => true, ...options };
+  const guardOptions = { busy: false, prepareClose: async () => true, validateSource: async () => true, ...options };
   const flush = async () => { prepareCalls++; return guardOptions.prepareClose(); };
   const dialog = { open: false, showModal() { this.open = true; }, close() { this.open = false; } };
   const h = createLibraryHarness({
@@ -100,6 +118,13 @@ async function fixture(t, options = {}) {
     getAssetAvailability: async () => ({ status: availability }),
     restoreMissingAsset: async () => true,
     platformCapabilities: async () => ({ videoEditing: true }),
+    loadVideoProject: async () => options.sourceChanged?.()
+      ? { state: "invalid", reason: "sourceChanged", revision: "changed", project: savedProject }
+      : { state: savedProject ? "valid" : "none", revision: savedRevision, project: savedProject },
+    saveVideoProject: (id, revision, project) => {
+      const request = deferred(); writes.push({ id, revision, project, ...request });
+      return request.promise.then(result => { savedRevision = result.revision; savedProject = project; return result; });
+    },
   }, source, {
     modules: {
       "@tauri-apps/api/window": { getCurrentWindow },
@@ -107,6 +132,8 @@ async function fixture(t, options = {}) {
       "./VideoCloseGuard": { VideoCloseGuard: guardType },
       "./viewer-state.js": viewerState,
       "./video-project-shortcuts.js": { installVideoProjectShortcuts },
+      "./video-project-save.js": { createVideoProjectSaveQueue },
+      "./video-project": projectModule,
     },
     attachRef(node) { if (node.type === "dialog") node.props.ref.current = dialog; },
   });
@@ -122,11 +149,13 @@ async function fixture(t, options = {}) {
         playerRegistration?.unmount(); playerRegistration = null;
       }
       if (player && !playerRegistration) {
+        playerMounts++;
         playerKey = player.props.key;
         playerRegistration = h.mount("PlayerCloseRegistration", {});
       }
       if (playerRegistration) playerFlushes.add(playerRegistration.render({
-        busy: guardOptions.busy, flush, onClosePreparationChange: player.props.onClosePreparationChange,
+        busy: guardOptions.busy, flush, validateSource: guardOptions.validateSource, onClosePreparationChange: player.props.onClosePreparationChange,
+        id: testAsset.id, useRealProject: options.useRealProject ?? false, getProject, snapshot,
       }));
       const guardNode = nodes(tree).find(node => node.type === guardType);
       assert.ok(guardNode, "Viewer renders its persistent close guard in every content state");
@@ -154,7 +183,7 @@ async function fixture(t, options = {}) {
     const restoreButton = nodes(message?.props.actions).find(node => node.props?.children?.includes("Restore File…"));
     assert.ok(restoreButton, "missing viewer exposes restore");
     restoreButton.props.onClick(); await settle();
-    assert.equal(player, undefined);
+    assert.ok(player?.props.suspended, "loading keeps the existing save queue mounted");
     assert.ok(nodes(tree).some(node => node.props?.title === "Loading…"));
     assertPersistentGuard();
     return finish;
@@ -172,13 +201,24 @@ async function fixture(t, options = {}) {
     native, guardOptions, dialog,
     get prepareCalls() { return prepareCalls; },
     get playerFlushCount() { return playerFlushes.size; },
+    get playerMounts() { return playerMounts; },
+    get mediaRevision() { return player?.props.mediaRevision; },
+    get suspended() { return player?.props.suspended; },
+    writes,
+    edit() { snapshot = { ...snapshot, edit: { ...snapshot.edit, segments: [{ start: 1, end: 2 }] } }; render(); },
+    contentChanged() { h.emit("assetContentChanged", testAsset.id); render(); },
+    retry() {
+      const message = nodes(tree).find(node => node.props?.title === "Couldn't play this video.");
+      const button = nodes(message?.props.actions).find(node => node.props?.children?.includes("Retry"));
+      assert.ok(button); button.props.onClick();
+    },
     settle,
     beginRestore,
     async mediaFailure(status) {
       availability = status;
       player.props.onError();
       await settle();
-      assert.equal(player, undefined, "the failed player unregisters its close preparation");
+      assert.ok(player?.props.suspended, "the failed player keeps its close preparation and pending edits");
       assert.equal(native.calls.listen, 1, "media failure does not replace the Viewer close listener");
       assert.equal(native.calls.unlisten, 0, "the Viewer guard survives player cleanup");
       assert.ok(nodes(tree).some(node => node.props?.title ===
@@ -222,10 +262,66 @@ for (const action of ["X", "Escape", "Cmd+W", "Ctrl+W"]) {
     assert.equal(f.native.pendingUnlistenCount, 0);
     assert.equal(f.native.listenerCount, 1, "the Viewer listener remains registered");
     await f.close(action);
-    assert.equal(f.native.calls.destroy, 1, "the Viewer guard permits close after player cleanup");
-    assert.equal(f.prepareCalls, 0, "unavailable media never flushes its removed player");
+    assert.equal(f.native.calls.destroy, 1, "the Viewer guard permits close after pending edits save");
+    assert.equal(f.prepareCalls, 1, "unavailable media still flushes its retained player");
   });
 }
+
+for (const status of ["ready", "missing", "unreadable", "libraryUnavailable"]) {
+  test(`${status} media failure retains a pending edit until its real autosave queue flushes`, async t => {
+    const f = await fixture(t, { useRealProject: true });
+    f.edit();
+    assert.equal(f.writes.length, 0, "the edit is still inside the debounce interval");
+    await f.mediaFailure(status);
+    await f.close("native");
+    assert.equal(f.writes.length, 1, "failure must not dispose the pending project");
+    assert.deepEqual(f.writes[0].project.edit.segments, [{ start: 1, end: 2 }]);
+    assert.equal(f.native.calls.destroy, 0, "close waits for the write acknowledgement");
+    f.writes[0].resolve({ state: "valid", revision: "saved" }); await f.settle();
+    assert.equal(f.native.calls.destroy, 1);
+    assert.equal(f.playerMounts, 1);
+  });
+}
+
+test("failed autosave after media failure retains the draft and requires a successful retry", async t => {
+  const f = await fixture(t, { useRealProject: true });
+  f.edit(); await f.mediaFailure("ready"); await f.close("X");
+  f.writes[0].reject(new Error("VIDEO_PROJECT_IO")); await f.settle();
+  assert.equal(f.native.calls.destroy, 0); assert.equal(f.dialog.open, true);
+  await f.close("native");
+  assert.equal(f.writes.length, 2);
+  assert.equal(f.writes[1].revision, "base", "failure does not advance the saved revision");
+  assert.deepEqual(f.writes[1].project.edit.segments, [{ start: 1, end: 2 }]);
+  f.writes[1].resolve({ state: "valid", revision: "retried" }); await f.settle();
+  assert.equal(f.native.calls.destroy, 1);
+});
+
+test("same-source decoder retry waits for autosave and preserves the mounted editor", async t => {
+  const f = await fixture(t, { useRealProject: true });
+  f.edit(); await f.mediaFailure("ready");
+  const revision = f.mediaRevision;
+  f.retry(); await f.settle();
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.suspended, true); assert.equal(f.mediaRevision, revision);
+  f.writes[0].resolve({ state: "valid", revision: "saved" }); await f.settle();
+  assert.equal(f.suspended, false); assert.equal(f.mediaRevision, revision + 1);
+  assert.equal(f.playerMounts, 1, "decoder recovery does not replace the project owner");
+  await f.close("native");
+  assert.equal(f.writes.length, 1, "close still recognizes the acknowledged draft");
+  assert.equal(f.native.calls.destroy, 1);
+});
+
+test("a changed video source cannot silently reload the old project", async t => {
+  let changed = false;
+  const f = await fixture(t, { useRealProject: true, sourceChanged: () => changed });
+  changed = true; f.contentChanged();
+  const revision = f.mediaRevision;
+  f.retry(); await f.settle();
+  assert.equal(f.suspended, true); assert.equal(f.mediaRevision, revision);
+  assert.equal(f.playerMounts, 1); assert.equal(f.writes.length, 0);
+  await f.close("native");
+  assert.equal(f.native.calls.destroy, 1, "an unchanged draft can still close without overwriting the source");
+});
 
 for (const [filename, action] of [
   ["fixture.png", "X"], ["fixture.png", "native"],
@@ -245,7 +341,7 @@ for (const status of ["unreadable", "libraryUnavailable", "ready"]) {
     const f = await fixture(t);
     f.native.delayUnlisten(); await f.mediaFailure(status); await f.close("X");
     assert.equal(f.native.calls.destroy, 1);
-    assert.equal(f.prepareCalls, 0);
+    assert.equal(f.prepareCalls, 1);
   });
 }
 
@@ -255,12 +351,12 @@ test("missing video native title-bar close cannot be stranded by player cleanup"
   assert.equal(f.native.calls.destroy, 1);
 });
 
-test("restoring video's loading state keeps the native guard and allows close", async t => {
-  const f = await fixture(t, { busy: true, prepareClose: async () => false });
+test("restoring video's loading state keeps the native guard and flushes before close", async t => {
+  const f = await fixture(t);
   await f.mediaFailure("missing");
   const finishRestore = await f.beginRestore();
   await f.close("native");
-  assert.equal(f.native.calls.destroy, 1); assert.equal(f.prepareCalls, 0);
+  assert.equal(f.native.calls.destroy, 1); assert.equal(f.prepareCalls, 2);
   await finishRestore();
 });
 
@@ -310,17 +406,20 @@ test("player flush stays stable across parent renders and busy registration chan
   assert.equal(f.native.calls.unlisten, 0);
 });
 
-test("player failure clears its export block before native close", async t => {
+test("player failure retains its export block before native close", async t => {
   const f = await fixture(t, { busy: true, prepareClose: async () => false });
   await f.mediaFailure("missing"); await f.close("native");
-  assert.equal(f.native.calls.destroy, 1); assert.equal(f.prepareCalls, 0);
+  assert.equal(f.native.calls.destroy, 0); assert.equal(f.prepareCalls, 0);
+  assert.equal(f.dialog.open, true);
 });
 
 for (const action of ["X", "Escape", "Cmd+W", "Ctrl+W"]) {
   test(`restored ready video ${action} uses its current save guard`, async t => {
-    const f = await fixture(t, { prepareClose: async () => false });
-    await f.mediaFailure("missing"); await f.restore(); await f.close(action);
-    assert.equal(f.prepareCalls, 1, "restoration must not retain unavailable-state close behavior");
+    const f = await fixture(t);
+    await f.mediaFailure("missing"); await f.restore();
+    f.guardOptions.prepareClose = async () => false;
+    await f.close(action);
+    assert.equal(f.prepareCalls, 2, "restoration must retain the same save guard");
     assert.equal(f.native.calls.destroy, 0); assert.equal(f.dialog.open, true);
   });
 }

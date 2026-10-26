@@ -1112,6 +1112,70 @@ mod tests {
     }
 
     #[test]
+    fn failed_location_commit_keeps_source_ready_and_allows_migration_retry() {
+        for replace_existing in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let source_root = directory.path().join("source");
+            let target = directory.path().join("target");
+            let config = directory.path().join("config.json");
+            let library_id = uuid::Uuid::new_v4();
+            let source_library = create_library(&source_root, library_id);
+            let asset = source_library.all_assets(false).remove(0);
+            let source_bytes = std::fs::read(source_library.asset_url(&asset)).unwrap();
+            let mut context =
+                LibraryContext::open_with_paths(source_root.clone(), config.clone()).unwrap();
+            let source_generation = context.expected_library_generation();
+            let saved_config = std::fs::read(&config).unwrap();
+
+            let previous_target_generation = if replace_existing {
+                let prepared =
+                    migrate_library(&migration_source(&source_root, library_id), &target, false)
+                        .unwrap();
+                Some(prepared.generation)
+            } else {
+                None
+            };
+            let source = context.begin_migration().unwrap();
+            let prepared = migrate_library(&source, &target, replace_existing).unwrap();
+            assert_eq!(context.status().availability, LibraryAvailability::Migrating);
+
+            // A regular file as the configuration parent deterministically
+            // rejects persistence on every platform without permission changes.
+            context.config_path = config.join("blocked.json");
+            assert!(context.activate_prepared(prepared).is_err());
+            assert_eq!(context.status().availability, LibraryAvailability::Ready);
+            assert_eq!(context.root(), source_root);
+            assert_eq!(context.expected_library_generation(), source_generation);
+            assert_eq!(std::fs::read(&config).unwrap(), saved_config);
+            assert_eq!(
+                std::fs::read(context.library().unwrap().asset_url(&asset)).unwrap(),
+                source_bytes
+            );
+            if let Some(generation) = previous_target_generation {
+                // Returning to an existing destination restores its prior copy.
+                assert_eq!(current_generation(&target), generation);
+            }
+
+            context.config_path = config.clone();
+            let source = context.begin_migration().unwrap();
+            // The folder-picker command detects an existing target on retry.
+            let prepared = migrate_library(&source, &target, target.exists()).unwrap();
+            context.activate_prepared(prepared).unwrap();
+            assert_eq!(context.status().availability, LibraryAvailability::Ready);
+            assert_eq!(context.root(), std::fs::canonicalize(&target).unwrap());
+            assert_ne!(context.expected_library_generation(), source_generation);
+            assert_eq!(
+                std::fs::read(context.library().unwrap().asset_url(&asset)).unwrap(),
+                source_bytes
+            );
+            let stored = read_location_config(&config).unwrap().unwrap();
+            assert_eq!(stored.root, context.root());
+            assert_eq!(stored.generation, context.expected_library_generation());
+            validate_marker_identity(&source_root, library_id, source_generation).unwrap();
+        }
+    }
+
+    #[test]
     fn migration_preserves_ocr_text_and_its_source_snapshot() {
         let directory = tempfile::tempdir().unwrap();
         let source_root = directory.path().join("source");

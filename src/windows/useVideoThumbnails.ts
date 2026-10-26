@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /** One decoder and twelve small frames, independent of recording length. */
-export function useVideoThumbnails(src: string, duration: number, enabled: boolean) {
+export function useVideoThumbnails(src: string, duration: number, enabled: boolean, revision = 0) {
   const [frames, setFrames] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -55,6 +55,6 @@ export function useVideoThumbnails(src: string, duration: number, enabled: boole
       cancelled=true; pending.forEach(abort=>abort()); decoder.pause();
       decoder.removeAttribute("src"); decoder.load();
     };
-  },[src,duration,enabled]);
+  },[src,duration,enabled,revision]);
   return {frames,failed};
 }

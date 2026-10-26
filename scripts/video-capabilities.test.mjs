@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isBasicVideoEditing, unsupportedVideoProjectFeatures, videoEditingCapabilities } from "../src/windows/video-capabilities.js";
-import { nodes } from "./helpers/library-render-harness.mjs";
+import { createLibraryHarness, nodes, settleRequests } from "./helpers/library-render-harness.mjs";
 import { createVideoPlayerHarness } from "./helpers/video-player-harness.mjs";
 
 const none = {
@@ -21,6 +21,81 @@ const project = (edit = {}, preset = "original") => ({
   edit: { segments: [{ start: 0, end: 10 }], effects: [], annotations: [], stickers: [], ...edit },
   preset,
   playhead: 0,
+});
+
+test("decoder retry reuses the video element and preserves edits, undo history and playhead", t => {
+  let failures = 0;
+  const component = createVideoPlayerHarness(full, { onError: () => failures++ });
+  t.after(() => component.unmount());
+  let tree = component.openEditor();
+  const start = nodes(tree).find(node => node?.props?.className === "kiri-video-trim-handle kiri-video-trim-handle--start");
+  start.props.onKeyDown({ key: "ArrowRight", shiftKey: false, preventDefault() {} });
+  tree = component.render();
+  const video = nodes(tree).find(node => node?.type === "video");
+  const player = video.props.ref.current;
+  player.currentTime = 1.25; video.props.onTimeUpdate(); component.render();
+  const edit = component.projectOptions().getProject().edit;
+  assert.deepEqual(edit.segments, [{ start: .1, end: 10 }]);
+  component.updateProps({ suspended: true });
+  const retried = component.updateProps({ suspended: false, mediaRevision: 1 });
+  const decoder = nodes(retried).find(node => node?.type === "video");
+  assert.equal(decoder.props.ref.current, player);
+  assert.equal(player.loads, 1); assert.equal(decoder.props.autoPlay, false);
+  decoder.props.onLoadedMetadata({ currentTarget: player });
+  tree = component.render();
+  assert.equal(player.currentTime, 1.25);
+  assert.deepEqual(component.projectOptions().getProject().edit, edit);
+  const undo = nodes(tree).find(node => node?.props?.["aria-label"] === "Undo");
+  assert.equal(undo.props.disabled, false);
+  undo.props.onClick(); component.render();
+  assert.deepEqual(component.projectOptions().getProject().edit.segments, [{ start: 0, end: 10 }]);
+  assert.equal(failures, 0);
+  decoder.props.onLoadedMetadata({ currentTarget: { ...player, duration: 12 } });
+  assert.equal(failures, 1, "changed metadata cannot reinitialize the old draft");
+  assert.equal(component.projectOptions().getProject().sourceDuration, 10);
+});
+
+test("a recovered video moved to Trash cannot keep an editable UI after its save queue disables", t => {
+  const component = createVideoPlayerHarness(full);
+  t.after(() => component.unmount());
+  component.openEditor();
+  const before = component.projectOptions().getProject().edit;
+  const tree = component.updateProps({ editable: false });
+  assert.equal(nodes(tree).some(node => node?.type === "export-panel"), false);
+  assert.equal(nodes(tree).some(node => node?.props?.["aria-label"] === "Reset edit"), false);
+  component.window.dispatchEvent({ type: "keydown", key: "s", target: { closest: () => null }, preventDefault() {} });
+  component.render();
+  assert.deepEqual(component.projectOptions().getProject().edit, before);
+  assert.equal(component.projectOptions().enabled, false);
+});
+
+test("read-only preview does not pause ordinary autoplay when editing is unavailable", t => {
+  const component = createVideoPlayerHarness(none);
+  t.after(() => component.unmount());
+  const video = nodes(component.render()).find(node => node?.type === "video");
+  assert.equal(video.props.autoPlay, true);
+  assert.equal(video.props.ref.current.pauses, 0);
+});
+
+test("decoder recovery restarts a failed filmstrip without recreating the editor", async t => {
+  const decoders = [];
+  const source = readFileSync(new URL("../src/windows/useVideoThumbnails.ts", import.meta.url), "utf8") +
+    '\nexport function Thumbnails(props){return useVideoThumbnails("media:video",10,true,props.revision);}\n';
+  const harness = createLibraryHarness({}, source, { document: { createElement() {
+    const listeners = new Map();
+    const decoder = { currentTime: 0, addEventListener: (name, callback) => listeners.set(name, callback),
+      removeEventListener: name => listeners.delete(name), pause() {}, removeAttribute() {}, load() {},
+      fail: () => listeners.get("error")?.() };
+    decoders.push(decoder); return decoder;
+  } } });
+  harness.window.setTimeout = setTimeout;
+  const hook = harness.mount("Thumbnails", { revision: 0 });
+  t.after(() => hook.unmount());
+  hook.render(); decoders[0].fail(); await settleRequests();
+  assert.equal(hook.render().failed, true);
+  assert.equal(decoders.length, 1);
+  assert.equal(hook.render({ revision: 1 }).failed, false);
+  assert.equal(decoders.length, 2);
 });
 
 test("capability lookup failures and missing flags fail closed", () => {
@@ -120,7 +195,7 @@ test("UI independently gates editing tools without gating ordinary playback spee
   assert.match(source, /editing&&capabilities\.videoAnnotationsEditing&&<div className="kiri-video-annotation-editor"/);
   assert.match(source, /capabilities\.videoEffectsEditing\?<VideoEffectsControls/);
   assert.match(source, /supportsPresets=\{capabilities\.videoExportPresets\}/);
-  assert.match(source, /!editing&&<VideoPlaybackControls video=\{video\}/);
+  assert.match(source, /!editing&&!props\.suspended&&<VideoPlaybackControls video=\{video\}/);
   const settings = readFileSync(new URL("../src/windows/VideoExportSettings.tsx", import.meta.url), "utf8");
   assert.match(settings, /props\.supportsPresets&&<ChoiceSelect/);
 });
