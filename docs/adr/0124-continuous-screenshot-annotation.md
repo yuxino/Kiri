@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-28
-- Partially supersedes: ADR 0092 (selected shape placement), ADR 0110 (automatic property avoidance)
+- Partially supersedes: ADR 0060 (text Return), ADR 0092 (selected shape placement), ADR 0110 (automatic property avoidance)
 
 ## Context
 
