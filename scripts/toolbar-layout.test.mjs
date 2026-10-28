@@ -535,6 +535,55 @@ test("dragged properties clamp at screen edges and keep toolbar and mode selecto
   }
 });
 
+test("dragged properties skip the 26px strip above the mode selector", () => {
+  const bounds = {x: 0, y: 0, width: 1200, height: 800};
+  const toolbar = {x: 200, y: 700, width: 800, height: 48};
+  const mode = {x: 260, y: 44, width: 280, height: 44};
+  for (const naturalHeight of [60, 210]) {
+    const panel = captureToolOptionsLayout(toolbar, bounds, {width: 620, height: naturalHeight}, mode, [], {x: 100, y: 8});
+    const visible = {width: panel.width, height: Math.min(naturalHeight, panel.maxHeight)};
+    assert.ok(visible.height >= Math.min(naturalHeight, 80),
+      `the heading-only strip must yield to usable property space: ${JSON.stringify(panel)}`);
+    assert.ok(!overlaps(panel, visible, mode));
+    assert.ok(!overlaps(panel, visible, toolbar));
+    assert.ok(panel.top + visible.height <= bounds.height - 8);
+  }
+});
+
+test("moving the main toolbar cannot compress manual properties into a narrow top gap", () => {
+  const bounds = {x: 0, y: 0, width: 800, height: 600};
+  const toolbar = {x: 8, y: 200, width: 784, height: 48};
+  const natural = {width: 620, height: 160};
+  const preferred = {x: 90, y: 8};
+  const initial = captureToolOptionsLayout(toolbar, bounds, natural, null, [], preferred);
+  assert.deepEqual({x: initial.left, y: initial.top}, preferred);
+  assert.ok(initial.maxHeight >= natural.height);
+
+  const movedToolbar = {...toolbar, y: 45};
+  const panel = captureToolOptionsLayout(movedToolbar, bounds, natural, null, [], preferred);
+  const visible = {width: panel.width, height: Math.min(natural.height, panel.maxHeight)};
+  assert.ok(visible.height >= 80,
+    `properties must leave the toolbar's 31px upper gap: ${JSON.stringify(panel)}`);
+  assert.ok(!overlaps(panel, visible, movedToolbar));
+  assert.ok(panel.top >= movedToolbar.y + movedToolbar.height);
+  assert.ok(panel.top + visible.height <= bounds.height - 8);
+
+  const compact = captureToolOptionsLayout(movedToolbar, bounds, {...natural, height: 24}, null, [], preferred);
+  assert.deepEqual({x: compact.left, y: compact.top}, preferred,
+    "a genuinely short panel that fits can keep its manual position");
+});
+
+test("when every property space is shorter than 80px the largest remains available", () => {
+  const bounds = {x: 0, y: 0, width: 800, height: 180};
+  const toolbar = {x: 8, y: 45, width: 784, height: 48};
+  const natural = {width: 620, height: 210};
+  const panel = captureToolOptionsLayout(toolbar, bounds, natural, null, [], {x: 90, y: 8});
+  const visible = {width: panel.width, height: Math.min(natural.height, panel.maxHeight)};
+  assert.equal(panel.maxHeight, 73, "the 73px lower space is more usable than the nearer 31px strip");
+  assert.ok(!overlaps(panel, visible, toolbar));
+  assert.ok(panel.top >= 8 && panel.top + visible.height <= bounds.height - 8);
+});
+
 function movableToolbar() {
   const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
   const toolbar = source.slice(source.indexOf("const TOOLS:"));
