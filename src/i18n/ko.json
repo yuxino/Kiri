@@ -860,5 +860,12 @@
   "Open System Settings": "시스템 설정 열기",
   "Save the captured area first, then pin it from the completion preview.": "먼저 캡처한 영역을 저장한 뒤 완료 미리 보기에서 고정하세요.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "드래그하여 창을 이동하고 스크롤하여 이미지를 살펴보세요. 핀치하거나 Ctrl/Command를 누른 채 스크롤하면 확대/축소합니다. 스페이스를 누른 채 드래그하면 이미지 안을 이동합니다.",
-  "Zoom level": "확대/축소 배율"
+  "Zoom level": "확대/축소 배율",
+  "Annotate Recording": "녹화에 주석 추가",
+  "Operate Desktop": "데스크톱 조작",
+  "Preparing annotations…": "주석 준비 중…",
+  "Could not update recording annotations. Try again.": "녹화 주석을 업데이트하지 못했습니다. 다시 시도하세요.",
+  "Live annotations are unavailable for this recording.": "이 녹화에서는 실시간 주석을 사용할 수 없습니다.",
+  "Too many live annotations. Clear some marks to continue.": "실시간 주석이 너무 많습니다. 일부를 지운 뒤 계속하세요.",
+  "This annotation tool is unavailable while recording.": "녹화 중에는 이 주석 도구를 사용할 수 없습니다."
 }

@@ -130,7 +130,7 @@ export function useRecordingControlsLayout(sessionId: string) {
 
     controller.current = {
       begin(event) {
-        if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+        if (event.button !== 0 || (event.target as HTMLElement).closest("button,input,select,textarea,[role=slider]")) return;
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
         if (gesture) gesture.cancelled = true;

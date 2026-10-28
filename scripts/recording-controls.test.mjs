@@ -62,6 +62,8 @@ function controls(options = {}) {
       clearTimeout(id) { timers.delete(id); },
     },
     modules: {
+      "./useRecordingAnnotations": {useRecordingAnnotations: () => ({state: null, failed: false})},
+      "./RecordingAnnotationControls": {RecordingAnnotationControls: "annotation-controls"},
       "@tauri-apps/api/window": { getCurrentWindow: () => native },
       "@tauri-apps/api/dpi": { PhysicalPosition: class {
         constructor(x, y) { this.x = x; this.y = y; }

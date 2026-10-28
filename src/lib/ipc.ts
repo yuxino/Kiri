@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AnnotationDocumentV1, AppearanceSettings } from "../annotation/model";
+import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { AnnotationDocumentV1, AnnotationMark, AppearanceSettings } from "../annotation/model";
 import type { CropPixels } from "../annotation/crop.js";
 import { kiriResourceUrl, videoResourceUrl } from "./kiri-resource-url.js";
 import type {VideoProject,VideoProjectSnapshot} from "../windows/video-project";
@@ -155,6 +155,26 @@ export interface RecordingState {
   isFinalizing: boolean;
   elapsed: number;
   elapsedLabel: string;
+}
+
+export type RecordingAnnotationTool = "desktop" | "select" | "pen" | "arrow" | "rectangle" | "text";
+export type RecordingAnnotationAction = "undo" | "redo" | "clear";
+export type RecordingAnnotationAppearance = Partial<Pick<AppearanceSettings,
+  "colorPreset" | "penWidth" | "shapeWidth" | "textFontSize" | "textBackgroundStyle">>;
+
+export interface RecordingAnnotationsState {
+  sessionId: string;
+  supported: boolean;
+  available: boolean;
+  error: string | null;
+  ready: boolean;
+  tool: RecordingAnnotationTool;
+  canUndo: boolean;
+  canRedo: boolean;
+  hasMarks: boolean;
+  marks: AnnotationMark[];
+  /** Orders ink snapshots; readiness and tool changes can share a revision. */
+  revision: number;
 }
 
 export interface NoticeDto {
@@ -452,6 +472,20 @@ export const api = {
   cancelRecordingFlow: (sessionId: string) => invoke<void>("cancel_recording_flow", { sessionId }),
   beginRecording: (sessionId: string) => invoke<void>("begin_recording", { sessionId }),
   getRecordingState: () => invoke<RecordingState>("get_recording_state"),
+  getRecordingAnnotations: (sessionId: string) =>
+    invoke<RecordingAnnotationsState>("get_recording_annotations", { sessionId }),
+  recordingAnnotationsReady: (sessionId: string) =>
+    invoke<void>("recording_annotations_ready", { sessionId }),
+  setRecordingAnnotationTool: (sessionId: string, tool: RecordingAnnotationTool) =>
+    invoke<RecordingAnnotationsState>("set_recording_annotation_tool", { sessionId, tool }),
+  recordingAnnotationAction: (sessionId: string, action: RecordingAnnotationAction) =>
+    invoke<void>("recording_annotation_action", { sessionId, action }),
+  updateRecordingAnnotationAppearance: (sessionId: string, patch: RecordingAnnotationAppearance,
+    transient = false, finish = false) =>
+    invoke<void>("update_recording_annotation_appearance", { sessionId, patch, transient, finish }),
+  updateRecordingAnnotations: (sessionId: string, revision: number, marks: AnnotationMark[],
+    canUndo: boolean, canRedo: boolean, hasMarks: boolean) =>
+    invoke<void>("update_recording_annotations", { sessionId, revision, marks, canUndo, canRedo, hasMarks }),
   positionRecordingControls: (request: {
     sessionId: string; width: number; height: number; contentScale: number; preservePosition: boolean;
   }) => invoke<{ maxWidth: number }>("position_recording_controls", request),
@@ -573,6 +607,35 @@ export function onRecordingState(
   handler: (state: RecordingState) => void,
 ): Promise<UnlistenFn> {
   return listen<RecordingState>("recording-state", (event) => handler(event.payload));
+}
+
+export function onRecordingAnnotationsState(handler: (state: RecordingAnnotationsState) => void): Promise<UnlistenFn> {
+  return listen<RecordingAnnotationsState>("recording-annotations-state", event => handler(event.payload));
+}
+
+export function onRecordingAnnotationAction(handler: (event: {
+  sessionId: string; action: RecordingAnnotationAction;
+}) => void): Promise<UnlistenFn> {
+  return listen<{ sessionId: string; action: RecordingAnnotationAction }>(
+    "recording-annotation-action", event => handler(event.payload));
+}
+
+export function onRecordingAnnotationAppearance(handler: (event: {
+  sessionId: string; patch: RecordingAnnotationAppearance; transient: boolean; finish: boolean;
+}) => void): Promise<UnlistenFn> {
+  return listen<{sessionId: string; patch: RecordingAnnotationAppearance; transient: boolean; finish: boolean}>(
+    "recording-annotation-appearance", event => handler(event.payload));
+}
+
+export function emitRecordingAnnotationSelection(sessionId: string, mark: AnnotationMark | null, editing: boolean): Promise<void> {
+  return emitTo("control-panel", "recording-annotation-selection", {sessionId, mark, editing});
+}
+
+export function onRecordingAnnotationSelection(handler: (event: {
+  sessionId: string; mark: AnnotationMark | null; editing: boolean;
+}) => void): Promise<UnlistenFn> {
+  return listen<{sessionId: string; mark: AnnotationMark | null; editing: boolean}>(
+    "recording-annotation-selection", event => handler(event.payload));
 }
 
 export function onShortcutSettingsChanged(handler: (settings: ShortcutSettingDto[]) => void) {

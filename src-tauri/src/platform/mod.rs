@@ -40,6 +40,8 @@ pub enum TransientWindowRole {
     RecordingCountdown,
     RecordingControls,
     RecordingRegion,
+    RecordingAnnotationInk,
+    RecordingAnnotationInput,
     ScrollCaptureRegion,
     CompletionFeedback,
     ClickRipple,
@@ -59,14 +61,15 @@ impl TransientWindowRole {
         TransientWindowPolicy {
             can_join_all_spaces: true,
             full_screen_auxiliary: true,
-            stationary: matches!(self, Self::ClickRipple | Self::RecordingRegion | Self::ScrollCaptureRegion),
+            stationary: matches!(self, Self::ClickRipple | Self::RecordingRegion | Self::ScrollCaptureRegion
+                | Self::RecordingAnnotationInk | Self::RecordingAnnotationInput),
             // Preserve the existing native levels: capture UI and completion
             // feedback use the screen-saver level, while the click ripple
             // continues to rely on its always-on-top window configuration.
-            screen_saver_level: !matches!(self, Self::ClickRipple | Self::RecordingRegion),
-            // Only the passive scrolling mask is decorative; its sibling
-            // controls and every other existing role retain their AX behavior.
-            accessibility_hidden: matches!(self, Self::ScrollCaptureRegion),
+            screen_saver_level: !matches!(self, Self::ClickRipple | Self::RecordingRegion | Self::RecordingAnnotationInk),
+            // Passive pixel layers are decorative; their separate controls
+            // and input surfaces retain their accessibility behavior.
+            accessibility_hidden: matches!(self, Self::ScrollCaptureRegion | Self::RecordingAnnotationInk),
         }
     }
 }
@@ -348,6 +351,15 @@ mod tests {
         let ripple = TransientWindowRole::ClickRipple.policy();
         assert!(ripple.stationary);
         assert!(!ripple.screen_saver_level);
+    }
+
+    #[test]
+    fn live_annotation_input_is_above_passive_recorded_ink() {
+        let input = TransientWindowRole::RecordingAnnotationInput.policy();
+        let ink = TransientWindowRole::RecordingAnnotationInk.policy();
+        assert!(input.stationary && ink.stationary);
+        assert!(input.screen_saver_level && !ink.screen_saver_level);
+        assert!(!input.accessibility_hidden && ink.accessibility_hidden);
     }
 
     #[test]

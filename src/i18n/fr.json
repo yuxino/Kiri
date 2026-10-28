@@ -860,5 +860,12 @@
   "Open System Settings": "Ouvrir les réglages système",
   "Save the captured area first, then pin it from the completion preview.": "Enregistrez d’abord la zone capturée, puis épinglez-la depuis l’aperçu de fin.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites glisser pour déplacer la fenêtre et défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace en faisant glisser pour déplacer l’image.",
-  "Zoom level": "Niveau de zoom"
+  "Zoom level": "Niveau de zoom",
+  "Annotate Recording": "Annoter l’enregistrement",
+  "Operate Desktop": "Utiliser le bureau",
+  "Preparing annotations…": "Préparation des annotations…",
+  "Could not update recording annotations. Try again.": "Impossible de mettre à jour les annotations de l’enregistrement. Réessayez.",
+  "Live annotations are unavailable for this recording.": "Les annotations en direct ne sont pas disponibles pour cet enregistrement.",
+  "Too many live annotations. Clear some marks to continue.": "Trop d’annotations en direct. Effacez-en quelques-unes pour continuer.",
+  "This annotation tool is unavailable while recording.": "Cet outil d’annotation n’est pas disponible pendant l’enregistrement."
 }

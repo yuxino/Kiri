@@ -4339,7 +4339,8 @@ pub async fn cancel_recording_flow(app: AppHandle, session_id: uuid::Uuid) -> Re
     Ok(())
 }
 
-fn close_recording_windows(app: &AppHandle) {
+fn close_recording_windows(app: &AppHandle, session_id: uuid::Uuid) {
+    crate::recording_annotations::release_input(app, session_id);
     for label in ["countdown", "control-panel", "recording-region", "ripple"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.close();
@@ -4369,10 +4370,11 @@ fn discard_active_recording(mut active: ActiveRecording) {
 
 fn cleanup_abandoned_recording(app: &AppHandle, abandoned: RecordingFlow) {
     stop_click_monitor(app);
-    close_recording_windows(app);
+    close_recording_windows(app, abandoned.session_id);
     if let Some(active) = abandoned.active {
         discard_active_recording(active);
     }
+    crate::recording_annotations::close(app, abandoned.session_id);
     for path in abandoned.segments {
         let _ = std::fs::remove_file(path);
     }
@@ -4525,7 +4527,7 @@ pub fn position_recording_controls(
         return Err("This command is unavailable from this window.".into());
     }
     if !width.is_finite() || !height.is_finite() || !content_scale.is_finite()
-        || !(96.0..=640.0).contains(&width) || !(40.0..=96.0).contains(&height)
+        || !(96.0..=640.0).contains(&width) || !(40.0..=240.0).contains(&height)
         || !(0.5..=8.0).contains(&content_scale) {
         return Err("Invalid recording control dimensions.".into());
     }
@@ -4778,8 +4780,9 @@ fn start_recorder(
     #[cfg(any(windows, target_os = "linux"))]
     let _ = app;
     #[cfg(target_os = "macos")]
-    let ripple_excepted = platform::window_capture_id(app, "ripple")
-        .into_iter()
+    let recorded_windows = [platform::window_capture_id(app, "ripple"),
+        crate::recording_annotations::capture_window_id(app)]
+        .into_iter().flatten()
         .collect::<Vec<_>>();
     #[cfg(target_os = "macos")]
     {
@@ -4789,7 +4792,7 @@ fn start_recorder(
             configuration.region,
             configuration.backing_scale,
             configuration.options.clone(),
-            &ripple_excepted,
+            &recorded_windows,
             senders.video,
             senders.system_audio,
             senders.microphone,
@@ -4980,6 +4983,8 @@ fn spawn_recording_clock(app: &AppHandle, session_id: uuid::Uuid) {
     let handle = app.clone();
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(250));
+        #[cfg(not(target_os = "linux"))]
+        crate::recording_annotations::remember_desktop_focus(&handle, session_id);
         #[cfg(target_os = "linux")]
         if let Err(error) = stop_failed_linux_recording(&handle, session_id) {
             log::error!("recording: failed Linux session cleanup: {error}");
@@ -5054,6 +5059,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
                     log::warn!("recording region indicator unavailable: {error}");
                 }
                 create_control_panel(&app, &configuration, session_id)?;
+                crate::recording_annotations::prepare(&app, &configuration, session_id);
             }
             if configuration.options.highlights_clicks {
                 create_ripple_window(&app, &configuration)?;
@@ -5567,7 +5573,8 @@ fn stop_recording_session(
     };
 
     stop_click_monitor(&app);
-    close_recording_windows(&app);
+    let session_id = app.state::<AppState>().recording.lock().unwrap().session_id;
+    close_recording_windows(&app, session_id);
 
     let completion_id = uuid::Uuid::new_v4().to_string();
     let save_job = RecordingSaveJobGuard::begin(&app, RecordingSaveJobDto {
@@ -6072,6 +6079,7 @@ fn require_known_frontend_window(window: &WebviewWindow) -> Result<(), String> {
     if matches!(
         label,
         "library" | "overlay" | "countdown" | "control-panel" | "recording-region" | "ripple" | "confirm" | "toast"
+        | "recording-annotation-input" | "recording-annotation-ink"
     ) || ["viewer-", "editor-"]
         .iter()
         .any(|prefix| label.starts_with(prefix))

@@ -240,11 +240,13 @@ impl Default for RecordingFlow {
             completion_monitor: None,
             session_id: uuid::Uuid::nil(),
             controls_presented: false,
+            annotations: Default::default(),
         }
     }
 }
 
 pub struct RecordingFlow {
+    pub annotations: crate::recording_annotations::RecordingAnnotations,
     /// Stable identity for timer/finalization work owned by this session.
     pub session_id: uuid::Uuid,
     /// PID of the app that was frontmost before capture (focus restoration).

@@ -89,6 +89,10 @@ export interface AnnotationExportResult {
 interface Props {
   /** Full-resolution source image element. */
   image: HTMLImageElement | null;
+  /** Live desktop input has no frozen background; only annotation chrome is shown. */
+  transparent?: boolean;
+  /** Recording ink can be cleared in one reversible action. */
+  undoableClear?: boolean;
   /** Region of the source in display-local points (top-left). */
   region: Rect;
   /**
@@ -263,6 +267,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
   function AnnotationCanvas(
     {
       image,
+      transparent = false,
+      undoableClear = false,
       region,
       displaySize,
       initialDocument,
@@ -575,7 +581,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       const sourceImage = getSourceImage();
-      if (!sourceImage) return;
+      if (!sourceImage && !transparent) return;
       ctx.setTransform(
         renderScale * viewScaleX,
         0,
@@ -586,13 +592,13 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       );
       const context: RenderContext = {
         ctx,
-        sourceImage,
-        sourceWidth: sourceImage.naturalWidth,
-        sourceHeight: sourceImage.naturalHeight,
+        sourceImage: sourceImage ?? canvas,
+        sourceWidth: sourceImage?.naturalWidth ?? canvas.width,
+        sourceHeight: sourceImage?.naturalHeight ?? canvas.height,
         sourceOffset: { x: region.x, y: region.y },
         regionSize: { x: 0, y: 0, width: documentSize.width, height: documentSize.height },
-        scaleX: sourceImage.naturalWidth / (displaySize?.width ?? documentSize.width),
-        scaleY: sourceImage.naturalHeight / (displaySize?.height ?? documentSize.height),
+        scaleX: sourceImage ? sourceImage.naturalWidth / (displaySize?.width ?? documentSize.width) : 1,
+        scaleY: sourceImage ? sourceImage.naturalHeight / (displaySize?.height ?? documentSize.height) : 1,
         viewScaleX,
         viewScaleY,
         exporting: false,
@@ -609,6 +615,13 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if (editing.index === null) drawingDraft = watermark;
         else previewMarks = previewMarks.map((mark, index) => index === editing.index ? watermark : mark);
       }
+      // The recorded ink surface shows typed text without the native editor's
+      // caret, selection or border. Screenshot/video editor behavior is unchanged.
+      if (transparent && editing && !editing.callout && !editing.watermark) {
+        const text = editingTextMark(editing);
+        if (editing.index === null) drawingDraft = text;
+        else previewMarks = previewMarks.map((mark, index) => index === editing.index ? text : mark);
+      }
       renderAll(context, previewMarks, {
         draft: drawingDraft,
         brushCursor: (interactionRef.current.kind === "draw" && interactionRef.current.mosaic?.shape === "brush") ||
@@ -619,6 +632,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         editingIndex: editing ? editing.index : null,
         editingId: editing?.id,
         chromeOnly: !!onLiveMarks,
+        transparent,
       });
       onLiveMarks?.(previewMarks, drawingDraft, editing?.index != null ? marks[editing.index]?.id ?? null : null);
       onFrame?.(canvas);
@@ -648,6 +662,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       getSourceImage,
       onFrame,
       onLiveMarks,
+      transparent,
     ]);
 
     // Updating a canvas backing size clears it. Repaint before the resized or
@@ -1770,11 +1785,16 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         redo: () => redoRef.current(),
         clearAnnotations: () => {
           if (interactionsDisabled()) return;
-          if (history.elements.length === 0 && !editingRef.current) return;
+          finishAppearanceAdjustment();
+          interactionRef.current = {kind: "none"};
+          setDraft(null);
+          setBrushCursor(null);
+          setSelectCursor("default");
+          clearCaptureClicks();
           // Spec §10.1: clear also discards an in-flight text edit.
           editingRef.current = null;
           setEditing(null);
-          history.clear();
+          history.clear(undoableClear);
           selectMark(null);
           syncMarks();
         },
@@ -1817,7 +1837,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         setTextFontSizeLive: (value: number) => setFontLiveRef.current(value),
         endTextFontSizeAdjustment: () => endFontAdjustRef.current(),
       }),
-      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,editCallout,startWatermark,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
+      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,editCallout,startWatermark,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment,undoableClear],
     );
 
     const dotMarks = draft && marks.some(mark => mark.id === draft.id)
@@ -2013,6 +2033,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               editing={editing}
               bounds={documentSize}
               disabled={interactionDisabled}
+              inkOnlyText={transparent && !!onLiveMarks}
               onToggleDirection={() => toggleLabel(editing.id)}
               onTextChange={updateEditingText}
               onRectChange={updateEditingRect}
@@ -2048,6 +2069,8 @@ function TextEditor(props: {
   editing: EditingState;
   bounds: { width: number; height: number };
   disabled: boolean;
+  /** The separate recorded layer supplies the glyphs; retain native caret/IME. */
+  inkOnlyText?: boolean;
   onToggleDirection(): void;
   onTextChange(text: string): void;
   onRectChange(rect: Rect, fontSize?: number): void;
@@ -2063,6 +2086,7 @@ function TextEditor(props: {
     editing,
     bounds,
     disabled,
+    inkOnlyText,
     onTextChange,
     onToggleDirection,
     onRectChange,
@@ -2207,7 +2231,7 @@ function TextEditor(props: {
       className={editing.callout ? "kiri-callout-editor" : label ? "kiri-label-text-editor" : undefined}
       aria-label={t(editing.callout ? "Description (optional)" : "Text content")}
       aria-describedby={editing.callout ? undefined : hintId}
-      maxLength={editing.watermark ? 512 : editing.callout ? 1000 : undefined}
+      maxLength={editing.watermark ? 512 : editing.callout ? 1000 : inkOnlyText ? 8192 : undefined}
       disabled={disabled}
       placeholder={t(editing.callout ? "Add a description…" : "Type something…")}
       spellCheck={false}
@@ -2253,7 +2277,8 @@ function TextEditor(props: {
         boxSizing: "border-box",
         padding: editing.callout ? Math.max(0, Math.max(4, editing.fontSize * .5) - editing.uiScale) : `${5*editing.uiScale}px ${8*editing.uiScale}px`,
         font: textFont(editing.fontSize),
-        color: label ? "#fafafa" : COLOR_HEX[editing.color],
+        color: inkOnlyText ? "transparent" : label ? "#fafafa" : COLOR_HEX[editing.color],
+        caretColor: label ? "#fafafa" : COLOR_HEX[editing.color],
         background: "transparent",
         outline: "none",
         boxShadow: "none",

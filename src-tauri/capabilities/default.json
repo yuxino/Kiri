@@ -11,6 +11,8 @@
     "scroll-capture",
     "scroll-capture-region",
     "recording-region",
+    "recording-annotation-input",
+    "recording-annotation-ink",
     "ripple",
     "viewer-*",
     "pin-*",

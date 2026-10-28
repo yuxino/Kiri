@@ -5,12 +5,19 @@ import { api, onRecordingState, onShortcutSettingsChanged, type RecordingState, 
 import { t } from "../i18n";
 import { KiriIcon } from "../components/KiriIcons";
 import { useRecordingControlsLayout } from "./useRecordingControlsLayout";
+import { useRecordingAnnotations } from "./useRecordingAnnotations";
+import { RecordingAnnotationControls } from "./RecordingAnnotationControls";
+import "./recording-annotations.css";
 
 export function ControlPanelWindow() {
   const [state, setState] = useState<RecordingState | null>(null);
   const [shortcuts, setShortcuts] = useState<ShortcutSettingDto[]>([]);
   const sessionId = new URLSearchParams(window.location.search).get("session") ?? "";
   const { surface, ...dragHandlers } = useRecordingControlsLayout(sessionId);
+  const {state: annotations, failed: annotationsFailed} = useRecordingAnnotations(sessionId);
+  const [annotationsExpanded, setAnnotationsExpanded] = useState(false);
+  const [annotationError, setAnnotationError] = useState(false);
+  const [annotationPending, setAnnotationPending] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -90,6 +97,16 @@ export function ControlPanelWindow() {
           {state?.elapsedLabel ?? "00:00"}
         </span>
         <span className="kiri-record-controls__divider" aria-hidden="true" />
+        {annotations?.supported && <button type="button" className="kiri-record-control-button"
+          title={annotations.ready ? t("Annotate Recording") : t("Preparing annotations…")}
+          aria-label={t("Annotate Recording")} aria-expanded={annotationsExpanded}
+          aria-pressed={annotations.tool !== "desktop"} disabled={busy || !hasSession || !annotations.ready || annotationPending}
+          onClick={() => {
+            const enabling = annotations.tool === "desktop";
+            setAnnotationsExpanded(enabling); setAnnotationError(false); setAnnotationPending(true);
+            void api.setRecordingAnnotationTool(sessionId, enabling ? "pen" : "desktop")
+              .catch(() => setAnnotationError(true)).finally(() => setAnnotationPending(false));
+          }}><KiriIcon name="pencil.tip" size={17}/></button>}
         <button
           type="button"
           className="kiri-record-control-button kiri-record-control-button--stop"
@@ -102,6 +119,10 @@ export function ControlPanelWindow() {
           <span className="kiri-record-control-button__label">{state?.isStarting ? t("Cancel") : t("Stop Recording")}</span>
         </button>
       </div>
+      {annotationsExpanded && annotations?.ready && <RecordingAnnotationControls
+        sessionId={sessionId} state={annotations} disabled={busy || !hasSession}/>}
+      {(annotationError || annotationsFailed || (annotations?.supported && !annotations.available && annotations.error)) &&
+        <p className="kiri-record-annotation-notice" role="alert">{t(annotations?.error ?? "Could not update recording annotations. Try again.")}</p>}
     </div>
   );
 }

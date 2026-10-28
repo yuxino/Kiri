@@ -46,7 +46,15 @@ Die Aufnahmevorbereitung bietet MP4 / GIF, Start und vier nebeneinanderliegende 
 
 Der kleine Pfeil neben dem Mikrofon öffnet die Auswahl der verfügbaren Eingabegeräte, ohne das Standardgerät des Systems zu ändern. Ist das gewählte Gerät nicht verfügbar oder wird es getrennt, meldet Kiri einen Fehler, statt unbemerkt zu einem anderen Mikrofon zu wechseln.
 
+### Während der Aufnahme annotieren
+
+Unter macOS und Windows öffnet **Aufnahme annotieren** in der Aufnahmeleiste die Werkzeuge Stift, Pfeil, Rechteck und Text. Vorhandene Anmerkungen lassen sich auswählen und bearbeiten. Farbe, Strichstärke und Textgröße folgen den Anmerkungseinstellungen. Mit **Desktop bedienen** können Sie die darunterliegende App wieder verwenden; die Anmerkungen bleiben sichtbar.
+
+Rückgängig und Wiederholen gelten für die Anmerkungen. **Anmerkungen löschen** entfernt alle aktuellen Anmerkungen und lässt sich rückgängig machen. Solange die Anmerkungsebene den Fokus hat, löscht auch Cmd/Ctrl+Shift+Backspace alle Anmerkungen. Esc bricht zuerst eine Texteingabe oder Zeichengeste ab und kehrt danach zur Desktop-Bedienung zurück. Anmerkungen können während einer Pause angepasst werden; beim Fortsetzen wird das Ergebnis aufgenommen. Sie werden Bestandteil des Aufnahmebilds und können später nicht wie Videoeditor-Anmerkungen einzeln entfernt werden. Bedienelemente, Auswahlrahmen und Textcursor erscheinen nicht in der Aufnahme. Live-Anmerkungen sind unter Linux nicht verfügbar.
+
 ## Scrollaufnahmen
+
+Klicken Sie nach dem Speichern einer Scrollaufnahme auf das Bild in der Abschlussvorschau, um es im Editor zu annotieren. Es lässt sich auch über die Bibliothek öffnen.
 
 Wählen Sie den scrollenden Inhalt und vor dem Hinzufügen von Anmerkungen **Scrollaufnahme** in der Screenshot-Leiste. Beginnen Sie an beliebiger Stelle und scrollen Sie wie gewohnt nach oben oder unten. Bereits erfasster Inhalt wird beim Zurückscrollen nicht doppelt hinzugefügt. Lesepausen beenden die Aufnahme nicht. **Fertig** kopiert und speichert das Bild; vor dem Speichern bricht Esc ab. Enter bleibt für die ursprüngliche Anwendung verfügbar.
 

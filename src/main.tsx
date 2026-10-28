@@ -32,6 +32,9 @@ const RippleWindow = React.lazy(() =>
 const RecordingRegionWindow = React.lazy(() =>
   import("./windows/RecordingRegionWindow").then((module) => ({ default: module.RecordingRegionWindow })),
 );
+const RecordingAnnotationWindow = React.lazy(() =>
+  import("./windows/RecordingAnnotationWindow").then(module => ({default: module.RecordingAnnotationWindow})),
+);
 const EditorWindow = React.lazy(() =>
   import("./windows/EditorWindow").then((module) => ({ default: module.EditorWindow })),
 );
@@ -109,6 +112,10 @@ function App() {
         width={Number(params.get("width"))} height={Number(params.get("height"))} />;
     case "recording-region":
       return <RecordingRegionWindow />;
+    case "recording-annotation-input":
+      return <RecordingAnnotationWindow />;
+    case "recording-annotation-ink":
+      return <RecordingAnnotationWindow ink />;
     case "ripple":
       return <RippleWindow />;
     case "editor":

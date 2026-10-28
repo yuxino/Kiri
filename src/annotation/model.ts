@@ -330,7 +330,14 @@ export class AnnotationHistory {
     return step.redoResult;
   }
 
-  clear(): void {
+  clear(undoable = false): void {
+    if (undoable) {
+      if (!this.visible.length) return;
+      const before = this.visible.slice();
+      this.visible = [];
+      this.record({before, after: [], undoResult: null, redoResult: null});
+      return;
+    }
     this.visible = [];
     this.undoSteps = [];
     this.redoSteps = [];
