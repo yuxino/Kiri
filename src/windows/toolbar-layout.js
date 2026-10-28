@@ -147,7 +147,7 @@ export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = n
   if (modeSelector) free = exclude(free, modeSelector, 10);
   // A user-chosen position wins over automatic annotation avoidance. Retain it
   // when content grows by scrolling in place, rather than snapping the panel.
-  const minimumHeight = Math.min(size.height, 80);
+  const minimumHeight = Math.min(size.height, size.minimumHeight ?? 80);
   if (!preferredPosition && avoidBounds.length) {
     let clear = free;
     for (const rect of avoidBounds) clear = exclude(clear, rect, 10);

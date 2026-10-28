@@ -22,11 +22,18 @@ const background = { x: 60, y: 80, width: 1320, height: 830 };
 const normal = { x: 200, y: 100, width: 800, height: 680 };
 const floating = { x: 350, y: 310, width: 480, height: 120 };
 
+class OverlayTarget {
+  constructor(ancestors = []) { this.ancestors = new Set(ancestors); }
+  closest(selectors) {
+    return selectors.split(",").some(selector => this.ancestors.has(selector.trim())) ? this : null;
+  }
+}
+
 // Mount the entire real OverlayWindow and dispatch its rendered handlers.
 // Only native/data-loading boundaries and unrelated child surfaces are stubbed;
 // the selection state, geometry, phase changes and rendered outlines stay real.
 async function overlay(t, { windowRects = [floating, normal, background], scale = 2,
-  devicePixelRatio = scale, width = 1512, height = 982, scrollingCapture = true } = {}) {
+  devicePixelRatio = scale, width = 1512, height = 982, scrollingCapture = true, expectedCancellations = 0 } = {}) {
   const errors = [];
   const scrollStarts = [];
   let cancelled = 0;
@@ -39,6 +46,7 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
       fetch: async () => ({ ok: true, blob: async () => new Blob(["test frozen capture"]) }),
       Image: class { src = ""; },
       ResizeObserver: class { observe() {} disconnect() {} },
+      Element: OverlayTarget,
     },
     modules: {
       "@tauri-apps/api/core": { invoke: async (_command, value) => { errors.push(value); } },
@@ -70,7 +78,7 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
   });
   Object.assign(harness.window, { innerWidth: width, innerHeight: height, devicePixelRatio });
   const component = harness.mount("OverlayWindow", {});
-  t.after(() => { component.unmount(); assert.deepEqual(errors, []); assert.equal(cancelled, 0); });
+  t.after(() => { component.unmount(); assert.deepEqual(errors, []); assert.equal(cancelled, expectedCancellations); });
   let tree = component.render();
   await settleRequests();
   tree = component.render();
@@ -94,6 +102,14 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
   };
   return { region, hoverRect, scrollStarts,
     toolbar: () => nodes(render()).find(node => node?.type?.name === "Toolbar"),
+    contextMenu(ancestors = [], defaultPrevented = false) {
+      render();
+      const event = { target: new OverlayTarget(ancestors), defaultPrevented,
+        preventDefault() { this.defaultPrevented = true; } };
+      tree.props.onContextMenu(event);
+      render();
+      return event;
+    },
     annotationContent(hasContent, canUndo = hasContent) {
       nodes(render()).find(node => node?.type === "annotation-canvas").props.onHistoryChange(canUndo, false, hasContent);
       render();
@@ -112,6 +128,45 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
     },
   };
 }
+
+test("input and HUD context menus preserve the capture selection and annotation phase", async t => {
+  for (const ancestors of [["textarea"], ["input"], ["select"], ["[contenteditable]"],
+    ["button"], ["a"], [".kiri-hud"], [".kiri-record-options"], [".kiri-choice-menu"]]) {
+    const h = await overlay(t);
+    h.click(400, 350);
+    h.toolbar().props.setTool("text");
+    assert.equal(h.toolbar().props.canSetSize, false);
+    const before = h.region();
+    const event = h.contextMenu(ancestors);
+    assert.equal(event.defaultPrevented, false, `${ancestors} retains its native menu`);
+    assert.deepEqual(h.region(), before, `${ancestors} must not unmount the annotated region`);
+    assert.equal(h.toolbar().props.canSetSize, false, "the annotation session stays active");
+  }
+});
+
+test("a context menu already handled by a child cannot reset the capture", async t => {
+  const h = await overlay(t);
+  h.click(400, 350);
+  h.toolbar().props.setTool("rectangle");
+  const before = h.region();
+  const event = h.contextMenu([], true);
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(h.region(), before);
+  assert.equal(h.toolbar().props.canSetSize, false);
+});
+
+test("blank-canvas context menus still reselect during annotation and cancel before annotation", async t => {
+  const annotated = await overlay(t);
+  annotated.click(400, 350);
+  annotated.toolbar().props.setTool("rectangle");
+  assert.equal(annotated.contextMenu().defaultPrevented, true);
+  assert.equal(annotated.region(), null);
+  assert.equal(annotated.toolbar(), undefined);
+
+  const selecting = await overlay(t, {expectedCancellations: 1});
+  selecting.click(400, 350);
+  assert.equal(selecting.contextMenu().defaultPrevented, true);
+});
 
 for (const [scale, devicePixelRatio] of [[1, 1], [2, 2], [2, 2.5]]) {
   test(`hover and click agree for overlapping app and floating windows at scale ${scale}, DPR ${devicePixelRatio}`, async t => {
