@@ -382,6 +382,14 @@ Changes are debounced as field-level patches, merged under the native preference
 lock, and broadcast to open windows. The active tool, selection, crop,
 and document content are never persisted as appearance preferences.
 
+`components/AnnotationTools` owns the shared tool definitions and grouped
+`AnnotationToolbarButton` rendering for capture, saved images, live recording
+and video editing. Capture, saved images and live recording also share its
+Undo/Redo/Clear button renderer and `AnnotationStyleControls`; each window
+supplies its supported tools, actions and layout. Video editing shares the tool
+core while retaining its timeline history and property inspector, which converts
+visual widths and font sizes between display and source coordinates.
+
 The screenshot annotation toolbar and property panel have separate drag handles
 with keyboard adjustments. Manual positions belong to the current capture and
 survive selection, tool, and property changes. The main toolbar stays within the

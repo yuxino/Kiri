@@ -17,6 +17,12 @@ editing controls into the captured picture or preventing normal app interaction.
   Pen, Arrow, Rectangle and Text share existing annotation appearance settings;
   Select can edit existing marks. Mosaic is excluded because a transparent
   annotation surface has no live source pixels to sample.
+- `AnnotationTools` defines the shared tool order, icons, names, shortcuts and
+  grouped buttons for capture, saved images, live recording and video editing.
+  Capture, saved images and live recording also reuse its history buttons and
+  `AnnotationStyleControls`. Each window selects its supported tools and owns
+  its layout and actions. Video editing retains its timeline history and
+  property inspector, including conversion between display and source sizes.
 - **Operate Desktop** releases annotation input while retaining the visible
   marks. Escape first cancels active text editing or an in-flight gesture, then
   returns to desktop operation. Tool keys and Cmd/Ctrl+Shift+Backspace for
