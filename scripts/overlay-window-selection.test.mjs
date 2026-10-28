@@ -33,15 +33,24 @@ class OverlayTarget {
 // Only native/data-loading boundaries and unrelated child surfaces are stubbed;
 // the selection state, geometry, phase changes and rendered outlines stay real.
 async function overlay(t, { windowRects = [floating, normal, background], scale = 2,
-  devicePixelRatio = scale, width = 1512, height = 982, scrollingCapture = true, expectedCancellations = 0 } = {}) {
+  devicePixelRatio = scale, width = 1512, height = 982, scrollingCapture = true, expectedCancellations = 0,
+  canvasActions = {} } = {}) {
   const errors = [];
   const scrollStarts = [];
+  const confirmations = [];
   let cancelled = 0;
   const context = { captureId: "capture-1", displayWidth: width, displayHeight: height, scale,
     pixelWidth: Math.round(width * scale), pixelHeight: Math.round(height * scale),
     windowRects, sourceApplication: "selection-test" };
   const harness = createLibraryHarness({}, source, {
     search: "?window=overlay&captureToken=0123456789abcdef0123456789abcdef",
+    attachRef(node) {
+      if (node.type === "annotation-canvas") node.props.ref.current = {
+        commitTextEditing: () => true, finishAppearanceAdjustment() {}, clearSelection() {},
+        exportResult: async () => ({png: new Uint8Array([1]), document: null}),
+        cancelInteraction: () => false, ...canvasActions,
+      };
+    },
     globals: {
       fetch: async () => ({ ok: true, blob: async () => new Blob(["test frozen capture"]) }),
       Image: class { src = ""; },
@@ -57,6 +66,7 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
         micSupported: async () => true,
         platformCapabilities: async () => ({ scrollingCapture, recording: true, microphone: true, systemAudio: true, clickHighlights: true }),
         startScrollCapture: async (captureId, selection) => { scrollStarts.push({ captureId, selection }); },
+        confirmCapture: async (...args) => { confirmations.push(args); },
         cancelCapture: async () => { cancelled++; },
       } },
       "../annotation/geom": geometry.exports,
@@ -100,8 +110,17 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
       preventDefault() {}, stopPropagation() {} });
     render();
   };
-  return { region, hoverRect, scrollStarts,
+  return { region, hoverRect, scrollStarts, confirmations,
     toolbar: () => nodes(render()).find(node => node?.type?.name === "Toolbar"),
+    key(key, repeat = false) {
+      harness.window.dispatchEvent({type: "keydown", key, repeat, target: new OverlayTarget(),
+        preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}});
+      render();
+    },
+    annotationSelection(mark, editing) {
+      nodes(render()).find(node => node?.type === "annotation-canvas").props.onSelectionInfo(mark, editing);
+      render();
+    },
     contextMenu(ancestors = [], defaultPrevented = false) {
       render();
       const event = { target: new OverlayTarget(ancestors), defaultPrevented,
@@ -115,6 +134,8 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
       render();
     },
     hover: (x, y) => pointer("onPointerMove", x, y),
+    down: (x, y) => pointer("onPointerDown", x, y),
+    up: (x, y) => pointer("onPointerUp", x, y),
     click(x, y) { pointer("onPointerDown", x, y); pointer("onPointerUp", x, y); },
     drag(from, move, release) {
       pointer("onPointerDown", ...from);
@@ -155,17 +176,94 @@ test("a context menu already handled by a child cannot reset the capture", async
   assert.equal(h.toolbar().props.canSetSize, false);
 });
 
-test("blank-canvas context menus still reselect during annotation and cancel before annotation", async t => {
-  const annotated = await overlay(t);
+test("blank-canvas context menus retain annotated region and history while returning to Select", async t => {
+  let cleared = 0;
+  const annotated = await overlay(t, {canvasActions: {clearSelection() { cleared++; }}});
   annotated.click(400, 350);
   annotated.toolbar().props.setTool("rectangle");
+  annotated.annotationContent(true);
+  const region = annotated.region();
+  const before = cleared;
   assert.equal(annotated.contextMenu().defaultPrevented, true);
-  assert.equal(annotated.region(), null);
-  assert.equal(annotated.toolbar(), undefined);
+  assert.deepEqual(annotated.region(), region);
+  assert.equal(annotated.toolbar().props.tool, "select");
+  assert.equal(annotated.toolbar().props.canUndo, true);
+  assert.equal(annotated.toolbar().props.canSetSize, false);
+  assert.equal(cleared, before + 1);
+  annotated.contextMenu();
+  assert.deepEqual(annotated.region(), region, "another right click cannot discard the completed marks");
+});
 
+test("right click ends only the current text edit or drag before leaving the drawing tool", async t => {
+  for (const editing of [true, false]) {
+    let commits = 0, cancelled = 0, cleared = 0;
+    const h = await overlay(t, {canvasActions: {
+      commitTextEditing() { commits++; return true; },
+      cancelInteraction() { cancelled++; return true; },
+      clearSelection() { cleared++; },
+    }});
+    h.click(400, 350);
+    h.toolbar().props.setTool("text");
+    h.annotationSelection(null, editing);
+    const region = h.region();
+    const before = {commits, cancelled, cleared};
+    h.contextMenu();
+    assert.deepEqual(h.region(), region);
+    assert.equal(h.toolbar().props.tool, "text");
+    assert.equal(commits, before.commits + Number(editing));
+    assert.equal(cancelled, before.cancelled + Number(!editing));
+    assert.equal(cleared, before.cleared);
+  }
+});
+
+test("right click clears an unannotated selection before cancelling the capture", async t => {
   const selecting = await overlay(t, {expectedCancellations: 1});
   selecting.click(400, 350);
   assert.equal(selecting.contextMenu().defaultPrevented, true);
+  assert.equal(selecting.region(), null);
+  assert.equal(selecting.toolbar(), undefined);
+  selecting.contextMenu();
+});
+
+test("right click while moving or resizing a region cannot restore it on a late move or release", async t => {
+  for (const start of [[400, 350], [350, 310]]) {
+    const h = await overlay(t);
+    h.click(400, 350);
+    h.down(...start);
+    h.hover(start[0] + 25, start[1] + 25);
+    h.contextMenu();
+    assert.equal(h.region(), null);
+    h.hover(start[0] + 60, start[1] + 60);
+    h.up(start[0] + 60, start[1] + 60);
+    assert.equal(h.region(), null);
+    assert.equal(h.toolbar(), undefined);
+    h.drag([100, 100], [400, 300], [400, 300]);
+    assert.deepEqual(h.region(), {x: 100, y: 100, width: 300, height: 200}, "a fresh drag still works");
+  }
+});
+
+test("Select and V preserve region resizing until a drawing tool is chosen", async t => {
+  const annotated = await overlay(t);
+  annotated.click(400, 350);
+  annotated.toolbar().props.setTool("select");
+  assert.equal(annotated.toolbar().props.canSetSize, true);
+  annotated.key("v");
+  assert.equal(annotated.toolbar().props.canSetSize, true);
+  annotated.toolbar().props.setTool("rectangle");
+  annotated.key("v");
+  assert.equal(annotated.toolbar().props.canSetSize, false, "Select cannot move the crop after annotation begins");
+});
+
+test("only a fresh Enter confirms after text input has closed", async t => {
+  const h = await overlay(t, {expectedCancellations: 1});
+  h.click(400, 350);
+  h.toolbar().props.setTool("text");
+  h.key("Enter", true);
+  await settleRequests();
+  assert.equal(h.confirmations.length, 0, "held Enter cannot finish the capture after closing an input");
+  h.key("Enter");
+  await settleRequests();
+  assert.equal(h.confirmations.length, 1, "a new Enter outside input still confirms the screenshot");
 });
 
 for (const [scale, devicePixelRatio] of [[1, 1], [2, 2], [2, 2.5]]) {

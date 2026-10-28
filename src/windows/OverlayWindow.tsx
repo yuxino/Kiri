@@ -37,7 +37,6 @@ import {
 } from "../annotation/geom";
 import {
   nextCalloutNumber,
-  selectionBounds,
   type AnnotationMark,
   type AppearanceSettings,
   type Tool,
@@ -286,18 +285,6 @@ export function OverlayWindow() {
   const bounds: Rect = context
     ? { x: 0, y: 0, width: context.displayWidth, height: context.displayHeight }
     : { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
-
-  const selectedAnnotationBounds = useMemo(() => {
-    if (!selectedMark || !selection) return [];
-    // Canvas marks use selection-local logical points, including live text
-    // editors. Protect an empty callout editor as well as its separate badge.
-    const rects = selectedMark.kind === "callout"
-      ? [{x: selectedMark.center.x - selectedMark.size / 2, y: selectedMark.center.y - selectedMark.size / 2,
-          width: selectedMark.size, height: selectedMark.size},
-        ...(selectedMarkEditing || selectedMark.text.trim() ? [selectedMark.labelRect] : [])]
-      : [selectionBounds(selectedMark)];
-    return rects.map(rect => ({...rect, x: rect.x + selection.x, y: rect.y + selection.y}));
-  }, [selectedMark, selectedMarkEditing, selection]);
 
   const colorPicker = useCaptureColorPicker(
     !!context && mode === "screenshot" && (phase === "mode-select" || phase === "selecting") &&
@@ -691,6 +678,8 @@ export function OverlayWindow() {
         return;
       }
       if (e.key === "Enter" || e.key === "Return") {
+        // Holding Enter after a text editor closes must not also finish capture.
+        if (e.repeat) return;
         const ph = phaseRef.current;
         if (ph === "ocr-consent") {
           // Privacy default: Return never sends an image to a remote provider.
@@ -744,8 +733,8 @@ export function OverlayWindow() {
           canvasRef.current?.commitTextEditing();
           canvasRef.current?.finishAppearanceAdjustment();
           if (next !== "select") canvasRef.current?.clearSelection();
-          if (phaseRef.current === "selecting" && selectionRef.current) {
-            // Selecting a tool locks the region into annotation mode.
+          if (next !== "select" && phaseRef.current === "selecting" && selectionRef.current) {
+            // A drawing tool locks the region; Select keeps it adjustable.
             setPhase("annotating");
             setTool(next);
           } else {
@@ -1039,16 +1028,31 @@ export function OverlayWindow() {
         if (e.defaultPrevented || (e.target instanceof Element && e.target.closest(
           "input, textarea, select, [contenteditable], button, a, .kiri-hud, .kiri-record-options, .kiri-choice-menu",
         ))) return;
-        // Spec §1.6: right-click returns to region selection while
-        // annotating (tearing down annotations); otherwise it cancels.
+        // Step out of the current operation without discarding completed
+        // annotations. Escape and Cancel still explicitly leave capture.
         e.preventDefault();
-        if (completing) return;
+        if (completionLock.locked) return;
         if (phase === "qr-result") {
           closeQr();
         } else if (phase === "annotating") {
-          setPhase("selecting");
-          setSelection(null);
+          const canvas = canvasRef.current;
+          if (selectedMarkEditing) {
+            canvas?.commitTextEditing();
+            return;
+          }
+          if (canvas?.cancelInteraction()) return;
+          canvas?.finishAppearanceAdjustment();
+          canvas?.clearSelection();
           setTool("select");
+        } else if (mode === "screenshot" && phase === "selecting" && selection) {
+          setDrag(null);
+          setMoveDrag(null);
+          setResizeHandle(null);
+          selectionPointerStartRef.current = null;
+          selectionClickMovedRef.current = true;
+          doubleClickCanFinishRef.current = false;
+          selectionRef.current = null;
+          setSelection(null);
         } else {
           cancel();
         }
@@ -1229,7 +1233,6 @@ export function OverlayWindow() {
               setCanRedo(r);
             }}
             onCancel={cancel}
-            onFinishAfterTextCommit={() => void complete()}
             onFinishOnBlankDoubleClick={mode === "screenshot" ? () => void complete() : undefined}
           />
         </div>
@@ -1400,13 +1403,12 @@ export function OverlayWindow() {
             }
             canvasRef.current?.commitTextEditing();
             if (next !== "select") canvasRef.current?.clearSelection();
-            if (phase === "selecting") setPhase("annotating");
+            if (next !== "select" && phase === "selecting") setPhase("annotating");
             setTool(next);
           }}
           appearance={appearance}
           setAppearance={setAppearance}
           selectedMark={selectedMark}
-          avoidBounds={selectedAnnotationBounds}
           renderStyleControls={panelChrome => <AnnotationStyleControls panelChrome={panelChrome} tool={tool} selected={selectedMark} appearance={appearance}
             disabled={completing} nextNumber={calloutNumber} onNextNumber={setCalloutNumber}
             onCalloutEdit={(patch, transient) => canvasRef.current?.updateSelectedCallout(patch, transient)}
@@ -1863,7 +1865,6 @@ interface ToolbarProps {
   selectedMark?: AnnotationMark | null;
   styleControls?: React.ReactNode;
   renderStyleControls?(panelChrome: React.ReactNode): React.ReactNode;
-  avoidBounds?: Rect[];
   labelControls?: React.ReactNode;
   showLabelControls?: boolean;
   selectedLabelId?: number;
@@ -1989,8 +1990,6 @@ export function Toolbar(props: ToolbarProps) {
     return !open;
   });
   const [optionsPosition, setOptionsPosition] = useState<Point | null>(null);
-  const [optionsAdjustmentPosition, setOptionsAdjustmentPosition] = useState<Point | null>(null);
-  const optionsAdjustment = useRef<{pointerId: number | null; numberInput: HTMLElement | null}>({pointerId: null, numberInput: null});
   const [toolbarPosition, setToolbarPosition] = useState<Point | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
@@ -2039,45 +2038,8 @@ export function Toolbar(props: ToolbarProps) {
   const {left, top} = captureToolbarPosition(selection, bounds, barSize,
     sizeControlsOpen, props.modeSelectorBounds, toolbarPosition);
   const optionsLayout = captureToolOptionsLayout({x: left, y: top, ...barSize}, bounds,
-    {width: Math.min(620, barSize.width), height: optionsHeight, minimumHeight: optionsMinimumHeight}, props.modeSelectorBounds, props.avoidBounds,
-    optionsPosition ?? optionsAdjustmentPosition);
-  const optionsLayoutRef = useRef(optionsLayout);
-  optionsLayoutRef.current = optionsLayout;
-  const holdOptionsPosition = () => setOptionsAdjustmentPosition(previous => previous ?? {
-    x: optionsLayoutRef.current.left, y: optionsLayoutRef.current.top,
-  });
-  const finishOptionsPointer = (event: {pointerId: number}) => {
-    if (optionsAdjustment.current.pointerId !== event.pointerId) return;
-    optionsAdjustment.current.pointerId = null;
-    if (!optionsAdjustment.current.numberInput) setOptionsAdjustmentPosition(null);
-  };
-  const clearOptionsAdjustment = () => {
-    optionsAdjustment.current = {pointerId: null, numberInput: null};
-    setOptionsAdjustmentPosition(null);
-  };
-  // Font/number changes also change annotation bounds. Keep controls under the
-  // pointer (or focused number editor) until that adjustment is finished.
-  useEffect(clearOptionsAdjustment, [showOptions, disabled, tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
-  useEffect(() => {
-    const restoreNumberFocus = () => {
-      const input = document.activeElement;
-      if (!input?.matches('input[type="number"]:not(:disabled)') || !optionsRef.current?.contains(input)) return;
-      optionsAdjustment.current.numberInput = input as HTMLElement;
-      holdOptionsPosition();
-    };
-    window.addEventListener("pointerup", finishOptionsPointer, true);
-    window.addEventListener("pointercancel", finishOptionsPointer, true);
-    window.addEventListener("lostpointercapture", finishOptionsPointer, true);
-    window.addEventListener("blur", clearOptionsAdjustment);
-    window.addEventListener("focus", restoreNumberFocus);
-    return () => {
-      window.removeEventListener("pointerup", finishOptionsPointer, true);
-      window.removeEventListener("pointercancel", finishOptionsPointer, true);
-      window.removeEventListener("lostpointercapture", finishOptionsPointer, true);
-      window.removeEventListener("blur", clearOptionsAdjustment);
-      window.removeEventListener("focus", restoreNumberFocus);
-    };
-  }, []);
+    {width: Math.min(620, barSize.width), height: optionsHeight, minimumHeight: optionsMinimumHeight}, props.modeSelectorBounds,
+    optionsPosition);
   const toolbarDrag = useToolbarDrag({x: left, y: top}, !disabled, setToolbarPosition);
   const optionsDrag = useToolbarDrag({x: optionsLayout.left, y: optionsLayout.top}, showOptions && !disabled, setOptionsPosition);
   const dragGlyph = <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
@@ -2152,27 +2114,6 @@ export function Toolbar(props: ToolbarProps) {
           </div>
         </div>
         {showOptions && <div ref={optionsRef} className="kiri-hud kiri-capture-tool-options"
-          onPointerDownCapture={event => {
-            if (disabled || event.button !== 0 || !event.isPrimary || optionsAdjustment.current.pointerId !== null) return;
-            const control = (event.target as HTMLElement).closest("input, select, textarea, button, [role=slider]");
-            if (!control || control.matches(".kiri-capture-options-move, .kiri-capture-options-hide")) return;
-            optionsAdjustment.current.pointerId = event.pointerId;
-            holdOptionsPosition();
-          }}
-          onPointerUpCapture={finishOptionsPointer} onPointerCancelCapture={finishOptionsPointer}
-          onLostPointerCaptureCapture={finishOptionsPointer}
-          onFocusCapture={event => {
-            if (disabled || !event.target.matches('input[type="number"]')) return;
-            optionsAdjustment.current.numberInput = event.target;
-            holdOptionsPosition();
-          }}
-          onBlurCapture={event => {
-            if (optionsAdjustment.current.numberInput !== event.target) return;
-            const next = event.relatedTarget as HTMLElement | null;
-            optionsAdjustment.current.numberInput = next?.matches?.('input[type="number"]') &&
-              event.currentTarget.contains(next) ? next : null;
-            if (!optionsAdjustment.current.numberInput && optionsAdjustment.current.pointerId === null) setOptionsAdjustmentPosition(null);
-          }}
           style={{position: "absolute", left: optionsLayout.left - left, top: optionsLayout.top - top,
             width: optionsLayout.width, maxHeight: optionsLayout.maxHeight}}>
           {props.renderStyleControls ? props.renderStyleControls(panelChrome) : <><div className="kiri-capture-options-chrome">{panelChrome}</div>{options}</>}

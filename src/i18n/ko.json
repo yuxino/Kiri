@@ -582,7 +582,7 @@
   "Could not change window pinning on this desktop.": "이 데스크톱에서 창 고정 상태를 변경하지 못했습니다.",
   "Pinned screenshot": "고정한 스크린샷",
   "Could not pin this screenshot.": "이 스크린샷을 고정하지 못했습니다.",
-  "Shift + Enter: new line · Enter: done · Esc: cancel edit": "Shift + Enter: 줄바꿈 · Enter: 완료 · Esc: 편집 취소",
+  "Shift + Enter: new line · Enter: finish text · Esc: cancel edit": "Shift + Enter: 줄바꿈 · Enter: 텍스트 확정 · Esc: 편집 취소",
   "Save changes before closing?": "닫기 전에 변경 사항을 저장할까요?",
   "Your image has unsaved changes. Save them, discard them, or keep editing.": "이미지에 저장하지 않은 변경 사항이 있습니다. 저장하거나 버리거나 계속 편집하세요.",
   "Save & close": "저장하고 닫기",

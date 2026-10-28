@@ -19,7 +19,6 @@ export function captureToolOptionsLayout(
   bounds: Rect,
   size: { width: number; height: number; minimumHeight?: number },
   modeSelector?: Rect | null,
-  avoidBounds?: Rect[],
   preferredPosition?: { x: number; y: number } | null,
 ): { left: number; top: number; width: number; maxHeight: number };
 export function recordingPanelLayout(

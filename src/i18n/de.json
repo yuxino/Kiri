@@ -582,7 +582,7 @@
   "Could not change window pinning on this desktop.": "Das Anheften von Fenstern konnte auf diesem Desktop nicht geändert werden.",
   "Pinned screenshot": "Angehefteter Screenshot",
   "Could not pin this screenshot.": "Dieser Screenshot konnte nicht angeheftet werden.",
-  "Shift + Enter: new line · Enter: done · Esc: cancel edit": "Shift + Enter: neue Zeile · Enter: fertig · Esc: Bearbeitung abbrechen",
+  "Shift + Enter: new line · Enter: finish text · Esc: cancel edit": "Shift + Enter: neue Zeile · Enter: Text übernehmen · Esc: Bearbeitung abbrechen",
   "Save changes before closing?": "Änderungen vor dem Schließen speichern?",
   "Your image has unsaved changes. Save them, discard them, or keep editing.": "Das Bild hat ungespeicherte Änderungen. Speichern, verwerfen oder weiter bearbeiten.",
   "Save & close": "Speichern und schließen",

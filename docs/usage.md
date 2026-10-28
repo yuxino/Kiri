@@ -106,7 +106,7 @@ Before choosing an annotation tool, click the screenshot toolbar's sliders butto
 
 On macOS, if you change display layout, resolution, or scale after selecting a region, start a new capture before recording. If recording is paused, stop and save it first.
 
-While typing an annotation, Ctrl/Cmd+Z undoes text and Shift+Enter adds a line. Esc leaves the text edit first; a second Esc cancels capture. Closing an edited saved image offers Save, Discard, or Keep editing when changes are unsaved.
+While typing, Ctrl/Cmd+Z undoes text. Enter finishes ordinary text, labels, and watermarks without finishing the screenshot; Shift+Enter adds a line. In numbered descriptions, Enter adds a line. Ctrl/Cmd+Enter finishes any text edit. With the screenshot canvas focused and no text input open, Enter finishes the screenshot. Esc cancels the current text edit first; a second Esc cancels capture. Closing an edited saved image offers Save, Discard, or Keep editing when changes are unsaved.
 
 On GNOME Wayland, if the first capture shows no permission dialog, open Kiri's Library and choose Request Access in the error banner. Allow screenshot access in GNOME's dialog, then retry Capture. Kiri discards the authorization image. See the [Linux guide](linux.md).
 
@@ -142,13 +142,15 @@ Saved images use the same annotation tools: select a tool or existing object to 
 
 Select an existing annotation to change its style. Mosaic offers freehand, rectangle, and ellipse shapes, with pixel or blur effects and adjustable strength. Use Watermark (W) to type directly on the image, then adjust the tiled watermark’s opacity, angle, and spacing. Watermarks remain editable after saving.
 
-In the screenshot overlay, drag the small handle on the annotation toolbar or in the property panel’s heading to move each independently. With a handle focused, arrow keys move it by 2 pixels, or 10 with Shift. Chosen positions stay for the current capture, even when you adjust the selection or change tools; a new capture starts with automatic placement. The property panel makes room if the toolbar moves over it. Hide tool options keeps the panel closed until you reopen it from the main toolbar. Automatic property-panel placement also avoids the selected annotation.
+In the screenshot overlay, tool options stay near the main toolbar as you select or adjust annotations. Drag the small handles to move the toolbar and property panel independently; with a handle focused, arrow keys move it by 2 pixels, or 10 with Shift. Manual positions stay for this capture across selection and tool changes; a new capture restores automatic placement. The property panel yields to the main toolbar and screen edges. Hide tool options keeps it closed until reopened from the toolbar.
 
 Text (T), Numbered callout (N), and Label bubble (B) each have their own button in the screenshot and image-editor toolbars. Choose Numbered callout, click to place a number, and type its description directly on the image; Return adds a line. Drag the number and transparent description separately, and adjust size, color, and filled or outline style.
 
 Single-click existing text, numbered notes, labels, or watermarks to select them; drag to move and double-click to edit. Press `Delete` or `Backspace` to remove a selected annotation, or click **Delete annotation**. Undo with `⌘Z` / `Ctrl+Z`. While typing, deletion keys only delete text.
 
-While entering text, a numbered description, or a label, the first action on empty canvas finishes editing and clears selection; the next uses the current tool. Text and shape tools also clear an existing selection before placing another mark. The tool stays selected, and Pen and mosaic support continuous strokes. Clicking the canvas ends watermark input; editing again reuses the same watermark.
+With Rectangle, Line, or Arrow active, drag on empty canvas to draw the next shape immediately; a blank click only clears selection. Text, numbered notes, and labels still require clearing an existing selection before placing the next annotation. While editing text, the first blank-canvas gesture finishes the edit and clears selection; only the next gesture places a mark. IME confirmation keeps its native behavior. Pen and mosaic keep continuous strokes. Clicking the canvas ends watermark input; editing again reuses the same watermark.
+
+Right-click the screenshot canvas to finish an open text edit, cancel an unfinished drag, or otherwise clear the object selection and return to Select. Completed annotations, the capture region, and undo history stay intact. Before annotation starts, right-click clears the selected region; right-click again to leave capture. Input fields retain their native right-click menus.
 
 Annotations stack in creation order. Mosaic added later processes earlier text, shapes and watermarks; annotations added afterward appear above it. Moving or editing an annotation keeps its layer.
 

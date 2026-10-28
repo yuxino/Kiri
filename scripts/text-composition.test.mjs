@@ -43,7 +43,7 @@ test("composition end or blur releases only its own input", () => {
   setTextComposition(first, false);
   const e = key({ target: first }), a = actions();
   handleTextEditorKey(e, a, true);
-  assert.deepEqual(a.calls, ["commit", "finish"]);
+  assert.deepEqual(a.calls, ["commit"]);
 });
 test("native Ctrl/Cmd undo and redo execute focused history once without committing", () => {
   for (const modifier of ["ctrlKey", "metaKey"]) for (const shiftKey of [false, true]) {
@@ -76,15 +76,24 @@ test("normal Escape cancels edit; Shift+Enter keeps newline; legacy history stay
   handleTextEditorKey(redo, c, false);
   assert.deepEqual(c.calls, ["commit", "redo"]);
 });
-test("Return commits before finishing capture; a saved-image editor only commits", () => {
-  const capture = actions(), enter = key();
-  handleTextEditorKey(enter, capture, true);
-  assert.deepEqual(capture.calls, ["commit", "finish"]);
-  assert.equal(enter.defaultPrevented, true);
-  const image = actions();
-  delete image.finish;
-  handleTextEditorKey(key(), image, true);
-  assert.deepEqual(image.calls, ["commit"]);
+test("Enter and Ctrl/Cmd+Enter commit only the focused text without completing its capture", () => {
+  for (const modifier of [undefined, "ctrlKey", "metaKey"]) {
+    const a = actions(), event = key(modifier ? {[modifier]: true} : {});
+    handleTextEditorKey(event, a, true);
+    assert.deepEqual(a.calls, ["commit"], "a stale finish callback must never receive the text editor's Enter");
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(event.stopped, true, "the same key cannot reach screenshot completion");
+  }
+});
+test("numbered descriptions keep native newlines and use Ctrl/Cmd+Enter to commit", () => {
+  for (const patch of [{}, {shiftKey: true}, {ctrlKey: true}, {metaKey: true}]) {
+    const a = {...actions(), multiline: true}, event = key(patch);
+    handleTextEditorKey(event, a, true);
+    const commits = !!(patch.ctrlKey || patch.metaKey);
+    assert.deepEqual(a.calls, commits ? ["commit"] : []);
+    assert.equal(event.defaultPrevented, commits);
+    assert.equal(event.stopped, true);
+  }
 });
 
 function textFocusCallback(phase, textarea, editing = {}) {

@@ -210,8 +210,8 @@ test harness.
 
 Screenshot selections also finish on a stationary double-click inside the
 selected region, away from resize handles and overlay controls. In annotation
-mode, only the Select tool's unmarked canvas accepts this action; text keeps its
-double-click editing behavior. Both clicks must be eligible and use the same
+mode, blank canvas accepts this action with any annotation tool; existing text
+keeps its double-click editing behavior. Both clicks must be eligible and use the same
 synchronous completion lock and confirmation pipeline as Return.
 
 Idle Screenshot hover samples a bounded 15×15 sRGB patch from the original
@@ -384,11 +384,12 @@ The screenshot annotation toolbar and property panel have separate drag handles
 with keyboard adjustments. Manual positions belong to the current capture and
 survive selection, tool, and property changes. The main toolbar stays within the
 screen and avoids the mode selector; properties also avoid the main toolbar and
-make room when it moves over them. Automatic property placement additionally
-avoids the selected or edited mark. The property handle and explicit hide action
+make room when it moves over them. Automatic properties stay next to the main
+toolbar and do not move to avoid a selected or edited mark. Adjacent usable
+scrolling space takes priority over relocating to display every field. The property handle and explicit hide action
 share its existing heading. Hiding persists until the main toolbar reopens the
 panel. These layout states preserve annotation editing and IME composition
-(ADR 0110).
+(ADRs 0110 and 0124).
 
 Text (T), Numbered callout (N), and Label bubble (B) each have a direct button
 in the capture and saved-image toolbars. Their annotation groups wrap at narrow
@@ -413,15 +414,29 @@ and crop/export boundary remain unchanged. See ADRs 0083, 0085 and 0089.
 With any active tool, a genuinely blank-canvas gesture while editing ordinary
 text, a label, or a numbered description commits that input and clears selection.
 The gesture is consumed through pointer release and click handling; only a later
-gesture uses the current tool. When Text, Numbered callout, Label bubble, Rectangle,
-Line, or Arrow is active with an existing selection, blank canvas first clears
-that selection before another gesture creates a mark. Pen and mosaic do not
+gesture uses the current tool. When Text, Numbered callout or Label bubble is
+active with an existing selection, blank canvas first clears that selection
+before another gesture creates a mark. With Rectangle, Line or Arrow, a blank
+click deselects while a drag of at least three CSS pixels creates the next shape
+in that same gesture. Pen and mosaic do not
 consume each new stroke merely because the previous stroke was selected. Hits
 on existing objects or handles retain first-drag behavior, and double-click
 editing, native composition, and text history keep their current routes. Tools
 remain active without an automatic switch to Select. This policy applies to
 capture and saved-image editing; the video editor keeps its creation-then-Select
-policy. See [ADR 0092](adr/0092-finish-text-edit-before-placement.md).
+policy. See [ADR 0092](adr/0092-finish-text-edit-before-placement.md) and
+[ADR 0124](adr/0124-continuous-screenshot-annotation.md).
+
+Ordinary text, label and watermark Enter commits only the current input;
+Shift+Enter adds a line. Callout Enter keeps its multiline behavior, and
+Command/Ctrl+Enter commits any of these inputs. A fresh Enter outside inputs
+confirms capture; repeated events from a held key cannot confirm after the
+textarea closes. Screenshot canvas right-click commits an active text edit,
+cancels an unfinished drag, or clears selection and returns to Select, retaining
+the region, completed marks and undo history. Before annotation, right-click
+clears the selected region before a later right-click cancels capture. Inputs
+retain native context menus. Select/V does not lock an unannotated region;
+choosing a drawing tool still does. See ADR 0124.
 
 Screenshot label bubbles share the text mark and inline editor, with an optional
 `labelDirection` field. Clicking its dot keeps that pointing location fixed and
