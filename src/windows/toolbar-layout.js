@@ -123,7 +123,7 @@ export function capturePanelLayout(selection, bounds, size, modeSelector = null,
 
 /** Tool properties adapt around an already positioned main row. Growing or
  * switching properties must never choose a new anchor for that main row. */
-export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = null, avoidBounds = [], preferredPosition = null) {
+export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = null, preferredPosition = null) {
   const margin = 8, gap = 6;
   const screen = { x: bounds.x + margin, y: bounds.y + margin,
     width: Math.max(0, bounds.width - margin * 2), height: Math.max(0, bounds.height - margin * 2) };
@@ -145,15 +145,9 @@ export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = n
   };
   let free = exclude([screen], toolbar, gap);
   if (modeSelector) free = exclude(free, modeSelector, 10);
-  // A user-chosen position wins over automatic annotation avoidance. Retain it
-  // when content grows by scrolling in place, rather than snapping the panel.
+  // Properties follow the main toolbar, never the selected annotation. A
+  // manually detached panel keeps its own position as its content grows.
   const minimumHeight = Math.min(size.height, size.minimumHeight ?? 80);
-  if (!preferredPosition && avoidBounds.length) {
-    let clear = free;
-    for (const rect of avoidBounds) clear = exclude(clear, rect, 10);
-    const usable = clear.filter(rect => rect.height >= minimumHeight);
-    if (usable.length) free = usable;
-  }
   const centeredLeft = toolbar.x + (toolbar.width - width) / 2;
   const below = toolbar.y + toolbar.height + gap;
   const candidates = free.map(space => {
@@ -164,16 +158,19 @@ export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = n
       : space.y + space.height <= toolbar.y - gap
         ? space.y + space.height - height
         : clamp(below, space.y, space.y + space.height - height);
+    // Choose an automatic side using the usable height, so a taller tool panel
+    // scrolls beside the same toolbar edge rather than seeking a larger space.
+    const anchorTop = preferredPosition ? top : space.y + space.height <= toolbar.y - gap
+      ? space.y + space.height - Math.min(minimumHeight, space.height)
+      : clamp(below, space.y, space.y + space.height - Math.min(minimumHeight, space.height));
     return { left, top, width, maxHeight: preferredPosition ? space.y + space.height - top : space.height,
-      distance: Math.hypot(left - (preferredPosition?.x ?? centeredLeft), top - (preferredPosition?.y ?? below)) };
+      distance: Math.hypot(left - (preferredPosition?.x ?? centeredLeft), anchorTop - (preferredPosition?.y ?? below)) };
   });
-  const complete = candidates.filter(candidate => candidate.maxHeight >= size.height);
-  // Manual placement may scroll, but a nearby sliver must not hide every
-  // control beneath the sticky heading. Keep a usable panel before proximity.
+  // Both docked and manual placement may scroll, but a nearby sliver must not
+  // hide every control beneath the sticky heading. Prefer usable space first.
   const usable = candidates.filter(candidate => candidate.maxHeight >= minimumHeight);
-  const choices = preferredPosition ? (usable.length ? usable : candidates) : complete.length ? complete : candidates;
-  const nearest = preferredPosition ? usable.length > 0 : complete.length > 0;
-  choices.sort((a, b) => nearest ? a.distance - b.distance : b.maxHeight - a.maxHeight || a.distance - b.distance);
+  const choices = usable.length ? usable : candidates;
+  choices.sort((a, b) => usable.length ? a.distance - b.distance : b.maxHeight - a.maxHeight || a.distance - b.distance);
   const best = choices[0];
   return best ? { left: best.left, top: best.top, width, maxHeight: best.maxHeight }
     : { left: clamp(centeredLeft, screen.x, screen.x + screen.width - width), top: screen.y, width, maxHeight: 0 };

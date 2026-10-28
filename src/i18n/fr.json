@@ -582,7 +582,7 @@
   "Could not change window pinning on this desktop.": "Impossible de modifier l’épinglage des fenêtres sur ce bureau.",
   "Pinned screenshot": "Capture épinglée",
   "Could not pin this screenshot.": "Impossible d’épingler cette capture.",
-  "Shift + Enter: new line · Enter: done · Esc: cancel edit": "Maj + Entrée : nouvelle ligne · Entrée : terminer · Échap : annuler la modification",
+  "Shift + Enter: new line · Enter: finish text · Esc: cancel edit": "Maj + Entrée : nouvelle ligne · Entrée : valider le texte · Échap : annuler la modification",
   "Save changes before closing?": "Enregistrer les modifications avant de fermer ?",
   "Your image has unsaved changes. Save them, discard them, or keep editing.": "Votre image contient des modifications non enregistrées. Enregistrez-les, ignorez-les ou continuez à modifier.",
   "Save & close": "Enregistrer et fermer",

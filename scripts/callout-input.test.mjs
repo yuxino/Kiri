@@ -218,3 +218,37 @@ test("callout composition owns Enter/Escape/undo, then native history executes o
   assert.equal(h.key({key: "Enter", ctrlKey: true}).defaultPrevented, true);
   assert.equal(h.finishes(), 2);
 });
+
+test("inline text, watermark and description Enter stay within the current edit", () => {
+  for (const kind of ["text", "watermark", "callout"]) {
+    for (const modifier of [undefined, "ctrlKey", "metaKey"]) {
+      let completed = 0;
+      const h = input("saved", {onFinish: () => completed++});
+      h.render("saved", {callout: kind === "callout" ? {} : undefined,
+        watermark: kind === "watermark" ? {} : undefined});
+      const event = h.key(modifier ? {[modifier]: true} : {});
+      const commits = kind !== "callout" || !!modifier;
+      assert.equal(h.finishes(), commits ? 1 : 0, `${kind}: only the current edit commits`);
+      assert.equal(completed, 0, `${kind}: Enter cannot finish its screenshot`);
+      assert.equal(event.defaultPrevented, commits);
+      assert.equal(event.stopped, true);
+    }
+  }
+});
+
+test("Shift+Enter and composing Ctrl/Cmd+Enter retain the native inline editor", () => {
+  for (const kind of ["text", "watermark", "callout"]) {
+    const h = input("saved");
+    h.render("saved", {callout: kind === "callout" ? {} : undefined,
+      watermark: kind === "watermark" ? {} : undefined});
+    assert.equal(h.key({shiftKey: true}).defaultPrevented, false);
+    h.compose(true);
+    for (const modifier of ["ctrlKey", "metaKey"]) {
+      const event = h.key({[modifier]: true, isComposing: false});
+      assert.equal(event.defaultPrevented, false);
+      assert.equal(event.stopped, true);
+    }
+    assert.equal(h.finishes(), 0);
+    h.compose(false);
+  }
+});

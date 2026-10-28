@@ -252,3 +252,6 @@ development.
 
 - [ADR 0122: Preserve local state during recovery](adr/0122-preserve-local-state-during-recovery.md)
   — acknowledged favorites, atomic preferences, library recovery notifications and preserved video drafts.
+
+- [ADR 0124: Continuous screenshot annotation and explicit completion](adr/0124-continuous-screenshot-annotation.md)
+  — consecutive shape drawing, text-only confirmation, content-preserving right-click and stable properties.

@@ -84,7 +84,7 @@ async def main():
     await textarea.press(mod+'+Shift+z');assert await textarea.input_value()=='test123'
     await textarea.press('Shift+Enter');await textarea.press_sequentially('second line',delay=10)
     assert '\n' in await textarea.input_value()
-    await f.get_by_text('Shift + Enter: new line · Enter: done · Esc: cancel edit',exact=True).wait_for()
+    await f.get_by_text('Shift + Enter: new line · Enter: finish text · Esc: cancel edit',exact=True).wait_for()
     # Composition events are injected only to check routing, not native IME acceptance.
     await textarea.evaluate("el=>el.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',isComposing:true,bubbles:true}))")
     await textarea.evaluate("el=>el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true}))")
@@ -101,7 +101,9 @@ async def main():
     await textarea.press_sequentially('line one',delay=10);await textarea.press('Shift+Enter');await textarea.press_sequentially('line two',delay=10)
     typed=await textarea.input_value()
     assert typed=='line one\nline two',{'stage':'before Enter','actualText':typed}
-    await textarea.press('Enter');await page.locator('#overlay').wait_for(state='detached')
+    await textarea.press('Enter');await textarea.wait_for(state='detached')
+    assert await page.locator('#overlay').count()==1,'text Enter completed the screenshot instead of ending the edit'
+    await page.keyboard.press('Enter');await page.locator('#overlay').wait_for(state='detached')
     saved=(await page.evaluate('state.pendingAnnotation'))['documentJson']
     assert saved.find('line one')!=-1,saved
     assert [mark['text'] for mark in json.loads(saved)['marks'] if mark['kind']=='text']==[typed],saved
@@ -238,24 +240,28 @@ async def main():
     exported_marks=(await page.evaluate('state.prepared'))['marks']
     assert len(exported_marks)==1
     await f.get_by_role('button',name='Delete annotation',exact=True).wait_for(state='visible')
-    # Keep editing retains the selected rectangle. Its first blank gesture
-    # only deselects; the complete drag must not place another rectangle.
+    # Keep editing retains the selected rectangle. A second blank drag
+    # immediately creates another rectangle without a separate deselection.
     await drag((700,400),(900,500))
+    await f.get_by_role('button',name='Delete annotation',exact=True).wait_for(state='visible')
+    assert await f.get_by_role('button',name='Rectangle (R)',exact=True).get_attribute('aria-pressed')=='true','continuing the drag changed the active tool'
+    await f.get_by_role('button',name='Save As…',exact=True).click();await page.wait_for_function('state.updates===4')
+    continued_marks=(await page.evaluate('state.prepared'))['marks']
+    assert len(continued_marks)==2,'two rectangle drags did not create two annotations'
+    assert continued_marks[0]==exported_marks[0],'continuing edits changed the earlier rectangle'
+    # A blank click only clears selection; it must not create a third shape.
+    await page.mouse.click(700,520)
     await f.get_by_role('button',name='Delete annotation',exact=True).wait_for(state='hidden')
     assert await f.get_by_role('button',name='Rectangle (R)',exact=True).get_attribute('aria-pressed')=='true','deselect changed the active tool'
-    await f.get_by_role('button',name='Save As…',exact=True).click();await page.wait_for_function('state.updates===4')
-    assert (await page.evaluate('state.prepared'))['marks']==exported_marks,'first blank drag changed or added a selected rectangle'
-    await drag((700,400),(900,500))
     await f.get_by_role('button',name='Save As…',exact=True).click();await page.wait_for_function('state.updates===5')
-    assert len((await page.evaluate('state.prepared'))['marks'])==2,'export lost continuing edits'
-    assert (await page.evaluate('state.prepared'))['marks'][0]==exported_marks[0],'continuing edits changed the earlier rectangle'
+    assert (await page.evaluate('state.prepared'))['marks']==continued_marks,'blank click changed or added a rectangle'
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await dialog.wait_for()
     await dialog.get_by_role('button',name='Keep editing',exact=True).click()
     await f.get_by_role('button',name='Undo',exact=True).click();await f.get_by_role('button',name='Undo',exact=True).click()
     await f.get_by_role('button',name='Cancel (Esc)',exact=True).click();await page.locator('#editor').wait_for(state='detached')
     assert await page.evaluate('state.editorDestroyCalls')==6,'close never reached SDK destroy'
     assert not errors,errors
-    (OUT/'image-editing-check.json').write_text(json.dumps({'native':False,'closeBoundary':'SDK close-request to destroy modeled in IPC; editor-only capability checked separately; native exact-package replay pending','withdrawn':['old Save As baseline assertion contradicted export-only backend'],'passed':['native textarea undo/redo routing','Shift+Enter multiline','localized hint','composition event routing only','first Escape retains capture and marks','second Escape cancels','Enter commits text and completes capture','clean editor close','Cmd/Ctrl+W from focused text','dirty text keep editing','cancel text restores clean baseline','native close event guard','undo to baseline','Save As cancel is no-op','failed save retains dialog and marks','save then close','discard then close','Save As preserves library close protection','first blank drag only deselects with unchanged exported mark','second blank drag creates while retaining Rectangle tool','continue editing and re-export','undo exported edits to original baseline','SDK close-request completes via destroy','dirty close prevents destroy before confirmation']},indent=2)+'\n')
+    (OUT/'image-editing-check.json').write_text(json.dumps({'native':False,'closeBoundary':'SDK close-request to destroy modeled in IPC; editor-only capability checked separately; native exact-package replay pending','withdrawn':['old Save As baseline assertion contradicted export-only backend'],'passed':['native textarea undo/redo routing','Shift+Enter multiline','localized hint','composition event routing only','first Escape retains capture and marks','second Escape cancels','Enter commits text while retaining capture','fresh Enter outside text completes capture','clean editor close','Cmd/Ctrl+W from focused text','dirty text keep editing','cancel text restores clean baseline','native close event guard','undo to baseline','Save As cancel is no-op','failed save retains dialog and marks','save then close','discard then close','Save As preserves library close protection','two consecutive drags create two rectangles while retaining Rectangle tool','blank click only deselects with unchanged exported marks','continue editing and re-export','undo exported edits to original baseline','SDK close-request completes via destroy','dirty close prevents destroy before confirmation']},indent=2)+'\n')
     await context.close()
    finally:await browser.close()
  finally:server.shutdown();server.server_close()

@@ -15,7 +15,7 @@ interface TextKey extends CompositionKey {
 export function setTextComposition(target: EventTarget, active: boolean): void;
 export function isTextComposition(event: CompositionKey): boolean;
 export function handleTextEditorKey(event: TextKey, actions: {
-  cancel(): void; commit(): void; undo(): void; redo(): void; finish?(): void;
+  cancel(): void; commit(): void; undo(): void; redo(): void;
   nativeHistory?(command: "undo" | "redo"): boolean;
   multiline?: boolean;
 }, nativeUndo?: boolean): void;

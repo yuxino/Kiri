@@ -432,6 +432,14 @@ async def placement_setup(browser, surface):
             await page.wait_for_function("document.querySelector('img')?.complete")
             await placement_drag(page, {"x": 160, "y": 300}, {"x": 1120, "y": 900})
         await page.get_by_role("button", name="Select (V)", exact=True).click()
+        if surface == "overlay":
+            # Select preserves region adjustment until a drawing tool is chosen.
+            # Enter annotation without drawing, then use the shared Select baseline.
+            await page.locator("canvas").wait_for(state="attached")
+            assert await page.locator("canvas").is_hidden(), "Select must not lock an unannotated capture region"
+            await page.get_by_role("button", name="Rectangle (R)", exact=True).click()
+            await page.locator("canvas").wait_for(state="visible")
+            await page.get_by_role("button", name="Select (V)", exact=True).click()
         await page.locator("canvas").wait_for(state="visible")
         source_hash = await placement_source_hash(page)
         empty_hash = await placement_canvas_hash(page)
@@ -509,24 +517,24 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
     start, end = await placement_point(page, .18, .27), await placement_point(page, .36, .42)
     await placement_drag(page, start, end)
     await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
-    case["phase"] = "first blank drag only deselects"
+    case["phase"] = "first blank drag immediately creates the next shape"
     second_start, second_end = await placement_point(page, .68, .62), await placement_point(page, .83, .77)
-    await placement_drag(page, second_start, second_end)
-    await placement_finished(page, title, source_hash)
-    first_pixels = await placement_canvas_hash(page)
-    assert first_pixels != empty_hash
-    case["phase"] = "second blank drag creates another shape"
+    # No intervening click, tool switch or history action may clear the first
+    # shape's selection and hide a swallowed second-drag regression.
     await placement_drag(page, second_start, second_end)
     await page.get_by_role("button", name="Delete annotation", exact=True).wait_for(state="visible")
+    case["phase"] = "blank click only deselects the second shape"
     blank = await placement_point(page, .12, .82)
     await page.mouse.click(blank["x"], blank["y"])
     await placement_finished(page, title, source_hash)
     two_pixels = await placement_canvas_hash(page)
-    assert two_pixels != first_pixels
+    assert two_pixels != empty_hash
+    case["phase"] = "two drags create exactly two undo entries"
     await page.get_by_role("button", name="Undo", exact=True).click()
-    assert await placement_canvas_hash(page) == first_pixels
+    first_pixels = await placement_canvas_hash(page)
+    assert first_pixels != empty_hash and first_pixels != two_pixels, "The first blank drag must create the second shape"
     await page.get_by_role("button", name="Undo", exact=True).click()
-    assert await placement_canvas_hash(page) == empty_hash, "The entire first blank drag must be consumed"
+    assert await placement_canvas_hash(page) == empty_hash, "A blank deselection click must not create an undo entry"
     assert await page.get_by_role("button", name="Undo", exact=True).is_disabled()
     await page.get_by_role("button", name="Redo", exact=True).click()
     assert await placement_canvas_hash(page) == first_pixels
@@ -555,11 +563,17 @@ async def placement_shape_case(page, surface, tool, title, source_hash, empty_ha
         expected = {"x": .18 * size["width"] + dx, "y": .27 * size["height"] + dy,
                     "width": .18 * size["width"], "height": .15 * size["height"]}
         assert all(abs(marks[0]["rect"][key] - value) < 1 for key, value in expected.items()), marks
+        second_expected = {"x": .68 * size["width"], "y": .62 * size["height"],
+                           "width": .15 * size["width"], "height": .15 * size["height"]}
+        assert all(abs(marks[1]["rect"][key] - value) < 1 for key, value in second_expected.items()), marks
     else:
         for key, fx, fy in [("start", .18, .27), ("end", .36, .42)]:
             assert abs(marks[0][key]["x"] - fx * size["width"] - dx) < 1, marks
             assert abs(marks[0][key]["y"] - fy * size["height"] - dy) < 1, marks
-    case.update(firstBlankDragConsumed=True, secondDragCreated=True, ownShapeFirstDragMoved=True,
+        for key, fx, fy in [("start", .68, .62), ("end", .83, .77)]:
+            assert abs(marks[1][key]["x"] - fx * size["width"]) < 1, marks
+            assert abs(marks[1][key]["y"] - fy * size["height"]) < 1, marks
+    case.update(consecutiveShapes=True, secondDragNotConsumed=True, blankClickDeselected=True, ownShapeFirstDragMoved=True,
                 activeToolRetained=True, undoRedoPixels=True, exportedMarks=2)
 
 

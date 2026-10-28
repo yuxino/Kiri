@@ -399,22 +399,72 @@ for (const tool of ["select", "pen", "rectangle", "line", "arrow", "text", "labe
 
 for (const tool of ["rectangle", "line", "arrow"]) {
   const mark = tool === "rectangle" ? rectangle : {kind: tool, id: 2, start: {x: 100, y: 100}, end: {x: 200, y: 180}, color: "white", width: 3};
-  test(`${tool} clears selection on the first blank gesture and draws on the next`, async () => {
+  test(`${tool} draws consecutive shapes on the first blank drag after selection`, async () => {
     const selected = [], h = annotation(documentWith([mark]), {tool, selectedMarkId: mark.id, onSelectionChange: id => selected.push(id)});
     for (let n = 0; n < 2; n++) {
-      h.pointer("onPointerDown", 380, 210);
-      h.pointer("onPointerMove", 460, 260);
-      h.pointer("onPointerUp", 460, 260);
-      if (n === 0) {
-        assert.deepEqual(h.changes, []); assert.equal(selected.at(-1), null);
-        assert.deepEqual(h.frames.at(-1).marks, [mark]);
-      }
+      const x = 300 + n * 200;
+      h.pointer("onPointerDown", x, 210);
+      assert.equal(selected.at(-1), null);
+      assert.equal(h.frames.at(-1).options.draft, null, "a press alone only deselects");
+      h.pointer("onPointerMove", x + 80, 260);
+      assert.equal(h.frames.at(-1).options.draft.kind, tool);
+      h.pointer("onPointerUp", x + 80, 260);
+      assert.equal(h.changes.length, n + 1);
+      assert.equal(h.changes.at(-1).length, n + 2);
+      assert.equal(selected.at(-1), h.changes.at(-1).at(-1).id);
     }
+    const drawn = h.changes.at(-1);
+    assert.deepEqual(drawn[0], mark);
+    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), drawn.slice(0, 2));
+    h.ref.current.redo(); h.component.render();
+    assert.deepEqual((await h.ref.current.exportResult()).document.marks, drawn);
+  });
+  test(`${tool} blank clicks with small screen movement only deselect and preserve redo`, () => {
+    const selected = [], h = annotation(documentWith([mark]), {tool, selectedMarkId: mark.id,
+      viewSize: {width: 160, height: 90}, boundingRect: () => ({left: 0, top: 0, width: 160, height: 90}),
+      onSelectionChange: id => selected.push(id)});
+    h.pointer("onPointerDown", 95, 52.5);
+    h.pointer("onPointerMove", 96, 53.5);
+    assert.equal(h.frames.at(-1).options.draft, null, "the threshold is CSS pixels, not zoomed document pixels");
+    h.pointer("onPointerUp", 96, 53.5);
+    assert.deepEqual(h.changes, []); assert.equal(selected.at(-1), null);
+    assert.deepEqual(h.frames.at(-1).marks, [mark]);
+    h.pointer("onPointerDown", 95, 52.5); h.pointer("onPointerMove", 115, 65); h.pointer("onPointerUp", 115, 65);
+    const drawn = h.changes.at(-1);
+    h.ref.current.undo(); h.component.render();
+    h.pointer("onPointerDown", 37.5, 35); h.pointer("onPointerUp", 37.5, 35);
+    const changeCount = h.changes.length;
+    h.pointer("onPointerDown", 95, 52.5); h.pointer("onPointerUp", 95, 52.5);
+    assert.equal(h.changes.length, changeCount);
+    h.ref.current.redo(); h.component.render(); assert.deepEqual(h.changes.at(-1), drawn);
+  });
+  test(`${tool} can draw from a selected object when movement arrives only on release`, () => {
+    const h = annotation(documentWith([mark]), {tool, selectedMarkId: mark.id});
+    h.pointer("onPointerDown", 380, 210); h.pointer("onPointerUp", 460, 260);
     assert.equal(h.changes.length, 1); assert.equal(h.changes[0].length, 2);
     assert.deepEqual(h.changes[0][0], mark);
-    h.ref.current.undo(); h.component.render(); assert.deepEqual(h.changes.at(-1), [mark]);
-    h.ref.current.redo(); h.component.render();
-    assert.equal((await h.ref.current.exportResult()).document.marks.length, 2);
+  });
+  test(`${tool} keeps the press coordinate frame when deselection reflows the inspector`, () => {
+    let frame = {left: 0, top: 0, width: 640, height: 360};
+    const h = annotation(documentWith([mark]), {tool, selectedMarkId: mark.id, boundingRect: () => frame});
+    h.pointer("onPointerDown", 380, 210);
+    frame = {left: 20, top: 30, width: 512, height: 288};
+    h.pointer("onPointerMove", 460, 260); h.pointer("onPointerUp", 460, 260);
+    const drawn = h.changes.at(-1)[1];
+    if (tool === "rectangle") assert.deepEqual(drawn.rect, {x: 380, y: 210, width: 80, height: 50});
+    else { assert.deepEqual(drawn.start, {x: 380, y: 210}); assert.deepEqual(drawn.end, {x: 460, y: 260}); }
+    assert.deepEqual(h.changes[0][0], mark);
+  });
+  test(`${tool} retains the video creation callback's switch to Select`, () => {
+    let created = 0;
+    const h = annotation(documentWith([mark]), {tool, selectedMarkId: mark.id, onMarkCreated: () => created++});
+    h.pointer("onPointerDown", 380, 210); h.pointer("onPointerMove", 460, 260); h.pointer("onPointerUp", 460, 260);
+    const drawn = h.changes.at(-1);
+    assert.equal(created, 1);
+    h.component.render({...h.props, tool: "select", selectedMarkId: drawn.at(-1).id});
+    h.pointer("onPointerDown", 550, 280); h.pointer("onPointerMove", 590, 320); h.pointer("onPointerUp", 590, 320);
+    assert.equal(created, 1); assert.equal(h.changes.length, 1);
+    assert.deepEqual(h.frames.at(-1).marks, drawn);
   });
   for (const selected of [false, true]) {
     test(`${tool} moves its ${selected ? "selected" : "unselected"} object on the first body drag`, () => {
@@ -1625,7 +1675,7 @@ test("new mark IDs stay distinct with a frozen or backward clock and preserve lo
 
 
 class CaptureTextArea {}
-function captureClick(h, detail, {target = h.live, x = 550, y = 310, move = null} = {}) {
+function captureClick(h, detail, {target = h.live, x = 550, y = 310, move = null, cancel = false, releaseCapture = false} = {}) {
   const wrapper = () => nodes(h.component.render()).find(node => node?.props?.className === "annotation-canvas-root");
   const event = {clientX: x, clientY: y, button: 0, pointerId: 1, detail, target,
     nativeEvent: {clientX: x, clientY: y}, preventDefault() {}, stopPropagation() {this.stopped = true;}};
@@ -1633,10 +1683,13 @@ function captureClick(h, detail, {target = h.live, x = 550, y = 310, move = null
   if (target === h.live) h.pointer("onPointerDown", x, y, {detail: 0});
   if (move) { wrapper().props.onPointerMoveCapture({...event, clientX: move.x, clientY: move.y});
     if (target === h.live) h.pointer("onPointerMove", move.x, move.y); }
+  if (cancel) { h.ref.current.cancelInteraction(); h.component.render(); }
   wrapper().props.onPointerUpCapture({...event, clientX: move?.x ?? x, clientY: move?.y ?? y});
   h.pointer("onPointerUp", move?.x ?? x, move?.y ?? y, {detail: 0});
+  if (releaseCapture === "before-click" && target === h.live) h.pointer("onLostPointerCapture", x, y);
   wrapper().props.onClickCapture(event);
   if (!event.stopped && target === h.live) h.mouse("onClick", x, y, detail);
+  if (releaseCapture === "after-click" && target === h.live) h.pointer("onLostPointerCapture", x, y);
   h.component.render();
 }
 for (const tool of ["select", "pen", "rectangle", "line", "arrow", "text", "label", "callout", "mosaic", "watermark"]) {
@@ -1698,6 +1751,63 @@ test("capture: blank double-click may deselect an existing shape but never remov
   const h = annotation(documentWith([rectangle]), {tool: "rectangle", selectedMarkId: rectangle.id, onFinishOnBlankDoubleClick: () => finishes++});
   captureClick(h, 1); captureClick(h, 2);
   assert.equal(finishes, 1); assert.deepEqual((await h.ref.current.exportResult()).document.marks, [rectangle]);
+});
+test("capture: normal capture release after pointerup preserves blank double-click completion", async () => {
+  for (const tool of ["select", "pen", "rectangle", "line", "arrow", "text", "label", "callout", "mosaic", "watermark"]) {
+    for (const releaseCapture of ["before-click", "after-click"]) {
+      let finishes = 0;
+      const h = annotation(documentWith([text]), {tool, onFinishOnBlankDoubleClick: () => finishes++,
+        globals: {HTMLTextAreaElement: CaptureTextArea}});
+      captureClick(h, 1, {releaseCapture});
+      const target = inlineEditor(h) ? new CaptureTextArea() : h.live;
+      captureClick(h, 2, {target, releaseCapture});
+      assert.equal(finishes, 1, `${tool} ${releaseCapture} retains the completed click checkpoint`);
+      assert.equal(inlineEditor(h), undefined);
+      assert.deepEqual((await h.ref.current.exportResult()).document.marks, [text]);
+    }
+  }
+});
+for (const tool of ["select", "rectangle", "line", "arrow"]) {
+  test(`capture: cancelling a ${tool} gesture consumes later release and click checkpoints`, async () => {
+    let finishes = 0;
+    const h = annotation(documentWith([rectangle]), {tool, selectedMarkId: rectangle.id,
+      onFinishOnBlankDoubleClick: () => finishes++});
+    captureClick(h, 1, {cancel: true}); captureClick(h, 2);
+    h.mouse("onDoubleClick", 550, 310, 2);
+    assert.equal(finishes, 0);
+    assert.deepEqual(h.changes, []);
+    assert.deepEqual((await h.ref.current.exportResult()).document.marks, [rectangle]);
+    captureClick(h, 1); h.ref.current.cancelInteraction(); h.component.render();
+    captureClick(h, 2); h.mouse("onDoubleClick", 550, 310, 2);
+    assert.equal(finishes, 0, "cancellation also invalidates an already completed first click");
+  });
+}
+test("cancelling an object drag keeps its original geometry through a late pointer release", () => {
+  const h = annotation(documentWith([rectangle]), {selectedMarkId: rectangle.id});
+  h.pointer("onPointerDown", 150, 140); h.pointer("onPointerMove", 180, 160);
+  assert.equal(h.ref.current.cancelInteraction(), true); h.component.render();
+  h.pointer("onPointerUp", 180, 160); h.mouse("onClick", 180, 160, 1);
+  assert.deepEqual(h.changes, []); assert.deepEqual(h.frames.at(-1).marks, [rectangle]);
+  assert.equal(h.frames.at(-1).options.draft, null);
+});
+test("cancelling unfinished drawing prevents late releases from creating marks and allows a new gesture", () => {
+  for (const tool of ["rectangle", "line", "arrow", "pen", "mosaic", "callout"]) {
+    for (const cancel of ["handle", "pointer", "lostcapture"]) {
+      const h = annotation(documentWith([rectangle]), {tool});
+      h.pointer("onPointerDown", 380, 210); h.pointer("onPointerMove", 460, 260);
+      if (cancel === "handle") { assert.equal(h.ref.current.cancelInteraction(), true); h.component.render(); }
+      else h.pointer(cancel === "lostcapture" ? "onLostPointerCapture" : "onPointerCancel", 460, 260);
+      h.pointer("onPointerMove", 480, 280, {buttons: 0});
+      h.pointer("onPointerUp", 460, 260); h.mouse("onClick", 460, 260, 1);
+      assert.deepEqual(h.changes, [], `${tool} ${cancel} cancellation cannot commit a draft`);
+      assert.equal(h.frames.at(-1).options.draft, null);
+      assert.equal(inlineEditor(h), undefined);
+      assert.deepEqual(h.frames.at(-1).marks, [rectangle]);
+      h.pointer("onPointerDown", 380, 210); h.pointer("onPointerMove", 460, 260); h.pointer("onPointerUp", 460, 260);
+      assert.equal(h.changes.length, 1); assert.equal(h.changes[0].length, 2);
+      assert.equal(h.changes[0][1].kind, tool);
+    }
+  }
 });
 test("capture: native double-click on an existing text still opens its editor", () => {
   let finishes = 0;

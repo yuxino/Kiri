@@ -132,12 +132,6 @@ interface Props {
   onHistoryChange(canUndo: boolean, canRedo: boolean, hasMarks: boolean): void;
   onCancel(): void;
   onError?(message: string): void;
-  /**
-   * Called after a text annotation is committed via Return (spec §6.6:
-   * "Return commits the text and completes the capture"). The parent
-   * overlay finishes the screenshot; the editor leaves this unset.
-   */
-  onFinishAfterTextCommit?(): void;
   /** Capture-only: stationary blank double-clicks confirm with any annotation tool. */
   onFinishOnBlankDoubleClick?(): void;
 }
@@ -242,7 +236,7 @@ function resizeCalloutLabel(mark: CalloutMark, previous: CalloutMark,
 
 type Interaction =
   | { kind: "none" }
-  | { kind: "draw"; tool: Tool; start: Point; points: Point[]; mosaic?: Extract<AnnotationMark, {kind: "mosaic"}> }
+  | { kind: "draw"; tool: Tool; start: Point; points: Point[]; requiresDrag?: boolean; mosaic?: Extract<AnnotationMark, {kind: "mosaic"}> }
   | { kind: "move"; index: number; original: AnnotationMark; start: Point }
   | { kind: "resize"; index: number; original: AnnotationMark; handle: string; start: Point }
   | { kind: "endpoint"; index: number; original: AnnotationMark; isStart: boolean; start: Point };
@@ -290,7 +284,6 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       onHistoryChange,
       onCancel,
       onError,
-      onFinishAfterTextCommit,
       onFinishOnBlankDoubleClick,
     },
     ref,
@@ -773,10 +766,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       } else {
         appendMark(newMark);
       }
-      // Spec §6.6: commit (unchanged edits do not write history). The
-      // Return key additionally finishes the capture — handled in the
-      // TextEditor's Enter branch so other commit triggers (tool switch,
-      // undo, export) do not complete the capture.
+      // Committing an unchanged edit does not write history. Finishing text
+      // keeps the surrounding capture/editor session open.
     }, [history, publishHistory, syncMarks, appendMark, selectMark, validateEditingWatermark, documentSize.width, documentSize.height]);
 
     const editText=useCallback((index:number)=>{
@@ -986,13 +977,24 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       selectMark(index); syncMarks();
     }, [history, interactionsDisabled, commitText, finishAppearanceAdjustment, selectMark, syncMarks]);
 
-    const cancelInteraction=useCallback(()=>{
-      if(editingRef.current){editingRef.current=null;setEditing(null);publishHistory();return true;}
-      if(interactionRef.current.kind!=="none"){
-        interactionRef.current={kind:"none"};setDraft(null);setSelectCursor("default");return true;
+    const cancelPointerGesture = useCallback(() => {
+      const active = interactionRef.current.kind !== "none";
+      interactionRef.current = {kind: "none"};
+      canvasClickRef.current.consumed = true;
+      blankDoubleClickRef.current = false;
+      calloutClickRef.current = null;
+      capturePressRef.current = null;
+      clearCaptureClicks();
+      setDraft(null); setSelectCursor("default");
+      return active;
+    }, []);
+    const cancelInteraction = useCallback(() => {
+      const active = cancelPointerGesture();
+      if (editingRef.current) {
+        editingRef.current = null; setEditing(null); publishHistory(); return true;
       }
-      return false;
-    },[publishHistory]);
+      return active;
+    }, [cancelPointerGesture, publishHistory]);
 
     // Switching tools while a text edit is open should commit it (the text
     // becomes a mark and the editor closes), matching the canvas click
@@ -1067,15 +1069,19 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         const selectedHandle = selectedLine ? selectionHandleAt(selectedLine, p, hitTestScale.radial) : null;
         const blank = hit === null && !(selectedMatchesTool && selectedHandle !== null);
         const continuousTool = t === "pen" || t === "mosaic";
+        const deselectThenDraw = blank && selected !== null && ["rectangle", "line", "arrow"].includes(t);
         const finishWatermark = pendingEdit?.watermark &&
           (hit === null || current[hit].id === pendingEdit.id);
-        if (finishWatermark || (blank && (pendingEdit || (selected !== null && !continuousTool)))) {
+        if (finishWatermark || (blank && (pendingEdit || (selected !== null && !continuousTool && !deselectThenDraw)))) {
           // Finish/deselect first, place on the next gesture. Keeping the tool
           // active must not turn the same press into an unwanted new mark.
           finishGesture();
           selectMark(null);
           return;
         }
+        // A blank click only deselects, but dragging may immediately create the
+        // next shape. Text/IME finishing above still owns its entire gesture.
+        if (deselectThenDraw) selectMark(null);
         const editingExistingWatermark = t === "watermark" &&
           ((hit !== null && current[hit].kind === "watermark") ||
             (selectedLine?.kind === "watermark" && selectedHandle !== null));
@@ -1160,7 +1166,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         }
 
         const points = [p];
-        interactionRef.current = { kind: "draw", tool: t, start: p, points };
+        interactionRef.current = { kind: "draw", tool: t, start: p, points, requiresDrag: deselectThenDraw };
+        if (deselectThenDraw) { setDraft(null); return; }
         if (t === "callout") {
           setDraft(createCallout(p, p, -1));
         } else if (t === "pen") {
@@ -1321,6 +1328,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
           return;
         }
         if (interaction.kind === "draw") {
+          if (interaction.requiresDrag && !canvasClickRef.current.moved) return;
           const t = interaction.tool;
           // Spec §7.4: the brush cursor tracks the drag point while drawing.
           if (t === "mosaic" && interaction.mosaic?.shape === "brush") setBrushCursor(p);
@@ -1414,6 +1422,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         if (interaction.kind === "move") setSelectCursor("default");
 
         if (interaction.kind === "draw") {
+          if (interaction.requiresDrag && !canvasClickRef.current.moved &&
+            Math.hypot(e.clientX - canvasClickRef.current.start.x, e.clientY - canvasClickRef.current.start.y) < 3) {
+            setDraft(null); return;
+          }
           const t = interaction.tool;
           const ap = appearanceRef.current;
           if (t === "callout") {
@@ -1983,7 +1995,12 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               if (blankDoubleClickRef.current) onFinishOnBlankDoubleClick?.();
             }
           }}
-          onPointerCancel={()=>{interactionRef.current={kind:"none"};calloutClickRef.current=null;setDraft(null);setSelectCursor("default");}}
+          onPointerCancel={cancelPointerGesture}
+          onLostPointerCapture={() => {
+            // A normal pointerup already committed the gesture; preserve its
+            // click checkpoint for native double-click completion.
+            if (interactionRef.current.kind !== "none") cancelPointerGesture();
+          }}
           onPointerLeave={()=>setBrushCursor(null)}
         />
         {dotMarks.map((mark, index) => {
@@ -2017,7 +2034,6 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               onTextChange={updateEditingText}
               onRectChange={updateEditingRect}
               onCommit={commitText}
-              onFinish={editing.callout || editing.watermark ? undefined : onFinishAfterTextCommit}
               onMoveCallout={(event, firstPoint) => {
                 if (interactionsDisabled() || !editingRef.current?.callout) return;
                 event.preventDefault(); event.stopPropagation();
@@ -2052,7 +2068,6 @@ function TextEditor(props: {
   onTextChange(text: string): void;
   onRectChange(rect: Rect, fontSize?: number): void;
   onCommit(): void;
-  onFinish?(): void;
   onUndo(): void;
   onRedo(): void;
   onCancel(): void;
@@ -2067,7 +2082,6 @@ function TextEditor(props: {
     onToggleDirection,
     onRectChange,
     onCommit,
-    onFinish,
     onUndo,
     onRedo,
     onCancel,
@@ -2240,7 +2254,7 @@ function TextEditor(props: {
       onLostPointerCapture={() => {frameDrag.current = null;}}
       onKeyDown={(e) => {
         handleTextEditorKey(e, { cancel: onCancel, commit: onCommit,
-          undo: onUndo, redo: onRedo, finish: onFinish,
+          undo: onUndo, redo: onRedo,
           nativeHistory: (command) => e.currentTarget.ownerDocument.execCommand(command), multiline: !!editing.callout,
         }, nativeUndo);
       }}
@@ -2280,7 +2294,7 @@ function TextEditor(props: {
       color: "#eee",
       font: `${10 * editing.uiScale}px/${13 * editing.uiScale}px var(--kiri-font-ui)`,
       pointerEvents: "none",
-    }}>{t("Shift + Enter: new line · Enter: done · Esc: cancel edit")}</div>}
+    }}>{t("Shift + Enter: new line · Enter: finish text · Esc: cancel edit")}</div>}
     </>
   );
 }

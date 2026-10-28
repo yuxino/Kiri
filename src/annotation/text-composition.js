@@ -38,7 +38,6 @@ export function handleTextEditorKey(event, actions, nativeUndo) {
     } else if (event.key === "Enter" && !event.shiftKey && (!actions.multiline || event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       actions.commit();
-      actions.finish?.();
     }
   }
   event.stopPropagation();
