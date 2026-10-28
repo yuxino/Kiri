@@ -1999,6 +1999,11 @@ export function Toolbar(props: ToolbarProps) {
   const [optionsMinimumHeight, setOptionsMinimumHeight] = useState(80);
   const options = props.styleControls ?? (props.showLabelControls ? props.labelControls : props.showCalloutControls ? props.calloutControls : null);
   const showOptions = detailsOpen && !canSetSize && (!!props.renderStyleControls || !!options);
+  // A different tool or annotation starts at its first property. Editing the
+  // same object's values keeps the user's current scroll position.
+  useLayoutEffect(() => {
+    if (showOptions && optionsRef.current) optionsRef.current.scrollTop = 0;
+  }, [showOptions, tool, props.selectedMark?.id, props.selectedCalloutId, props.selectedLabelId]);
   // Measure each committed row change before paint, and observe later reflows
   // (font loading, translations and viewport wrapping) as well.
   const measureBar = () => {

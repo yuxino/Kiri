@@ -609,7 +609,7 @@ function movableToolbar(dimensions = {}) {
   const toolbar = source.slice(source.indexOf("const TOOLS:"));
   let height = dimensions.height ?? 160, panelStyle;
   const layoutSizes = [];
-  const measured = {get scrollHeight() {return height;}, get offsetHeight() {return Math.min(height, panelStyle.maxHeight);},
+  const measured = {scrollTop: 0, get scrollHeight() {return height;}, get offsetHeight() {return Math.min(height, panelStyle.maxHeight);},
     get clientHeight() {return Math.min(height, panelStyle.maxHeight);},
     querySelector(selector) {return selector === ".kiri-annotation-control-fields" ? dimensions.fields ?? null : null;}};
   const runtime = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
@@ -669,6 +669,41 @@ test("explicitly hiding properties survives new selections until the toolbar opt
   assert.equal(ui.find("kiri-hud kiri-capture-tool-options"), undefined);
   nodes(ui.tree()).find(node => node?.props?.icon === "slider.horizontal.3").props.onClick();
   assert.ok(ui.find("kiri-hud kiri-capture-tool-options"));
+  ui.component.unmount();
+});
+
+test("narrow properties show their first field after changing tools or selecting another annotation", () => {
+  const ui = movableToolbar({bounds: {x: 0, y: 0, width: 320, height: 480}, toolbarWidth: 304, toolbarHeight: 116,
+    height: 600, fields: {offsetHeight: 514, firstElementChild: {offsetHeight: 28}}});
+  ui.component.render({...ui.props, tool: "watermark", selectedMark: null});
+  const panel = ui.find("kiri-hud kiri-capture-tool-options").props.ref.current;
+  assert.ok(panel.scrollHeight > panel.clientHeight, "the sample really has scrollable properties");
+  panel.scrollTop = 160;
+  ui.component.render({...ui.props, tool: "callout", selectedMark: null});
+  assert.equal(panel.scrollTop, 0, "switching from the watermark's last field reveals the callout number");
+  panel.scrollTop = 40;
+  const callout = {id: 2, kind: "callout", number: 1, size: 32};
+  ui.component.render({...ui.props, tool: "callout", selectedMark: callout});
+  assert.equal(panel.scrollTop, 0, "placing/selecting a callout reveals its first property");
+  panel.scrollTop = 60;
+  ui.component.render({...ui.props, tool: "callout", selectedMark: {...callout, number: 2, size: 48}, appearance: {calloutSize: 48}});
+  assert.equal(panel.scrollTop, 60, "editing the same annotation's numbers preserves the reading position");
+  ui.component.render({...ui.props, tool: "callout", selectedMark: {...callout, id: 3}});
+  assert.equal(panel.scrollTop, 0, "another annotation starts at its first property");
+  ui.component.unmount();
+});
+
+test("reopening properties resets scrolling without changing a manually placed panel", () => {
+  const ui = movableToolbar({height: 900});
+  ui.find("kiri-capture-options-move").props.onKeyDown(panelPointer({}, {key: "ArrowLeft", shiftKey: true}));
+  const position = ui.position();
+  const panel = ui.find("kiri-hud kiri-capture-tool-options").props.ref.current;
+  panel.scrollTop = 120;
+  ui.find("kiri-capture-options-hide").props.onClick({currentTarget: {}});
+  nodes(ui.tree()).find(node => node?.props?.icon === "slider.horizontal.3").props.onClick();
+  ui.tree();
+  assert.equal(panel.scrollTop, 0);
+  assert.deepEqual(ui.position(), position);
   ui.component.unmount();
 });
 
