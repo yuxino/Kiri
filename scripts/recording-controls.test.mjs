@@ -165,6 +165,16 @@ test("natural content size includes padding, accessibility scale, and coalesces 
   h.component.unmount();
 });
 
+test("narrow expanded annotations request their full measured height", async () => {
+  const h = controls({paletteWidth: 390, maxWidth: 320});
+  h.size.height = 268;
+  await h.ready();
+  assert.equal(h.layouts.at(-1).request.width, 320);
+  assert.equal(h.layouts.at(-1).request.height, 300, "wrapped tools and text options are not capped at the old 240px height");
+  assert.equal(h.attributes.has("data-minimal"), false, "the annotation rows do not hide the timer");
+  h.component.unmount();
+});
+
 test("drag waits for an in-flight layout and clamps only after the final physical move", async () => {
   const h = controls(); await h.flush();
   const bar = surface(h);

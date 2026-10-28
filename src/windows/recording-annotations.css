@@ -9,17 +9,9 @@
   --kiri-record-annotation-max-width: initial;
   flex-direction: column;
 }
-.kiri-record-annotation-tools { display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; max-width: var(--kiri-record-annotation-max-width, 100%); padding: 8px; border: 1px solid var(--kiri-surface-border); border-top: 0; border-radius: 0 0 10px 10px; background: var(--kiri-card); color: var(--kiri-label); }
+.kiri-record-annotation-tools { display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; max-width: var(--kiri-record-annotation-max-width, 100%); padding: 6px; border: 1px solid #444; border-top: 0; border-radius: 0 0 10px 10px; background: #1c1c1c; color: var(--kiri-label-dark); }
 .kiri-record-controls-window:has(.kiri-record-annotation-tools) .kiri-record-controls { border-radius: 10px 10px 0 0; }
-.kiri-record-annotation-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.kiri-record-annotation-tools .kiri-record-control-button { width: 30px; }
+.kiri-record-annotation-row { display: flex; flex-wrap: wrap; gap: 6px 2px; align-items: center; }
+.kiri-record-annotation-tools .kiri-annotation-controls { border-top: 1px solid #3b3b3b; padding: 6px 6px 4px; }
 .kiri-record-control-button[aria-pressed="true"] { background: var(--kiri-group-fill); border-color: var(--kiri-label); }
-.kiri-record-annotation-swatch { width: 20px; height: 20px; border: 2px solid transparent; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(128,128,128,.35); cursor: pointer; }
-.kiri-record-annotation-swatch[aria-pressed="true"] { outline: 1px solid var(--kiri-label); outline-offset: 2px; }
-.kiri-record-annotation-swatch:hover:not(:disabled) { transform: scale(1.12); border-color: var(--kiri-label); }
-.kiri-record-annotation-swatch:focus-visible { outline: 2px solid var(--kiri-label); outline-offset: 2px; }
-.kiri-record-annotation-swatch:disabled { opacity: .4; cursor: default; }
-.kiri-record-annotation-size { display: flex; flex: 1; gap: 6px; align-items: center; font-size: 12px; min-width: 110px; }
-.kiri-record-annotation-size input { width: 76px; min-width: 40px; flex: 1; accent-color: var(--kiri-label); }
-.kiri-record-annotation-size output { min-width: 2ch; font-variant-numeric: tabular-nums; }
 .kiri-record-annotation-notice { margin: 0; max-width: min(300px, var(--kiri-record-annotation-max-width, 300px)); white-space: normal; font-size: 12px; line-height: 1.4; color: var(--kiri-secondary-label); }

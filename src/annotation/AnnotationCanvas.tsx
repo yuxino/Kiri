@@ -128,6 +128,8 @@ interface Props {
   visibleViewport?: Rect;
   /** Prevents edits while an immutable export snapshot is being committed. */
   interactionDisabled?: boolean;
+  /** Recording stop freezes the last visible gesture until its ink is flushed. */
+  preserveDraftWhenDisabled?: boolean;
   /** Synchronous companion to interactionDisabled for the pre-render event gap. */
   interactionLock?: { readonly locked: boolean };
   tool: Tool;
@@ -289,6 +291,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       viewSize,
       visibleViewport,
       interactionDisabled = false,
+      preserveDraftWhenDisabled = false,
       interactionLock,
       tool,
       appearance,
@@ -394,10 +397,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     useEffect(() => {
       if (!interactionDisabled) return;
       interactionRef.current = { kind: "none" };
-      setDraft(null);
+      if (!preserveDraftWhenDisabled) setDraft(null);
       setBrushCursor(null);
       setSelectCursor("default");
-    }, [interactionDisabled]);
+    }, [interactionDisabled, preserveDraftWhenDisabled]);
 
     // Canvas drawImage can crop directly from the decoded HTMLImageElement.
     // Keeping a second full-resolution source canvas would duplicate the
@@ -2003,7 +2006,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
               if (blankDoubleClickRef.current) onFinishOnBlankDoubleClick?.();
             }
           }}
-          onPointerCancel={()=>{interactionRef.current={kind:"none"};calloutClickRef.current=null;setDraft(null);setSelectCursor("default");}}
+          onPointerCancel={()=>{interactionRef.current={kind:"none"};calloutClickRef.current=null;
+            if (!interactionsDisabled() || !preserveDraftWhenDisabled) setDraft(null);
+            setSelectCursor("default");}}
           onPointerLeave={()=>setBrushCursor(null)}
         />
         {dotMarks.map((mark, index) => {

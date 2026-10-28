@@ -229,6 +229,11 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     return modules[name];
   }, toolbarModule, toolbarModule.exports, environment.navigator ?? { platform: "MacIntel" }, window, environment.document ?? {});
   modules["../components/AnnotationToolbarButton"] = toolbarModule.exports;
+  const toolsModule = {exports: {}};
+  new Function("require", "module", "exports", componentCode(
+    'import React from "react";\n' + readFileSync(new URL("../../src/components/AnnotationTools.tsx", import.meta.url), "utf8"),
+  ))(name => name === "./AnnotationToolbarButton" ? toolbarModule.exports : modules[name], toolsModule, toolsModule.exports);
+  modules["../components/AnnotationTools"] = toolsModule.exports;
   const module = { exports: {} };
   if (componentSource == null) {
     librarySource ??= readFileSync(new URL("../../src/windows/LibraryWindow.tsx", import.meta.url), "utf8") +
@@ -243,7 +248,8 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     if (name.endsWith(".css")) return {};
     if (!(name in modules)) throw new Error(`Unexpected import: ${name}`);
     return modules[name];
-  }, module, module.exports, window, document, () => 1, () => {}, environment.navigator ?? { userAgent: "Macintosh" }, ...Object.values(globals));
+  }, module, module.exports, window, document, environment.requestAnimationFrame ?? (() => 1),
+    environment.cancelAnimationFrame ?? (() => {}), environment.navigator ?? { userAgent: "Macintosh" }, ...Object.values(globals));
 
   return {
     window,

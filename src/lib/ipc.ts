@@ -158,7 +158,7 @@ export interface RecordingState {
 }
 
 export type RecordingAnnotationTool = "desktop" | "select" | "pen" | "arrow" | "rectangle" | "text";
-export type RecordingAnnotationAction = "undo" | "redo" | "clear";
+export type RecordingAnnotationAction = "undo" | "redo" | "clear" | "editText" | "delete";
 export type RecordingAnnotationAppearance = Partial<Pick<AppearanceSettings,
   "colorPreset" | "penWidth" | "shapeWidth" | "textFontSize" | "textBackgroundStyle">>;
 
@@ -476,6 +476,10 @@ export const api = {
     invoke<RecordingAnnotationsState>("get_recording_annotations", { sessionId }),
   recordingAnnotationsReady: (sessionId: string) =>
     invoke<void>("recording_annotations_ready", { sessionId }),
+  recordingAnnotationsFlushed: (sessionId: string, requestId: string, revision: number | null) =>
+    invoke<void>("recording_annotations_flushed", { sessionId, requestId, revision }),
+  recordingAnnotationsPresented: (sessionId: string, requestId: string, revision: number) =>
+    invoke<void>("recording_annotations_presented", { sessionId, requestId, revision }),
   setRecordingAnnotationTool: (sessionId: string, tool: RecordingAnnotationTool) =>
     invoke<RecordingAnnotationsState>("set_recording_annotation_tool", { sessionId, tool }),
   recordingAnnotationAction: (sessionId: string, action: RecordingAnnotationAction) =>
@@ -611,6 +615,14 @@ export function onRecordingState(
 
 export function onRecordingAnnotationsState(handler: (state: RecordingAnnotationsState) => void): Promise<UnlistenFn> {
   return listen<RecordingAnnotationsState>("recording-annotations-state", event => handler(event.payload));
+}
+
+export function onRecordingAnnotationFlush(handler: (event: {sessionId: string; requestId: string}) => void): Promise<UnlistenFn> {
+  return listen<{sessionId: string; requestId: string}>("recording-annotation-flush", event => handler(event.payload));
+}
+
+export function onRecordingAnnotationPresent(handler: (event: {sessionId: string; requestId: string; revision: number}) => void): Promise<UnlistenFn> {
+  return listen<{sessionId: string; requestId: string; revision: number}>("recording-annotation-present", event => handler(event.payload));
 }
 
 export function onRecordingAnnotationAction(handler: (event: {

@@ -16,6 +16,19 @@ const UNAVAILABLE: &str = "Live annotations are unavailable for this recording."
 const MAX_LIVE_MARKS: usize = 256;
 const MAX_LIVE_POINTS: usize = 20_000;
 const MAX_LIVE_TEXT: usize = 8_192;
+const STOP_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(600);
+
+struct StopFlush {
+    request_id: uuid::Uuid,
+    revision: Option<u64>,
+    completion: Option<std::sync::mpsc::Sender<bool>>,
+}
+
+impl StopFlush {
+    fn complete(&mut self, success: bool) {
+        if let Some(completion) = self.completion.take() { let _ = completion.send(success); }
+    }
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -30,8 +43,8 @@ pub enum AnnotationTool {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AnnotationAction { Undo, Redo, Clear }
+#[serde(rename_all = "camelCase")]
+pub enum AnnotationAction { Undo, Redo, Clear, EditText, Delete }
 
 #[derive(Default)]
 pub struct RecordingAnnotations {
@@ -46,6 +59,8 @@ pub struct RecordingAnnotations {
     revision: u64,
     return_pid: Option<u32>,
     error: Option<String>,
+    used: bool,
+    stop_flush: Option<StopFlush>,
 }
 
 #[derive(Clone, Serialize)]
@@ -86,6 +101,125 @@ impl RecordingAnnotations {
         self.has_marks = has_marks || !self.marks.is_empty();
         true
     }
+
+    pub(crate) fn owns_stop_flush(&self, request_id: Option<uuid::Uuid>) -> bool {
+        self.stop_flush.as_ref().is_some_and(|pending| Some(pending.request_id) == request_id)
+    }
+
+    fn accept_flush_revision(&mut self, request_id: uuid::Uuid, revision: Option<u64>) -> bool {
+        let Some(pending) = self.stop_flush.as_mut().filter(|pending| pending.request_id == request_id) else { return false; };
+        match revision {
+            Some(revision) if revision <= self.revision => { pending.revision = Some(revision); true }
+            _ => { pending.complete(false); false }
+        }
+    }
+
+    fn acknowledge_presented(&mut self, request_id: uuid::Uuid, revision: u64) {
+        if let Some(pending) = self.stop_flush.as_mut().filter(|pending| pending.request_id == request_id) {
+            if pending.revision.is_some_and(|target| revision >= target && revision <= self.revision) {
+                pending.complete(true);
+            }
+        }
+    }
+
+    fn mark_unavailable(&mut self) {
+        let mut pending = self.stop_flush.take();
+        if let Some(pending) = &mut pending { pending.complete(false); }
+        let revision = self.revision.saturating_add(1);
+        *self = Self { error: Some(UNAVAILABLE.into()), revision, stop_flush: pending, ..Default::default() };
+    }
+}
+
+pub(crate) enum StopPreparation {
+    Immediate,
+    AlreadyStopping,
+    Prepared { session_id: uuid::Uuid, request_id: uuid::Uuid },
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FlushEvent { session_id: uuid::Uuid, request_id: uuid::Uuid }
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PresentEvent { session_id: uuid::Uuid, request_id: uuid::Uuid, revision: u64 }
+
+/// Await renderer IPC only from async stop entry points. The native event loop
+/// remains free to accept the final vector frame and its paint acknowledgement.
+pub(crate) async fn flush_before_stop(app: &AppHandle, expected_session: Option<uuid::Uuid>) -> StopPreparation {
+    let (session_id, request_id, completion) = {
+        let state = app.state::<AppState>();
+        let mut flow = state.recording.lock().unwrap();
+        if !flow.accepts_recording_action(expected_session) || flow.annotations.stop_flush.is_some() {
+            return StopPreparation::AlreadyStopping;
+        }
+        if flow.is_starting || flow.is_transitioning || flow.is_finalizing
+            || !(flow.is_recording || flow.is_paused) || !flow.annotations.ready() || !flow.annotations.used {
+            return StopPreparation::Immediate;
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let request_id = uuid::Uuid::new_v4();
+        flow.annotations.stop_flush = Some(StopFlush { request_id, revision: None, completion: Some(sender) });
+        flow.is_transitioning = true;
+        crate::state::emit_recording_state(app, &flow);
+        (flow.session_id, request_id, receiver)
+    };
+    // Let the renderer freeze its in-progress gesture before changing native
+    // hit testing, which can otherwise cancel the final pointer draft.
+    let sent = app.emit_to(INPUT_WINDOW, "recording-annotation-flush", FlushEvent { session_id, request_id }).is_ok();
+    let presented = if sent {
+        let waiter = tauri::async_runtime::spawn_blocking(move || wait_for_flush(completion, STOP_FLUSH_TIMEOUT));
+        // Include blocking-pool queue time in the deadline as well.
+        tokio::time::timeout(STOP_FLUSH_TIMEOUT, waiter).await.ok().and_then(Result::ok).unwrap_or(false)
+    } else { false };
+    if presented {
+        // One capture interval after compositor presentation keeps the final
+        // painted ink in a native frame before the source is stopped.
+        tokio::time::sleep(std::time::Duration::from_millis(34)).await;
+    } else {
+        log::warn!("recording annotation final-frame flush did not complete before stop");
+    }
+    StopPreparation::Prepared { session_id, request_id }
+}
+
+fn wait_for_flush(completion: std::sync::mpsc::Receiver<bool>, timeout: std::time::Duration) -> bool {
+    completion.recv_timeout(timeout).unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn recording_annotations_flushed(app: AppHandle, window: WebviewWindow, session_id: uuid::Uuid,
+    request_id: uuid::Uuid, revision: Option<u64>) -> Result<(), String> {
+    require_caller(&window, true)?;
+    let (owned, accepted) = {
+        let state = app.state::<AppState>();
+        let mut flow = state.recording.lock().unwrap();
+        let owned = flow.session_id == session_id && !flow.is_finalizing
+            && flow.annotations.owns_stop_flush(Some(request_id));
+        (owned, owned && flow.annotations.accept_flush_revision(request_id, revision))
+    };
+    if owned {
+        if let Some(input) = owned_window(&app, INPUT_WINDOW, session_id) {
+            let _ = input.set_ignore_cursor_events(true);
+        }
+    }
+    if accepted {
+        app.emit_to(INK_WINDOW, "recording-annotation-present", PresentEvent {
+            session_id, request_id, revision: revision.unwrap(),
+        }).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn recording_annotations_presented(app: AppHandle, window: WebviewWindow, session_id: uuid::Uuid,
+    request_id: uuid::Uuid, revision: u64) -> Result<(), String> {
+    if window.label() != INK_WINDOW { return Err("This command is unavailable from this window.".into()); }
+    let state = app.state::<AppState>();
+    let mut flow = state.recording.lock().unwrap();
+    if flow.session_id == session_id && !flow.is_finalizing {
+        flow.annotations.acknowledge_presented(request_id, revision);
+    }
+    Ok(())
 }
 
 fn require_caller(window: &WebviewWindow, input_only: bool) -> Result<(), String> {
@@ -198,6 +332,7 @@ pub fn set_recording_annotation_tool(app: AppHandle, window: WebviewWindow,
             flow.annotations.return_pid = frontmost.filter(|pid| *pid != std::process::id()).or(return_pid);
         }
         flow.annotations.tool = tool;
+        flow.annotations.used |= tool != AnnotationTool::Desktop;
         flow.annotations.snapshot(session_id)
     };
     publish(&app, &snapshot);
@@ -385,8 +520,7 @@ fn disable(app: &AppHandle, session_id: uuid::Uuid, only_loading: bool) {
         if flow.session_id != session_id || !flow.annotations.available
             || (only_loading && flow.annotations.ready()) { return; }
         let return_pid = flow.annotations.return_pid.or(flow.return_pid);
-        let revision = flow.annotations.revision.saturating_add(1);
-        flow.annotations = RecordingAnnotations { error: Some(UNAVAILABLE.into()), revision, ..Default::default() };
+        flow.annotations.mark_unavailable();
         (flow.annotations.snapshot(session_id), return_pid)
     };
     publish(app, &snapshot);
@@ -580,5 +714,49 @@ mod tests {
         let finish: LiveAppearancePatch = serde_json::from_str("{}").unwrap();
         assert!(finish.validate().is_ok());
         assert_eq!(serde_json::to_string(&finish).unwrap(), "{}");
+    }
+
+    fn pending_stop(revision: u64) -> (RecordingAnnotations, uuid::Uuid, std::sync::mpsc::Receiver<bool>) {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let request_id = uuid::Uuid::new_v4();
+        (RecordingAnnotations { revision,
+            stop_flush: Some(StopFlush { request_id, revision: None, completion: Some(sender) }),
+            ..Default::default() }, request_id, receiver)
+    }
+
+    #[test]
+    fn stop_waits_for_the_flushed_revision_to_be_painted() {
+        let (mut state, request, completion) = pending_stop(7);
+        assert!(state.accept_flush_revision(request, Some(7)));
+        assert!(matches!(completion.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        state.acknowledge_presented(request, 6);
+        assert!(matches!(completion.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        state.acknowledge_presented(request, 7);
+        assert!(wait_for_flush(completion, std::time::Duration::ZERO));
+    }
+
+    #[test]
+    fn old_flush_replies_cannot_complete_a_new_stop() {
+        let (mut state, request, completion) = pending_stop(8);
+        let old_request = uuid::Uuid::new_v4();
+        assert!(!state.accept_flush_revision(old_request, Some(8)));
+        state.acknowledge_presented(old_request, 8);
+        assert!(!wait_for_flush(completion, std::time::Duration::ZERO));
+        assert!(state.owns_stop_flush(Some(request)));
+        assert!(!state.owns_stop_flush(Some(old_request)));
+    }
+
+    #[test]
+    fn missing_or_failed_surface_never_holds_stop_open() {
+        let (state, _, completion) = pending_stop(2);
+        assert!(!wait_for_flush(completion, std::time::Duration::ZERO));
+        drop(state);
+        let (mut state, request, completion) = pending_stop(2);
+        assert!(!state.accept_flush_revision(request, None));
+        assert!(!wait_for_flush(completion, STOP_FLUSH_TIMEOUT));
+        let (mut state, request, completion) = pending_stop(2);
+        state.mark_unavailable();
+        assert!(!wait_for_flush(completion, STOP_FLUSH_TIMEOUT));
+        assert!(state.owns_stop_flush(Some(request)), "failed overlay must retain the stop permit");
     }
 }

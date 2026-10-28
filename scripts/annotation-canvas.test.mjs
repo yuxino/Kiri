@@ -346,6 +346,40 @@ test("transparent live input paints without a frozen source and publishes clean 
   h.component.unmount();
 });
 
+test("recording stop freezes a visible pen draft while ordinary disabled editing still cancels it", () => {
+  for (const preserveDraftWhenDisabled of [false, true]) {
+    const live = [];
+    const h = annotation(documentWith([]), {image: null, transparent: true, tool: "pen",
+      preserveDraftWhenDisabled,
+      onLiveMarks: (marks, draft) => live.push({marks: structuredClone(marks), draft: structuredClone(draft)})});
+    h.pointer("onPointerDown", 30, 40); h.pointer("onPointerMove", 100, 90);
+    const finalDraft = live.at(-1).draft;
+    assert.equal(finalDraft.kind, "pen"); assert.ok(finalDraft.points.length > 1);
+    h.component.render({...h.props, interactionDisabled: true});
+    h.pointer("onPointerCancel", 100, 90);
+    h.pointer("onPointerMove", 160, 130);
+    assert.deepEqual(live.at(-1).draft, preserveDraftWhenDisabled ? finalDraft : null);
+    assert.deepEqual(h.changes, [], "freezing the last pixels does not invent a committed gesture");
+    h.component.unmount();
+  }
+});
+
+test("recording stop preserves a pen draft when native cancellation precedes the disabled render", () => {
+  const live = [], interactionLock = {locked: false};
+  const h = annotation(documentWith([]), {image: null, transparent: true, tool: "pen",
+    interactionLock, preserveDraftWhenDisabled: true,
+    onLiveMarks: (marks, draft) => live.push({marks: structuredClone(marks), draft: structuredClone(draft)})});
+  h.pointer("onPointerDown", 30, 40); h.pointer("onPointerMove", 100, 90);
+  const finalDraft = live.at(-1).draft;
+  const canvas = nodes(h.component.render()).find(node => node?.type === "canvas");
+  interactionLock.locked = true;
+  canvas.props.onPointerCancel();
+  h.component.render({...h.props, interactionDisabled: true});
+  assert.deepEqual(live.at(-1).draft, finalDraft, "the synchronous stop lock protects the frame before React commits");
+  assert.deepEqual(h.changes, []);
+  h.component.unmount();
+});
+
 test("live clear cancels an in-flight stroke and undo restores only committed ink", () => {
   const h = annotation(documentWith([rectangle]), {image: null, transparent: true, undoableClear: true, tool: "pen"});
   h.pointer("onPointerDown", 300, 200); h.pointer("onPointerMove", 350, 250);

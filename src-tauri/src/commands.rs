@@ -4527,7 +4527,7 @@ pub fn position_recording_controls(
         return Err("This command is unavailable from this window.".into());
     }
     if !width.is_finite() || !height.is_finite() || !content_scale.is_finite()
-        || !(96.0..=640.0).contains(&width) || !(40.0..=240.0).contains(&height)
+        || !(96.0..=640.0).contains(&width) || !(40.0..=360.0).contains(&height)
         || !(0.5..=8.0).contains(&content_scale) {
         return Err("Invalid recording control dimensions.".into());
     }
@@ -5446,14 +5446,24 @@ async fn resume_recording_session(app: AppHandle, expected_session: Option<uuid:
 
 #[tauri::command]
 pub async fn stop_recording(app: AppHandle) -> Result<(), String> {
-    stop_recording_session(app, None, None)
+    stop_recording_with_annotations(app, None).await
+}
+
+async fn stop_recording_with_annotations(app: AppHandle, expected_session: Option<uuid::Uuid>) -> Result<(), String> {
+    use crate::recording_annotations::StopPreparation;
+    match crate::recording_annotations::flush_before_stop(&app, expected_session).await {
+        StopPreparation::Immediate => stop_recording_session(app, None, expected_session, None),
+        StopPreparation::AlreadyStopping => Ok(()),
+        StopPreparation::Prepared { session_id, request_id } =>
+            stop_recording_session(app, None, Some(session_id), Some(request_id)),
+    }
 }
 
 pub(crate) async fn perform_recording_shortcut(
     app: AppHandle, session_id: uuid::Uuid, action: ShortcutAction, paused: bool,
 ) -> Result<(), String> {
     match action {
-        ShortcutAction::RecordingStop => stop_recording_session(app, None, Some(session_id)),
+        ShortcutAction::RecordingStop => stop_recording_with_annotations(app, Some(session_id)).await,
         ShortcutAction::RecordingPauseResume if paused => resume_recording_session(app, Some(session_id)).await,
         ShortcutAction::RecordingPauseResume => pause_recording_session(app, Some(session_id)).await,
         _ => Ok(()),
@@ -5462,13 +5472,14 @@ pub(crate) async fn perform_recording_shortcut(
 
 #[cfg(target_os = "linux")]
 fn stop_failed_linux_recording(app: &AppHandle, session_id: uuid::Uuid) -> Result<(), String> {
-    stop_recording_session(app.clone(), Some(session_id), Some(session_id))
+    stop_recording_session(app.clone(), Some(session_id), Some(session_id), None)
 }
 
 fn stop_recording_session(
     app: AppHandle,
     failed_session: Option<uuid::Uuid>,
     expected_session: Option<uuid::Uuid>,
+    annotation_flush: Option<uuid::Uuid>,
 ) -> Result<(), String> {
     if failed_session.is_none() {
         log::info!("stop_recording: called");
@@ -5522,7 +5533,8 @@ fn stop_recording_session(
                 return Ok(());
             }
         }
-        if !(recording.is_recording || recording.is_paused) || recording.is_transitioning {
+        if !(recording.is_recording || recording.is_paused)
+            || (recording.is_transitioning && !recording.annotations.owns_stop_flush(annotation_flush)) {
             return Ok(());
         }
         let needs_active_segment = recording.is_recording;
@@ -5553,6 +5565,7 @@ fn stop_recording_session(
         recording.is_recording = false;
         recording.is_paused = false;
         recording.is_finalizing = true;
+        recording.is_transitioning = false;
         recording.started_at = None;
         emit_recording_state(&app, &recording);
         (

@@ -4,6 +4,7 @@ export class RecordingAnnotationPublisher {
   constructor(send: (revision: number, value: RecordingInkFrame) => Promise<void>, onError: (failed: boolean) => void);
   revision: number;
   push(value: RecordingInkFrame): void;
+  drain(): Promise<number>;
   dispose(): void;
 }
 export function recordingInkMarks(marks: AnnotationMark[], draft: AnnotationMark | null): AnnotationMark[];

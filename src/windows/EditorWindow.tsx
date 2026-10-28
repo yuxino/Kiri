@@ -26,8 +26,9 @@ import {
 import { resolveInitialEditorDocument } from "../annotation/editor-document.js";
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { parseAnnotationDocument } from "../annotation/project.js";
-import { KiriIcon, type IconName } from "../components/KiriIcons";
+import { KiriIcon } from "../components/KiriIcons";
 import { AnnotationToolbarButton } from "../components/AnnotationToolbarButton";
+import {annotationToolGroups, annotationHistoryButtons, IMAGE_ANNOTATION_TOOLS} from "../components/AnnotationTools";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
 import { hasPendingImageTextChange, hasUnsavedImageChanges, type ImageEditSnapshot, type ImageTextDraft } from "../annotation/image-edit-state.js";
 import { ImageCloseGuard, type ImageCloseGuardHandle } from "./ImageCloseGuard";
@@ -36,20 +37,6 @@ import { Minus, Plus, CircleHelp } from "lucide-react";
 import "./editor-view.css";
 
 type EditorTool = Tool | "crop";
-
-const TOOLS: { tool: EditorTool; icon: IconName; title: string; shortcut: string }[] = [
-  { tool: "select", icon: "cursorarrow", title: "Select (V)", shortcut: "V" },
-  { tool: "crop", icon: "crop", title: "Crop (C)", shortcut: "C" },
-  { tool: "pen", icon: "pencil.tip", title: "Pen (P)", shortcut: "P" },
-  { tool: "rectangle", icon: "rectangle.dashed", title: "Rectangle (R)", shortcut: "R" },
-  { tool: "line", icon: "line.diagonal", title: "Line (L)", shortcut: "L" },
-  { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)", shortcut: "A" },
-  { tool: "text", icon: "textformat", title: "Text (T)", shortcut: "T" },
-  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)", shortcut: "N" },
-  { tool: "label", icon: "tag", title: "Label bubble (B)", shortcut: "B" },
-  { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)", shortcut: "M" },
-  { tool: "watermark", icon: "watermark", title: "Watermark (W)", shortcut: "W" },
-];
 
 export function EditorWindow(props: { id: string }) {
   const [readOnly, setReadOnly] = useState(() => new URLSearchParams(window.location.search).get("readonly") === "1");
@@ -469,25 +456,12 @@ export function EditorWindow(props: { id: string }) {
     >
       <div className="kiri-image-editor-toolbar" style={{opacity: completing ? 0.62 : 1}}>
         {!readOnly && <div className="kiri-image-editor-tools" inert={qrActive}>
-          <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(0, 2).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
-          </div>
-          <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>
-            {TOOLS.slice(2, 6).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
-          </div>
-          <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(6, 9).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
-          </div>
-          <div className="kiri-annotation-tool-group">
-            {TOOLS.slice(9).map(({tool: value, icon, title, shortcut}) => <EditorToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} onClick={() => selectTool(value)}/>)}
-          </div>
-          <div className="kiri-annotation-tool-group">
-            <EditorToolButton icon="arrow.uturn.backward" title={t("Undo")} shortcut="Mod+Z" disabled={tool === "crop" ? cropUndo.length === 0 : !canUndo}
-              onClick={() => tool === "crop" ? undoCrop() : canvasRef.current?.undo()}/>
-            <EditorToolButton icon="arrow.uturn.forward" title={t("Redo")} shortcut="Mod+Shift+Z" disabled={tool === "crop" ? cropRedo.length === 0 : !canRedo}
-              onClick={() => tool === "crop" ? redoCrop() : canvasRef.current?.redo()}/>
-            <EditorToolButton icon="trash" title={t("Clear Annotations")} disabled={tool === "crop" || !hasMarks} onClick={() => canvasRef.current?.clearAnnotations()}/>
-          </div>
+          {annotationToolGroups({tools: IMAGE_ANNOTATION_TOOLS, selected: tool, onChange: selectTool})}
+          {annotationHistoryButtons({canUndo: tool === "crop" ? cropUndo.length > 0 : canUndo,
+            canRedo: tool === "crop" ? cropRedo.length > 0 : canRedo,
+            onUndo: () => tool === "crop" ? undoCrop() : canvasRef.current?.undo(),
+            onRedo: () => tool === "crop" ? redoCrop() : canvasRef.current?.redo(),
+            hasMarks: tool !== "crop" && hasMarks, onClear: () => canvasRef.current?.clearAnnotations()})}
         </div>}
         <div className="kiri-image-editor-actions">
           {!readOnly && cropSelection && <button type="button" className="kiri-image-editor-view-button" disabled={qrActive || completing}

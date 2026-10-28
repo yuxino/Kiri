@@ -40,8 +40,18 @@ editing controls into the captured picture or preventing normal app interaction.
   one bounded mark snapshot; monotonically increasing ink revisions reject
   obsolete publications. Renderers subscribe before hydrating state. Input and
   ink readiness are separate from platform support and setup availability.
-  Stopping, cancellation and failure close both windows and discard transient
-  marks; a new recording starts empty.
+  Recording cancellation and recording failure release annotation input and close
+  both windows after native capture stops. A new recording starts empty.
+- Stopping a recording that used annotations first freezes the input document,
+  commits text where possible and retains an in-flight drawing draft. It drains
+  the latest vector update without waiting for the normal 34 ms publication
+  timer. The ink renderer acknowledges that revision after a browser paint.
+  This handoff has a 600 ms deadline, including blocking-pool queue time; a
+  failed or unresponsive renderer cannot prevent stopping. An acknowledged
+  handoff gets a further 34 ms capture interval before native stop. Recordings
+  that never entered annotation mode skip this handoff. Input is released while
+  the last ink remains visible until the native recorder and encoder finish;
+  teardown then discards the transient document and both windows.
 - Live marks are captured as video pixels, including GIF recordings produced
   from that video. They are not a saved editable video-annotation project and
   cannot later be removed independently. Editing chrome and the text caret
@@ -53,9 +63,10 @@ editing controls into the captured picture or preventing normal app interaction.
 ## Verification boundary
 
 Unit and renderer checks cover session ownership, bounded updates, publication
-ordering, undoable clear, local keyboard handling and toolbar layout. They do not
-establish native capture exclusion, focus restoration, DPI alignment or exported
-video content.
+ordering, bounded stop handoff, undoable clear, local keyboard handling and
+toolbar layout. A browser-paint acknowledgement does not prove that a native
+video frame contains the final mark. These checks do not establish native capture
+exclusion, focus restoration, DPI alignment or exported video content.
 
 Native acceptance must record real marks and inspect exported frames for ink
 with no toolbar, selection handles or text caret. It must also exercise desktop

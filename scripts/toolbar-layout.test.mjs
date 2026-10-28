@@ -118,7 +118,7 @@ test("choosing N and changing property heights keeps the main toolbar anchored b
   const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
   // Compile the real tool definitions and both toolbar rows, including all
   // three direct text tools; no empty TOOLS shortcut hides wrap groups.
-  const toolbar = source.slice(source.indexOf("const TOOLS:"));
+  const toolbar = source.slice(source.indexOf("const toolbarRowStyle:"));
   const css = readFileSync(new URL("../src/styles/design-system.css", import.meta.url), "utf8");
   const optionsCss = css.match(/\.kiri-capture-tool-options\s*\{([^}]+)\}/)?.[1];
   assert.ok(optionsCss, "the property HUD has an explicit input and width boundary");
@@ -132,6 +132,7 @@ test("choosing N and changing property heights keeps the main toolbar anchored b
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
     import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+    import {annotationToolGroups, annotationHistoryButtons, SCREENSHOT_ANNOTATION_TOOLS} from "../components/AnnotationTools";
     const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`, {
     attachRef(node) {
       if (node.props.className?.includes("kiri-annotation-tool-row")) node.props.ref.current = {offsetWidth: 550, offsetHeight: 48};
@@ -537,13 +538,14 @@ test("dragged properties clamp at screen edges and keep toolbar and mode selecto
 
 function movableToolbar() {
   const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
-  const toolbar = source.slice(source.indexOf("const TOOLS:"));
+  const toolbar = source.slice(source.indexOf("const toolbarRowStyle:"));
   let height = 160, panelStyle;
   const measured = {get scrollHeight() {return height;}, get offsetHeight() {return Math.min(height, panelStyle.maxHeight);},
     get clientHeight() {return Math.min(height, panelStyle.maxHeight);}};
   const runtime = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
     import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+    import {annotationToolGroups, annotationHistoryButtons, SCREENSHOT_ANNOTATION_TOOLS} from "../components/AnnotationTools";
     const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`, {
     attachRef(node) {
       if (node.props.className?.includes("kiri-annotation-tool-row")) node.props.ref.current = {offsetWidth: 784, offsetHeight: 48};

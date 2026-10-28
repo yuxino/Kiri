@@ -693,10 +693,11 @@ test("a failed close after saving does not offer to save the already committed s
 });
 
 test("the toolbar exposes direct pin, disables it while completing, and isolates keyboard activation", () => {
-  const toolbar = overlaySource.slice(overlaySource.indexOf("const TOOLS:"));
+  const toolbar = overlaySource.slice(overlaySource.indexOf("const toolbarRowStyle:"));
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
     import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+    import {annotationToolGroups, annotationHistoryButtons, SCREENSHOT_ANNOTATION_TOOLS} from "../components/AnnotationTools";
     const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}; export {ToolButton};`);
   let pins = 0, saves = 0;
   const props = { selection:{x:100,y:100,width:140,height:160}, bounds:{x:0,y:0,width:800,height:600},

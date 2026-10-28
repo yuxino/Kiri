@@ -640,8 +640,13 @@ Both windows are created before native capture starts, with the ink window
 explicitly included in the macOS filter. Availability requires successful
 native exclusion of input and controls, and readiness from both renderers.
 The session owns one bounded mark snapshot and rejects stale ink revisions.
-Pause preserves the document; stop, cancellation and failure destroy both
-windows. Live marks become recorded pixels, not an editable video project.
+Pause preserves the document. Stop freezes and drains the latest annotation
+frame, waits up to 600 ms for its browser-paint acknowledgement, and gives an
+acknowledged frame another 34 ms capture interval before native stop. Recordings
+that never used annotations skip this handoff; a timeout still permits stopping.
+Input is released while the last ink stays visible until native recording and
+encoding finish. Teardown destroys both windows and their transient document.
+Live marks become recorded pixels, not an editable video project.
 Linux retains its existing controls without live annotations. See
 [ADR 0123](adr/0123-live-recording-annotations.md).
 

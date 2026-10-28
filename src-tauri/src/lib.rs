@@ -318,6 +318,8 @@ pub fn run() {
             commands::get_recording_state,
             recording_annotations::get_recording_annotations,
             recording_annotations::recording_annotations_ready,
+            recording_annotations::recording_annotations_flushed,
+            recording_annotations::recording_annotations_presented,
             recording_annotations::set_recording_annotation_tool,
             recording_annotations::recording_annotation_action,
             recording_annotations::update_recording_annotations,

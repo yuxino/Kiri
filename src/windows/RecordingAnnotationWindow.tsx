@@ -4,7 +4,8 @@ import {type AnnotationMark, type Tool} from "../annotation/model";
 import {drawMark, type RenderContext} from "../annotation/render";
 import {isTextComposition} from "../annotation/text-composition.js";
 import {useAnnotationAppearance} from "../annotation/useAnnotationAppearance";
-import {api, onRecordingAnnotationAction, onRecordingAnnotationAppearance, emitRecordingAnnotationSelection,
+import {api, onRecordingAnnotationAction, onRecordingAnnotationAppearance, onRecordingAnnotationFlush,
+  onRecordingAnnotationPresent, emitRecordingAnnotationSelection,
   type RecordingAnnotationAction, type RecordingAnnotationsState} from "../lib/ipc";
 import {t} from "../i18n";
 import {useRecordingAnnotations} from "./useRecordingAnnotations";
@@ -31,7 +32,19 @@ export function RecordingAnnotationWindow({ink = false}: {ink?: boolean}) {
 
 function RecordingInk({sessionId, state, size}: {sessionId: string; state: RecordingAnnotationsState | null; size: {width: number; height: number}}) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const drawnRevision = useRef<number | null>(null);
+  const [presentation, setPresentation] = useState<{requestId: string; revision: number} | null>(null);
+  const [subscribed, setSubscribed] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    const subscription = onRecordingAnnotationPresent(event => {
+      if (!disposed && event.sessionId === sessionId) setPresentation(event);
+    });
+    void subscription.then(() => {if (!disposed) setSubscribed(true);}).catch(() => {});
+    return () => {disposed = true; void subscription.then(stop => stop()).catch(() => {});};
+  }, [sessionId]);
   useLayoutEffect(() => {
+    drawnRevision.current = null;
     const element = canvas.current;
     if (!element || !state) return;
     const scale = Math.max(1, window.devicePixelRatio || 1);
@@ -48,11 +61,27 @@ function RecordingInk({sessionId, state, size}: {sessionId: string; state: Recor
     for (const mark of recordingInkMarks(state.marks, null)) {
       ctx.save(); drawMark(mark, context, ctx); ctx.restore();
     }
+    drawnRevision.current = state.revision;
   }, [state, size]);
   useEffect(() => {
-    if (!state) return;
+    if (!state || !subscribed) return;
     void api.recordingAnnotationsReady(sessionId).catch(() => {});
-  }, [sessionId, Boolean(state)]);
+  }, [sessionId, Boolean(state), subscribed]);
+  useEffect(() => {
+    if (!presentation || !state || drawnRevision.current === null
+      || drawnRevision.current < presentation.revision) return;
+    let cancelled = false;
+    // The layout effect has drawn the target revision. Wait across a browser
+    // paint before acknowledging it to the native recording stop barrier.
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        if (!cancelled) void api.recordingAnnotationsPresented(sessionId, presentation.requestId,
+          state.revision).catch(() => {});
+      });
+    });
+    return () => {cancelled = true; cancelAnimationFrame(first); cancelAnimationFrame(second);};
+  }, [sessionId, state, presentation]);
   return <canvas ref={canvas} className="kiri-record-annotation-ink" aria-hidden="true" style={size}/>;
 }
 
@@ -64,6 +93,9 @@ function RecordingInput({sessionId, state, size}: {sessionId: string; state: Rec
   const appearanceRef = useRef(appearance); appearanceRef.current = appearance;
   const setAppearanceRef = useRef(setAppearance); setAppearanceRef.current = setAppearance;
   const [failed, setFailed] = useState(false);
+  const [flushing, setFlushing] = useState(false);
+  const flushingRef = useRef(false);
+  const interactionLock = useRef({locked: false});
   const publisher = useRef<RecordingAnnotationPublisher | null>(null);
   const latest = useRef<RecordingInkFrame>({marks: initial.marks, canUndo: false, canRedo: false, hasMarks: initial.marks.length > 0});
   const lastTool = useRef<Tool>("pen");
@@ -71,7 +103,10 @@ function RecordingInput({sessionId, state, size}: {sessionId: string; state: Rec
   const active = state.tool !== "desktop";
   const stateRef = useRef(state); stateRef.current = state;
   const perform = useCallback((action: RecordingAnnotationAction) => {
+    if (flushingRef.current) return;
     if (action === "clear") canvas.current?.clearAnnotations();
+    else if (action === "editText") canvas.current?.editSelectedText();
+    else if (action === "delete") canvas.current?.deleteSelection();
     else {
       if (canvas.current?.cancelInteraction()) return;
       action === "undo" ? canvas.current?.undo() : canvas.current?.redo();
@@ -88,21 +123,45 @@ function RecordingInput({sessionId, state, size}: {sessionId: string; state: Rec
       if (!disposed && event.sessionId === sessionId) perform(event.action);
     });
     const styling = onRecordingAnnotationAppearance(event => {
-      if (disposed || event.sessionId !== sessionId) return;
+      if (disposed || flushingRef.current || event.sessionId !== sessionId) return;
       if (Object.keys(event.patch).length) {
         setAppearanceRef.current({...appearanceRef.current, ...event.patch});
         canvas.current?.updateSelectionAppearance(event.patch, event.transient);
       }
       if (event.finish) canvas.current?.finishAppearanceAdjustment();
     });
-    const subscription = Promise.all([actions, styling]);
+    const flushSubscription = onRecordingAnnotationFlush(event => {
+      if (disposed || event.sessionId !== sessionId || flushingRef.current) return;
+      flushingRef.current = true;
+      canvas.current?.commitTextEditing();
+      canvas.current?.finishAppearanceAdjustment();
+      interactionLock.current.locked = true;
+      setFlushing(true);
+      void (async () => {
+        try {
+          // React commits text/history before AnnotationCanvas publishes its
+          // next rendered frame. A hidden desktop-mode canvas stays mounted.
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          if (disposed) return;
+          next.push(latest.current);
+          const revision = await next.drain();
+          if (!disposed) await api.recordingAnnotationsFlushed(sessionId, event.requestId, revision);
+        } catch {
+          if (!disposed) {
+            setFailed(true);
+            await api.recordingAnnotationsFlushed(sessionId, event.requestId, null).catch(() => {});
+          }
+        }
+      })();
+    });
+    const subscription = Promise.all([actions, styling, flushSubscription]);
     void subscription.then(async () => {
       if (disposed) return;
       await api.recordingAnnotationsReady(sessionId);
       if (!disposed && stateRef.current.available) next.push(latest.current);
     }).catch(() => {if (!disposed) setFailed(true);});
     return () => {disposed = true; next.dispose(); publisher.current = null;
-      for (const subscription of [actions, styling]) void subscription.then(stop => stop()).catch(() => {});};
+      for (const subscription of [actions, styling, flushSubscription]) void subscription.then(stop => stop()).catch(() => {});};
   }, [sessionId, perform, appearanceReady]);
   useEffect(() => {
     if (state.available) publisher.current?.push(latest.current);
@@ -139,6 +198,7 @@ function RecordingInput({sessionId, state, size}: {sessionId: string; state: Rec
   useEffect(() => {
     if (!active) return;
     const key = (event: KeyboardEvent) => {
+      if (flushingRef.current) return;
       if (event.defaultPrevented || event.repeat || isTextComposition(event)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input,textarea,select,[contenteditable],[role=menu],[role=listbox]")) return;
@@ -162,6 +222,7 @@ function RecordingInput({sessionId, state, size}: {sessionId: string; state: Rec
   return <div className="kiri-record-annotation-input" data-active={active || undefined} style={size}>
     <AnnotationCanvas ref={canvas} image={null} transparent undoableClear region={{x: 0, y: 0, ...size}}
       initialDocument={initial} tool={lastTool.current} appearance={appearance} onLiveMarks={liveMarks}
+      interactionDisabled={flushing} interactionLock={interactionLock.current} preserveDraftWhenDisabled
       onSelectionInfo={selection} onHistoryChange={history} onCancel={desktop} onError={() => setFailed(true)}/>
     {failed && <div className="kiri-record-annotation-error" role="alert">
       <span>{t("Could not update recording annotations. Try again.")}</span>

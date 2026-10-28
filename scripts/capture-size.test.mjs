@@ -54,10 +54,11 @@ test("edge fields clear resize handles and stay within every display corner", ()
 
 test("the existing screenshot sliders toggle edge fields without completing capture", () => {
   const overlay = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
-  const toolbar = overlay.slice(overlay.indexOf("const TOOLS:"));
+  const toolbar = overlay.slice(overlay.indexOf("const toolbarRowStyle:"));
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
     import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+    import {annotationToolGroups, annotationHistoryButtons, SCREENSHOT_ANNOTATION_TOOLS} from "../components/AnnotationTools";
     const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`);
   let toggles = 0, captures = 0;
   const props = { selection:{x:100,y:100,width:140,height:160}, bounds:{x:0,y:0,width:1000,height:700},
