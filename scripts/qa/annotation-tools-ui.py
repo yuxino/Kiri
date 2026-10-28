@@ -432,6 +432,14 @@ async def placement_setup(browser, surface):
             await page.wait_for_function("document.querySelector('img')?.complete")
             await placement_drag(page, {"x": 160, "y": 300}, {"x": 1120, "y": 900})
         await page.get_by_role("button", name="Select (V)", exact=True).click()
+        if surface == "overlay":
+            # Select preserves region adjustment until a drawing tool is chosen.
+            # Enter annotation without drawing, then use the shared Select baseline.
+            await page.locator("canvas").wait_for(state="attached")
+            assert await page.locator("canvas").is_hidden(), "Select must not lock an unannotated capture region"
+            await page.get_by_role("button", name="Rectangle (R)", exact=True).click()
+            await page.locator("canvas").wait_for(state="visible")
+            await page.get_by_role("button", name="Select (V)", exact=True).click()
         await page.locator("canvas").wait_for(state="visible")
         source_hash = await placement_source_hash(page)
         empty_hash = await placement_canvas_hash(page)
