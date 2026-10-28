@@ -6,7 +6,7 @@ import { AppearanceUpdates } from "./appearance-updates.js";
 const SAVE_DELAY_MS = 180;
 
 /** Shares styling without overwriting unrelated cross-window edits. */
-export function useAnnotationAppearance(): [AppearanceSettings, (next: AppearanceSettings) => void] {
+export function useAnnotationAppearance(): [AppearanceSettings, (next: AppearanceSettings) => void, boolean] {
   const updates = useRef(new AppearanceUpdates(DEFAULT_APPEARANCE));
   const [appearance, setAppearanceState] = useState(DEFAULT_APPEARANCE);
   const [loaded, setLoaded] = useState(false);
@@ -64,5 +64,5 @@ export function useAnnotationAppearance(): [AppearanceSettings, (next: Appearanc
   useEffect(() => () => {
     if (loadedRef.current && updates.current.hasPending) void savePending();
   }, [savePending]);
-  return [appearance, setAppearance];
+  return [appearance, setAppearance, loaded];
 }

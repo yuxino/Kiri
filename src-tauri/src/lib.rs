@@ -34,6 +34,7 @@ mod media_playback;
 #[cfg(windows)]
 mod media_source_windows;
 mod record;
+mod recording_annotations;
 mod scroll_capture;
 mod remote_ocr;
 mod shortcut_settings;
@@ -315,6 +316,14 @@ pub fn run() {
             commands::start_recording_flow,
             commands::recording_countdown_ready,
             commands::get_recording_state,
+            recording_annotations::get_recording_annotations,
+            recording_annotations::recording_annotations_ready,
+            recording_annotations::recording_annotations_flushed,
+            recording_annotations::recording_annotations_presented,
+            recording_annotations::set_recording_annotation_tool,
+            recording_annotations::recording_annotation_action,
+            recording_annotations::update_recording_annotations,
+            recording_annotations::update_recording_annotation_appearance,
             commands::position_recording_controls,
             commands::cancel_recording_flow,
             commands::begin_recording,

@@ -45,6 +45,8 @@ modules.
 | `scroll-capture` | Nonactivating scrolling screenshot preview and completion controls |
 | `scroll-capture-region` | Persistent pointer-transparent selection guide with dimming outside the crop |
 | `recording-region` | Passive, capture-excluded recording region outline |
+| `recording-annotation-ink` | Recorded, pointer-transparent live marks on macOS/Windows |
+| `recording-annotation-input` | Capture-excluded live annotation editing surface |
 | `ripple` | Optional recorded click highlight |
 | `editor-*` | Full screenshot editor |
 | `viewer-*` | Image, video, or GIF viewer |
@@ -380,6 +382,14 @@ Changes are debounced as field-level patches, merged under the native preference
 lock, and broadcast to open windows. The active tool, selection, crop,
 and document content are never persisted as appearance preferences.
 
+`components/AnnotationTools` owns the shared tool definitions and grouped
+`AnnotationToolbarButton` rendering for capture, saved images, live recording
+and video editing. Capture, saved images and live recording also share its
+Undo/Redo/Clear button renderer and `AnnotationStyleControls`; each window
+supplies its supported tools, actions and layout. Video editing shares the tool
+core while retaining its timeline history and property inspector, which converts
+visual widths and font sizes between display and source coordinates.
+
 The screenshot annotation toolbar and property panel have separate drag handles
 with keyboard adjustments. Manual positions belong to the current capture and
 survive selection, tool, and property changes. The main toolbar stays within the
@@ -630,6 +640,24 @@ geometry from overriding a drag. The passive region outline is click-through and
 excluded alongside the controls. Older Windows capture-exclusion limitations
 retain the OS indicator, and Linux keeps tray/CLI controls. See ADR 0105.
 
+On macOS and Windows, the same control bar can enable live annotation. A
+pointer-transparent ink window contributes only marks to the recording; a
+separate capture-excluded input window owns selection, gestures and text editing.
+Returning to desktop operation hides the input surface and retains the marks.
+Both windows are created before native capture starts, with the ink window
+explicitly included in the macOS filter. Availability requires successful
+native exclusion of input and controls, and readiness from both renderers.
+The session owns one bounded mark snapshot and rejects stale ink revisions.
+Pause preserves the document. Stop freezes and drains the latest annotation
+frame, waits up to 600 ms for its browser-paint acknowledgement, and gives an
+acknowledged frame another 34 ms capture interval before native stop. Recordings
+that never used annotations skip this handoff; a timeout still permits stopping.
+Input is released while the last ink stays visible until native recording and
+encoding finish. Teardown destroys both windows and their transient document.
+Live marks become recorded pixels, not an editable video project.
+Linux retains its existing controls without live annotations. See
+[ADR 0123](adr/0123-live-recording-annotations.md).
+
 Platform capture produces BGRA video frames and optional PCM audio. macOS uses
 ScreenCaptureKit and sends those buffers to AVAssetWriter for a 30 fps H.264
 MP4 with optional AAC audio and explicit BT.709 color metadata, keeping playback
@@ -705,7 +733,7 @@ compatible segment; stop merges those segments into one library asset. If a
 live segment loses integrity, previously completed segments are moved out of
 cleanup ownership and imported as a partial recording. AVFoundation validates
 and losslessly exports macOS segments as one MP4. Kiri control windows are excluded from exported frames,
-while an enabled click-ripple window is intentionally included.
+while an enabled click-ripple window and live annotation ink are intentionally included.
 
 The macOS and Windows recording control panel is shown without taking keyboard
 focus and has no window-level bare Space/Escape recording listener. Explicitly

@@ -860,5 +860,12 @@
   "Open System Settings": "Systemeinstellungen öffnen",
   "Save the captured area first, then pin it from the completion preview.": "Speichern Sie zuerst den erfassten Bereich und heften Sie ihn dann über die Abschlussvorschau an.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Verschieben des Fensters ziehen. Zum Betrachten scrollen. Per Pinch oder mit Strg/Command und Scrollen zoomen. Zum Verschieben des Bildausschnitts beim Ziehen die Leertaste gedrückt halten.",
-  "Zoom level": "Zoomstufe"
+  "Zoom level": "Zoomstufe",
+  "Annotate Recording": "Aufnahme annotieren",
+  "Operate Desktop": "Desktop bedienen",
+  "Preparing annotations…": "Anmerkungen werden vorbereitet…",
+  "Could not update recording annotations. Try again.": "Aufnahme-Anmerkungen konnten nicht aktualisiert werden. Bitte erneut versuchen.",
+  "Live annotations are unavailable for this recording.": "Live-Anmerkungen sind für diese Aufnahme nicht verfügbar.",
+  "Too many live annotations. Clear some marks to continue.": "Zu viele Live-Anmerkungen. Löschen Sie einige, um fortzufahren.",
+  "This annotation tool is unavailable while recording.": "Dieses Anmerkungswerkzeug ist während der Aufnahme nicht verfügbar."
 }

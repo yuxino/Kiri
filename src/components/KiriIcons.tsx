@@ -20,6 +20,7 @@ import {
   Image,
   Moon,
   MoreHorizontal,
+  Mouse,
   MousePointer2,
   MoveVertical,
   Pause,
@@ -49,6 +50,7 @@ import {
 } from "lucide-react";
 
 export type IconName =
+  | "mouse" // Operate the desktop while recording
   | "cursorarrow" // Select (V)
   | "crop" // Crop (C)
   | "pencil.tip" // Pen (P)
@@ -100,6 +102,7 @@ export type IconName =
   | "eye"; // library: view
 
 const ICONS: Record<IconName, React.ComponentType<Record<string, unknown>>> = {
+  mouse: Mouse,
   cursorarrow: MousePointer2,
   crop: Crop,
   "pencil.tip": Pen,

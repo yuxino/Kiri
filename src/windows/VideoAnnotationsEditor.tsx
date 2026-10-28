@@ -5,8 +5,7 @@ import {ChoiceSelect} from "../components/ChoiceSelect";
 import AnnotationCanvas, {type AnnotationCanvasHandle} from "../annotation/AnnotationCanvas";
 import {isTextComposition} from "../annotation/text-composition.js";
 import {COLOR_HEX, COLOR_LABELS, COLOR_PRESETS, type AnnotationMark, type AppearanceSettings, type MosaicShape, type Tool} from "../annotation/model";
-import {type IconName} from "../components/KiriIcons";
-import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+import {ANNOTATION_TOOLS, annotationToolGroups, VIDEO_ANNOTATION_TOOLS} from "../components/AnnotationTools";
 import {t} from "../i18n";
 import "./VideoAnnotationsEditor.css";
 import {useAnnotationAppearance} from "../annotation/useAnnotationAppearance";
@@ -21,15 +20,17 @@ export type VideoAnnotationsEditorProps={
   onCommitReady?(commit:(()=>void)|null):void;
   onChange(marks:AnnotationMark[]):void;onUndo():void;onRedo():void;canUndo:boolean;canRedo:boolean;onClose():void;
 };
-const tools:{tool:Tool;icon:IconName;label:string;name:string;hint:string;key:string}[]=[
-  {tool:"select",icon:"cursorarrow",label:"Select (V)",name:"Select",hint:"Click an object to edit it. Drag its handles to resize.",key:"v"},
-  {tool:"pen",icon:"pencil.tip",label:"Pen (P)",name:"Pen",hint:"Draw on the picture. Your stroke stays editable.",key:"p"},
-  {tool:"rectangle",icon:"rectangle.dashed",label:"Rectangle (R)",name:"Rectangle",hint:"Drag on the picture to draw a rectangle.",key:"r"},
-  {tool:"line",icon:"line.diagonal",label:"Line (L)",name:"Line",hint:"Drag to draw a line. Move either endpoint to adjust it.",key:"l"},
-  {tool:"arrow",icon:"arrow.up.right",label:"Arrow (A)",name:"Arrow",hint:"Drag toward the detail you want to point out.",key:"a"},
-  {tool:"text",icon:"textformat",label:"Text (T)",name:"Text",hint:"Click the picture to type. Enter finishes; Shift + Enter adds a line.",key:"t"},
-  {tool:"mosaic",icon:"square.grid.3x3.fill",label:"Mosaic (M)",name:"Mosaic",hint:"Brush over private details, or drag a rectangle or ellipse.",key:"m"},
-];
+const hints: Partial<Record<Tool, {name: string; hint: string}>> = {
+  select: {name:"Select",hint:"Click an object to edit it. Drag its handles to resize."},
+  pen: {name:"Pen",hint:"Draw on the picture. Your stroke stays editable."},
+  rectangle: {name:"Rectangle",hint:"Drag on the picture to draw a rectangle."},
+  line: {name:"Line",hint:"Drag to draw a line. Move either endpoint to adjust it."},
+  arrow: {name:"Arrow",hint:"Drag toward the detail you want to point out."},
+  text: {name:"Text",hint:"Click the picture to type. Enter finishes; Shift + Enter adds a line."},
+  mosaic: {name:"Mosaic",hint:"Brush over private details, or drag a rectangle or ellipse."},
+};
+const tools = ANNOTATION_TOOLS.filter(item => VIDEO_ANNOTATION_TOOLS.includes(item.tool as Tool))
+  .map(item => ({...item, tool: item.tool as Tool, key: item.shortcut.toLowerCase()}));
 const noop=()=>{};
 export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
   const canvas=useRef<AnnotationCanvasHandle>(null);
@@ -51,7 +52,7 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
   const scaled={...appearance,penWidth:appearance.penWidth*scale,shapeWidth:appearance.shapeWidth*scale,textFontSize:appearance.textFontSize*scale,mosaicBrushDiameter:appearance.mosaicBrushDiameter*scale};
   const selected=selection.mark;
   const editingTool=selected?.kind??tool;
-  const definition=tools.find(item=>item.tool===editingTool)??tools[0];
+  const definition=hints[editingTool]??hints.select!;
   const shape=selected?.kind==="mosaic"?selected.shape??"brush":mosaicShape;
   const values:AppearanceSettings={...appearance,...(selected?.kind==="mosaic"?{
     mosaicBrushDiameter:selected.brushDiameter/scale,mosaicIntensity:selected.intensity,mosaicStyle:selected.style,
@@ -120,7 +121,7 @@ export function VideoAnnotationsEditor(props:VideoAnnotationsEditorProps) {
   </div>;
   const toolbar=<fieldset disabled={props.disabled} className={`kiri-video-annotation-tools${props.toolbarHost?" kiri-video-annotation-tools--hosted":""}`} aria-label={t("Annotations")}>
     <div className="kiri-video-annotation-tool-group" role="group" aria-label={t("Annotations")}>
-      {tools.map(item=><AnnotationToolbarButton key={item.tool} icon={item.icon} title={t(item.label)} shortcut={item.key.toUpperCase()} active={props.active&&tool===item.tool} disabled={props.disabled} onClick={()=>selectTool(item.tool)}/>)}
+      {annotationToolGroups({tools: VIDEO_ANNOTATION_TOOLS, selected: props.active ? tool : null, disabled: props.disabled, onChange: selectTool})}
     </div>
     {props.extraTools&&<div className="kiri-video-annotation-extra-tools">{props.extraTools}</div>}
     {!props.appearanceHost&&controls}

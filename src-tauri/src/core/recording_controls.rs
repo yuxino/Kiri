@@ -198,4 +198,21 @@ mod tests {
             Rect::new(1082.0, 32.0, 350.0, 52.0)
         );
     }
+
+    #[test]
+    fn expanded_annotation_controls_fit_narrow_work_areas_and_dragged_edges() {
+        for origin in [(0.0, 24.0), (-320.0, -600.0)] {
+            let work = Rect::new(origin.0, origin.1, 320.0, 600.0);
+            for height in [300.0, 360.0] {
+                for preferred in [None, Some((origin.0 + 280.0, origin.1 + 540.0))] {
+                    let frame = controls_frame(work, work, (320.0, height), preferred);
+                    assert_eq!(frame.width, 304.0);
+                    assert_eq!(frame.height, height);
+                    assert!(frame.x >= work.x + 8.0 && frame.y >= work.y + 8.0);
+                    assert!(frame.x + frame.width <= work.x + work.width - 8.0);
+                    assert!(frame.y + frame.height <= work.y + work.height - 8.0);
+                }
+            }
+        }
+    }
 }

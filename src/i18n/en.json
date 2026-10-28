@@ -860,5 +860,12 @@
   "Open System Settings": "Open System Settings",
   "Save the captured area first, then pin it from the completion preview.": "Save the captured area first, then pin it from the completion preview.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.",
-  "Zoom level": "Zoom level"
+  "Zoom level": "Zoom level",
+  "Annotate Recording": "Annotate Recording",
+  "Operate Desktop": "Operate Desktop",
+  "Preparing annotations…": "Preparing annotations…",
+  "Could not update recording annotations. Try again.": "Could not update recording annotations. Try again.",
+  "Live annotations are unavailable for this recording.": "Live annotations are unavailable for this recording.",
+  "Too many live annotations. Clear some marks to continue.": "Too many live annotations. Clear some marks to continue.",
+  "This annotation tool is unavailable while recording.": "This annotation tool is unavailable while recording."
 }

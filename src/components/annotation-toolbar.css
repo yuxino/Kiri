@@ -19,9 +19,9 @@
 .kiri-annotation-toolbar-button:disabled {opacity:.32;}
 .kiri-annotation-toolbar-button.kiri-toolbar-button:focus-visible {outline:2px solid #aaa; outline-offset:1px; box-shadow:none;}
 .kiri-annotation-toolbar-tooltip {position:fixed; z-index:1000; max-width:min(260px, calc(100vw - 16px)); box-sizing:border-box; padding:5px 8px; border:1px solid #414141; border-radius:5px; background:#242424; color:#eee; pointer-events:none; font:400 11px/1.45 var(--kiri-font-ui); overflow-wrap:anywhere;}
-:is(.kiri-capture-toolbar, .kiri-image-editor-tools) .kiri-annotation-tool-group {gap:1px; flex-wrap:wrap; max-width:100%; box-sizing:border-box;}
-:is(.kiri-capture-toolbar, .kiri-image-editor-tools) .kiri-annotation-tool-group + .kiri-annotation-tool-group {position:relative; padding-left:6px; margin-left:2px; border-left:0;}
-:is(.kiri-capture-toolbar, .kiri-image-editor-tools) .kiri-annotation-tool-group + .kiri-annotation-tool-group::before {content:""; position:absolute; left:0; top:50%; width:1px; height:18px; transform:translateY(-50%); background:#3b3b3b;}
+.kiri-annotation-tool-group {display:flex; align-items:center; gap:1px; flex-wrap:wrap; max-width:100%; box-sizing:border-box;}
+:is(.kiri-capture-toolbar, .kiri-image-editor-tools, .kiri-record-annotation-row, .kiri-video-annotation-tool-group) .kiri-annotation-tool-group + .kiri-annotation-tool-group {position:relative; padding-left:6px; margin-left:2px; border-left:0;}
+:is(.kiri-capture-toolbar, .kiri-image-editor-tools, .kiri-record-annotation-row, .kiri-video-annotation-tool-group) .kiri-annotation-tool-group + .kiri-annotation-tool-group::before {content:""; position:absolute; left:0; top:50%; width:1px; height:18px; transform:translateY(-50%); background:#3b3b3b;}
 .kiri-capture-toolbar .kiri-annotation-tool-row {row-gap:6px; border-radius:9px; border:1px solid #444; background:#1c1c1c; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none;}
 .kiri-image-editor-toolbar:has(.kiri-annotation-toolbar-button) {gap:6px 10px; padding:7px 10px;}
 .kiri-image-editor-tools:has(.kiri-annotation-toolbar-button) {row-gap:6px;}

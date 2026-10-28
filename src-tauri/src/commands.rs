@@ -4339,7 +4339,8 @@ pub async fn cancel_recording_flow(app: AppHandle, session_id: uuid::Uuid) -> Re
     Ok(())
 }
 
-fn close_recording_windows(app: &AppHandle) {
+fn close_recording_windows(app: &AppHandle, session_id: uuid::Uuid) {
+    crate::recording_annotations::release_input(app, session_id);
     for label in ["countdown", "control-panel", "recording-region", "ripple"] {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.close();
@@ -4369,10 +4370,11 @@ fn discard_active_recording(mut active: ActiveRecording) {
 
 fn cleanup_abandoned_recording(app: &AppHandle, abandoned: RecordingFlow) {
     stop_click_monitor(app);
-    close_recording_windows(app);
+    close_recording_windows(app, abandoned.session_id);
     if let Some(active) = abandoned.active {
         discard_active_recording(active);
     }
+    crate::recording_annotations::close(app, abandoned.session_id);
     for path in abandoned.segments {
         let _ = std::fs::remove_file(path);
     }
@@ -4525,7 +4527,7 @@ pub fn position_recording_controls(
         return Err("This command is unavailable from this window.".into());
     }
     if !width.is_finite() || !height.is_finite() || !content_scale.is_finite()
-        || !(96.0..=640.0).contains(&width) || !(40.0..=96.0).contains(&height)
+        || !(96.0..=640.0).contains(&width) || !(40.0..=360.0).contains(&height)
         || !(0.5..=8.0).contains(&content_scale) {
         return Err("Invalid recording control dimensions.".into());
     }
@@ -4778,8 +4780,9 @@ fn start_recorder(
     #[cfg(any(windows, target_os = "linux"))]
     let _ = app;
     #[cfg(target_os = "macos")]
-    let ripple_excepted = platform::window_capture_id(app, "ripple")
-        .into_iter()
+    let recorded_windows = [platform::window_capture_id(app, "ripple"),
+        crate::recording_annotations::capture_window_id(app)]
+        .into_iter().flatten()
         .collect::<Vec<_>>();
     #[cfg(target_os = "macos")]
     {
@@ -4789,7 +4792,7 @@ fn start_recorder(
             configuration.region,
             configuration.backing_scale,
             configuration.options.clone(),
-            &ripple_excepted,
+            &recorded_windows,
             senders.video,
             senders.system_audio,
             senders.microphone,
@@ -4980,6 +4983,8 @@ fn spawn_recording_clock(app: &AppHandle, session_id: uuid::Uuid) {
     let handle = app.clone();
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(250));
+        #[cfg(not(target_os = "linux"))]
+        crate::recording_annotations::remember_desktop_focus(&handle, session_id);
         #[cfg(target_os = "linux")]
         if let Err(error) = stop_failed_linux_recording(&handle, session_id) {
             log::error!("recording: failed Linux session cleanup: {error}");
@@ -5054,6 +5059,7 @@ pub async fn begin_recording(app: AppHandle, session_id: Option<uuid::Uuid>) -> 
                     log::warn!("recording region indicator unavailable: {error}");
                 }
                 create_control_panel(&app, &configuration, session_id)?;
+                crate::recording_annotations::prepare(&app, &configuration, session_id);
             }
             if configuration.options.highlights_clicks {
                 create_ripple_window(&app, &configuration)?;
@@ -5440,14 +5446,24 @@ async fn resume_recording_session(app: AppHandle, expected_session: Option<uuid:
 
 #[tauri::command]
 pub async fn stop_recording(app: AppHandle) -> Result<(), String> {
-    stop_recording_session(app, None, None)
+    stop_recording_with_annotations(app, None).await
+}
+
+async fn stop_recording_with_annotations(app: AppHandle, expected_session: Option<uuid::Uuid>) -> Result<(), String> {
+    use crate::recording_annotations::StopPreparation;
+    match crate::recording_annotations::flush_before_stop(&app, expected_session).await {
+        StopPreparation::Immediate => stop_recording_session(app, None, expected_session, None),
+        StopPreparation::AlreadyStopping => Ok(()),
+        StopPreparation::Prepared { session_id, request_id } =>
+            stop_recording_session(app, None, Some(session_id), Some(request_id)),
+    }
 }
 
 pub(crate) async fn perform_recording_shortcut(
     app: AppHandle, session_id: uuid::Uuid, action: ShortcutAction, paused: bool,
 ) -> Result<(), String> {
     match action {
-        ShortcutAction::RecordingStop => stop_recording_session(app, None, Some(session_id)),
+        ShortcutAction::RecordingStop => stop_recording_with_annotations(app, Some(session_id)).await,
         ShortcutAction::RecordingPauseResume if paused => resume_recording_session(app, Some(session_id)).await,
         ShortcutAction::RecordingPauseResume => pause_recording_session(app, Some(session_id)).await,
         _ => Ok(()),
@@ -5456,13 +5472,14 @@ pub(crate) async fn perform_recording_shortcut(
 
 #[cfg(target_os = "linux")]
 fn stop_failed_linux_recording(app: &AppHandle, session_id: uuid::Uuid) -> Result<(), String> {
-    stop_recording_session(app.clone(), Some(session_id), Some(session_id))
+    stop_recording_session(app.clone(), Some(session_id), Some(session_id), None)
 }
 
 fn stop_recording_session(
     app: AppHandle,
     failed_session: Option<uuid::Uuid>,
     expected_session: Option<uuid::Uuid>,
+    annotation_flush: Option<uuid::Uuid>,
 ) -> Result<(), String> {
     if failed_session.is_none() {
         log::info!("stop_recording: called");
@@ -5516,7 +5533,8 @@ fn stop_recording_session(
                 return Ok(());
             }
         }
-        if !(recording.is_recording || recording.is_paused) || recording.is_transitioning {
+        if !(recording.is_recording || recording.is_paused)
+            || (recording.is_transitioning && !recording.annotations.owns_stop_flush(annotation_flush)) {
             return Ok(());
         }
         let needs_active_segment = recording.is_recording;
@@ -5547,6 +5565,7 @@ fn stop_recording_session(
         recording.is_recording = false;
         recording.is_paused = false;
         recording.is_finalizing = true;
+        recording.is_transitioning = false;
         recording.started_at = None;
         emit_recording_state(&app, &recording);
         (
@@ -5567,7 +5586,8 @@ fn stop_recording_session(
     };
 
     stop_click_monitor(&app);
-    close_recording_windows(&app);
+    let session_id = app.state::<AppState>().recording.lock().unwrap().session_id;
+    close_recording_windows(&app, session_id);
 
     let completion_id = uuid::Uuid::new_v4().to_string();
     let save_job = RecordingSaveJobGuard::begin(&app, RecordingSaveJobDto {
@@ -6072,6 +6092,7 @@ fn require_known_frontend_window(window: &WebviewWindow) -> Result<(), String> {
     if matches!(
         label,
         "library" | "overlay" | "countdown" | "control-panel" | "recording-region" | "ripple" | "confirm" | "toast"
+        | "recording-annotation-input" | "recording-annotation-ink"
     ) || ["viewer-", "editor-"]
         .iter()
         .any(|prefix| label.starts_with(prefix))

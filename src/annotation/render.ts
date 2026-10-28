@@ -500,6 +500,7 @@ type RenderOptions = {
   editingIndex?: number | null;
   editingId?: number;
   chromeOnly?: boolean;
+  transparent?: boolean;
 };
 
 function hasLayeredMosaic(marks: AnnotationMark[], draft?: AnnotationMark | null): boolean {
@@ -514,7 +515,9 @@ function hasLayeredMosaic(marks: AnnotationMark[], draft?: AnnotationMark | null
 function renderDocument(r: RenderContext, marks: AnnotationMark[], options: RenderOptions, preview: boolean) {
   const {ctx} = r;
   const region = {x: 0, y: 0, width: r.regionSize.width, height: r.regionSize.height};
-  if (r.exporting) {
+  if (options.transparent) {
+    ctx.clearRect(0, 0, region.width, region.height);
+  } else if (r.exporting) {
     // PNG exports retain the source alpha unless an annotation covers it.
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   } else {
@@ -522,7 +525,9 @@ function renderDocument(r: RenderContext, marks: AnnotationMark[], options: Rend
     ctx.fillRect(0, 0, region.width, region.height);
   }
 
-  if (r.exporting) {
+  if (options.transparent) {
+    // Live desktop ink has no image source. Supported tools never sample pixels.
+  } else if (r.exporting) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(

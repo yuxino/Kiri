@@ -326,6 +326,83 @@ const blankPress = h => {
   h.mouse("onClick", 550, 310, 1);
 };
 
+test("transparent live input paints without a frozen source and publishes clean typed text", () => {
+  const live = [];
+  const h = annotation(documentWith([]), {image: null, transparent: true, tool: "text",
+    onLiveMarks: (marks, draft) => live.push({marks: structuredClone(marks), draft: structuredClone(draft)})});
+  assert.ok(h.frames.length > 0, "transparent input paints its handles without an image");
+  assert.equal(h.frames.at(-1).options.chromeOnly, true);
+  assert.equal(h.frames.at(-1).options.transparent, true);
+  h.pointer("onPointerDown", 80, 100); h.pointer("onPointerUp", 80, 100);
+  assert.equal(inlineEditor(h).props.inkOnlyText, true, "native editing retains caret/IME without duplicating recorded glyphs");
+  inlineEditor(h).props.onTextChange("正在讲解中文"); h.component.render();
+  const draft = live.at(-1).draft;
+  assert.equal(draft.kind, "text"); assert.equal(draft.text, "正在讲解中文");
+  assert.deepEqual(h.changes, [], "live typing does not commit or terminate IME");
+  h.ref.current.commitTextEditing(); h.component.render();
+  assert.equal(live.at(-1).draft, null);
+  assert.equal(live.at(-1).marks[0].text, draft.text);
+  assert.deepEqual(live.at(-1).marks[0].rect, draft.rect, "recorded typing and committed text share geometry");
+  h.component.unmount();
+});
+
+test("recording stop freezes a visible pen draft while ordinary disabled editing still cancels it", () => {
+  for (const preserveDraftWhenDisabled of [false, true]) {
+    const live = [];
+    const h = annotation(documentWith([]), {image: null, transparent: true, tool: "pen",
+      preserveDraftWhenDisabled,
+      onLiveMarks: (marks, draft) => live.push({marks: structuredClone(marks), draft: structuredClone(draft)})});
+    h.pointer("onPointerDown", 30, 40); h.pointer("onPointerMove", 100, 90);
+    const finalDraft = live.at(-1).draft;
+    assert.equal(finalDraft.kind, "pen"); assert.ok(finalDraft.points.length > 1);
+    h.component.render({...h.props, interactionDisabled: true});
+    h.pointer("onPointerCancel", 100, 90);
+    h.pointer("onPointerMove", 160, 130);
+    assert.deepEqual(live.at(-1).draft, preserveDraftWhenDisabled ? finalDraft : null);
+    assert.deepEqual(h.changes, [], "freezing the last pixels does not invent a committed gesture");
+    h.component.unmount();
+  }
+});
+
+test("recording stop preserves a pen draft when native cancellation precedes the disabled render", () => {
+  const live = [], interactionLock = {locked: false};
+  const h = annotation(documentWith([]), {image: null, transparent: true, tool: "pen",
+    interactionLock, preserveDraftWhenDisabled: true,
+    onLiveMarks: (marks, draft) => live.push({marks: structuredClone(marks), draft: structuredClone(draft)})});
+  h.pointer("onPointerDown", 30, 40); h.pointer("onPointerMove", 100, 90);
+  const finalDraft = live.at(-1).draft;
+  const canvas = nodes(h.component.render()).find(node => node?.type === "canvas");
+  interactionLock.locked = true;
+  canvas.props.onPointerCancel();
+  h.component.render({...h.props, interactionDisabled: true});
+  assert.deepEqual(live.at(-1).draft, finalDraft, "the synchronous stop lock protects the frame before React commits");
+  assert.deepEqual(h.changes, []);
+  h.component.unmount();
+});
+
+test("live clear cancels an in-flight stroke and undo restores only committed ink", () => {
+  const h = annotation(documentWith([rectangle]), {image: null, transparent: true, undoableClear: true, tool: "pen"});
+  h.pointer("onPointerDown", 300, 200); h.pointer("onPointerMove", 350, 250);
+  assert.ok(h.frames.at(-1).options.draft);
+  h.ref.current.clearAnnotations(); h.component.render();
+  assert.deepEqual(h.frames.at(-1).marks, []); assert.equal(h.frames.at(-1).options.draft, null);
+  h.pointer("onPointerUp", 380, 280);
+  assert.deepEqual(h.frames.at(-1).marks, [], "late release never resurrects a cleared draft");
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.frames.at(-1).marks, [rectangle]);
+  h.ref.current.redo(); h.component.render(); assert.deepEqual(h.frames.at(-1).marks, []);
+  h.component.unmount();
+});
+
+test("live clear discards uncommitted text while preserving the old saved text for undo", () => {
+  const h = annotation(documentWith([text]), {image: null, transparent: true, undoableClear: true, selectedMarkId: text.id});
+  h.ref.current.editSelectedText(); h.component.render();
+  inlineEditor(h).props.onTextChange("discard this draft"); h.component.render();
+  h.ref.current.clearAnnotations(); h.component.render();
+  assert.equal(inlineEditor(h), undefined); assert.deepEqual(h.frames.at(-1).marks, []);
+  h.ref.current.undo(); h.component.render(); assert.deepEqual(h.frames.at(-1).marks, [text]);
+  h.component.unmount();
+});
+
 for (const tool of ["text", "label"]) {
   test(`${tool} finishes an inline note on the first blank press and creates only on the next`, async () => {
     const selected = [], h = annotation(documentWith([]), {tool, onSelectionChange: id => selected.push(id)});

@@ -46,7 +46,15 @@ Le panneau de préparation propose MP4 / GIF, Démarrer et quatre icônes côte 
 
 La petite flèche à côté du microphone permet de choisir un périphérique d’entrée réel sans modifier celui par défaut du système. Si le périphérique choisi est indisponible ou déconnecté, Kiri affiche une erreur au lieu de changer de microphone silencieusement.
 
+### Annoter pendant l’enregistrement
+
+Sur macOS et Windows, choisissez **Annoter l’enregistrement** dans les commandes pour utiliser le stylo, la flèche, le rectangle ou le texte, ou pour sélectionner et modifier une annotation existante. La couleur, l’épaisseur du trait et la taille du texte suivent vos réglages d’annotation. Choisissez **Utiliser le bureau** pour reprendre le contrôle de l’application en dessous ; les annotations restent visibles.
+
+Annuler et Rétablir s’appliquent aux annotations. **Effacer les annotations** les supprime toutes et peut être annulé. Lorsque la surface d’annotation a le focus, Cmd/Ctrl+Shift+Backspace permet aussi de tout effacer. Échap annule d’abord le texte en cours de saisie ou le geste de dessin, puis revient au contrôle du bureau. Vous pouvez modifier les annotations pendant une pause ; elles apparaîtront ainsi à la reprise. Elles font partie de l’image enregistrée et ne peuvent plus être supprimées séparément comme les annotations de l’éditeur vidéo. Les commandes, les cadres de sélection et le curseur de texte n’apparaissent pas dans l’enregistrement. L’annotation en direct n’est pas disponible sous Linux.
+
 ## Captures défilantes
+
+Après avoir enregistré une capture défilante, cliquez sur son image dans l’aperçu de fin pour l’ouvrir dans l’éditeur et l’annoter. Vous pouvez aussi l’ouvrir depuis la bibliothèque.
 
 Sélectionnez le contenu à faire défiler, puis **Capture défilante** dans la barre de capture avant d’ajouter des annotations. Commencez où vous voulez et faites défiler normalement vers le haut ou le bas. Revenir sur du contenu capturé n’ajoute pas de doublons. Une pause pour lire ne termine pas la capture. **Terminé** copie et enregistre ; Échap annule avant le début de l’enregistrement. Entrée reste disponible dans l’application d’origine.
 

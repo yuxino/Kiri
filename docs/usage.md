@@ -116,7 +116,15 @@ Use the small arrow beside the microphone to select an actual input device witho
 
 On macOS and Windows, recording controls follow the selection and adapt near display edges without taking keyboard focus. Dragging moves the current panel; the next capture positions it from the new selection again. Pause keeps the recorded elapsed time, and resume continues it. Use the configured recording shortcuts, the control buttons, or the tray menu. There are no built-in bare Space/Esc recording commands; a bare key you explicitly confirm as a recording shortcut follows that binding. A button you focus explicitly still supports normal Space/Enter activation. Esc continues to cancel capture and the countdown. Older Windows versions may still show the system’s full-display capture border. Linux uses native X11 shortcuts, desktop-managed Wayland shortcuts, tray actions, or commands.
 
+### Annotate while recording
+
+On macOS and Windows, choose **Annotate Recording** in the recording controls to draw with Pen, Arrow or Rectangle, add Text, or select and edit an existing mark. Color, stroke width and text size follow your annotation settings. Choose **Operate Desktop** to use the underlying app again; the marks remain visible.
+
+Undo and Redo apply to marks. **Clear Annotations** clears the current marks and can be undone. While the annotation surface has focus, Cmd/Ctrl+Shift+Backspace also clears; Esc first cancels active text editing or a gesture, then returns to desktop operation. You can adjust marks while paused and continue recording with the result. Marks become part of the recorded picture and cannot be removed later as editable video annotations. The controls, selection handles and text caret stay out of the recording. Live annotation is unavailable on Linux.
+
 ## Scrolling screenshots
+
+After saving a scrolling screenshot, click the image in the completion preview to open the editor and annotate it. You can also open it from the library.
 
 Select the scrolling content, then choose **Scrolling Screenshot** in the screenshot toolbar before adding annotations. Start anywhere and scroll naturally up or down; captured content is not added twice when you return to it. Pausing to read does not end capture. Choose **Done** to copy and save, or **Esc** to cancel before saving starts. Enter remains available to the original application.
 

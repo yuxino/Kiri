@@ -860,5 +860,12 @@
   "Open System Settings": "開啟系統設定",
   "Save the captured area first, then pin it from the completion preview.": "先儲存已擷取區域，再從完成卡中置頂。",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "拖曳可移動視窗；捲動查看，雙指捏合或按住 Ctrl/Command 捲動縮放；按住空白鍵拖動畫面。",
-  "Zoom level": "縮放比例"
+  "Zoom level": "縮放比例",
+  "Annotate Recording": "錄影標註",
+  "Operate Desktop": "操作桌面",
+  "Preparing annotations…": "正在準備標註…",
+  "Could not update recording annotations. Try again.": "無法更新錄影標註，請重試。",
+  "Live annotations are unavailable for this recording.": "本次錄影無法使用即時標註。",
+  "Too many live annotations. Clear some marks to continue.": "即時標註過多，請清除部分標註後繼續。",
+  "This annotation tool is unavailable while recording.": "錄影時無法使用此標註工具。"
 }

@@ -252,3 +252,6 @@ development.
 
 - [ADR 0122: Preserve local state during recovery](adr/0122-preserve-local-state-during-recovery.md)
   — acknowledged favorites, atomic preferences, library recovery notifications and preserved video drafts.
+
+- [ADR 0123: Live recording annotations](adr/0123-live-recording-annotations.md)
+  — separate recorded ink and excluded editing surfaces, desktop-operation mode and undoable clearing.

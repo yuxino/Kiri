@@ -45,10 +45,15 @@ export function useRecordingControlsLayout(sessionId: string) {
       // never against our own resized viewport. A locale/font/scale change can
       // therefore restore the full label rather than locking in compact mode.
       element!.style.removeProperty("--kiri-record-controls-max-width");
+      element!.style.removeProperty("--kiri-record-annotation-max-width");
       for (const mode of ["compact", "narrow", "minimal"]) {
         element!.removeAttribute(`data-${mode}`);
       }
       if (maxWidth !== undefined) {
+        // The palette wraps independently. Its natural width must not force
+        // the recording header through every compact mode and hide its timer.
+        // The outer surface contributes 4 CSS pixels of padding on each side.
+        element!.style.setProperty("--kiri-record-annotation-max-width", `${Math.max(0, maxWidth - 8)}px`);
         for (const mode of ["compact", "narrow", "minimal"]) {
           if (element!.getBoundingClientRect().width <= maxWidth) break;
           element!.setAttribute(`data-${mode}`, "");
@@ -130,7 +135,7 @@ export function useRecordingControlsLayout(sessionId: string) {
 
     controller.current = {
       begin(event) {
-        if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+        if (event.button !== 0 || (event.target as HTMLElement).closest("button,input,select,textarea,[role=slider]")) return;
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
         if (gesture) gesture.cancelled = true;

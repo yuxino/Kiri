@@ -38,10 +38,11 @@ test('explicit OCR mode switching reuses a finished selection once',()=>{
 });
 
 test('toolbar OCR is explicit, disabled while completing and independent of screenshot completion', () => {
- const toolbar=source.slice(source.indexOf('const TOOLS:'));
+ const toolbar=source.slice(source.indexOf('const toolbarRowStyle:'));
  const harness=createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
   import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
   import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
+  import {annotationToolGroups, annotationHistoryButtons, SCREENSHOT_ANNOTATION_TOOLS} from "../components/AnnotationTools";
   const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`);
  let recognitions=0,captures=0;
  const component=harness.mount('Toolbar',{selection:{x:100,y:100,width:200,height:100},bounds:{x:0,y:0,width:800,height:600},

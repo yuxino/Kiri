@@ -48,6 +48,7 @@ import AnnotationCanvas, { type AnnotationCanvasHandle } from "../annotation/Ann
 import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
 import { AnnotationToolbarButton } from "../components/AnnotationToolbarButton";
+import {annotationToolGroups, annotationHistoryButtons, SCREENSHOT_ANNOTATION_TOOLS} from "../components/AnnotationTools";
 import { QrOverlay } from "../qr/QrOverlay";
 import { RemoteOcrConsent } from "../ocr/RemoteOcrConsent";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
@@ -1885,19 +1886,6 @@ interface ToolbarProps {
   onTextFontEnd?(): void;
 }
 
-const TOOLS: { tool: Tool; icon: IconName; title: string; shortcut: string }[] = [
-  { tool: "select", icon: "cursorarrow", title: "Select (V)", shortcut: "V" },
-  { tool: "pen", icon: "pencil.tip", title: "Pen (P)", shortcut: "P" },
-  { tool: "rectangle", icon: "rectangle.dashed", title: "Rectangle (R)", shortcut: "R" },
-  { tool: "line", icon: "line.diagonal", title: "Line (L)", shortcut: "L" },
-  { tool: "arrow", icon: "arrow.up.right", title: "Arrow (A)", shortcut: "A" },
-  { tool: "text", icon: "textformat", title: "Text (T)", shortcut: "T" },
-  { tool: "callout", icon: "number.circle", title: "Numbered callout (N)", shortcut: "N" },
-  { tool: "label", icon: "tag", title: "Label bubble (B)", shortcut: "B" },
-  { tool: "mosaic", icon: "square.grid.3x3.fill", title: "Mosaic (M)", shortcut: "M" },
-  { tool: "watermark", icon: "watermark", title: "Watermark (W)", shortcut: "W" },
-];
-
 const toolbarRowStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
@@ -2085,9 +2073,6 @@ export function Toolbar(props: ToolbarProps) {
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 9 4-4 4 4"/></svg>
     </button>
   </>;
-  const button = ({tool: value, icon, title, shortcut}: typeof TOOLS[number]) =>
-    <ToolButton key={value} icon={icon} title={t(title)} shortcut={shortcut} active={tool === value} disabled={disabled} onClick={() => setTool(value)}/>;
-
   return (
     <>
       <div
@@ -2120,11 +2105,8 @@ export function Toolbar(props: ToolbarProps) {
               {...toolbarDrag}>{dragGlyph}</button>
             <ToolButton icon="xmark" title={t("Cancel capture · Esc")} shortcut="Escape" onClick={onCancel}/>
           </div>
-          <div className="kiri-annotation-tool-group" role="group" aria-label={t("Annotations")}>{TOOLS.map(button)}</div>
-          <div className="kiri-annotation-tool-group">
-            <ToolButton icon="arrow.uturn.backward" title={t("Undo")} shortcut="Mod+Z" disabled={!canUndo} onClick={onUndo}/>
-            <ToolButton icon="arrow.uturn.forward" title={t("Redo")} shortcut="Mod+Shift+Z" disabled={!canRedo} onClick={onRedo}/>
-          </div>
+          {annotationToolGroups({tools: SCREENSHOT_ANNOTATION_TOOLS, selected: tool, disabled, onChange: setTool})}
+          {annotationHistoryButtons({canUndo, canRedo, disabled, onUndo, onRedo})}
           <div className="kiri-annotation-tool-group">
             <ToolButton icon="text.viewfinder" title={t("Recognize Text")} disabled={disabled} onClick={onOcr}/>
             <ToolButton icon="qrcode" title={t("Recognize QR Codes")} disabled={disabled} onClick={onQr}/>
