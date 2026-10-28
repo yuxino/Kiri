@@ -27,11 +27,18 @@ function controls(options = {}) {
     },
     getBoundingClientRect() {
       let width = size.width;
+      let height = size.height;
       if (attributes.has("data-compact")) width = 184;
       if (attributes.has("data-narrow")) width = 146;
       if (attributes.has("data-minimal")) width = 96;
+      if (options.paletteWidth) {
+        const paletteLimit = parseFloat(styles.get("--kiri-record-annotation-max-width"));
+        const paletteWidth = Number.isFinite(paletteLimit) ? Math.min(options.paletteWidth, paletteLimit) : options.paletteWidth;
+        width = Math.max(width, paletteWidth + 8);
+        if (paletteWidth < options.paletteWidth) height += 32;
+      }
       const limit = parseFloat(styles.get("--kiri-record-controls-max-width"));
-      return { width: Number.isFinite(limit) ? Math.min(width, limit) : width, height: size.height };
+      return { width: Number.isFinite(limit) ? Math.min(width, limit) : width, height };
     },
   };
   let sequence = 0, observe, scaleChanged, recordingChanged, languageChanged, shortcutsChanged;
@@ -357,5 +364,32 @@ test("shorter translated labels leave compact mode even without a parent resize"
   h.size.width = 204; h.language(); await h.flush();
   assert.equal(h.attributes.has("data-compact"), false);
   assert.equal(h.layouts.at(-1).request.width, 204);
+  h.component.unmount();
+});
+
+test("a wide annotation palette wraps before header compaction and preserves a fitting timer", async () => {
+  const h = controls({maxWidth: 320, paletteWidth: 350});
+  h.size.width = 390; // A long localized Stop label requires only compact mode.
+  await h.ready();
+  assert.equal(h.layouts[0].request.width, 390, "initial natural size ignores the startup WebView width");
+  assert.equal(h.layouts.at(-1).request.width, 320);
+  assert.equal(h.layouts.at(-1).request.height, 84, "palette wrapping is included in native height");
+  assert.ok(h.attributes.has("data-compact"));
+  assert.equal(h.attributes.has("data-narrow"), false, "palette width cannot hide a fitting grip");
+  assert.equal(h.attributes.has("data-minimal"), false, "palette width cannot hide a fitting timer");
+  h.layouts.at(-1).resolve(); await h.flush();
+  const count = h.layouts.length; h.resize(); await h.flush();
+  assert.equal(h.layouts.length, count, "wrapped content has a stable measured size");
+  h.scale(); await h.flush(); h.layouts.at(-1).resolve({maxWidth: 1000}); await h.flush();
+  assert.equal(h.layouts.at(-1).request.width, 390);
+  assert.equal(h.layouts.at(-1).request.height, 52);
+  assert.equal(h.attributes.has("data-compact"), false, "a larger display restores natural content");
+  h.component.unmount();
+});
+
+test("a palette alone never compacts a header that already fits the monitor", async () => {
+  const h = controls({maxWidth: 320, paletteWidth: 350}); await h.ready();
+  assert.equal(h.layouts.at(-1).request.width, 320);
+  for (const mode of ["compact", "narrow", "minimal"]) assert.equal(h.attributes.has(`data-${mode}`), false);
   h.component.unmount();
 });
