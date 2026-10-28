@@ -86,7 +86,8 @@ if (!role) {
   stage.innerHTML='<div style="padding:36px"><h1 style="margin:0 0 18px;font-size:30px">Explain a workflow</h1><p style="max-width:600px;line-height:1.8">Draw an arrow, highlight a step, and add a note while the recording continues. Return to the desktop to keep working.</p><button id="source-action" style="margin-top:28px;padding:12px 18px">Original application button</button><p id="source-result"></p></div>';
   stage.querySelector("button")!.addEventListener("click",()=>{stage.querySelector("#source-result")!.textContent="Desktop interaction received";});
   document.body.append(title,stage);
-  for (const name of ["ink","input","panel"]) {
+  // Native acceptance records this ordinary generated page with no mock UI.
+  for (const name of params.has("source") ? [] : ["ink","input","panel"]) {
     const frame=document.createElement("iframe"); frames[name]=frame;frame.id=`qa-${name}`;
     frame.src=`?role=${name}&session=qa-recording&width=${width}&height=${height}&lang=${language}`;
     frame.title=`${name} WebView`;

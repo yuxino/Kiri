@@ -5,7 +5,10 @@
 .kiri-record-annotation-error-action { border: 1px solid var(--kiri-surface-border); border-radius: 5px; background: var(--kiri-group-fill); color: inherit; padding: 4px 8px; cursor: pointer; }
 .kiri-record-annotation-error-action:hover { border-color: var(--kiri-label); background: var(--kiri-card); }
 .kiri-record-annotation-error-action:focus-visible { outline: 2px solid var(--kiri-label); outline-offset: 2px; }
-.kiri-record-controls-window { flex-direction: column; }
+.kiri-record-controls-window {
+  --kiri-record-annotation-max-width: initial;
+  flex-direction: column;
+}
 .kiri-record-annotation-tools { display: flex; flex-direction: column; gap: 6px; box-sizing: border-box; max-width: var(--kiri-record-annotation-max-width, 100%); padding: 8px; border: 1px solid var(--kiri-surface-border); border-top: 0; border-radius: 0 0 10px 10px; background: var(--kiri-card); color: var(--kiri-label); }
 .kiri-record-controls-window:has(.kiri-record-annotation-tools) .kiri-record-controls { border-radius: 10px 10px 0 0; }
 .kiri-record-annotation-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
