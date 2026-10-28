@@ -128,7 +128,7 @@ test("choosing N and changing property heights keeps the main toolbar anchored b
   let height = 48, panelStyle;
   const measured = { get scrollHeight() { return height; },
     get offsetHeight() { return Math.min(height, panelStyle.maxHeight); },
-    get clientHeight() { return Math.min(height, panelStyle.maxHeight); } };
+    get clientHeight() { return Math.min(height, panelStyle.maxHeight); }, querySelector() { return null; } };
   const harness = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
     import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
@@ -535,23 +535,90 @@ test("dragged properties clamp at screen edges and keep toolbar and mode selecto
   }
 });
 
-function movableToolbar() {
+test("dragged properties skip the 26px strip above the mode selector", () => {
+  const bounds = {x: 0, y: 0, width: 1200, height: 800};
+  const toolbar = {x: 200, y: 700, width: 800, height: 48};
+  const mode = {x: 260, y: 44, width: 280, height: 44};
+  for (const naturalHeight of [60, 210]) {
+    const panel = captureToolOptionsLayout(toolbar, bounds, {width: 620, height: naturalHeight}, mode, [], {x: 100, y: 8});
+    const visible = {width: panel.width, height: Math.min(naturalHeight, panel.maxHeight)};
+    assert.ok(visible.height >= Math.min(naturalHeight, 80),
+      `the heading-only strip must yield to usable property space: ${JSON.stringify(panel)}`);
+    assert.ok(!overlaps(panel, visible, mode));
+    assert.ok(!overlaps(panel, visible, toolbar));
+    assert.ok(panel.top + visible.height <= bounds.height - 8);
+  }
+});
+
+test("moving the main toolbar cannot compress manual properties into a narrow top gap", () => {
+  const bounds = {x: 0, y: 0, width: 800, height: 600};
+  const toolbar = {x: 8, y: 200, width: 784, height: 48};
+  const natural = {width: 620, height: 160};
+  const preferred = {x: 90, y: 8};
+  const initial = captureToolOptionsLayout(toolbar, bounds, natural, null, [], preferred);
+  assert.deepEqual({x: initial.left, y: initial.top}, preferred);
+  assert.ok(initial.maxHeight >= natural.height);
+
+  const movedToolbar = {...toolbar, y: 45};
+  const panel = captureToolOptionsLayout(movedToolbar, bounds, natural, null, [], preferred);
+  const visible = {width: panel.width, height: Math.min(natural.height, panel.maxHeight)};
+  assert.ok(visible.height >= 80,
+    `properties must leave the toolbar's 31px upper gap: ${JSON.stringify(panel)}`);
+  assert.ok(!overlaps(panel, visible, movedToolbar));
+  assert.ok(panel.top >= movedToolbar.y + movedToolbar.height);
+  assert.ok(panel.top + visible.height <= bounds.height - 8);
+
+  const compact = captureToolOptionsLayout(movedToolbar, bounds, {...natural, height: 24}, null, [], preferred);
+  assert.deepEqual({x: compact.left, y: compact.top}, preferred,
+    "a genuinely short panel that fits can keep its manual position");
+});
+
+test("when every property space is shorter than 80px the largest remains available", () => {
+  const bounds = {x: 0, y: 0, width: 800, height: 180};
+  const toolbar = {x: 8, y: 45, width: 784, height: 48};
+  const natural = {width: 620, height: 210};
+  const panel = captureToolOptionsLayout(toolbar, bounds, natural, null, [], {x: 90, y: 8});
+  const visible = {width: panel.width, height: Math.min(natural.height, panel.maxHeight)};
+  assert.equal(panel.maxHeight, 73, "the 73px lower space is more usable than the nearer 31px strip");
+  assert.ok(!overlaps(panel, visible, toolbar));
+  assert.ok(panel.top >= 8 && panel.top + visible.height <= bounds.height - 8);
+});
+
+test("a wrapped property heading reserves its measured first control row instead of an 80px strip", () => {
+  const bounds = {x: 0, y: 0, width: 320, height: 480};
+  const toolbar = {x: 8, y: 114, width: 304, height: 116};
+  const natural = {width: 304, height: 320, minimumHeight: 114};
+  const panel = captureToolOptionsLayout(toolbar, bounds, natural, null, [], {x: 8, y: 8});
+  const visible = {width: panel.width, height: Math.min(natural.height, panel.maxHeight)};
+  assert.ok(visible.height >= natural.minimumHeight,
+    `the 100px upper strip cannot fit this heading and first control: ${JSON.stringify(panel)}`);
+  assert.ok(panel.top >= toolbar.y + toolbar.height);
+  assert.ok(!overlaps(panel, visible, toolbar));
+  assert.ok(panel.top + visible.height <= bounds.height - 8);
+});
+
+function movableToolbar(dimensions = {}) {
   const source = readFileSync(new URL("../src/windows/OverlayWindow.tsx", import.meta.url), "utf8");
   const toolbar = source.slice(source.indexOf("const TOOLS:"));
-  let height = 160, panelStyle;
+  let height = dimensions.height ?? 160, panelStyle;
+  const layoutSizes = [];
   const measured = {get scrollHeight() {return height;}, get offsetHeight() {return Math.min(height, panelStyle.maxHeight);},
-    get clientHeight() {return Math.min(height, panelStyle.maxHeight);}};
+    get clientHeight() {return Math.min(height, panelStyle.maxHeight);},
+    querySelector(selector) {return selector === ".kiri-annotation-control-fields" ? dimensions.fields ?? null : null;}};
   const runtime = createLibraryHarness({}, `import React,{useState,useRef,useEffect,useLayoutEffect} from "react";
     import {t} from "../i18n"; import {KiriIcon} from "../components/KiriIcons";
     import {AnnotationToolbarButton} from "../components/AnnotationToolbarButton";
-    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()}, captureToolOptionsLayout=${captureToolOptionsLayout.toString()}; ${toolbar}`, {
+    const captureToolbarPosition=${captureToolbarPosition.toString()}, capturePanelLayout=${capturePanelLayout.toString()};
+    const captureToolOptionsLayout=(...args) => {layoutSizes.push(args[2]); return (${captureToolOptionsLayout.toString()})(...args);}; ${toolbar}`, {
     attachRef(node) {
-      if (node.props.className?.includes("kiri-annotation-tool-row")) node.props.ref.current = {offsetWidth: 784, offsetHeight: 48};
+      if (node.props.className?.includes("kiri-annotation-tool-row")) node.props.ref.current = {
+        offsetWidth: dimensions.toolbarWidth ?? 784, offsetHeight: dimensions.toolbarHeight ?? 48};
       if (node.props.className === "kiri-hud kiri-capture-tool-options") {panelStyle = node.props.style; node.props.ref.current = measured;}
     },
-    globals: {ResizeObserver: class {observe() {} disconnect() {}}},
+    globals: {layoutSizes, ResizeObserver: class {observe() {} disconnect() {}}},
   });
-  const props = {selection: {x: 0, y: 0, width: 1000, height: 800}, bounds: {x: 0, y: 0, width: 1000, height: 800},
+  const bounds = dimensions.bounds ?? {x: 0, y: 0, width: 1000, height: 800};
+  const props = {selection: bounds, bounds,
     tool: "text", appearance: {}, canSetSize: false, disabled: false, selectedMark: {id: 1},
     renderStyleControls: chrome => ({type: "fieldset", props: {className: "real-heading-fixture", children: [chrome, "properties"]}})};
   const component = runtime.mount("Toolbar", props);
@@ -561,12 +628,29 @@ function movableToolbar() {
     const root = find("kiri-capture-toolbar"), panel = find("kiri-hud kiri-capture-tool-options");
     return {left: root.props.style.left + panel.props.style.left, top: root.props.style.top + panel.props.style.top};
   };
-  return {runtime, component, props, tree, find, position, height: value => {height = value;}};
+  return {runtime, component, props, tree, find, position, layoutSizes, height: value => {height = value;}};
 }
 function panelPointer(currentTarget, patch = {}) {
   return {button: 0, isPrimary: true, pointerId: 7, clientX: 400, clientY: 600, currentTarget,
     prevented: false, stopped: false, preventDefault() {this.prevented = true;}, stopPropagation() {this.stopped = true;}, ...patch};
 }
+
+test("measuring a two-line property heading keeps its first input visible when dragged to the bottom", () => {
+  const ui = movableToolbar({bounds: {x: 0, y: 0, width: 320, height: 480}, toolbarWidth: 304, toolbarHeight: 116,
+    height: 320, fields: {offsetHeight: 234, firstElementChild: {offsetHeight: 28}}});
+  // 320 - 234 + 28 = 114: a 58px wrapped heading, its spacing/borders,
+  // and one complete 28px property input must remain visible together.
+  ui.tree();
+  assert.equal(ui.layoutSizes.at(-1).minimumHeight, 114);
+  const target = {setPointerCapture() {}, hasPointerCapture() {return true;}, releasePointerCapture() {}};
+  ui.find("kiri-capture-options-move").props.onPointerDown(panelPointer(target));
+  ui.find("kiri-capture-options-move").props.onPointerMove(panelPointer(target, {clientY: 1600}));
+  ui.find("kiri-capture-options-move").props.onPointerUp(panelPointer(target));
+  const panel = ui.find("kiri-hud kiri-capture-tool-options");
+  assert.equal(panel.props.style.maxHeight, 114, "bottom clamping preserves the measured heading and first input");
+  assert.ok(ui.position().top >= 8 && ui.position().top + panel.props.style.maxHeight <= 472);
+  ui.component.unmount();
+});
 
 test("explicitly hiding properties survives new selections until the toolbar options button reopens them", () => {
   const ui = movableToolbar();

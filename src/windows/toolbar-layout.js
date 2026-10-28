@@ -147,7 +147,7 @@ export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = n
   if (modeSelector) free = exclude(free, modeSelector, 10);
   // A user-chosen position wins over automatic annotation avoidance. Retain it
   // when content grows by scrolling in place, rather than snapping the panel.
-  const minimumHeight = Math.min(size.height, 80);
+  const minimumHeight = Math.min(size.height, size.minimumHeight ?? 80);
   if (!preferredPosition && avoidBounds.length) {
     let clear = free;
     for (const rect of avoidBounds) clear = exclude(clear, rect, 10);
@@ -168,8 +168,12 @@ export function captureToolOptionsLayout(toolbar, bounds, size, modeSelector = n
       distance: Math.hypot(left - (preferredPosition?.x ?? centeredLeft), top - (preferredPosition?.y ?? below)) };
   });
   const complete = candidates.filter(candidate => candidate.maxHeight >= size.height);
-  const choices = preferredPosition ? candidates : complete.length ? complete : candidates;
-  choices.sort((a, b) => preferredPosition || complete.length ? a.distance - b.distance : b.maxHeight - a.maxHeight || a.distance - b.distance);
+  // Manual placement may scroll, but a nearby sliver must not hide every
+  // control beneath the sticky heading. Keep a usable panel before proximity.
+  const usable = candidates.filter(candidate => candidate.maxHeight >= minimumHeight);
+  const choices = preferredPosition ? (usable.length ? usable : candidates) : complete.length ? complete : candidates;
+  const nearest = preferredPosition ? usable.length > 0 : complete.length > 0;
+  choices.sort((a, b) => nearest ? a.distance - b.distance : b.maxHeight - a.maxHeight || a.distance - b.distance);
   const best = choices[0];
   return best ? { left: best.left, top: best.top, width, maxHeight: best.maxHeight }
     : { left: clamp(centeredLeft, screen.x, screen.x + screen.width - width), top: screen.y, width, maxHeight: 0 };

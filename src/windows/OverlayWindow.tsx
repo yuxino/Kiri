@@ -1034,6 +1034,11 @@ export function OverlayWindow() {
         void complete();
       }}
       onContextMenu={(e) => {
+        // Inputs own their native editing menu; controls must not turn a
+        // secondary click into discarding the capture's annotation canvas.
+        if (e.defaultPrevented || (e.target instanceof Element && e.target.closest(
+          "input, textarea, select, [contenteditable], button, a, .kiri-hud, .kiri-record-options, .kiri-choice-menu",
+        ))) return;
         // Spec §1.6: right-click returns to region selection while
         // annotating (tearing down annotations); otherwise it cancels.
         e.preventDefault();
@@ -1992,6 +1997,7 @@ export function Toolbar(props: ToolbarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [barSize, setBarSize] = useState({ width: 420, height: 48 });
   const [optionsHeight, setOptionsHeight] = useState(96);
+  const [optionsMinimumHeight, setOptionsMinimumHeight] = useState(80);
   const options = props.styleControls ?? (props.showLabelControls ? props.labelControls : props.showCalloutControls ? props.calloutControls : null);
   const showOptions = detailsOpen && !canSetSize && (!!props.renderStyleControls || !!options);
   // Measure each committed row change before paint, and observe later reflows
@@ -2009,7 +2015,14 @@ export function Toolbar(props: ToolbarProps) {
     if (panel) {
       // Scroll height preserves natural content height while the available
       // property area is constrained by the toolbar or the mode selector.
-      setOptionsHeight(panel.scrollHeight + panel.offsetHeight - panel.clientHeight);
+      const height = panel.scrollHeight + panel.offsetHeight - panel.clientHeight;
+      setOptionsHeight(height);
+      // Keep the complete heading (which can wrap) and at least one property
+      // row visible. Measuring the natural content also works while scrolled.
+      const fields = panel.querySelector<HTMLElement>(".kiri-annotation-control-fields");
+      const firstField = fields?.firstElementChild as HTMLElement | null;
+      setOptionsMinimumHeight(fields && firstField
+        ? Math.max(80, height - fields.offsetHeight + firstField.offsetHeight) : 80);
     }
   };
   useLayoutEffect(measureBar);
@@ -2026,7 +2039,7 @@ export function Toolbar(props: ToolbarProps) {
   const {left, top} = captureToolbarPosition(selection, bounds, barSize,
     sizeControlsOpen, props.modeSelectorBounds, toolbarPosition);
   const optionsLayout = captureToolOptionsLayout({x: left, y: top, ...barSize}, bounds,
-    {width: Math.min(620, barSize.width), height: optionsHeight}, props.modeSelectorBounds, props.avoidBounds,
+    {width: Math.min(620, barSize.width), height: optionsHeight, minimumHeight: optionsMinimumHeight}, props.modeSelectorBounds, props.avoidBounds,
     optionsPosition ?? optionsAdjustmentPosition);
   const optionsLayoutRef = useRef(optionsLayout);
   optionsLayoutRef.current = optionsLayout;

@@ -17,7 +17,7 @@ export function capturePanelLayout(
 export function captureToolOptionsLayout(
   toolbar: Rect,
   bounds: Rect,
-  size: { width: number; height: number },
+  size: { width: number; height: number; minimumHeight?: number },
   modeSelector?: Rect | null,
   avoidBounds?: Rect[],
   preferredPosition?: { x: number; y: number } | null,
