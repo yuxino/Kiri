@@ -589,6 +589,13 @@ with a 60-second process deadline and a 1 MiB text limit. The process is reaped
 on completion or failure, and native diagnostics are not retained. Kiri does
 not link Tesseract or Leptonica, so the distribution owns their matching ABI
 versions (ADR 0118).
+
+Windows preserves the original OCR pass. A successful empty result on a narrow
+crop can trigger one temporary, bounded two- or threefold enlargement with a
+background-matched margin, constrained by the native engine's maximum image
+dimension. History keeps the original PNG; this recovery never changes languages
+or sends an image to another provider (ADR 0125).
+
 The normal local path does not use the network. OCR crop preparation waits for
 pointer release and uses that final endpoint, never an intermediate drag
 frame. Explicitly switching a completed screenshot selection to OCR reuses
