@@ -11,6 +11,9 @@ mod linux;
 #[cfg(target_os = "linux")]
 pub use linux::recognize_text;
 
+#[cfg(any(windows, test))]
+mod windows_small_text;
+
 #[cfg(windows)]
 fn rgba_to_bgra_in_place(bytes: &mut [u8]) {
     for pixel in bytes.chunks_exact_mut(4) {
@@ -89,14 +92,29 @@ mod tests {
 
 #[cfg(windows)]
 pub fn recognize_text(png: &[u8]) -> Result<String> {
-    use windows::Graphics::Imaging::BitmapPixelFormat;
     use windows::Media::Ocr::OcrEngine;
+
+    let rgba = image::load_from_memory(png)
+        .map_err(|error| anyhow!("{error}"))?
+        .into_rgba8();
+    let engine =
+        OcrEngine::TryCreateFromUserProfileLanguages().map_err(|error| anyhow!("{error}"))?;
+    let max_dimension = OcrEngine::MaxImageDimension().map_err(|error| anyhow!("{error}"))?;
+    windows_small_text::recognize(&rgba, max_dimension, |image| {
+        recognize_windows_image(&engine, image)
+    })
+}
+
+#[cfg(windows)]
+fn recognize_windows_image(
+    engine: &windows::Media::Ocr::OcrEngine,
+    image: &image::RgbaImage,
+) -> Result<String> {
+    use windows::Graphics::Imaging::BitmapPixelFormat;
     use windows::Storage::Streams::DataWriter;
 
-    let image = image::load_from_memory(png).map_err(|error| anyhow!("{error}"))?;
-    let rgba = image.to_rgba8();
-    let (width, height) = rgba.dimensions();
-    let mut raw = rgba.into_raw();
+    let (width, height) = image.dimensions();
+    let mut raw = image.as_raw().clone();
     // Windows.Media.Ocr expects the same BGRA8 SoftwareBitmap shape used by
     // Microsoft's OCR samples. `image` decodes to RGBA8, so swap red and blue
     // before declaring the WinRT buffer as BGRA8. Declaring RGBA8 here causes
@@ -111,17 +129,14 @@ pub fn recognize_text(png: &[u8]) -> Result<String> {
         .map_err(|error| anyhow!("{error}"))?;
     let buffer = writer.DetachBuffer().map_err(|error| anyhow!("{error}"))?;
 
-    let bitmap: windows::Graphics::Imaging::SoftwareBitmap =
-        windows::Graphics::Imaging::SoftwareBitmap::CreateCopyFromBuffer(
-            &buffer,
-            BitmapPixelFormat::Bgra8,
-            width as i32,
-            height as i32,
-        )
-        .map_err(|error| anyhow!("{error}"))?;
+    let bitmap = windows::Graphics::Imaging::SoftwareBitmap::CreateCopyFromBuffer(
+        &buffer,
+        BitmapPixelFormat::Bgra8,
+        width as i32,
+        height as i32,
+    )
+    .map_err(|error| anyhow!("{error}"))?;
 
-    let engine =
-        OcrEngine::TryCreateFromUserProfileLanguages().map_err(|error| anyhow!("{error}"))?;
     let operation = engine
         .RecognizeAsync(&bitmap)
         .map_err(|error| anyhow!("{error}"))?;
@@ -132,14 +147,49 @@ pub fn recognize_text(png: &[u8]) -> Result<String> {
     for line in ocr_lines {
         lines.push(line.Text().map_err(|error| anyhow!("{error}"))?.to_string());
     }
-    let text = lines.join("\n");
     // A successful recognition with no characters is a normal empty result.
-    Ok(text)
+    Ok(lines.join("\n"))
 }
 
 #[cfg(all(test, windows))]
 mod windows_tests {
     use super::rgba_to_bgra_in_place;
+
+    fn encode_png(image: &image::RgbaImage) -> Vec<u8> {
+        let mut png = std::io::Cursor::new(Vec::new());
+        image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+        png.into_inner()
+    }
+
+    #[test]
+    fn windows_native_blank_narrow_crop_is_successful_empty() {
+        let image = image::RgbaImage::from_pixel(295, 35, image::Rgba([255; 4]));
+        let text = super::recognize_text(&encode_png(&image))
+            .expect("Windows OCR and a user-profile OCR language pack must be available");
+        assert!(text.trim().is_empty());
+    }
+
+    #[test]
+    fn windows_native_narrow_text_crop_is_readable() {
+        // Reuse public, generated test pixels; no issue screenshot or private
+        // capture is stored. Match the reported 295 x 35 crop at 100% scale.
+        let source = image::load_from_memory(include_bytes!("../tests/fixtures/linux-ocr.png"))
+            .unwrap()
+            .to_rgba8();
+        let scaled =
+            image::imageops::resize(&source, 295, 55, image::imageops::FilterType::Lanczos3);
+        let image = image::imageops::crop_imm(&scaled, 0, 10, 295, 35).to_image();
+        let text = super::recognize_text(&encode_png(&image))
+            .expect("Windows OCR and a user-profile OCR language pack must be available");
+        let compact: String = text
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
+        assert!(
+            compact.to_uppercase().contains("KIRI"),
+            "Narrow local OCR fixture was not recognized"
+        );
+    }
 
     #[test]
     fn converts_decoded_rgba_pixels_to_windows_bgra_order() {

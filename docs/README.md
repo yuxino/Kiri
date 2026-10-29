@@ -255,3 +255,5 @@ development.
 
 - [ADR 0124: Continuous screenshot annotation and explicit completion](adr/0124-continuous-screenshot-annotation.md)
   — consecutive shape drawing, text-only confirmation, content-preserving right-click and stable properties.
+
+- [ADR 0125: Bounded Windows small-text OCR recovery](adr/0125-windows-small-text-ocr-recovery.md)
