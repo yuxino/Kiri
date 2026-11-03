@@ -5,12 +5,7 @@
   },
   "bundle": {
     "resources": {
-      "target/ocr-runtime/nbocr.exe": "ocr-runtime/nbocr.exe",
-      "target/ocr-runtime/LICENSE": "ocr-runtime/LICENSE",
-      "target/ocr-runtime/PP-OCRv6_small_det.mnn": "ocr-runtime/PP-OCRv6_small_det.mnn",
-      "target/ocr-runtime/PP-OCRv6_small_rec.mnn": "ocr-runtime/PP-OCRv6_small_rec.mnn",
-      "target/ocr-runtime/ppocr_keys_v6_small.txt": "ocr-runtime/ppocr_keys_v6_small.txt",
-      "ocr/NOTICE.txt": "ocr-runtime/NOTICE.txt"
+      "target/ocr-runtime/nbocr.exe": "ocr-runtime/nbocr.exe"
     },
     "windows": {
       "nsis": {

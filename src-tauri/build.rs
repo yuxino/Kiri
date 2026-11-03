@@ -40,17 +40,13 @@ fn main() {
         }
     }
 
-    if target_os == "windows" {
-        println!("cargo:rerun-if-changed=ocr/windows-runtime.mjs");
-        let prepared = std::process::Command::new("node")
-            .arg("ocr/windows-runtime.mjs")
-            .status()
-            .expect("Node.js is required to prepare the Windows OCR runtime");
-        assert!(
-            prepared.success(),
-            "could not verify the Windows OCR runtime"
-        );
-    }
+    println!("cargo:rerun-if-changed=ocr/runtime.mjs");
+    let prepared = std::process::Command::new("node")
+        .args(["ocr/runtime.mjs", "--prepare"])
+        .arg(std::env::var("TARGET").expect("missing Cargo target"))
+        .status()
+        .expect("Node.js is required to prepare the OCR runtime");
+    assert!(prepared.success(), "could not verify the OCR runtime");
 
     tauri_build::build()
 }

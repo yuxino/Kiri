@@ -575,7 +575,7 @@ def smoke(executable, update_button, label):
     global process
     if not executable.is_file():
         raise RuntimeError(f"Missing {label} executable")
-    subprocess.run(["node", "src-tauri/ocr/windows-runtime.mjs", "--verify",
+    subprocess.run(["node", "src-tauri/ocr/runtime.mjs", "--verify", "x86_64-pc-windows-msvc",
                     str(executable.parent / "ocr-runtime")], check=True)
     process = subprocess.Popen([str(executable)], env=app_environment)
     try:

@@ -1,20 +1,58 @@
-//! Local OCR — Vision on macOS, PaddleOCR and Windows.Media.Ocr on Windows, Tesseract on Linux.
-//! Uses accurate recognition with language correction and automatic language
-//! detection, returning the top candidate per line.
+//! Local OCR for screen selections and saved screenshots.
 
-#[cfg(any(target_os = "macos", windows))]
 use anyhow::{anyhow, Result};
+use std::path::Path;
 
+mod compatibility;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod linux;
-
+mod paddle;
 #[cfg(target_os = "linux")]
-pub use linux::recognize_text;
-
-#[cfg(any(windows, test))]
-mod windows_paddle;
+use linux::recognize_text as recognize_native;
 #[cfg(any(windows, test))]
 mod windows_small_text;
+
+/// Tauri resolves resource_dir for both installed packages and Cargo builds.
+pub fn recognize_text(png: &[u8], resources: Option<&Path>) -> Result<String> {
+    let model = resources
+        .ok_or_else(|| anyhow!("OCR resource directory unavailable"))
+        .and_then(|root| paddle::recognize(&root.join("ocr-runtime"), png));
+    with_native_fallback(model, compatibility::system_hint, || recognize_native(png))
+}
+
+fn with_native_fallback(
+    model: Result<String>,
+    hint: impl FnOnce() -> Option<compatibility::Script>,
+    native: impl FnOnce() -> Result<String>,
+) -> Result<String> {
+    match model {
+        Ok(text) if text.trim().is_empty() => native().or(Ok(String::new())),
+        Ok(text) => {
+            if let Some(script) = hint() {
+                if let Ok(alternate) = native() {
+                    if script.confirms(&alternate, &text) {
+                        return Ok(alternate);
+                    }
+                }
+            }
+            Ok(text)
+        }
+        Err(_) => {
+            log::debug!("Bundled OCR unavailable; using the local system recognizer");
+            native()
+        }
+    }
+}
+
+#[cfg(any(windows, test))]
+fn run_with_one_retry<T, E>(
+    mut operation: impl FnMut() -> Result<T, E>,
+) -> (Result<T, E>, Option<E>) {
+    match operation() {
+        Ok(value) => (Ok(value), None),
+        Err(first_error) => (operation(), Some(first_error)),
+    }
+}
 
 #[cfg(windows)]
 fn rgba_to_bgra_in_place(bytes: &mut [u8]) {
@@ -35,7 +73,7 @@ fn make_macos_text_request() -> objc2::rc::Retained<objc2_vision::VNRecognizeTex
 }
 
 #[cfg(target_os = "macos")]
-pub fn recognize_text(png: &[u8]) -> Result<String> {
+fn recognize_native(png: &[u8]) -> Result<String> {
     use objc2::rc::Retained;
     use objc2::AnyThread;
     use objc2_foundation::{NSArray, NSData, NSDictionary};
@@ -82,7 +120,10 @@ mod tests {
         let image = image::RgbaImage::from_pixel(320, 180, image::Rgba([255, 255, 255, 255]));
         let mut png = std::io::Cursor::new(Vec::new());
         image.write_to(&mut png, image::ImageFormat::Png).unwrap();
-        assert!(super::recognize_text(&png.into_inner()).unwrap().trim().is_empty());
+        assert!(super::recognize_native(&png.into_inner())
+            .unwrap()
+            .trim()
+            .is_empty());
     }
 
     #[test]
@@ -93,34 +134,23 @@ mod tests {
 }
 
 #[cfg(windows)]
-pub fn recognize_text(png: &[u8]) -> Result<String> {
+fn recognize_native(png: &[u8]) -> Result<String> {
     use windows::Media::Ocr::OcrEngine;
 
     let rgba = image::load_from_memory(png)
         .map_err(|error| anyhow!("{error}"))?
         .into_rgba8();
-    let engine = OcrEngine::TryCreateFromUserProfileLanguages();
-    let language = engine.as_ref().ok().and_then(|engine| {
-        engine
-            .RecognizerLanguage()
-            .and_then(|language| language.LanguageTag())
-            .ok()
-            .map(|tag| tag.to_string())
+    // WinRT can fail on first use while the installed language pack warms up.
+    // Only retry the system recognizer, never the already-attempted model.
+    let (result, _) = run_with_one_retry(|| {
+        let engine =
+            OcrEngine::TryCreateFromUserProfileLanguages().map_err(|error| anyhow!("{error}"))?;
+        let max_dimension = OcrEngine::MaxImageDimension().map_err(|error| anyhow!("{error}"))?;
+        windows_small_text::recognize(&rgba, max_dimension, |image| {
+            recognize_windows_image(&engine, image)
+        })
     });
-    if let Some(text) = windows_paddle::preferred_text(
-        rgba.width(),
-        rgba.height(),
-        language.as_deref(),
-        engine.is_err(),
-        || windows_paddle::recognize(png),
-    ) {
-        return Ok(text);
-    }
-    let engine = engine.map_err(|error| anyhow!("{error}"))?;
-    let max_dimension = OcrEngine::MaxImageDimension().map_err(|error| anyhow!("{error}"))?;
-    windows_small_text::recognize(&rgba, max_dimension, |image| {
-        recognize_windows_image(&engine, image)
-    })
+    result
 }
 
 #[cfg(windows)]
@@ -182,7 +212,7 @@ mod windows_tests {
     #[test]
     fn windows_native_blank_narrow_crop_is_successful_empty() {
         let image = image::RgbaImage::from_pixel(295, 35, image::Rgba([255; 4]));
-        let text = super::recognize_text(&encode_png(&image))
+        let text = super::recognize_native(&encode_png(&image))
             .expect("Windows OCR and a user-profile OCR language pack must be available");
         assert!(text.trim().is_empty());
     }
@@ -197,7 +227,7 @@ mod windows_tests {
         let scaled =
             image::imageops::resize(&source, 295, 55, image::imageops::FilterType::Lanczos3);
         let image = image::imageops::crop_imm(&scaled, 0, 10, 295, 35).to_image();
-        let text = super::recognize_text(&encode_png(&image))
+        let text = super::recognize_native(&encode_png(&image))
             .expect("Windows OCR and a user-profile OCR language pack must be available");
         let compact: String = text
             .chars()
@@ -214,5 +244,86 @@ mod windows_tests {
         let mut pixels = vec![1, 2, 3, 4, 10, 20, 30, 40];
         rgba_to_bgra_in_place(&mut pixels);
         assert_eq!(pixels, [3, 2, 1, 4, 30, 20, 10, 40]);
+    }
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+
+    #[test]
+    fn recognized_model_text_only_uses_the_model() {
+        let text = with_native_fallback(
+            Ok("bonjour 日本語 中文".into()),
+            || None,
+            || panic!("unexpected native OCR"),
+        )
+        .unwrap();
+        assert_eq!(text, "bonjour 日本語 中文");
+    }
+
+    #[test]
+    fn compatibility_hint_only_overrides_with_confirmed_image_text() {
+        let recognize = |alternate: &str| {
+            with_native_fallback(
+                Ok("API 判".into()),
+                || Some(compatibility::Script::Hangul),
+                || Ok(alternate.into()),
+            )
+            .unwrap()
+        };
+        assert_eq!(recognize("API 한국"), "API 한국");
+        assert_eq!(recognize("API 한"), "API 判");
+        assert_eq!(recognize(""), "API 判");
+    }
+
+    #[test]
+    fn empty_or_unavailable_model_uses_the_system_recognizer() {
+        for result in [Ok(String::new()), Err(anyhow!("model unavailable"))] {
+            assert_eq!(
+                with_native_fallback(result, || None, || Ok("한글".into())).unwrap(),
+                "한글"
+            );
+        }
+        assert_eq!(
+            with_native_fallback(
+                Ok(String::new()),
+                || None,
+                || Err(anyhow!("no system engine"))
+            )
+            .unwrap(),
+            ""
+        );
+        assert!(with_native_fallback(
+            Err(anyhow!("model unavailable")),
+            || None,
+            || Err(anyhow!("no system engine"))
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn local_retry_runs_at_most_twice_and_preserves_the_first_error() {
+        let mut attempts = 0;
+        let (result, first_error) = run_with_one_retry(|| {
+            attempts += 1;
+            if attempts == 1 {
+                Err("cold start")
+            } else {
+                Ok("recognized")
+            }
+        });
+        assert_eq!(attempts, 2);
+        assert_eq!(result, Ok("recognized"));
+        assert_eq!(first_error, Some("cold start"));
+
+        let mut successful_attempts = 0;
+        let (result, first_error) = run_with_one_retry(|| {
+            successful_attempts += 1;
+            Ok::<_, &str>("recognized")
+        });
+        assert_eq!(successful_attempts, 1);
+        assert_eq!(result, Ok("recognized"));
+        assert_eq!(first_error, None);
     }
 }

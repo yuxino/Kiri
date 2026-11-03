@@ -1,6 +1,6 @@
-Windows local text recognition
+Local text recognition
 
-Kiri includes the unmodified nbocr 0.2.3 Windows x64 executable by ChenZibo,
+Kiri includes nbocr 0.2.3 by ChenZibo,
 with PP-OCRv6 small detection and recognition models from PaddleOCR
 and the MNN inference engine from Alibaba. The bundled Apache License 2.0
 is in LICENSE alongside this notice.

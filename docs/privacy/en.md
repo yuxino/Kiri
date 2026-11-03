@@ -77,11 +77,10 @@ account identifier.
 
 ## Local OCR
 
-Local OCR is enabled by default. macOS uses Vision and Linux uses system
-Tesseract. Windows uses its system recognizer and a bundled PP-OCRv6 small
-model for small Chinese text. The model reads the crop locally. Windows deletes
-the temporary image and result when their last file handles close. Local OCR
-requires neither an API key nor a network connection.
+Local OCR uses Baidu PP-OCRv6 small, bundled with Kiri on macOS, Windows and
+Linux. Screen selections and saved screenshots are processed on the device.
+The platform recognizer can retry locally if the model is unavailable or
+returns no text. Local OCR requires no account, API key or network connection.
 
 ## Text History
 

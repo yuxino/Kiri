@@ -25,16 +25,6 @@ impl Drop for HistoryOcrPermit {
 
 const MAX_PREPARED_PNG_BYTES: usize = 20 * 1024 * 1024;
 
-#[cfg(any(windows, test))]
-fn run_with_one_retry<T, E>(
-    mut operation: impl FnMut() -> Result<T, E>,
-) -> (Result<T, E>, Option<E>) {
-    match operation() {
-        Ok(value) => (Ok(value), None),
-        Err(first_error) => (operation(), Some(first_error)),
-    }
-}
-
 #[tauri::command]
 pub async fn get_ocr_provider_settings(
     window: WebviewWindow,
@@ -167,23 +157,9 @@ pub async fn recognize_prepared_ocr_local(
         .begin(&owner, &request_id)
         .map_err(|error| error.to_string())?;
     let png = lease.png.clone();
+    let resources = app.path().resource_dir().ok();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        #[cfg(windows)]
-        {
-            // Windows.Media.Ocr can reject its first request while the user
-            // profile language recognizer is warming up. A single local-only
-            // retry makes first-use behavior deterministic without sending
-            // image data anywhere or hiding a persistent failure.
-            let (result, first_error) = run_with_one_retry(|| crate::ocr::recognize_text(&png));
-            if let Some(error) = first_error {
-                log::warn!("local OCR first attempt failed; retrying once: {error:#}");
-            }
-            result
-        }
-        #[cfg(not(windows))]
-        {
-            crate::ocr::recognize_text(&png)
-        }
+        crate::ocr::recognize_text(&png, resources.as_deref())
     })
     .await;
     if lease.cancellation.is_cancelled() {
@@ -480,31 +456,6 @@ mod tests {
         )
         .is_err());
     }
-
-    #[test]
-    fn local_retry_runs_at_most_twice_and_preserves_the_first_error() {
-        let mut attempts = 0;
-        let (result, first_error) = run_with_one_retry(|| {
-            attempts += 1;
-            if attempts == 1 {
-                Err("cold start")
-            } else {
-                Ok("recognized")
-            }
-        });
-        assert_eq!(attempts, 2);
-        assert_eq!(result, Ok("recognized"));
-        assert_eq!(first_error, Some("cold start"));
-
-        let mut successful_attempts = 0;
-        let (result, first_error) = run_with_one_retry(|| {
-            successful_attempts += 1;
-            Ok::<_, &str>("recognized")
-        });
-        assert_eq!(successful_attempts, 1);
-        assert_eq!(result, Ok("recognized"));
-        assert_eq!(first_error, None);
-    }
 }
 
 #[derive(Serialize)]
@@ -693,11 +644,8 @@ pub async fn recognize_asset_local(
             }
             (png, asset.source_application.clone(), identity)
         };
-        #[cfg(windows)]
-        let text = run_with_one_retry(|| crate::ocr::recognize_text(&png)).0;
-        #[cfg(not(windows))]
-        let text = crate::ocr::recognize_text(&png);
-        let text = text.map_err(|_| "Local OCR failed.".to_string())?;
+        let text = crate::ocr::recognize_text(&png, app.path().resource_dir().ok().as_deref())
+            .map_err(|_| "Local OCR failed.".to_string())?;
         // This result owns a snapshot: editing the source does not change its pixels.
         Ok(import_result(&app, &png, text, source, Some(identity)))
     })

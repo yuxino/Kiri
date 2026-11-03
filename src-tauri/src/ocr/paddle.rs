@@ -1,5 +1,5 @@
-//! Offline Chinese OCR for the small Windows captures where WinRT can return
-//! plausible but incorrect text. The model is loaded from the verified bundle.
+//! Bundled offline PP-OCRv6 small. The detector and multilingual recognizer
+//! use the same weights for every supported language.
 
 use anyhow::{anyhow, ensure, Result};
 use serde::Deserialize;
@@ -7,71 +7,29 @@ use std::io::{Read, Seek, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+#[cfg(windows)]
 use tempfile::{Builder, NamedTempFile};
 
-pub(super) fn prefers_model(
-    width: u32,
-    height: u32,
-    language: Option<&str>,
-    no_engine: bool,
-) -> bool {
-    let small_edge = width.min(height);
-    let long_edge = width.max(height);
-    // The same 601 × 115 toolbar selection can be 1202 × 230 physical
-    // pixels on a 200% display. Keep ordinary page-sized crops on WinRT.
-    let narrow = (1..=128).contains(&small_edge)
-        || ((129..=256).contains(&small_edge) && long_edge >= 3 * small_edge);
-    narrow
-        && long_edge <= 4096
-        && (no_engine
-            || language.is_some_and(|tag| {
-                tag.split('-')
-                    .next()
-                    .is_some_and(|code| code.eq_ignore_ascii_case("zh"))
-            }))
-}
-
-pub(super) fn preferred_text(
-    width: u32,
-    height: u32,
-    language: Option<&str>,
-    no_engine: bool,
-    recognize_model: impl FnOnce() -> Result<String>,
-) -> Option<String> {
-    if !prefers_model(width, height, language, no_engine) {
-        return None;
-    }
-    match recognize_model() {
-        Ok(text) if no_engine || !text.trim().is_empty() => Some(text),
-        Ok(_) => None,
-        Err(_) => {
-            log::debug!("Bundled OCR model was unavailable or failed");
-            None
-        }
-    }
+pub(super) fn recognize(directory: &Path, png: &[u8]) -> Result<String> {
+    #[cfg(windows)]
+    let executable = directory.join("nbocr.exe");
+    #[cfg(unix)]
+    let executable = std::env::current_exe()?.with_file_name("kiri-ocr");
+    run(&executable, directory, png)
 }
 
 #[cfg(windows)]
-pub(super) fn recognize(png: &[u8]) -> Result<String> {
-    let exe = std::env::current_exe()?;
-    let directory = exe
-        .parent()
-        .ok_or_else(|| anyhow!("Missing application directory"))?;
-    run(&directory.join("ocr-runtime").join("nbocr.exe"), png)
-}
-
 fn temporary_file(suffix: &str) -> std::io::Result<NamedTempFile> {
-    let mut builder = Builder::new();
-    builder.prefix("kiri-ocr-").rand_bytes(16).suffix(suffix);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        use windows::Win32::Storage::FileSystem::{
-            FILE_ATTRIBUTE_TEMPORARY, FILE_FLAG_DELETE_ON_CLOSE,
-        };
-        // The helper requires an image path. Keep our handle open so Windows
-        // also deletes the file if Kiri exits during recognition.
-        builder.make(|path| {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_TEMPORARY, FILE_FLAG_DELETE_ON_CLOSE,
+    };
+    // The helper opens the image by name; Windows deletes it at last close.
+    Builder::new()
+        .prefix("kiri-ocr-")
+        .rand_bytes(16)
+        .suffix(suffix)
+        .make(|path| {
             std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -79,9 +37,6 @@ fn temporary_file(suffix: &str) -> std::io::Result<NamedTempFile> {
                 .custom_flags((FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE).0)
                 .open(path)
         })
-    }
-    #[cfg(not(windows))]
-    builder.tempfile()
 }
 
 const MODEL_FILES: [&str; 3] = [
@@ -90,15 +45,12 @@ const MODEL_FILES: [&str; 3] = [
     "ppocr_keys_v6_small.txt",
 ];
 
+#[cfg(windows)]
 fn open_model_files(directory: &Path) -> Result<Vec<std::fs::File>> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
     let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
-        options.share_mode(FILE_SHARE_READ.0);
-    }
+    options.read(true).share_mode(FILE_SHARE_READ.0);
     MODEL_FILES
         .iter()
         .map(|name| {
@@ -111,37 +63,70 @@ fn open_model_files(directory: &Path) -> Result<Vec<std::fs::File>> {
         .collect()
 }
 
-fn run(executable: &Path, png: &[u8]) -> Result<String> {
+#[cfg(unix)]
+fn private_model_directory(directory: &Path) -> Result<tempfile::TempDir> {
+    use std::os::unix::fs::PermissionsExt;
+    let private = tempfile::Builder::new()
+        .prefix("kiri-ocr-")
+        .permissions(std::fs::Permissions::from_mode(0o700))
+        .tempdir()?;
+    // nbocr will download any missing model. A private snapshot keeps all
+    // names alive even when a package update removes the installed files.
+    for name in MODEL_FILES {
+        let source = directory.join(name);
+        let destination = private.path().join(name);
+        if !source.is_file() {
+            return Err(anyhow!("Bundled OCR model file is unavailable"));
+        }
+        if std::fs::hard_link(&source, &destination).is_err() {
+            // Cross-filesystem tempdir, or Linux protected_hardlinks.
+            std::fs::copy(&source, &destination)?;
+        }
+    }
+    Ok(private)
+}
+
+fn run(executable: &Path, directory: &Path, png: &[u8]) -> Result<String> {
     ensure!(executable.is_file(), "Local model is unavailable");
-    let directory = executable
-        .parent()
-        .ok_or_else(|| anyhow!("Missing OCR model directory"))?;
-    // nbocr downloads missing external models. Refuse to start unless all
-    // three exist, then prevent replacement or deletion until it exits.
+    #[cfg(windows)]
     let _model_files = open_model_files(directory)?;
-    let mut input = temporary_file(".png")?;
-    // Inherit a handle rather than passing an output path: the helper cannot
-    // recreate an orphaned plaintext file if Kiri exits mid-recognition.
-    let mut output = tempfile::tempfile()?;
-    input.write_all(png)?;
+    #[cfg(windows)]
+    let input = {
+        let mut file = temporary_file(".png")?;
+        file.write_all(png)?;
+        file
+    };
+    #[cfg(unix)]
+    let private = private_model_directory(directory)?;
+    #[cfg(unix)]
+    let directory = private.path();
     let mut command = Command::new(executable);
+    command.args([
+        "recognize",
+        "--det-model",
+        "v6-small",
+        "--models-dir",
+        ".",
+        "--language",
+        "zh",
+        "--format",
+        "jsonl",
+    ]);
+    #[cfg(windows)]
+    command.arg(input.path()).stdin(Stdio::null());
+    #[cfg(unix)]
+    {
+        // The CLI opens a .png by name. Give it an anonymous seekable file
+        // through stdin; no captured pixels are left by a Kiri crash.
+        let mut input = tempfile::tempfile()?;
+        input.write_all(png)?;
+        input.rewind()?;
+        std::os::unix::fs::symlink("/dev/fd/0", directory.join("input.png"))?;
+        command.arg("input.png").stdin(Stdio::from(input));
+    }
+    let mut output = tempfile::tempfile()?;
     command
-        .args([
-            "recognize",
-            "--det-model",
-            "v6-small",
-            "--models-dir",
-            ".",
-            "--language",
-            "zh",
-            "--format",
-            "jsonl",
-        ])
-        .arg(input.path())
-        // Keep the native MNN model filenames ASCII even if the Windows
-        // installation path contains Chinese or other non-ASCII characters.
         .current_dir(directory)
-        .stdin(Stdio::null())
         .stdout(Stdio::from(output.try_clone()?))
         .stderr(Stdio::null());
     #[cfg(windows)]
@@ -150,13 +135,23 @@ fn run(executable: &Path, png: &[u8]) -> Result<String> {
         use windows::Win32::System::Threading::CREATE_NO_WINDOW;
         command.creation_flags(CREATE_NO_WINDOW.0);
     }
+    // JSON includes bounding boxes as well as the recognized text.
+    const MAX_OUTPUT_BYTES: u64 = 8 * 1024 * 1024;
     let mut child = command.spawn()?;
     let start = Instant::now();
     loop {
         let status = match child.try_wait() {
             Ok(Some(status)) => status,
-            Ok(None) if start.elapsed() < Duration::from_secs(10) => {
-                std::thread::sleep(Duration::from_millis(15));
+            Ok(None) if start.elapsed() < Duration::from_secs(60) => {
+                if output
+                    .metadata()
+                    .is_ok_and(|meta| meta.len() > MAX_OUTPUT_BYTES)
+                {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(anyhow!("Local model output exceeded its limit"));
+                }
+                std::thread::sleep(Duration::from_millis(25));
                 continue;
             }
             result => {
@@ -169,9 +164,6 @@ fn run(executable: &Path, png: &[u8]) -> Result<String> {
         ensure!(status.success(), "Local model failed");
         break;
     }
-    // The output contains bounding boxes as well as text. A narrow crop
-    // cannot legitimately produce megabytes of OCR results.
-    const MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
     let mut bytes = Vec::new();
     output.rewind()?;
     output.take(MAX_OUTPUT_BYTES + 1).read_to_end(&mut bytes)?;
@@ -236,42 +228,10 @@ fn recognized_text(bytes: &[u8]) -> Result<String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn routes_only_small_chinese_or_unavailable_system_recognizers() {
-        assert!(prefers_model(593, 105, Some("zh-Hans-CN"), false));
-        assert!(prefers_model(128, 4096, Some("ZH-TW"), false));
-        assert!(prefers_model(295, 35, None, true));
-        assert!(!prefers_model(593, 105, None, false));
-        assert!(!prefers_model(593, 105, Some("ja-JP"), false));
-        assert!(!prefers_model(0, 105, Some("zh"), false));
-        assert!(prefers_model(902, 173, Some("zh"), false));
-        assert!(prefers_model(1202, 230, Some("zh"), false));
-        assert!(prefers_model(256, 768, Some("zh"), false));
-        assert!(!prefers_model(256, 767, Some("zh"), false));
-        assert!(!prefers_model(257, 2048, Some("zh"), false));
-        assert!(!prefers_model(4097, 100, Some("zh"), false));
-    }
-
-    #[test]
-    fn blank_or_failed_model_keeps_the_native_fallback_available() {
-        let preferred =
-            |model: Result<String>| preferred_text(601, 115, Some("zh"), false, || model);
-        assert_eq!(
-            preferred(Ok(" recognised ".into())).as_deref(),
-            Some(" recognised ")
-        );
-        assert_eq!(preferred(Ok("  ".into())), None);
-        assert_eq!(preferred(Err(anyhow!("fixture failure"))), None);
-        assert_eq!(
-            preferred_text(601, 115, None, true, || Ok(String::new())),
-            Some(String::new())
-        );
-        assert_eq!(
-            preferred_text(601, 115, Some("ja"), false, || panic!(
-                "unexpected model call"
-            )),
-            None
-        );
+    fn test_model_directory(executable: &Path) -> std::path::PathBuf {
+        std::env::var_os("KIRI_TEST_PADDLE_OCR_MODELS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| executable.parent().unwrap().to_owned())
     }
 
     #[test]
@@ -294,16 +254,43 @@ mod tests {
         let executable = Path::new(&path);
         let text = run(
             executable,
+            &test_model_directory(executable),
             include_bytes!("../../tests/fixtures/linux-ocr.png"),
         )
         .unwrap();
         assert!(text.contains("KIRI LINUX 123"));
+        // A full-sized ordinary screenshot also enters the same model.
+        let source = image::load_from_memory(include_bytes!("../../tests/fixtures/linux-ocr.png"))
+            .unwrap()
+            .to_rgba8();
+        let mut desktop = image::RgbaImage::from_pixel(1280, 720, image::Rgba([255; 4]));
+        image::imageops::replace(&mut desktop, &source, 80, 50);
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        desktop
+            .write_to(&mut encoded, image::ImageFormat::Png)
+            .unwrap();
+        let text = run(
+            executable,
+            &test_model_directory(executable),
+            encoded.get_ref(),
+        )
+        .unwrap();
+        assert!(text.contains("KIRI LINUX 123"));
+
         let blank = image::RgbaImage::from_pixel(295, 35, image::Rgba([255; 4]));
         let mut encoded = std::io::Cursor::new(Vec::new());
         blank
             .write_to(&mut encoded, image::ImageFormat::Png)
             .unwrap();
-        assert_eq!(run(executable, encoded.get_ref()).unwrap(), "");
+        assert_eq!(
+            run(
+                executable,
+                &test_model_directory(executable),
+                encoded.get_ref()
+            )
+            .unwrap(),
+            ""
+        );
     }
 
     #[test]
@@ -356,10 +343,13 @@ mod tests {
             frame
                 .write_to(&mut encoded, image::ImageFormat::Png)
                 .unwrap();
-            let text = preferred_text(width, height, Some("zh-Hans"), false, || {
-                run(Path::new(&path), encoded.get_ref())
-            })
-            .expect("local OCR should handle the selection");
+            let executable = Path::new(&path);
+            let text = run(
+                executable,
+                &test_model_directory(executable),
+                encoded.get_ref(),
+            )
+            .expect("bundled OCR should handle the selection");
             let mut remaining = text.as_str();
             for (matched, label) in labels.iter().enumerate() {
                 remaining = remaining.split_once(label).unwrap_or_else(|| {
@@ -383,11 +373,34 @@ mod tests {
             let path = directory.join(missing);
             std::fs::remove_file(&path).unwrap();
             assert_eq!(
-                run(&executable, b"").unwrap_err().to_string(),
+                run(&executable, directory, b"").unwrap_err().to_string(),
                 "Bundled OCR model file is unavailable"
             );
             assert!(!path.exists());
             std::fs::write(path, b"fixture").unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_model_snapshot_survives_package_replacement() {
+        use std::os::unix::fs::PermissionsExt;
+        let install = tempfile::tempdir().unwrap();
+        for name in MODEL_FILES {
+            std::fs::write(install.path().join(name), b"model").unwrap();
+        }
+        let snapshot = private_model_directory(install.path()).unwrap();
+        assert_eq!(
+            std::fs::metadata(snapshot.path())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        drop(install);
+        for name in MODEL_FILES {
+            assert_eq!(std::fs::read(snapshot.path().join(name)).unwrap(), b"model");
         }
     }
 

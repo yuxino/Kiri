@@ -12,7 +12,7 @@ $portableDir = Join-Path $env:RUNNER_TEMP 'kiri-portable'
 $verifyDir = Join-Path $env:RUNNER_TEMP 'kiri-portable-verify'
 $archive = "Kiri-$version-Windows-x64-Portable.zip"
 if (-not (Test-Path $executable)) { throw 'Missing Windows release executable' }
-node src-tauri/ocr/windows-runtime.mjs --verify $RuntimeDirectory
+node src-tauri/ocr/runtime.mjs --verify x86_64-pc-windows-msvc $RuntimeDirectory
 if ($LASTEXITCODE -ne 0) { throw 'The release build has an invalid OCR runtime' }
 New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
 Copy-Item $executable (Join-Path $portableDir 'kiri.exe') -Force
@@ -29,6 +29,6 @@ $contents = @(Get-ChildItem $verifyDir | ForEach-Object Name | Sort-Object)
 if ($expected -ne $actual -or ($contents -join ',') -ne 'kiri.exe,kiri.portable,ocr-runtime') {
   throw 'Portable archive verification failed'
 }
-node src-tauri/ocr/windows-runtime.mjs --verify (Join-Path $verifyDir 'ocr-runtime')
+node src-tauri/ocr/runtime.mjs --verify x86_64-pc-windows-msvc (Join-Path $verifyDir 'ocr-runtime')
 if ($LASTEXITCODE -ne 0) { throw 'Portable OCR verification failed' }
 Write-Host "Verified $archive against the release executable"
