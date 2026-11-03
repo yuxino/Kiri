@@ -11,8 +11,8 @@ fn main() {
         println!("cargo:rerun-if-changed={icon}");
     }
 
-    #[cfg(target_os = "macos")]
-    {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").expect("missing target platform");
+    if target_os == "macos" {
         println!("cargo:rerun-if-changed=src/macos_media.m");
         println!("cargo:rerun-if-changed=src/macos_audio.m");
         println!("cargo:rerun-if-changed=src/video_export.m");
@@ -39,6 +39,14 @@ fn main() {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
     }
+
+    println!("cargo:rerun-if-changed=ocr/runtime.mjs");
+    let prepared = std::process::Command::new("node")
+        .args(["ocr/runtime.mjs", "--prepare"])
+        .arg(std::env::var("TARGET").expect("missing Cargo target"))
+        .status()
+        .expect("Node.js is required to prepare the OCR runtime");
+    assert!(prepared.success(), "could not verify the OCR runtime");
 
     tauri_build::build()
 }

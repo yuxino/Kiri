@@ -988,9 +988,9 @@ try:
     show_fixture()
     open_capture("OCR")
     drag_region((220, 240, 900, 350))
-    wait_for("OCR result Copy button", lambda: visible_control("Copy"), timeout=35)
+    wait_for("OCR result Copy Text button", lambda: visible_control("Copy Text"), timeout=35)
     screenshot("ocr-recognized-text.png")
-    click_control("Copy")
+    click_control("Copy Text")
     wait_for("Copy closes the OCR overlay", lambda: overlay() is None)
     recognized = command("xclip", "-selection", "clipboard", "-t", "UTF8_STRING", "-o").stdout
     if "SCREEN CAPTURE 123" not in normalized(recognized):

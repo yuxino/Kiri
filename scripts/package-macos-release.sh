@@ -138,6 +138,17 @@ done
 [[ "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" == "$version" ]]
 [[ "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" == "$expected_macos" ]]
 codesign --verify --deep --strict --verbose=2 "$app"
+ocr_helper="$app/Contents/MacOS/kiri-ocr"
+[[ -x "$ocr_helper" ]]
+lipo "$ocr_helper" -verify_arch arm64 x86_64
+codesign --verify --strict "$ocr_helper"
+# Always run the host slice. On Apple Silicon also exercise Intel when
+# Rosetta is available; Intel CI independently runs the pinned x64 sidecar.
+for architecture in arm64 x86_64; do
+  if /usr/bin/arch "-$architecture" /usr/bin/true >/dev/null 2>&1; then
+    node src-tauri/ocr/runtime.mjs --smoke universal-apple-darwin "$app/Contents/Resources/ocr-runtime" "$ocr_helper" "$architecture"
+  fi
+done
 
 requirement="$(
   codesign --display --requirements - "$app" 2>&1 |

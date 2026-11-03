@@ -35,7 +35,7 @@
 .text-dialog { color: var(--kiri-label); background: var(--kiri-card); border: 1px solid var(--kiri-surface-border); border-radius: 14px; width: min(600px, calc(100vw - 72px)); max-height: calc(100vh - 80px); overflow: auto; padding: 24px 28px; }
 .text-dialog::backdrop { background: rgba(0,0,0,.42); }
 .text-dialog__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
-.text-dialog__header h2 { margin: 0; font-size: 18px; }
-.text-dialog__header p { margin: 7px 0 0; font-size: 13px; color: var(--kiri-secondary-label); }
+.text-dialog__title h2 { margin: 0; font-size: 18px; }
+.text-dialog__title p { margin: 7px 0 0; font-size: 13px; color: var(--kiri-secondary-label); }
 @media (max-width: 1000px) { .text-history__sidebar { width: 220px; } }
 @container (max-width: 420px) { .text-history__record-actions { justify-content: flex-start; } }

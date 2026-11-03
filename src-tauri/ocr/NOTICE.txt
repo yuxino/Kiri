@@ -1,0 +1,11 @@
+Local text recognition
+
+Kiri includes nbocr 0.2.3 by ChenZibo,
+with PP-OCRv6 small detection and recognition models from PaddleOCR
+and the MNN inference engine from Alibaba. The bundled Apache License 2.0
+is in LICENSE alongside this notice.
+
+Newbee OCR CLI     https://github.com/zibo-chen/newbee-ocr-cli/tree/v0.2.3
+Rust Paddle OCR    https://github.com/zibo-chen/rust-paddle-ocr/tree/v2.3.1
+PaddleOCR          https://github.com/PaddlePaddle/PaddleOCR
+MNN                https://github.com/alibaba/MNN

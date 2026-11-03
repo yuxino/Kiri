@@ -27,8 +27,9 @@ sudo apt install xdg-desktop-portal xdg-desktop-portal-gnome pipewire
 
 The `.deb` declares the GStreamer plugins, the system `tesseract` command,
 and Tesseract English, Simplified Chinese, and Japanese language data.
-Local OCR uses that command, so the distribution manages its matching
-Tesseract and Leptonica libraries. It does not require an account or a network
+The package includes PP-OCRv6 small as the default local recognizer. The
+system command is available for fallback, with its matching Tesseract and
+Leptonica libraries managed by the distribution. It does not require an account or a network
 connection. Optional remote OCR requires an unlocked Secret Service
 implementation, normally GNOME Keyring on Ubuntu.
 
@@ -184,7 +185,7 @@ cover MP4/GIF encoding and merging. Check the candidate's reports for results.
 | Screenshots and annotations | Region capture, editable marks, clipboard, local library | Physical-desktop focus, annotation, and IME acceptance |
 | Window selection | X11 hover and click selection | Wayland uses region drag |
 | Displays | X11 monitor selection; single-display Wayland | Wayland multiple displays unavailable; physical fractional-scale acceptance pending |
-| Local OCR | System Tesseract with installed `eng`, `chi_sim`, `jpn` data | Real GNOME text/IME workflows; missing models show an error |
+| Local OCR | Bundled PP-OCRv6 small with system Tesseract for fallback | Real GNOME text/IME workflows; missing models show an error |
 | Remote OCR | Explicit send/retry, Secret Service credentials | Needs a configured profile and an unlocked secret store |
 | Recording | MP4 with optional audio or silent GIF, optional pointer, X11 native / Wayland desktop shortcuts and tray/command controls | Portal consent, pause/resume, timing, and control exclusion on real GNOME |
 | Saved videos | Playback, thumbnails, GIF conversion, normal-speed cuts/reordering and MP4 export with source audio | System GStreamer codecs required; no speed changes, effects, masks, annotations or stickers; [installed-app acceptance](qa/linux-video-export.md) remains separate |

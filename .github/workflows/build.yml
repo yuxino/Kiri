@@ -150,6 +150,11 @@ jobs:
           workspaces: src-tauri
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Exercise the offline macOS model
+        env:
+          KIRI_TEST_PADDLE_OCR_BIN: ${{ github.workspace }}/src-tauri/target/debug/kiri-ocr
+          KIRI_TEST_PADDLE_OCR_MODELS: ${{ github.workspace }}/src-tauri/target/debug/ocr-runtime
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib packaged_helper_reads_a_real_fixture -- --ignored
       - name: Test native shortcut harness
         run: node --test scripts/qa/shortcut-native-unit.test.mjs
       - name: Test native shortcut mappings and registration rollback
@@ -284,6 +289,8 @@ jobs:
           sha256sum "${packages[0]}" > linux-native-review/package-sha256.txt
           sudo apt-get install -y --no-install-recommends "$(realpath "${packages[0]}")"
           test -x /usr/bin/kiri
+          test -x /usr/bin/kiri-ocr
+          node src-tauri/ocr/runtime.mjs --smoke x86_64-unknown-linux-gnu /usr/lib/kiri/ocr-runtime /usr/bin/kiri-ocr
           test -f /usr/share/applications/io.yuxino.kiri.desktop
           grep -qx "Exec=kiri" /usr/share/applications/io.yuxino.kiri.desktop
           grep -qx "NoDisplay=true" /usr/share/applications/io.yuxino.kiri.desktop
@@ -505,6 +512,10 @@ jobs:
       - name: Compile without a runnable macOS bundle
         if: needs.plan.outputs.package_macos == 'true'
         run: pnpm tauri build --no-bundle
+      - name: Run the native architecture's OCR sidecar
+        if: needs.plan.outputs.package_macos == 'true'
+        run: |
+          node src-tauri/ocr/runtime.mjs --smoke "$(rustc -vV | sed -n 's/^host: //p')" src-tauri/target/release/ocr-runtime src-tauri/target/release/kiri-ocr
 
   build-windows:
     name: Build and test Windows app (Server 2025)
@@ -534,6 +545,14 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
         env:
           KIRI_VIDEO_QA_DIR: ${{ runner.temp }}/kiri-video-export-review
+      - name: Exercise the packaged offline OCR helper
+        shell: pwsh
+        run: |
+          $env:KIRI_TEST_PADDLE_OCR_BIN = (Resolve-Path 'src-tauri/target/debug/ocr-runtime/nbocr.exe').Path
+          $env:KIRI_TEST_OCR_193_IMAGE = Join-Path $env:RUNNER_TEMP 'kiri-issue-193-toolbar.png'
+          curl.exe --fail --silent --show-error --location --retry 3 --max-time 60 --output $env:KIRI_TEST_OCR_193_IMAGE 'https://github.com/user-attachments/assets/debb425b-1a24-4e25-aa56-b21c139342b3'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib packaged_helper_reads_ -- --ignored
       - name: Test native shortcut harness
         run: node --test scripts/qa/shortcut-native-unit.test.mjs
       - name: Test native shortcut mappings and registration rollback

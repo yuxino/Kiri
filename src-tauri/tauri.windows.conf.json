@@ -4,6 +4,9 @@
     "beforeBuildCommand": "node src-tauri/installer-theme/build.mjs && pnpm build"
   },
   "bundle": {
+    "resources": {
+      "target/ocr-runtime/nbocr.exe": "ocr-runtime/nbocr.exe"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",

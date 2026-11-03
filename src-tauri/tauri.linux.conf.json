@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
+    "externalBin": ["target/ocr-runtime/kiri-ocr"],
     "targets": [
       "deb"
     ],
@@ -9,6 +10,9 @@
       "deb": {
         "depends": [
           "libasound2t64 | libasound2",
+          "libc6 (>= 2.35)",
+          "libstdc++6 (>= 12)",
+          "libssl3t64 | libssl3",
           "libgbm1",
           "libpulse0",
           "libxcb1",

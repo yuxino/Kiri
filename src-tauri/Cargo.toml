@@ -1,6 +1,6 @@
 [package]
 name = "kiri"
-version = "1.6.35"
+version = "1.6.36"
 description = "Kiri - a fast, local-first capture workspace"
 authors = ["yuxino"]
 edition = "2021"
@@ -150,6 +150,7 @@ cpal = "0.18"
 windows-future = "0.3.2"
 windows = { version = "0.62", features = [
     "Graphics_Capture",
+    "Globalization",
     "Security_Authorization_AppCapabilityAccess",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
@@ -165,7 +166,7 @@ windows = { version = "0.62", features = [
     "Wdk_System_SystemServices",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
-    "Win32_Storage",
+    "Win32_Storage_FileSystem",
     "Win32_System_Ole",
     "Win32_System_DataExchange",
     "Win32_System_Memory",

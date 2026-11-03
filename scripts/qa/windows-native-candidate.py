@@ -237,7 +237,8 @@ def main():
         extract_verified(archives[0], portable.parent, "sha256:" + digest(archives[0]))
         portable_provenance = "Reused the original portable ZIP from the verified bundle artifact"
     else:
-        subprocess.run(["pwsh", "-NoProfile", "-File", "scripts/package-windows-portable.ps1"], check=True)
+        subprocess.run(["pwsh", "-NoProfile", "-File", "scripts/package-windows-portable.ps1",
+                        "-RuntimeDirectory", str(install / "ocr-runtime")], check=True)
         portable_provenance = "Repacked from the exact original executable; original ZIP not retained"
     require(digest(portable) == checksum, "Repacked portable executable differs from the candidate")
     manifest = {

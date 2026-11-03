@@ -74,7 +74,8 @@ Linux. Preserve these decisions:
   Linux uses replacement `.deb` packages downloaded and installed by the user;
   it does not expose the signed in-app updater. Ubuntu 24.04 / GNOME is the
   initial Linux target, with X11 compatibility. Do not claim AppImage delivery.
-- Linux local OCR uses system Tesseract with `eng`, `chi_sim`, and `jpn` data.
+- All desktop platforms use the bundled PP-OCRv6 small model for local OCR.
+  Linux keeps system Tesseract with `eng`, `chi_sim`, and `jpn` data for recovery.
   Linux videos support playback, GIF conversion, normal-speed cuts/reordering and
   MP4 export with source audio. Independently gated speed, effects, masks,
   annotations and stickers remain unavailable; never silently drop saved content.

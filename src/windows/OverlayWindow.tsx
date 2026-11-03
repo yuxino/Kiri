@@ -48,9 +48,10 @@ import { AnnotationInteractionLock } from "../annotation/interaction-lock.js";
 import { KiriIcon, type IconName } from "../components/KiriIcons";
 import { AnnotationToolbarButton } from "../components/AnnotationToolbarButton";
 import { QrOverlay } from "../qr/QrOverlay";
+import { OcrResultPanel } from "../ocr/OcrResultPanel";
 import { RemoteOcrConsent } from "../ocr/RemoteOcrConsent";
 import { kiriResourceUrl } from "../lib/kiri-resource-url.js";
-import { capturePanelLayout, captureToolOptionsLayout, captureToolbarPosition, recordingPanelLayout } from "./toolbar-layout.js";
+import { captureToolOptionsLayout, captureToolbarPosition, recordingPanelLayout } from "./toolbar-layout.js";
 import { CaptureSizeControls } from "./CaptureSizeControls";
 import { resizeCapturePixels } from "./capture-size.js";
 import { CaptureColorPicker, useCaptureColorPicker } from "./CaptureColorPicker";
@@ -178,7 +179,7 @@ export function OverlayWindow() {
   const qrReturnPhaseRef = useRef<"selecting" | "annotating">("selecting");
   const [ocrText, setOcrText] = useState("");
   const [ocrSaved, setOcrSaved] = useState(false);
-  const [ocrFailed, setOcrFailed] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const [preparedOcr, setPreparedOcr] = useState<PreparedOcrRequestDto | null>(null);
   const [remoteOcrFailed, setRemoteOcrFailed] = useState(false);
   const [recordSelectionRevision, setRecordSelectionRevision] = useState(0);
@@ -508,7 +509,7 @@ export function OverlayWindow() {
       if (generation !== ocrGenerationRef.current) return;
       preparedOcrRef.current = null;
       setPreparedOcr(null);
-      setOcrFailed(false);
+      setOcrError(null);
       setOcrText(text.text);
       setOcrSaved(text.saved);
       setPhase("ocr-result");
@@ -518,7 +519,7 @@ export function OverlayWindow() {
       preparedOcrRef.current = null;
       setPreparedOcr(null);
       void api.cancelPreparedOcr(pending.requestId).catch(() => {});
-      setOcrFailed(true);
+      setOcrError("Text Recognition Failed");
       setOcrText("");
       setPhase("ocr-result");
     }
@@ -540,7 +541,7 @@ export function OverlayWindow() {
       if (generation !== ocrGenerationRef.current) return;
       preparedOcrRef.current = null;
       setPreparedOcr(null);
-      setOcrFailed(false);
+      setOcrError(null);
       setOcrText(text.text);
       setOcrSaved(text.saved);
       setPhase("ocr-result");
@@ -561,7 +562,7 @@ export function OverlayWindow() {
       preparedOcrRef.current = null;
       setPreparedOcr(null);
       setRemoteOcrFailed(false);
-      setOcrFailed(false);
+      setOcrError(null);
       setOcrText("");
       setPhase("ocr-preparing");
       if (previous) void api.cancelPreparedOcr(previous.requestId).catch(() => {});
@@ -594,7 +595,7 @@ export function OverlayWindow() {
           preparedOcrRef.current = null;
           setPreparedOcr(null);
           void api.cancelPreparedOcr(prepared.requestId).catch(() => {});
-          setOcrFailed(true);
+          setOcrError(profile && !profile.hasApiKey ? "Add an API key before selecting this profile" : "Text Recognition Failed");
           setPhase("ocr-result");
           return;
         }
@@ -602,7 +603,7 @@ export function OverlayWindow() {
       } catch (error) {
         if (generation !== ocrGenerationRef.current) return;
         reportFrontend(`prepare_ocr_request rejected: ${String(error)}`);
-        setOcrFailed(true);
+        setOcrError(String(error) === "The OCR image exceeds the size limit." ? "The OCR image exceeds the size limit." : "Text Recognition Failed");
         setOcrText("");
         setPhase("ocr-result");
       }
@@ -652,7 +653,7 @@ export function OverlayWindow() {
         e.stopPropagation();
         return;
       }
-      // QR content is selectable, and its buttons keep their native keyboard
+      // QR and OCR results are selectable, and their buttons keep native keyboard
       // behavior. Annotation shortcuts must not intercept this reading phase.
       if (phaseRef.current === "qr-result" || phaseRef.current === "ocr-result") return;
       if (e.defaultPrevented) return;
@@ -762,23 +763,27 @@ export function OverlayWindow() {
     [],
   );
 
+  const selectAnotherOcrRegion = useCallback(() => {
+    setOcrText("");
+    setOcrError(null);
+    setPhase("selecting");
+    phaseRef.current = "selecting";
+    setSelection(null);
+    selectionRef.current = null;
+  }, []);
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return;
       selectionPointerStartRef.current = toPoint(e);
       selectionClickMovedRef.current = false;
-      // OCR results: allow drawing a fresh region directly (no button) —
+      // Alongside the explicit reselect action, keep direct redrawing:
       // clicking/dragging in blank space starts a new selection which
       // re-runs recognition on release. phaseRef must be updated
       // synchronously so the same pointer-down proceeds into the drag
       // start below (setPhase alone is async and would return early).
       if (phaseRef.current === "ocr-result") {
-        setOcrText("");
-        setOcrFailed(false);
-        setPhase("selecting");
-        phaseRef.current = "selecting";
-        setSelection(null);
-        selectionRef.current = null;
+        selectAnotherOcrRegion();
       }
       if (
         phaseRef.current !== "mode-select" &&
@@ -804,7 +809,7 @@ export function OverlayWindow() {
       }
       setDrag({ start: p, current: p, moved: false });
     },
-    [toPoint, bounds],
+    [toPoint, bounds, selectAnotherOcrRegion],
   );
 
   const onPointerMove = useCallback(
@@ -939,7 +944,7 @@ export function OverlayWindow() {
       setHoverWindow(null);
       hoverWindowRef.current = null;
       setOcrText("");
-      setOcrFailed(false);
+      setOcrError(null);
       setTool("select");
       if (next === "ocr") {
         // Reuse the finished crop once, without a render effect watching live
@@ -967,6 +972,7 @@ export function OverlayWindow() {
   // --- render ---
   const selectingRect = drag && drag.moved && !resizeHandle ? normalized(drag.start, drag.current) : null;
   const displayRect = selection ?? selectingRect;
+  const showSelectionDetails = mode !== "ocr" || phase === "mode-select" || phase === "selecting";
   const activeDimRect = displayRect ?? hoverWindow;
   const annotating = phase === "annotating";
   const canResizeSelection = (mode === "screenshot" && phase === "selecting") ||
@@ -1139,8 +1145,8 @@ export function OverlayWindow() {
               pointerEvents: "none",
             }}
           />
-          <SelectionHandles rect={displayRect} />
-          {!showSizeControls && <SizeBadge
+          {showSelectionDetails && <SelectionHandles rect={displayRect} />}
+          {showSelectionDetails && !showSizeControls && <SizeBadge
             rect={displayRect}
             bounds={bounds}
             pixelScale={context?.scale ?? 1}
@@ -1238,9 +1244,7 @@ export function OverlayWindow() {
         </div>
       )}
 
-      {/* Mode selector — ALWAYS visible (spec §1.2: never hidden), so the
-          mode can be switched at any point: before/during selection and
-          after a region is chosen (spec §2.4 changeCaptureMode). */}
+      {/* Keep mode switching available while selecting; results own their actions. */}
       {phase !== "ocr-result" && phase !== "qr-result" && (
         <>
           <div
@@ -1288,7 +1292,7 @@ export function OverlayWindow() {
               onClick={() => switchMode("ocr")}
             />
           </div>
-          {!selection && (
+          {!selection && (mode !== "ocr" || !drag?.moved) && (
             <HintLabel
               text={
                 mode === "screenshot"
@@ -1315,7 +1319,7 @@ export function OverlayWindow() {
 
       {/* Drag hint while creating a region (spec §3.2.5: shown when no
           toolbar exists yet and the user is dragging). */}
-      {phase === "selecting" && drag && drag.moved && !selection && (
+      {phase === "selecting" && drag && drag.moved && (!selection || (mode === "ocr" && !resizeHandle && !moveDrag)) && (
         <HintLabel
           text={
             mode === "screenshot"
@@ -1327,20 +1331,16 @@ export function OverlayWindow() {
           top={DEFAULT_HINT_TOP}
         />
       )}
-      {phase === "selecting" && mode === "ocr" && selection && !drag && (
-        <HintLabel text={t("Release to recognize text")} top={DEFAULT_HINT_TOP} />
-      )}
       {phase === "ocr-result" && (
-        <OcrPanel
+        <OcrResultPanel
           text={ocrText}
           saved={ocrSaved}
-          failed={ocrFailed}
+          error={ocrError}
           anchor={selection ?? { x: 0, y: 0, width: bounds.width, height: 0 }}
           bounds={bounds}
           modeSelectorBounds={modeSelectorBounds}
-          onCopy={() => {
-            void api.copyText(ocrText).catch(() => {});
-          }}
+          onCopy={() => api.copyText(ocrText)}
+          onReselect={selectAnotherOcrRegion}
           onClose={cancel}
         />
       )}
@@ -1583,151 +1583,6 @@ function SizeBadge(props: { rect: Rect; bounds: Rect; pixelScale: number }) {
       }}
     >
       {label}
-    </div>
-  );
-}
-
-function OcrPanel(props: {
-  saved: boolean;
-  text: string;
-  failed: boolean;
-  anchor: Rect;
-  bounds: Rect;
-  modeSelectorBounds?: Rect | null;
-  onCopy(): void;
-  onClose(): void;
-}) {
-  const { text, failed, anchor, bounds, modeSelectorBounds, onCopy, onClose } = props;
-  const panelRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
-  const [measuredHeight, setMeasuredHeight] = useState(0);
-  const measurePanel = () => {
-    const element = panelRef.current;
-    if (!element) return;
-    const content = textRef.current;
-    const hiddenContent = content ? Math.max(0, content.scrollHeight - content.clientHeight) : 0;
-    // Text has its own 150px reading viewport; only panel-induced clipping
-    // should make the panel taller, not a long recognized document.
-    const height = Math.ceil(element.getBoundingClientRect().height + Math.min(hiddenContent,
-      Math.max(0, 150 - (content?.clientHeight ?? 0))));
-    setMeasuredHeight(current => current === height ? current : height);
-  };
-  useLayoutEffect(measurePanel);
-  useLayoutEffect(() => {
-    const element = panelRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver(measurePanel);
-    observer.observe(element);
-    if (textRef.current) observer.observe(textRef.current);
-    return () => observer.disconnect();
-  }, []);
-  const { left, top, width: panelWidth, maxHeight } = capturePanelLayout(
-    anchor, bounds, { width: 368, height: measuredHeight }, modeSelectorBounds,
-  );
-  return (
-    <div
-      ref={panelRef}
-      className="kiri-hud"
-      onPointerDown={(e) => e.stopPropagation()}
-      style={{
-        position: "absolute",
-        left,
-        top,
-        width: panelWidth,
-        maxHeight,
-        overflow: "hidden",
-        zIndex: 8,
-        padding: 14,
-        boxSizing: "border-box",
-        borderRadius: 16,
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        boxShadow: "0 16px 42px rgba(0,0,0,0.22)",
-      }}
-    >
-      {!failed && text.trim() && <div role="status" style={{ flexShrink: 0, fontSize: 11, color: "var(--kiri-secondary-label)" }}>
-        {t(props.saved ? "Saved to Text History" : "History wasn't saved. Copy the text before closing.")}
-      </div>}
-      <div style={{ display: "flex", flexShrink: 0, justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span
-            style={{
-              width: 28,
-              height: 28,
-              display: "grid",
-              placeItems: "center",
-              borderRadius: 8,
-              background: "#fff",
-              color: "#000",
-            }}
-          >
-            <KiriIcon name="text.viewfinder" size={15} />
-          </span>
-          <span style={{ font: "700 13px var(--kiri-font-ui)" }}>
-            {failed ? t("Text Recognition Failed") : t("Recognized Text")}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="kiri-icon-button kiri-icon-button--hud"
-          aria-label={t("Close")}
-          title={t("Close")}
-          onClick={onClose}
-          style={{
-            width: 28,
-            height: 28,
-          }}
-        >
-          <KiriIcon name="xmark" size={11} />
-        </button>
-      </div>
-      <div
-        ref={textRef}
-        role="region"
-        aria-label={t("Recognized Text")}
-        tabIndex={0}
-        style={{
-          background: "rgba(255,255,255,0.97)",
-          color: "#0a0a0a",
-          borderRadius: 11,
-          padding: "12px 14px",
-          minHeight: Math.min(96, Math.max(0, maxHeight - 160)),
-          flex: "1 1 auto",
-          maxHeight: 150,
-          boxSizing: "border-box",
-          overflow: "auto",
-          font: "450 13px/1.48 var(--kiri-font-ui)",
-          userSelect: "text",
-          WebkitUserSelect: "text",
-          whiteSpace: "pre-wrap",
-          border: "1px solid rgba(255,255,255,0.24)",
-          boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.08)",
-        }}
-      >
-        {text || (failed ? t("Adjust the region and try again") : t("No Text Found"))}
-      </div>
-      <button
-        type="button"
-        className="kiri-primary-button"
-        onClick={onCopy}
-        disabled={!text}
-        style={{
-          minHeight: 38,
-          flexShrink: 0,
-          borderRadius: 10,
-          alignSelf: "flex-end",
-          minWidth: 112,
-          padding: "0 16px",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 7,
-        }}
-      >
-        <KiriIcon name="doc.on.doc" size={13} />
-        {t("Copy")}
-      </button>
     </div>
   );
 }

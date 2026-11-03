@@ -376,20 +376,6 @@
   background: rgba(200, 62, 54, 0.1);
 }
 
-.ocr-profile-empty {
-  min-height: 0;
-  padding: 12px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 9px;
-  color: var(--kiri-secondary-label);
-  font-size: 13px;
-  border-top: 1px solid var(--kiri-surface-border);
-}
-
-.ocr-profile-empty svg { width: 16px; height: 16px; flex-shrink: 0; }
-
 .ocr-privacy-note,
 .kiri-settings-key-note {
   margin: 0;

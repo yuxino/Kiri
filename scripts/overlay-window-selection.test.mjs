@@ -78,6 +78,7 @@ async function overlay(t, { windowRects = [floating, normal, background], scale 
       "../annotation/text-composition.js": { isTextComposition },
       "./RecordingMicrophoneSelect": { __esModule: true, default: "microphone-select" },
       "../qr/QrOverlay": { QrOverlay: "qr-overlay" },
+      "../ocr/OcrResultPanel": { OcrResultPanel: "ocr-result" },
       "../ocr/RemoteOcrConsent": { RemoteOcrConsent: "ocr-consent" },
       "../lib/kiri-resource-url.js": { kiriResourceUrl: () => "kiri://capture/frozen/test.png" },
       "./toolbar-layout.js": toolbarLayout,

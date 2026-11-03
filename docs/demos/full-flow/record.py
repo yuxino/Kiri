@@ -123,7 +123,7 @@ async def run(args):
    report['checks']['ocr_request_count']=len(requests);report['checks']['ocr_selection']=actual
    await mark('整页文字识别：标题、清单和段落',8)
    result=o.get_by_role('region',name='识别结果',exact=True);await result.hover();await page.mouse.wheel(0,240);await mark('回看识别内容并复制',8)
-   await click(o.get_by_role('button',name='复制',exact=True));await wait(2)
+   await click(o.get_by_role('button',name='复制文字',exact=True));await wait(2)
    copied=await page.evaluate('state.copiedText');report['checks']['ocr_lines']=len(copied.splitlines());assert report['checks']['ocr_lines']>=12
    o=await capture('录屏');await drag(180,115,1110,566);await mark('区域录屏选区与选项')
    await click(o.get_by_role('button',name='开始录制',exact=True),pause=0)
