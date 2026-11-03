@@ -514,7 +514,8 @@ jobs:
         run: pnpm tauri build --no-bundle
       - name: Run the native architecture's OCR sidecar
         if: needs.plan.outputs.package_macos == 'true'
-        run: node src-tauri/ocr/runtime.mjs --smoke "$(rustc -vV | sed -n 's/^host: //p')" src-tauri/target/release/ocr-runtime src-tauri/target/release/kiri-ocr
+        run: |
+          node src-tauri/ocr/runtime.mjs --smoke "$(rustc -vV | sed -n 's/^host: //p')" src-tauri/target/release/ocr-runtime src-tauri/target/release/kiri-ocr
 
   build-windows:
     name: Build and test Windows app (Server 2025)
