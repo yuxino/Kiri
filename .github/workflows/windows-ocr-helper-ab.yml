@@ -1,0 +1,54 @@
+name: Windows OCR helper size experiment
+
+on:
+  push:
+    branches: [perf/ocr-helper-no-tiny]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-ab:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: zibo-chen/newbee-ocr-cli
+          ref: 96eacca7ec881227d3f0d705f3678714bc988911
+          path: upstream
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /Cargo.toml
+            /Cargo.lock
+            /src/
+            /models/PP-OCRv6_tiny_det.mnn
+            /models/PP-OCRv6_tiny_rec.mnn
+            /models/ppocr_keys_v6_tiny.txt
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install Pillow==11.3.0
+      - name: Enable firewall profiles on this disposable GitHub-hosted VM
+        shell: pwsh
+        run: |
+          Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
+      - name: Build, compare and test the helper on Windows
+        run: python scripts/qa/windows-ocr-helper-ab.py upstream ocr-experiment
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-ocr-helper-no-tiny
+          path: |
+            ocr-experiment/report.json
+            ocr-experiment/Kiri-1.6.36-Windows-x64-Portable-no-tiny-candidate.zip
+          if-no-files-found: error
+          retention-days: 7
