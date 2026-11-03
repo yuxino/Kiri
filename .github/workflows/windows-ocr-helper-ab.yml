@@ -38,10 +38,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install Pillow==11.3.0
-      - name: Enable firewall profiles on this disposable GitHub-hosted VM
-        shell: pwsh
-        run: |
-          Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
       - name: Build, compare and test the helper on Windows
         run: python scripts/qa/windows-ocr-helper-ab.py upstream ocr-experiment
       - uses: actions/upload-artifact@v7

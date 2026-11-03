@@ -1,6 +1,7 @@
 """Windows-only experiment. Run with the pinned nbocr checkout and a new output directory."""
 import argparse
 from collections import Counter
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import hashlib
 import json
 import os
@@ -8,7 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import uuid
+from threading import Thread
 import zipfile
 
 from PIL import Image
@@ -87,9 +88,14 @@ def fixtures(work):
         "latin": Path(__file__).resolve().parents[2] / "src-tauri/tests/fixtures/linux-ocr.png"}
 
 
-def recognize(exe, models, png):
-    p = subprocess.run([exe, "recognize", "--det-model", "v6-small", "--models-dir", ".", "--language", "zh",
-                        "--format", "jsonl", png], cwd=models, capture_output=True, timeout=60, check=True)
+def run_helper(exe, models, png, env):
+    return subprocess.run([exe, "recognize", "--det-model", "v6-small", "--models-dir", ".", "--language", "zh",
+                        "--format", "jsonl", png], cwd=models, env=env, capture_output=True, timeout=60)
+
+
+def recognize(exe, models, png, env):
+    p = run_helper(exe, models, png, env)
+    p.check_returncode()
     records = [json.loads(line) for line in p.stdout.splitlines() if line.startswith(b"{")]
     if len(records) != 1:
         raise ValueError("Expected exactly one recognition record")
@@ -156,6 +162,38 @@ def package(official, helper, dest):
                 "helper_sha256": sha(helper.read_bytes())}
 
 
+def verify_tiny_inputs(upstream, helpers):
+    tiny_inputs = ["PP-OCRv6_tiny_det.mnn", "PP-OCRv6_tiny_rec.mnn", "ppocr_keys_v6_tiny.txt"]
+    for name in tiny_inputs:
+        data = (upstream / "models" / name).read_bytes()
+        # The official Windows dictionary uses CRLF; checkout settings can yield LF.
+        chunks = [data] if name.endswith(".mnn") else [data.replace(b"\r\n", b"\n"), data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")]
+        for variant, exe in helpers.items():
+            payload = exe.read_bytes()
+            if any(chunk in payload for chunk in chunks) != (variant != "lean"):
+                raise ValueError(f"Unexpected embedded {name} in {variant}")
+
+
+class RejectModelDownload(BaseHTTPRequestHandler):
+    def do_CONNECT(self):
+        self.server.requests.append(self.path)
+        self.send_error(403, "Offline OCR test")
+
+    do_GET = do_CONNECT
+
+    def log_message(self, *args):
+        pass
+
+
+def verify_download_block(exe, empty, png, proxy, env):
+    before = len(proxy.requests)
+    result = run_helper(exe, empty, png, env)
+    attempts = proxy.requests[before:]
+    if result.returncode == 0 or not attempts or any(empty.iterdir()):
+        raise ValueError("Missing-model control did not fail through the rejecting proxy")
+    return len(attempts)
+
+
 def main(args, work):
     zipfile_path = download(work / "official.zip", f"https://github.com/yuxino/Kiri/releases/download/v1.6.36/{PORTABLE}.zip",
                             "97e59195bded0c0f198e20f72660213c4fc3da84491d58e918e0e512c8c7155c")
@@ -166,47 +204,39 @@ def main(args, work):
     for name, digest in MODEL_DIGESTS.items():
         if sha((models / name).read_bytes()) != digest:
             raise ValueError(f"Invalid external model: {name}")
-    helpers = {"official": models / "nbocr.exe", **build_pair(args.upstream.resolve(), work)}
-    tiny_inputs = ["PP-OCRv6_tiny_det.mnn", "PP-OCRv6_tiny_rec.mnn", "ppocr_keys_v6_tiny.txt"]
-    for name in tiny_inputs:
-        data = (args.upstream / "models" / name).read_bytes()
-        # The official Windows dictionary uses CRLF; checkout settings can yield LF.
-        chunks = [data] if name.endswith(".mnn") else [data.replace(b"\r\n", b"\n"), data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")]
-        for variant, exe in helpers.items():
-            payload = exe.read_bytes()
-            if any(chunk in payload for chunk in chunks) != (variant != "lean"):
-                raise ValueError(f"Unexpected embedded {name} in {variant}")
     samples = fixtures(work)
-    report = {"upstream_commit": REV, "target": TARGET, "rustc": subprocess.check_output(["rustc", "-Vv"], text=True).strip(),
-              "official_zip_bytes": zipfile_path.stat().st_size, "official_helper_deflated": released_size,
-              "small_sha256": MODEL_DIGESTS, "packages": {}, "quality": {}}
-    # Block these exact executable paths for the recognition phase only.
-    block = r"""
-        $ErrorActionPreference = 'Stop'
-        $profiles = @(Get-NetConnectionProfile | ForEach-Object {
-            if ($_.NetworkCategory -eq 'DomainAuthenticated') {'Domain'} else {$_.NetworkCategory.ToString()}
-        } | Select-Object -Unique)
-        if (!$profiles) {throw 'No active network profile'}
-        foreach ($profile in $profiles) {
-            if ((Get-NetFirewallProfile -Name $profile -PolicyStore ActiveStore).Enabled -ne 'True') {
-                throw "Enable the $profile firewall profile in the isolated Windows runner before testing"
-            }
-        }
-        foreach ($path in ($env:OCR_HELPERS -split ';')) {
-            New-NetFirewallRule -Group $env:OCR_FIREWALL_GROUP -DisplayName $env:OCR_FIREWALL_GROUP -Direction Outbound -Program $path -Action Block -Profile Any | Out-Null
-        }
-    """
-    group = f"KiriOCR-AB-{uuid.uuid4()}"
-    rule_env = dict(os.environ, OCR_HELPERS=";".join(str(p) for p in helpers.values()), OCR_FIREWALL_GROUP=group)
-    try:
-        subprocess.run(["pwsh", "-NoProfile", "-Command", block], check=True, env=rule_env)
-        for name, png in samples.items():
-            rounds = 20 if name in ("tight", "wide") else 2
-            results = {key: Counter(recognize(exe, models, png) for _ in range(rounds)) for key, exe in helpers.items()}
-            report["quality"][name] = {"comparison": compare_texts(name, results), "runs": results}
-    finally:
-        remove = "Get-NetFirewallRule -Group $env:OCR_FIREWALL_GROUP -ErrorAction SilentlyContinue | Remove-NetFirewallRule"
-        subprocess.run(["pwsh", "-NoProfile", "-Command", remove], check=True, env=rule_env)
+    empty = work / "missing-models"
+    empty.mkdir()
+    # nbocr 0.2.3 uses ureq's environment proxy for its sole model download path.
+    # Check each real binary with models missing, then require zero requests with models present.
+    with HTTPServer(("127.0.0.1", 0), RejectModelDownload) as proxy:
+        proxy.requests = []
+        thread = Thread(target=proxy.serve_forever, daemon=True)
+        thread.start()
+        address = f"http://127.0.0.1:{proxy.server_port}"
+        env = dict(os.environ, HTTPS_PROXY=address, HTTP_PROXY=address, ALL_PROXY=address, NO_PROXY="")
+        try:
+            probes = {"official": verify_download_block(models / "nbocr.exe", empty, samples["blank"], proxy, env)}
+            helpers = {"official": models / "nbocr.exe", **build_pair(args.upstream.resolve(), work)}
+            verify_tiny_inputs(args.upstream, helpers)
+            report = {"upstream_commit": REV, "target": TARGET, "rustc": subprocess.check_output(["rustc", "-Vv"], text=True).strip(),
+                      "official_zip_bytes": zipfile_path.stat().st_size, "official_helper_deflated": released_size,
+                      "small_sha256": MODEL_DIGESTS, "packages": {}, "quality": {}}
+            for key in ("control", "lean"):
+                probes[key] = verify_download_block(helpers[key], empty, samples["blank"], proxy, env)
+            before = len(proxy.requests)
+            for name, png in samples.items():
+                rounds = 20 if name in ("tight", "wide") else 2
+                results = {key: Counter(recognize(exe, models, png, env) for _ in range(rounds))
+                           for key, exe in helpers.items()}
+                report["quality"][name] = {"comparison": compare_texts(name, results), "runs": results}
+            real_requests = len(proxy.requests) - before
+            if real_requests:
+                raise ValueError("Recognition with the bundled small models attempted a download")
+            report["download_checks"] = {"rejected_missing_model_requests": probes, "recognition_requests": real_requests}
+        finally:
+            proxy.shutdown()
+            thread.join()
     for name, helper in helpers.items():
         dest = args.output / f"{PORTABLE}-no-tiny-candidate.zip" if name == "lean" else work / f"{name}-repacked.zip"
         report["packages"][name] = package(zipfile_path, helper, dest)
@@ -224,7 +254,7 @@ if __name__ == "__main__":
     cli.add_argument("output", type=Path)
     args = cli.parse_args()
     if os.name != "nt":
-        cli.error("Use an elevated Windows x64 build desktop with Rust 1.98, MSVC, LLVM, Pillow and pwsh")
+        cli.error("Use a Windows x64 build desktop with Rust 1.98, MSVC, LLVM, Pillow and pwsh")
     args.output.mkdir()
     with tempfile.TemporaryDirectory(prefix="kiri-ocr-ab-") as scratch:
         main(args, Path(scratch))
