@@ -1,0 +1,43 @@
+.ocr-result {
+  position: absolute;
+  z-index: 8;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: var(--kiri-font-ui);
+}
+
+.ocr-result__header, .ocr-result__header h2, .ocr-result__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocr-result__header { justify-content: space-between; }
+.ocr-result__header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.ocr-result__header .kiri-icon-button { width: 28px; height: 28px; }
+.ocr-result__body {
+  box-sizing: border-box;
+  padding: 10px 0;
+  margin: 5px 0 0;
+  max-height: 170px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.ocr-result__body:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
+.ocr-result__message { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: #ffc1bc; }
+.ocr-result__footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, .16);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.ocr-result__saved { margin: 4px 0 0; color: var(--kiri-secondary-label-dark); font-size: 12px; }
+.ocr-result__reselect { margin-right: auto; }
+.ocr-result__footer button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; flex-shrink: 0; }

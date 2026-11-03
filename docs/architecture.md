@@ -581,8 +581,8 @@ markers to the editor and library menu while preserving pending edits.
 
 ## OCR flow
 
-Local OCR is the default and runs through macOS Vision, Windows.Media.Ocr, or
-the system `/usr/bin/tesseract` command on Linux. Linux selects installed `eng`,
+Local OCR is the default. macOS uses Vision, Windows uses its system recognizer
+and a bundled PaddleOCR model, and Linux runs the system `/usr/bin/tesseract` command. Linux selects installed `eng`,
 `chi_sim`, and `jpn` models from the configured or system data directory; it
 never downloads models. PNG input and text output use concurrent local pipes,
 with a 60-second process deadline and a 1 MiB text limit. The process is reaped
@@ -590,11 +590,12 @@ on completion or failure, and native diagnostics are not retained. Kiri does
 not link Tesseract or Leptonica, so the distribution owns their matching ABI
 versions (ADR 0118).
 
-Windows preserves the original OCR pass. A successful empty result on a narrow
-crop can trigger one temporary, bounded two- or threefold enlargement with a
-background-matched margin, constrained by the native engine's maximum image
-dimension. History keeps the original PNG; this recovery never changes languages
-or sends an image to another provider (ADR 0125).
+Windows recognizes small Chinese selections with the bundled PP-OCRv6 small
+model first. The system recognizer handles other selections and recovers when
+the model is unavailable or returns empty. Its original pass and bounded
+small-image enlargement remain available. History always keeps the original
+PNG. See [Windows small-text recognition](adr/0126-offline-chinese-ocr.md)
+and [system recognizer recovery](adr/0125-windows-small-text-ocr-recovery.md).
 
 The normal local path does not use the network. OCR crop preparation waits for
 pointer release and uses that final endpoint, never an intermediate drag

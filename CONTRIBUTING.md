@@ -27,6 +27,10 @@ macOS development requires a stable signing identity; see the
 Use the Tauri commands: a plain `cargo build` executable does not include
 frontend assets.
 
+The first Windows build fetches the pinned Newbee OCR CLI and PP-OCRv6 small
+weights using system tools. Cargo verifies every file before bundling it.
+Subsequent builds reuse the verified files under `src-tauri/target/ocr-runtime`. Recognition works offline.
+
 Before submitting changes:
 
 ```bash

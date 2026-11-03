@@ -282,6 +282,7 @@ class NativePackageIsolationTests(unittest.TestCase):
         for path in (self.portable, self.installed):
             path.parent.mkdir(); path.write_bytes(b"application")
         (self.portable.parent / "kiri.portable").write_text("")
+        (self.portable.parent / "ocr-runtime").mkdir()
         self.report = {"success": False}
         self.events, self.labels = [], []
         self.scope = 0

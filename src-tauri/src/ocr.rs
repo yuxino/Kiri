@@ -1,4 +1,4 @@
-//! Local OCR — Vision on macOS, Windows.Media.Ocr on Windows, Tesseract on Linux.
+//! Local OCR — Vision on macOS, PaddleOCR and Windows.Media.Ocr on Windows, Tesseract on Linux.
 //! Uses accurate recognition with language correction and automatic language
 //! detection, returning the top candidate per line.
 
@@ -11,6 +11,8 @@ mod linux;
 #[cfg(target_os = "linux")]
 pub use linux::recognize_text;
 
+#[cfg(any(windows, test))]
+mod windows_paddle;
 #[cfg(any(windows, test))]
 mod windows_small_text;
 
@@ -97,8 +99,24 @@ pub fn recognize_text(png: &[u8]) -> Result<String> {
     let rgba = image::load_from_memory(png)
         .map_err(|error| anyhow!("{error}"))?
         .into_rgba8();
-    let engine =
-        OcrEngine::TryCreateFromUserProfileLanguages().map_err(|error| anyhow!("{error}"))?;
+    let engine = OcrEngine::TryCreateFromUserProfileLanguages();
+    let language = engine.as_ref().ok().and_then(|engine| {
+        engine
+            .RecognizerLanguage()
+            .and_then(|language| language.LanguageTag())
+            .ok()
+            .map(|tag| tag.to_string())
+    });
+    if let Some(text) = windows_paddle::preferred_text(
+        rgba.width(),
+        rgba.height(),
+        language.as_deref(),
+        engine.is_err(),
+        || windows_paddle::recognize(png),
+    ) {
+        return Ok(text);
+    }
+    let engine = engine.map_err(|error| anyhow!("{error}"))?;
     let max_dimension = OcrEngine::MaxImageDimension().map_err(|error| anyhow!("{error}"))?;
     windows_small_text::recognize(&rgba, max_dimension, |image| {
         recognize_windows_image(&engine, image)

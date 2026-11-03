@@ -11,8 +11,8 @@ fn main() {
         println!("cargo:rerun-if-changed={icon}");
     }
 
-    #[cfg(target_os = "macos")]
-    {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").expect("missing target platform");
+    if target_os == "macos" {
         println!("cargo:rerun-if-changed=src/macos_media.m");
         println!("cargo:rerun-if-changed=src/macos_audio.m");
         println!("cargo:rerun-if-changed=src/video_export.m");
@@ -38,6 +38,18 @@ fn main() {
         ] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
+    }
+
+    if target_os == "windows" {
+        println!("cargo:rerun-if-changed=ocr/windows-runtime.mjs");
+        let prepared = std::process::Command::new("node")
+            .arg("ocr/windows-runtime.mjs")
+            .status()
+            .expect("Node.js is required to prepare the Windows OCR runtime");
+        assert!(
+            prepared.success(),
+            "could not verify the Windows OCR runtime"
+        );
     }
 
     tauri_build::build()

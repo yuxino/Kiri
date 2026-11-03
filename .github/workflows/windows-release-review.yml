@@ -36,9 +36,7 @@ jobs:
           $install = Join-Path $env:RUNNER_TEMP 'kiri-installed-review'
           $result = Start-Process $installer.FullName -ArgumentList @('/S', "/D=$install") -Wait -PassThru
           if ($result.ExitCode -ne 0) { throw "Installation failed: $($result.ExitCode)" }
-          New-Item -ItemType Directory -Force src-tauri/target/release | Out-Null
-          Copy-Item (Join-Path $install 'kiri.exe') src-tauri/target/release/kiri.exe
-          ./scripts/package-windows-portable.ps1
+          ./scripts/package-windows-portable.ps1 -Executable (Join-Path $install 'kiri.exe')
           "KIRI_QA_INSTALLED_EXE=$(Join-Path $install 'kiri.exe')" >> $env:GITHUB_ENV
           "KIRI_QA_PORTABLE_EXE=$(Join-Path $env:RUNNER_TEMP 'kiri-portable-verify/kiri.exe')" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Force windows-release-review | Out-Null

@@ -33,17 +33,17 @@ async def main():
    await f.get_by_text('已保存到「文字」',exact=True).wait_for()
    first=await calls();assert len(first)==1,first
    assert first[0]['a']['selection']=={'x':194,'y':104,'width':896,'height':537},first
-   await f.get_by_role('button',name='复制',exact=True).click()
+   await f.get_by_role('button',name='复制文字',exact=True).click()
    f=await open_mode('文字');await page.mouse.click(120,90);await page.wait_for_timeout(250);assert len(await calls())==1
    await select((1080,580),(200,120));await f.get_by_text('识别结果',exact=True).wait_for()
    second=await calls();assert len(second)==2,second
    assert second[-1]['a']['selection']=={'x':200,'y':120,'width':880,'height':460}
-   await f.get_by_role('button',name='复制',exact=True).click()
+   await f.get_by_role('button',name='复制文字',exact=True).click()
    f=await open_mode('截图');await select((210,150),(1015,530));assert len(await calls())==2
    await f.get_by_role('button',name='文字',exact=True).click();await f.get_by_text('识别结果',exact=True).wait_for();await page.wait_for_timeout(400)
    third=await calls();assert len(third)==3,third
    assert third[-1]['a']['selection']=={'x':210,'y':150,'width':805,'height':380}
-   await f.get_by_role('button',name='复制',exact=True).click()
+   await f.get_by_role('button',name='复制文字',exact=True).click()
    f=await open_mode('截图');await select((230,160),(980,510));assert len(await calls())==3
    await f.locator('.kiri-capture-toolbar').get_by_role('button',name='识别文字',exact=True).click()
    await f.get_by_text('识别结果',exact=True).wait_for()

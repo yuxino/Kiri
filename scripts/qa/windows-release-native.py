@@ -575,6 +575,8 @@ def smoke(executable, update_button, label):
     global process
     if not executable.is_file():
         raise RuntimeError(f"Missing {label} executable")
+    subprocess.run(["node", "src-tauri/ocr/windows-runtime.mjs", "--verify",
+                    str(executable.parent / "ocr-runtime")], check=True)
     process = subprocess.Popen([str(executable)], env=app_environment)
     try:
         settings = find("Settings")
@@ -686,7 +688,7 @@ try:
     if (installed.parent / "kiri.portable").exists():
         raise RuntimeError("Installed copy contains a portable marker")
     smoke_isolated_package(portable, "Open Releases Page", "portable ZIP")
-    if sorted(path.name for path in portable.parent.iterdir()) != ["kiri.exe", "kiri.portable"]:
+    if sorted(path.name for path in portable.parent.iterdir()) != ["kiri.exe", "kiri.portable", "ocr-runtime"]:
         raise RuntimeError("Portable copy wrote unexpected files beside the executable")
     smoke_isolated_package(installed, "Check for Updates", "NSIS installation")
     report["native_acceptance_success"] = True

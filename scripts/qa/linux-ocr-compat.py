@@ -164,7 +164,7 @@ def main():
         command("xdotool", "mousemove", "--sync", "900", "350")
         time.sleep(0.15)
         command("xdotool", "mouseup", "1")
-        bounds = wait_for("recognized text Copy button", lambda: control("Copy"), timeout=65)
+        bounds = wait_for("recognized text Copy Text button", lambda: control("Copy Text"), timeout=65)
         ImageGrab.grab().save(output / "ocr-recognized-text.png")
         command("xdotool", "mousemove", str(bounds.x + bounds.width // 2), str(bounds.y + bounds.height // 2), "click", "1")
         recognized = wait_for("recognized text in clipboard", lambda: (

@@ -257,3 +257,5 @@ development.
   — consecutive shape drawing, text-only confirmation, content-preserving right-click and stable properties.
 
 - [ADR 0125: Bounded Windows small-text OCR recovery](adr/0125-windows-small-text-ocr-recovery.md)
+
+- [ADR 0126: Offline recognition of small Chinese selections](adr/0126-offline-chinese-ocr.md)

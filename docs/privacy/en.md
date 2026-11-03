@@ -77,9 +77,11 @@ account identifier.
 
 ## Local OCR
 
-Local OCR is enabled by default and uses macOS Vision, Windows.Media.Ocr, or
-system Tesseract on Linux. It does not require an API key or network connection,
-and image pixels do not leave the device.
+Local OCR is enabled by default. macOS uses Vision and Linux uses system
+Tesseract. Windows uses its system recognizer and a bundled PP-OCRv6 small
+model for small Chinese text. The model reads the crop locally. Windows deletes
+the temporary image and result when their last file handles close. Local OCR
+requires neither an API key nor a network connection.
 
 ## Text History
 

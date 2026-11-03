@@ -47,7 +47,7 @@ export function OcrSettingsSection({
           disabled={busy}
         >
           <span aria-hidden="true">＋</span>
-          {t("Add Profile")}
+          {t("Add Remote Profile")}
         </button>
       </div>
 
@@ -63,7 +63,7 @@ export function OcrSettingsSection({
             type="button"
             className="ocr-engine-choice"
             aria-pressed={localActive}
-            onClick={() => onActivate({ kind: "local" })}
+            onClick={() => { if (!localActive) onActivate({ kind: "local" }); }}
             disabled={busy}
           >
             <span className="ocr-engine-radio" aria-hidden="true" />
@@ -74,7 +74,7 @@ export function OcrSettingsSection({
                   {t("On device")}
                 </span>
               </span>
-              <span>{t("Uses the system text recognizer. Images never leave this device.")}</span>
+              <span>{t("Recognizes text on this device, even offline.")}</span>
             </span>
           </button>
         </div>
@@ -89,7 +89,7 @@ export function OcrSettingsSection({
                 type="button"
                 className="ocr-engine-choice"
                 aria-pressed={active}
-                onClick={() => onActivate({ kind: "profile", profileId: profile.id })}
+                onClick={() => { if (!active) onActivate({ kind: "profile", profileId: profile.id }); }}
                 disabled={busy || !profile.hasApiKey}
                 title={
                   profile.hasApiKey
@@ -150,16 +150,10 @@ export function OcrSettingsSection({
           );
         })}
 
-        {settings.profiles.length === 0 && (
-          <div className="ocr-profile-empty">
-            <KiriIcon name="text.viewfinder" size={20} />
-            <span>{t("Add a profile to use a remote OCR provider.")}</span>
-          </div>
-        )}
       </div>
 
       <p className="ocr-privacy-note">
-        {t("Remote OCR always asks before an image is sent. Return uses local OCR for that image only.")}
+        {t("Remote OCR asks before sending each image.")}
       </p>
     </section>
   );

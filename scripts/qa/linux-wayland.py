@@ -743,7 +743,7 @@ try:
         wait_for("OCR mode is visibly active", lambda: active_control_frame("OCR", pending_frames))
         report["ocr_mode_click"]["mode_confirmed"] = True
         drag_region((220, 240, 900, 350))
-        click_control("Copy")
+        click_control("Copy Text")
         wait_for("OCR copy closes capture", lambda: controls("OCR") is None)
         recognized = clipboard("text")
         report["ocr_text"] = " ".join(recognized.split())

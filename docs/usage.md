@@ -41,6 +41,16 @@ On macOS, Windows and Linux, the Kiri executable also accepts `--capture`, `--re
 
 Choose Screenshot, Record, or OCR. The screenshot toolbar also offers Recognize QR Codes. Enter confirms a screenshot; Esc cancels capture. Screenshots go to your clipboard and local library.
 
+In OCR mode, release the pointer to recognize the selected region. Copy Text
+copies the full result and closes the overlay. To copy part of the result,
+select the text and press Ctrl+C or ⌘C. Choose Select Another Region to try a
+different area, including after an empty result. The panel reports whether
+the result was saved to Text History.
+
+On Windows, small Chinese selections use the bundled Baidu PP-OCRv6 small
+model first. No setup or model download is needed. If a toolbar icon comes
+through as a character, select just the text.
+
 ### Keyboard shortcuts
 
 Settings → Shortcuts brings global shortcuts and the in-app key reference together.

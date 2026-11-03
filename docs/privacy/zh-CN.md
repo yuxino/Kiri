@@ -28,7 +28,7 @@ macOS 与 Windows 安装版在打开主面板时检查更新。同一次运行�
 
 ## 本地 OCR
 
-Kiri 默认使用 macOS Vision、Windows.Media.Ocr 或 Linux 系统 Tesseract 进行本地文字识别。它不需要 API Key 或网络连接，图片像素不会离开设备。
+macOS 使用 Vision，Linux 使用系统 Tesseract。Windows 使用系统识别器，并随应用附带用于小块中文的 PP-OCRv6 small 模型。模型在本机读取选区，临时图片和识别结果会在文件句柄关闭后由系统删除。所有本地识别均无需 API Key 或网络连接。
 
 ## 文字历史
 

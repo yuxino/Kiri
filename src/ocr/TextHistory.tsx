@@ -31,7 +31,7 @@ export function TextReader({ text, imageId, saved = true, editor, heading, actio
     <div className="text-reader__actions">
       {heading ?? <span className="text-reader__caption">{t("Recognized Text")}</span>}
       <div className="text-history__record-actions">
-        {!editor && <button type="button" className="kiri-button kiri-button--primary" disabled={!text.trim()} onClick={() => void copy()}>
+        {!editor && text.trim() && <button type="button" className="kiri-button kiri-button--primary" onClick={() => void copy()}>
           <KiriIcon name={copied ? "checkmark" : "doc.on.doc"} size={14} />
           {t(copied ? "Text Copied" : "Copy Text")}
         </button>}
@@ -79,19 +79,23 @@ export function OcrDialog({ asset, onClose }: { asset: AssetDto; onClose(): void
     });
     return () => { current = false; };
   }, [asset.id, asset.ocrText, attempt]);
+  const hasText = Boolean(result?.text.trim());
+  const heading = <div className="text-dialog__title">
+    <h2 id="text-dialog-title">{t(hasText ? "Recognized Text" : "Local OCR")}</h2>
+    {hasText && result?.saved && <p>{t("Saved to Text History")}</p>}
+  </div>;
+  const closeButton = <button type="button" className="kiri-icon-button" aria-label={t("Close")} onClick={onClose}><KiriIcon name="xmark" size={16} /></button>;
   return <dialog ref={dialog} className="text-dialog" onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
     onKeyDown={(event) => event.stopPropagation()} aria-labelledby="text-dialog-title">
-    <header className="text-dialog__header">
-      <div><h2 id="text-dialog-title">{t("Recognized Text")}</h2><p>{t(result?.saved ? "Saved to Text History" : "Local OCR")}</p></div>
-      <button type="button" className="kiri-icon-button" aria-label={t("Close")} onClick={onClose}><KiriIcon name="xmark" size={16} /></button>
-    </header>
-    {result ? <TextReader text={result.text} saved={result.saved} imageId={result.asset?.id ?? asset.id} /> :
+    {result ? <TextReader text={result.text} saved={result.saved} imageId={result.asset?.id ?? asset.id} heading={heading} actions={closeButton} /> : <>
+      <header className="text-dialog__header">{heading}{closeButton}</header>
       <div className="text-history__empty" role={error ? "alert" : "status"}>
         <KiriIcon name="text.viewfinder" size={28} />
         <p>{t(error ?? "Recognizing Text…")}</p>
         {!error && <small>{t("You can close this window. Successful results are saved to Text History.")}</small>}
         {error && <button type="button" className="kiri-button kiri-button--secondary" onClick={() => { request.current = null; setAttempt((value) => value + 1); }}>{t("Retry")}</button>}
-      </div>}
+      </div>
+    </>}
   </dialog>;
 }
 
