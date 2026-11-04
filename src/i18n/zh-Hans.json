@@ -333,7 +333,6 @@
   "Could not start recording. Cancel and try again.": "无法开始录制，请取消后重试。",
   "Could not cancel recording. Try again.": "未能取消录制，请重试。",
   "Text History": "文字",
-  "Read, copy, and revisit recognized text": "回看、搜索和复制识别过的文字",
   "Recognize Text": "识别文字",
   "Recognize Text Locally": "本地识别文字",
   "Read Text": "查看文字",
@@ -587,7 +586,6 @@
   "Save & close": "保存并关闭",
   "QR Codes": "二维码",
   "QR Favorites": "二维码收藏",
-  "Find and reuse saved QR codes": "查找并复用收藏的二维码",
   "Recognize QR Codes": "识别二维码",
   "QR Content": "二维码内容",
   "Link": "链接",
@@ -859,5 +857,9 @@
   "Open System Settings": "打开系统设置",
   "Save the captured area first, then pin it from the completion preview.": "先保存已截区域，再从完成卡中置顶。",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "拖动可移动窗口；滚动查看，双指捏合或按住 Ctrl/Command 滚动缩放；按住空格拖动画面。",
-  "Zoom level": "缩放比例"
+  "Zoom level": "缩放比例",
+  "Select records": "多选",
+  "Select record": "选择记录",
+  "Deselect All": "取消全选",
+  "Couldn't move these records to Trash. Try again.": "无法将这些记录移到回收站，请重试。"
 }

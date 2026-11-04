@@ -1022,7 +1022,7 @@ export function LibraryWindow() {
       />
       </aside>
       <div className="library-workspace">
-      <header className={`library-control-panel${destination === "settings" ? " library-control-panel--settings" : ""}`}>
+      <header className={`library-control-panel${destination === "settings" ? " library-control-panel--settings" : destination === "text" || destination === "qr" ? " library-control-panel--records" : ""}`}>
         <div className="library-control-panel__primary">
             <div className="library-control-panel__titles">
               <h1 id="library-page-title" className="library-control-panel__title">
@@ -1034,10 +1034,8 @@ export function LibraryWindow() {
                     ? t("Trash")
                     : t("Library")}
               </h1>
-              {destination !== "settings" && <span className="library-control-panel__subtitle">
-                {destination === "qr" ? t("Find and reuse saved QR codes")
-                  : destination === "text" ? t("Read, copy, and revisit recognized text")
-                  : libraryUnavailable
+              {destination === "captures" && <span className="library-control-panel__subtitle">
+                {libraryUnavailable
                     ? t("Unavailable")
                     : libraryMigrating
                       ? t("Moving…")

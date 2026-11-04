@@ -333,7 +333,6 @@
   "Could not start recording. Cancel and try again.": "Could not start recording. Cancel and try again.",
   "Could not cancel recording. Try again.": "Could not cancel recording. Try again.",
   "Text History": "Text History",
-  "Read, copy, and revisit recognized text": "Read, copy, and revisit recognized text",
   "Recognize Text": "Recognize Text",
   "Recognize Text Locally": "Recognize Text Locally",
   "Read Text": "Read Text",
@@ -587,7 +586,6 @@
   "Save & close": "Save & close",
   "QR Codes": "QR Codes",
   "QR Favorites": "QR Favorites",
-  "Find and reuse saved QR codes": "Find and reuse saved QR codes",
   "Recognize QR Codes": "Recognize QR Codes",
   "QR Content": "QR Content",
   "Link": "Link",
@@ -859,5 +857,9 @@
   "Open System Settings": "Open System Settings",
   "Save the captured area first, then pin it from the completion preview.": "Save the captured area first, then pin it from the completion preview.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.",
-  "Zoom level": "Zoom level"
+  "Zoom level": "Zoom level",
+  "Select records": "Select records",
+  "Select record": "Select record",
+  "Deselect All": "Deselect All",
+  "Couldn't move these records to Trash. Try again.": "Couldn't move these records to Trash. Try again."
 }

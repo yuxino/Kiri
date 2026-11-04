@@ -127,6 +127,18 @@ Object.assign(window, {
           asset.ocrText = String(args.replacement ?? original);
           return {...asset};
         }
+        case "batch_move_to_trash": {
+          actions.push(`${command}:${JSON.stringify(args.ids)}`);
+          if (params.has("batchFailure")) throw new Error("Controlled batch failure");
+          const ids = args.ids as string[];
+          for (const records of [textRecords, qrRecords]) {
+            for (let index = records.length - 1; index >= 0; index--) {
+              if (ids.includes(records[index].id)) records.splice(index, 1);
+            }
+          }
+          emit("library-changed", null);
+          return null;
+        }
         case "empty_trash":
           actions.push(command);
           if (params.has("trashFailure")) throw new Error("Controlled trash deletion failure");

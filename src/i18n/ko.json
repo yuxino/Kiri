@@ -333,7 +333,6 @@
   "Could not start recording. Cancel and try again.": "녹화를 시작하지 못했습니다. 취소하고 다시 시도하세요.",
   "Could not cancel recording. Try again.": "녹화를 취소하지 못했습니다. 다시 시도하세요.",
   "Text History": "글자 기록",
-  "Read, copy, and revisit recognized text": "인식한 글자를 읽고 복사하거나 다시 보기",
   "Recognize Text": "문자 인식",
   "Recognize Text Locally": "로컬에서 글자 인식",
   "Read Text": "글자 읽기",
@@ -587,7 +586,6 @@
   "Save & close": "저장하고 닫기",
   "QR Codes": "QR 코드",
   "QR Favorites": "QR 즐겨찾기",
-  "Find and reuse saved QR codes": "저장한 QR 코드 찾기 및 재사용",
   "Recognize QR Codes": "QR 코드 인식",
   "QR Content": "QR 내용",
   "Link": "링크",
@@ -859,5 +857,9 @@
   "Open System Settings": "시스템 설정 열기",
   "Save the captured area first, then pin it from the completion preview.": "먼저 캡처한 영역을 저장한 뒤 완료 미리 보기에서 고정하세요.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "드래그하여 창을 이동하고 스크롤하여 이미지를 살펴보세요. 핀치하거나 Ctrl/Command를 누른 채 스크롤하면 확대/축소합니다. 스페이스를 누른 채 드래그하면 이미지 안을 이동합니다.",
-  "Zoom level": "확대/축소 배율"
+  "Zoom level": "확대/축소 배율",
+  "Select records": "기록 선택",
+  "Select record": "기록 선택",
+  "Deselect All": "모두 선택 해제",
+  "Couldn't move these records to Trash. Try again.": "기록을 휴지통으로 이동하지 못했습니다. 다시 시도해 주세요."
 }

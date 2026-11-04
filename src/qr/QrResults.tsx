@@ -6,9 +6,11 @@ import type { Rect } from "../annotation/geom";
 import { initialQrSelection, qrCodeCenter, qrContentType, qrLooksLikeLink } from "./selection.js";
 import "../ocr/text-history.css";
 import "./qr.css";
+import { RecordMoreActions } from "../components/RecordMoreActions";
+import { useRecordSelection } from "../components/useRecordSelection";
 
-export function QrDetails({ code, action, saved = false, removable = false, autoSaving = false, autoSaveError = null, preview, meta }: {
-  code: QrCodeDto; action(action: string): Promise<unknown>; saved?: boolean; removable?: boolean; autoSaving?: boolean; autoSaveError?: string | null; preview?: ReactNode; meta?: ReactNode;
+export function QrDetails({ code, action, saved = false, removable = false, autoSaving = false, autoSaveError = null, preview, meta, disabled = false }: {
+  code: QrCodeDto; action(action: string): Promise<unknown>; saved?: boolean; removable?: boolean; autoSaving?: boolean; autoSaveError?: string | null; preview?: ReactNode; meta?: ReactNode; disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -21,7 +23,7 @@ export function QrDetails({ code, action, saved = false, removable = false, auto
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setFavorite(saved); }, [saved]);
   const run = async (name: string) => {
-    if (busyRef.current) return;
+    if (busyRef.current || disabled) return;
     busyRef.current = true;
     setBusy(true); setMessage("");
     try {
@@ -35,20 +37,21 @@ export function QrDetails({ code, action, saved = false, removable = false, auto
     } finally { busyRef.current = false; if (mounted.current) setBusy(false); }
   };
   const controls = code.text ? (
-    <div className="qr-actions">
-      {code.url && <button type="button" className="kiri-button kiri-button--primary" disabled={busy} onClick={() => void run("open")}><ExternalLink size={14}/>{t("Open Link")}</button>}
-      <button type="button" className={`kiri-button ${code.url ? "kiri-button--secondary" : "kiri-button--primary"}`} disabled={busy} onClick={() => void run("copy")}><Copy size={14}/>{t("Copy Text")}</button>
-      {!removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || autoSaving} onClick={() => void run(favorite ? "unfavorite" : "favorite")}><Star size={14} fill={favorite ? "currentColor" : "none"}/>{t(autoSaving ? "Saving…" : favorite ? "Remove Favorite" : "Save QR Code")}</button>}
+    <div className={removable ? "record-actions" : "qr-actions"}>
+      {removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || disabled} onClick={() => void run("copy")}><Copy size={14} aria-hidden="true"/>{t("Copy Text")}</button>}
+      {code.url && <button type="button" className={`kiri-button ${removable ? "kiri-button--ghost" : "kiri-button--primary"}`} disabled={busy || disabled} onClick={() => void run("open")}><ExternalLink size={14} aria-hidden="true"/>{t("Open Link")}</button>}
+      {!removable && <button type="button" className={`kiri-button ${code.url ? "kiri-button--secondary" : "kiri-button--primary"}`} disabled={busy || disabled} onClick={() => void run("copy")}><Copy size={14}/>{t("Copy Text")}</button>}
+      {!removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || autoSaving || disabled} onClick={() => void run(favorite ? "unfavorite" : "favorite")}><Star size={14} fill={favorite ? "currentColor" : "none"}/>{t(autoSaving ? "Saving…" : favorite ? "Remove Favorite" : "Save QR Code")}</button>}
       {removable && <>
-        <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run("copyImage")}><QrCode size={14}/>{t("Copy QR Image")}</button>
-        <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={() => void run("remove")}><Trash2 size={14}/>{t("Remove Favorite")}</button>
+        <button type="button" className="kiri-button kiri-button--ghost" disabled={busy || disabled} onClick={() => void run("copyImage")}><QrCode size={14} aria-hidden="true"/>{t("Copy QR Image")}</button>
+        <RecordMoreActions disabled={busy || disabled}><button type="button" className="kiri-button kiri-button--destructive" disabled={busy || disabled} onClick={() => void run("remove")}><Trash2 size={14} aria-hidden="true"/>{t("Move to Trash")}</button></RecordMoreActions>
       </>}
     </div>
   ) : null;
   return <section className={`qr-details${removable ? " qr-details--saved" : ""}`} aria-label={t("QR Content")}>
-    <header className="qr-details__header">
+    <header className={removable ? "qr-details__header record-detail-header" : "qr-details__header"}>
       <div className="text-history__record-heading">
-        <span className="text-reader__caption qr-content-type">{t(code.text ? contentType : "QR Content")}</span>
+        {!removable && <span className="text-reader__caption qr-content-type">{t(code.text ? contentType : "QR Content")}</span>}
         {meta}
       </div>
       {removable && controls}
@@ -217,13 +220,23 @@ export function QrFavorites() {
   const records = snapshot?.query === query ? snapshot.records : [];
   const error = failedQuery === query;
   const loadingResults = loading || snapshot?.query !== query;
+  const batch = useRecordSelection({ query, ids: records.map(record => record.id), loading: loadingResults || error,
+    onDeleted: ids => {
+      setSnapshot(current => current ? { ...current, records: current.records.filter(record => !ids.includes(record.id)) } : null);
+      setRevision(value => value + 1);
+    } });
   const asset = records.find(a => a.id === selected);
-  return <div className="text-history">
-    <aside className="text-history__sidebar"><label className="text-history__search"><QrCode size={15}/><input type="search" aria-label={t("Search QR Favorites")} placeholder={t("Search QR Favorites")} value={query} onChange={event => setQuery(event.target.value)}/></label>
-      <div className="text-history__list">{records.map(asset => <button type="button" className="ocr-history__item" aria-current={asset.id === selected || undefined} key={asset.id} onClick={() => setSelected(asset.id)}><span className="text-history__excerpt">{asset.qrText}</span><time>{new Date(asset.createdAt).toLocaleString()}</time></button>)}</div>
+  return <div className="text-history" onKeyDown={batch.onKeyDown}>
+    <div className="record-workspace-toolbar"><label className="text-history__search"><QrCode size={15}/><input type="search" aria-label={t("Search QR Favorites")} placeholder={t("Search QR Favorites")} value={query} disabled={batch.busy} onChange={event => { if (!batch.busy) setQuery(event.target.value); }}/></label>
+      {batch.controls}
+    </div>
+    <aside className="text-history__sidebar">
+      <div className="text-history__list" aria-busy={loadingResults}>{records.map(asset => batch.active ? <label key={asset.id} className="ocr-history__item record-selection__item">
+        {batch.checkbox(asset.id)}<span className="record-selection__text"><span className="text-history__excerpt">{asset.qrText}</span><time title={new Date(asset.createdAt).toLocaleString()}>{new Date(asset.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></span>
+      </label> : <button type="button" className="ocr-history__item" aria-current={asset.id === selected || undefined} key={asset.id} onClick={() => setSelected(asset.id)}><span className="text-history__excerpt">{asset.qrText}</span><time title={new Date(asset.createdAt).toLocaleString()}>{new Date(asset.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></button>)}</div>
     </aside>
-    <main className="text-history__detail">{asset ? <QrDetails key={asset.id} code={favoriteCode(asset.qrText ?? "")} saved removable
-      meta={<time>{new Date(asset.createdAt).toLocaleString()}</time>}
+    <main className="text-history__detail">{asset ? <QrDetails disabled={batch.active} key={asset.id} code={favoriteCode(asset.qrText ?? "")} saved removable
+      meta={<time title={new Date(asset.createdAt).toLocaleString()}>{new Date(asset.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>}
       preview={<img className="qr-favorite-image" src={mediaUrl(asset.id)} alt={t("QR Source Image")} />}
       action={action => api.qrFavoriteAction(asset.id, action)} /> : <div className="text-history__empty" role={error ? "alert" : "status"}><QrCode size={28}/><p>{t(error ? "Could not load QR Favorites." : loadingResults ? "Loading…" : query ? "No QR favorites match this search." : "Save a QR code to find and reuse it here.")}</p></div>}</main>
   </div>;

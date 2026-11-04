@@ -20,16 +20,13 @@
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .qr-prompt { color: var(--kiri-secondary-label); font-size: 13px; line-height: 1.7; padding: 24px 0; }
 /* Saved QR details use the same metadata/action line as Text History. */
-.qr-details--saved .qr-details__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding-bottom: 18px; margin-bottom: 24px; border-bottom: 1px solid var(--kiri-surface-border); }
-.qr-details--saved .qr-actions { justify-content: flex-end; }
-.qr-details--saved .qr-details__body { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: start; gap: 28px; }
+.qr-details--saved .qr-details__body { display: grid; grid-template-columns: 160px minmax(0, 1fr); align-items: start; gap: 20px; }
 .qr-details__content { min-width: 0; }
-.qr-favorite-image { display: block; width: 200px; max-width: 100%; max-height: 240px; box-sizing: border-box; padding: 12px; object-fit: contain; background: var(--kiri-canvas); border: 1px solid var(--kiri-surface-border); border-radius: 8px; }
+.qr-favorite-image { display: block; width: 160px; max-width: 100%; max-height: 240px; box-sizing: border-box; padding: 12px; object-fit: contain; background: var(--kiri-canvas); border: 1px solid var(--kiri-surface-border); border-radius: 8px; }
 .qr-details--saved .qr-content { padding: 0 0 12px; max-height: none; }
 .qr-details--saved .qr-host { margin: 0; }
-@container (max-width: 560px) {
+@container (max-width: 400px) {
   .qr-details--saved .qr-details__body { grid-template-columns: 1fr; gap: 20px; }
-  .qr-details--saved .qr-actions { justify-content: flex-start; }
 }
 
 .qr-overlay, .qr-results-inline { position: absolute; inset: 0; pointer-events: none; }

@@ -3,10 +3,12 @@ import { api, mediaUrl, onLibraryChanged, type AssetDto, type OcrRecognitionDto 
 import { KiriIcon } from "../components/KiriIcons";
 import { t } from "../i18n";
 import { isTextComposition, setTextComposition } from "../annotation/text-composition.js";
+import { useRecordSelection } from "../components/useRecordSelection";
+import { RecordMoreActions } from "../components/RecordMoreActions";
 import "./text-history.css";
 
-export function TextReader({ text, imageId, saved = true, editor, heading, actions }: {
-  text: string; imageId?: string; saved?: boolean; editor?: ReactNode; heading?: ReactNode; actions?: ReactNode;
+export function TextReader({ text, imageId, saved = true, editor, heading, actions, actionsDisabled = false }: {
+  text: string; imageId?: string; saved?: boolean; editor?: ReactNode; heading?: ReactNode; actions?: ReactNode; actionsDisabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -18,6 +20,7 @@ export function TextReader({ text, imageId, saved = true, editor, heading, actio
     return () => { copyGeneration.current += 1; };
   }, [text, imageId]);
   const copy = async () => {
+    if (actionsDisabled) return;
     const generation = ++copyGeneration.current;
     setCopyError(false);
     try {
@@ -28,10 +31,10 @@ export function TextReader({ text, imageId, saved = true, editor, heading, actio
     }
   };
   return <div className="text-reader">
-    <div className="text-reader__actions">
+    <div className="record-detail-header">
       {heading ?? <span className="text-reader__caption">{t("Recognized Text")}</span>}
-      <div className="text-history__record-actions">
-        {!editor && text.trim() && <button type="button" className="kiri-button kiri-button--primary" onClick={() => void copy()}>
+      <div className="record-actions">
+        {!editor && text.trim() && <button type="button" className="kiri-button kiri-button--secondary" disabled={actionsDisabled} onClick={() => void copy()}>
           <KiriIcon name={copied ? "checkmark" : "doc.on.doc"} size={14} />
           {t(copied ? "Text Copied" : "Copy Text")}
         </button>}
@@ -102,6 +105,7 @@ export function OcrDialog({ asset, onClose }: { asset: AssetDto; onClose(): void
 export function TextHistory() {
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<AssetDto[]>([]);
+  const [recordsQuery, setRecordsQuery] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -116,6 +120,12 @@ export function TextHistory() {
   const [editError, setEditError] = useState(false);
   const [revision, setRevision] = useState(0);
   const search = useRef<HTMLInputElement>(null);
+  const visibleRecords = recordsQuery === query ? records : [];
+  const batch = useRecordSelection({ query, ids: visibleRecords.map(record => record.id), loading: loading || recordsQuery !== query,
+    disabled: editing || saving || deleting, onDeleted: ids => {
+      setRecords(current => current.filter(record => !ids.includes(record.id)));
+      setRevision(value => value + 1);
+    } });
   useEffect(() => {
     const subscription = onLibraryChanged(() => setRevision((value) => value + 1));
     return () => { void subscription.then((dispose) => dispose()).catch(() => {}); };
@@ -126,7 +136,7 @@ export function TextHistory() {
     const timer = setTimeout(() => {
       void api.listOcrRecords(query).then((items) => {
         if (!current) return;
-        setRecords(items);
+        setRecords(items); setRecordsQuery(query);
         setSelectedId((id) => editingRef.current ? id : items.some((item) => item.id === id) ? id : items[0]?.id ?? null);
         setLoading(false);
       }, () => { if (current) { setLoadError(true); setLoading(false); setRecords([]); } });
@@ -155,7 +165,7 @@ export function TextHistory() {
     setEditing(false); setEditBase(null);
   };
   const saveCorrection = async (replacement: string | null) => {
-    if (!selected || savingRef.current || !selected.ocrText) return;
+    if (!selected || savingRef.current || !selected.ocrText || batch.active) return;
     // A live library refresh must not silently rebase an in-progress draft over
     // another window's correction. Keep the text the user began editing.
     if (replacement !== null && editBase?.id !== selected.id) return;
@@ -170,21 +180,27 @@ export function TextHistory() {
     finally { savingRef.current = false; setSaving(false); }
   };
   const remove = async () => {
-    if (!selected || deleting) return;
+    if (!selected || deleting || batch.active) return;
     setDeleting(true); setMutationError(false);
     try { await api.moveToTrash(selected.id); setRevision((value) => value + 1); }
     catch { setMutationError(true); }
     finally { setDeleting(false); }
   };
-  return <section className="text-history" aria-label={t("Text History")}>
-    <aside className="text-history__sidebar">
+  return <section className="text-history" aria-label={t("Text History")} onKeyDown={batch.onKeyDown}>
+    <div className="record-workspace-toolbar">
       <label className="text-history__search"><KiriIcon name="magnifyingglass" size={15} />
-        <input ref={search} type="search" value={query} disabled={editing || saving}
-          onChange={(event) => { if (!editingRef.current && !savingRef.current) setQuery(event.target.value); }}
+        <input ref={search} type="search" value={query} disabled={editing || saving || batch.busy}
+          onChange={(event) => { if (!editingRef.current && !savingRef.current && !batch.busy) setQuery(event.target.value); }}
           placeholder={t("Search recognized text")} aria-label={t("Search recognized text")} />
       </label>
+      {batch.controls}
+    </div>
+    <aside className="text-history__sidebar">
       <div className="text-history__list" aria-label={t("Text History")} aria-busy={loading}>
-        {records.map((record) => <button type="button" key={record.id} className="ocr-history__item"
+        {visibleRecords.map((record) => batch.active ? <label key={record.id} className="ocr-history__item record-selection__item">
+          {batch.checkbox(record.id)}<span className="record-selection__text"><span className="text-history__excerpt">{record.ocrText}</span>
+          <time>{new Date(record.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></span>
+        </label> : <button type="button" key={record.id} className="ocr-history__item"
           aria-current={selectedId === record.id ? "true" : undefined} disabled={editing || saving}
           onClick={() => { if (editingRef.current || savingRef.current) return; setSelectedId(record.id); setMutationError(false); }}>
           <span className="text-history__excerpt">{record.ocrText}</span>
@@ -198,18 +214,19 @@ export function TextHistory() {
           {loadError && <p role="alert" className="text-history__error">{t("Couldn't load Text History.")}</p>}
           {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
           {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
-          <TextReader key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
+          <TextReader actionsDisabled={batch.active} key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
             heading={<div className="text-history__record-heading">
-              <span className="text-reader__caption">{t("Recognized Text")}</span>
-              <time>{new Date(selected.createdAt).toLocaleString()}</time>
+              <time title={new Date(selected.createdAt).toLocaleString()}>{new Date(selected.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
             </div>}
             actions={editing ? <>
-                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { if (savingRef.current) return; finishEditing(); setEditError(false); }}>{t("Cancel")}</button>
-                <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}>{t("Save")}</button>
+                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { if (savingRef.current) return; finishEditing(); setEditError(false); }}><KiriIcon name="xmark" size={14} />{t("Cancel")}</button>
+                <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}><KiriIcon name="checkmark" size={14} />{t("Save")}</button>
               </> : <>
-                {selected.ocrOriginalText != null && <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => void saveCorrection(null)}>{t("Restore Original Text")}</button>}
-                <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting} onClick={() => { if (savingRef.current) return; editingRef.current = true; setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected }); setEditing(true); setEditError(false); }}>{t("Edit Text")}</button>
-                <button type="button" className="kiri-icon-button" disabled={deleting || loading || saving} onClick={() => void remove()} title={t("Move to Trash")} aria-label={t("Move to Trash")}><KiriIcon name="trash" size={16} /></button>
+                <button type="button" className="kiri-button kiri-button--ghost" disabled={saving || deleting || batch.active} onClick={() => { if (savingRef.current || batch.active) return; editingRef.current = true; setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected }); setEditing(true); setEditError(false); }}><KiriIcon name="pencil.tip" size={14} />{t("Edit Text")}</button>
+                <RecordMoreActions disabled={saving || deleting || batch.active}>
+                {selected.ocrOriginalText != null && <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting || batch.active} onClick={() => void saveCorrection(null)}><KiriIcon name="arrow.uturn.backward" size={14} />{t("Restore Original Text")}</button>}
+                <button type="button" className="kiri-button kiri-button--destructive" disabled={deleting || loading || saving || batch.active} onClick={() => void remove()}><KiriIcon name="trash" size={14} />{t("Move to Trash")}</button>
+                </RecordMoreActions>
               </>}
             editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} disabled={saving}
               onChange={(event) => { if (!savingRef.current) setDraft(event.target.value); }}

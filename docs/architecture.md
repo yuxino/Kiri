@@ -491,7 +491,11 @@ Library and Trash expose explicit Select captures, individual checkboxes and
 filtered Select All, alongside rubber-band selection. Normal card clicks retain
 direct opening. Batch mutations keep a retryable selection on failure and
 serialize pending actions; recoverable movement is labelled Move to Trash
-(ADR 0097).
+(ADR 0097). Text History and QR Favorites share query-scoped checkbox
+selection and recoverable batch removal, with retryable failures and editing/busy
+guards. A compact shared toolbar keeps batch actions together while preserving
+the reading preview; low-frequency record actions share an overflow menu
+(ADR 0128).
 
 Inline tags preserve failed drafts and display acknowledged changes while the
 library refresh catches up. Shared choice menus, settings modals and video

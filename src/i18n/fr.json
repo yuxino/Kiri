@@ -333,7 +333,6 @@
   "Could not start recording. Cancel and try again.": "Impossible de démarrer l’enregistrement. Annulez et réessayez.",
   "Could not cancel recording. Try again.": "Impossible d’annuler l’enregistrement. Réessayez.",
   "Text History": "Historique du texte",
-  "Read, copy, and revisit recognized text": "Lire, copier et retrouver le texte reconnu",
   "Recognize Text": "Reconnaître le texte",
   "Recognize Text Locally": "Reconnaître le texte localement",
   "Read Text": "Lire le texte",
@@ -587,7 +586,6 @@
   "Save & close": "Enregistrer et fermer",
   "QR Codes": "Codes QR",
   "QR Favorites": "Favoris QR",
-  "Find and reuse saved QR codes": "Retrouver et réutiliser les codes QR enregistrés",
   "Recognize QR Codes": "Reconnaître les codes QR",
   "QR Content": "Contenu QR",
   "Link": "Lien",
@@ -859,5 +857,9 @@
   "Open System Settings": "Ouvrir les réglages système",
   "Save the captured area first, then pin it from the completion preview.": "Enregistrez d’abord la zone capturée, puis épinglez-la depuis l’aperçu de fin.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Faites glisser pour déplacer la fenêtre et défiler pour parcourir l’image. Pincez ou maintenez Ctrl/Command en faisant défiler pour zoomer. Maintenez Espace en faisant glisser pour déplacer l’image.",
-  "Zoom level": "Niveau de zoom"
+  "Zoom level": "Niveau de zoom",
+  "Select records": "Sélectionner",
+  "Select record": "Sélectionner une entrée",
+  "Deselect All": "Tout désélectionner",
+  "Couldn't move these records to Trash. Try again.": "Impossible de déplacer ces entrées vers la corbeille. Réessayez."
 }

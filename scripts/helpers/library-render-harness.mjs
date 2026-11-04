@@ -197,6 +197,14 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     },
     "../i18n": { t: (value) => value, fmt: (value) => value },
     "../../src-tauri/icons/128x128.png": "",
+    get "../components/useRecordSelection"() {
+      const hook = { exports: {} };
+      new Function("require", "module", "exports", "window", componentCode(
+        'import React from "react";\n' + readFileSync(new URL("../../src/components/useRecordSelection.tsx", import.meta.url), "utf8"),
+      ))(name => modules[name], hook, hook.exports, window);
+      return hook.exports;
+    },
+    "../components/RecordMoreActions": { RecordMoreActions: "record-more" },
     "../components/KiriIcons": { KiriIcon: "icon" },
     "../components/EmptyTrashDialog": { EmptyTrashDialog: "empty-trash-dialog" },
     "../lib/kiri-resource-url.js": {

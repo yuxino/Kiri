@@ -167,7 +167,7 @@ textarea {
 /* The main window keeps one navigation spine and one content origin. */
 .library-root { font-size: 14px; display: flex; height: 100%; position: relative; }
 .library-sidebar {
-  flex: 0 0 208px;
+  flex: 0 0 180px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -188,6 +188,8 @@ textarea {
 .library-control-panel__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; max-width: 68%; }
 .library-control-panel__actions > .kiri-button { flex: 0 0 auto; white-space: nowrap; }
 .library-control-panel__actions svg { flex-shrink: 0; }
+.library-control-panel--records .library-control-panel__primary { min-height: 56px; padding-block: 12px; }
+.library-control-panel--records .library-control-panel__title { font-size: 20px; font-weight: 600; }
 .library-control-panel--settings { background: transparent; border-bottom: 0; }
 .library-control-panel--settings .library-control-panel__primary { width: 100%; max-width: calc(var(--kiri-settings-content-width) + 2 * var(--kiri-space-page)); min-height: 58px; margin-inline: auto; padding: 18px var(--kiri-space-page) 8px; }
 .library-control-panel--settings .library-control-panel__title { font-size: 20px; font-weight: 600; }

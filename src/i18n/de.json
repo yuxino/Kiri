@@ -333,7 +333,6 @@
   "Could not start recording. Cancel and try again.": "Aufnahme konnte nicht gestartet werden. Brechen Sie ab und versuchen Sie es erneut.",
   "Could not cancel recording. Try again.": "Aufnahme konnte nicht abgebrochen werden. Versuchen Sie es erneut.",
   "Text History": "Textverlauf",
-  "Read, copy, and revisit recognized text": "Erkannten Text lesen, kopieren und erneut aufrufen",
   "Recognize Text": "Text erkennen",
   "Recognize Text Locally": "Text lokal erkennen",
   "Read Text": "Text lesen",
@@ -587,7 +586,6 @@
   "Save & close": "Speichern und schließen",
   "QR Codes": "QR-Codes",
   "QR Favorites": "QR-Favoriten",
-  "Find and reuse saved QR codes": "Gespeicherte QR-Codes finden und wiederverwenden",
   "Recognize QR Codes": "QR-Codes erkennen",
   "QR Content": "QR-Inhalt",
   "Link": "Link",
@@ -859,5 +857,9 @@
   "Open System Settings": "Systemeinstellungen öffnen",
   "Save the captured area first, then pin it from the completion preview.": "Speichern Sie zuerst den erfassten Bereich und heften Sie ihn dann über die Abschlussvorschau an.",
   "Drag to move the window. Scroll to view. Pinch or hold Ctrl/Command and scroll to zoom. Hold Space and drag to pan.": "Zum Verschieben des Fensters ziehen. Zum Betrachten scrollen. Per Pinch oder mit Strg/Command und Scrollen zoomen. Zum Verschieben des Bildausschnitts beim Ziehen die Leertaste gedrückt halten.",
-  "Zoom level": "Zoomstufe"
+  "Zoom level": "Zoomstufe",
+  "Select records": "Einträge auswählen",
+  "Select record": "Eintrag auswählen",
+  "Deselect All": "Auswahl aufheben",
+  "Couldn't move these records to Trash. Try again.": "Diese Einträge konnten nicht in den Papierkorb verschoben werden. Versuche es erneut."
 }
