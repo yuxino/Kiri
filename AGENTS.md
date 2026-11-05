@@ -165,6 +165,33 @@ scripts and procedural macros. A current Universal or architecture-specific
 output does not make that host profile obsolete; check those dependencies
 before removing a whole profile.
 
+Balanced Rust cache policy:
+
+- Keep incremental compilation for daily development and focused tests. For
+  complete acceptance and CI, scope `CARGO_INCREMENTAL=0` to the command or job;
+  never disable it globally. In PowerShell, save the process environment value
+  and restore it in `finally` (remove it afterward if originally unset).
+- Reuse fixed outputs for each needed platform, architecture and profile, and
+  the existing `CARGO_HOME`. Do not introduce a global shared `target-dir` or
+  create full caches per task. Avoid repeatedly changing debug levels or
+  `RUSTFLAGS`, which creates distinct build variants. Preserve an existing
+  `line-tables-only` setting; where absent, measure the debugging/build trade-off
+  separately before changing profiles. Do not promise unmeasured space savings.
+- Preview exact cleanup paths and sizes, confirm no active build or file use,
+  and acquire the relevant Cargo/rustc locks before deleting proven obsolete
+  artifacts. File age alone is insufficient. Never strip crate-id hashes and
+  keep only the newest same-name directory: different hashes can represent
+  current profiles, features or targets. Within one complete crate-id directory,
+  older completed incremental sessions may be removed after lock validation,
+  retaining its latest completed session; skip active, unknown or ambiguous state.
+- Cargo's automatic cache cleanup concerns Cargo home downloads, not project
+  `target` outputs. Preserve reusable dependencies, shared toolchains, source,
+  dirty work, credentials, user data, installed apps/signing identities and
+  necessary validation evidence. Do not routinely clear an entire active target.
+- Keep the host release dependencies described above, OCR runtime/model caches,
+  and necessary `target/qa` evidence. The native shortcut harness already reuses
+  `src-tauri/target`; independent QA manifests must follow the same policy.
+
 Do not add a runtime synthetic-capture mode to the user-facing application.
 Capture QA must use unit-level injected data or an isolated test harness, never
 replace the visible desktop with a mock screen inside normal dev or prod Kiri.
