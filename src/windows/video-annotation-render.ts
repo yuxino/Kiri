@@ -23,6 +23,7 @@ export function paintVideoAnnotation(ctx:CanvasRenderingContext2D, mark:Annotati
 
 /** Rasterize ink once; mosaic PNGs contain coverage only, never frozen video pixels. */
 export function rasterizeVideoAnnotations(tracks:TimedVideoAnnotation[], sourceSize:Size):RasterizedVideoAnnotation[] {
+  if(tracks.length===0)return [];
   const {width,height}=sourceSize;
   if (!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0) throw new Error("Invalid annotation canvas size");
   const canvas=document.createElement("canvas");canvas.width=width;canvas.height=height;

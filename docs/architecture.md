@@ -960,6 +960,12 @@ cleanup finish. AVFoundation sessions and Windows asynchronous operations are
 cancelled at the platform boundary. Snapshot copying and frame/audio passes also
 check cancellation. The final library-save phase is not cancellable.
 
+Source snapshots close their writable handles before native decoding, including
+video import probing. Export failures retain typed causes until a path-free IPC
+boundary reports the failed stage and a safe numeric/category code. Preparing
+annotations, saving a copy and opening an already saved copy retain distinct
+retry states; a declined cancellation does not imply saving began (ADR 0130).
+
 Editable state lives separately in optional `VideoProjects/<asset UUID>.json`
 files ([ADR 0045](adr/0045-local-video-projects-and-cancellable-export.md)). The
 schema preserves source-time segments, effects, annotation marks, embedded PNG

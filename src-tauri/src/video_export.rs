@@ -157,6 +157,33 @@ impl ExportProgressRange {
     }
 }
 
+/// Copy a stable source outside the library mutex, then release its writable
+/// handle before native media opens it. The returned path retains RAII cleanup.
+pub fn prepare_export_source<R: std::io::Read>(
+    source: &mut R,
+    length: u64,
+    control: &ExportControl,
+) -> Result<tempfile::TempPath> {
+    prepare_export_source_in(source, length, control, &std::env::temp_dir())
+}
+
+fn prepare_export_source_in<R: std::io::Read>(
+    source: &mut R,
+    length: u64,
+    control: &ExportControl,
+    directory: &Path,
+) -> Result<tempfile::TempPath> {
+    control.check()?;
+    let mut snapshot = tempfile::Builder::new()
+        .prefix("kiri-export-source-")
+        .suffix(".mp4")
+        .tempfile_in(directory)?;
+    copy_export_source(source, snapshot.as_file_mut(), length, control)?;
+    // Windows media readers can deny write sharing. Release our writable
+    // handle before handing the path to native media, while retaining cleanup.
+    Ok(snapshot.into_temp_path())
+}
+
 /// A source can be on a slow external disk. Copy in bounded chunks, outside the
 /// library mutex, checking cancellation between reads and writes.
 pub fn copy_export_source<R: std::io::Read, W: std::io::Write>(
@@ -765,6 +792,62 @@ fn platform_export(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prepared_export_source_is_complete_closed_and_removed_on_drop() {
+        let original: Vec<_> = (0..(1024 * 1024 + 17)).map(|index| (index % 251) as u8).collect();
+        let mut source = std::io::Cursor::new(original.clone());
+        let snapshot = prepare_export_source(&mut source, original.len() as u64,
+            &ExportControl::default()).unwrap();
+        let path = snapshot.to_path_buf();
+        assert_eq!(path.extension().unwrap(), "mp4");
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(source.into_inner(), original);
+        // This open is incompatible with any outstanding write-access handle
+        // on Windows, even when that handle itself allows read sharing.
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.share_mode(1 | 4); // FILE_SHARE_READ | FILE_SHARE_DELETE
+        }
+        let reader = options.open(&path).unwrap();
+        drop(reader);
+        drop(snapshot);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn preparing_export_source_cleans_up_after_failure_or_cancellation() {
+        struct Source { control: ExportControl, cancel: bool, fail: bool, read: bool }
+        impl std::io::Read for Source {
+            fn read(&mut self, target: &mut [u8]) -> std::io::Result<usize> {
+                if self.fail { return Err(std::io::Error::other("injected source read failure")); }
+                if self.read { return Ok(0); }
+                self.read = true;
+                target[..16].fill(7);
+                if self.cancel { self.control.request_cancel(); }
+                Ok(16)
+            }
+        }
+        let directory = tempfile::tempdir().unwrap();
+        for (cancel_before, cancel_during, fail_read) in [
+            (true, false, false), (false, true, false), (false, false, true), (false, false, false),
+        ] {
+            let control = ExportControl::default();
+            if cancel_before { control.request_cancel(); }
+            let mut source = Source {control: control.clone(), cancel: cancel_during, fail: fail_read, read: false};
+            let result = prepare_export_source_in(&mut source, 32, &control, directory.path());
+            let message = result.unwrap_err().to_string();
+            if cancel_before || cancel_during { assert_eq!(message, EXPORT_CANCELLED); }
+            else if fail_read { assert_eq!(message, "injected source read failure"); }
+            else { assert_eq!(message, "The video source changed while preparing export"); }
+            if cancel_before { assert!(!source.read, "pre-cancelled export must not read its source"); }
+            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0,
+                "failed preparation must not retain its snapshot");
+        }
+    }
 
     #[test]
     fn export_control_cancels_before_reading_or_native_media_work() {

@@ -1494,7 +1494,7 @@ pub async fn import_media(
                     .library_mut()
                     .map_err(|e| e.to_string())?
                     .import_file_with_title(
-                        prepared.file.path(),
+                        &prepared.file,
                         prepared.kind,
                         prepared.extension,
                         prepared.width,
@@ -1537,7 +1537,7 @@ pub async fn paste_clipboard_image(window: WebviewWindow, app: AppHandle) -> Res
             return Err("Library changed during import.".to_string());
         }
         let asset = context.library_mut().map_err(|error| error.to_string())?
-            .import_file_with_title(prepared.file.path(), CaptureKind::Image, "png", prepared.width,
+            .import_file_with_title(&prepared.file, CaptureKind::Image, "png", prepared.width,
                 prepared.height, None, None, None).map_err(|error| error.to_string())?;
         drop(context);
         emit_library_changed(&app);
@@ -1555,20 +1555,22 @@ pub async fn export_video_copy(
     preset: crate::video_export::VideoExportPreset,
     request_id: Option<String>,
 ) -> Result<String, String> {
+    use crate::video_export_failure::{report, ExportStage};
     let app = window.app_handle().clone();
-    let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let parsed = uuid::Uuid::parse_str(&id)
+        .map_err(|error| report(ExportStage::Request, error.into()))?;
     if window.label() != format!("viewer-{parsed}") {
-        return Err("Video export requires its own viewer.".into());
+        return Err(report(ExportStage::Request, anyhow::anyhow!("Invalid export owner")));
     }
     if segments.is_empty() || segments.len() > 128 || effects.len() > 128 || annotations.len() > 128
     {
-        return Err("Invalid video edit size.".into());
+        return Err(report(ExportStage::Request, anyhow::anyhow!("Invalid video edit size")));
     }
     let request_id = request_id
         .as_deref()
         .map(uuid::Uuid::parse_str)
         .transpose()
-        .map_err(|error| error.to_string())?
+        .map_err(|error| report(ExportStage::Request, error.into()))?
         .unwrap_or_else(uuid::Uuid::new_v4);
     let progress_window = window.clone();
     let control = crate::video_export::ExportControl::new(move |update| {
@@ -1585,7 +1587,7 @@ pub async fn export_video_copy(
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         if job.is_some() {
-            return Err("Another video is being exported.".into());
+            return Err(report(ExportStage::Request, anyhow::anyhow!("Export already active")));
         }
         *job = Some(ActiveVideoExport {
             request_id,
@@ -1596,14 +1598,10 @@ pub async fn export_video_copy(
     };
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
-        let result = (|| {
-            control.check().map_err(|error| error.to_string())?;
+        let mut stage = ExportStage::Source;
+        let result = (|| -> anyhow::Result<String> {
+            control.check()?;
             control.report(crate::video_export::ExportPhase::Preparing, None);
-            let mut snapshot = tempfile::Builder::new()
-                .prefix("kiri-export-source-")
-                .suffix(".mp4")
-                .tempfile()
-                .map_err(|e| e.to_string())?;
             let state = app.state::<AppState>();
             // Open under the library lock, then copy from the stable file handle
             // outside it. A large video on an external disk must not block UI commands.
@@ -1611,53 +1609,50 @@ pub async fn export_video_copy(
                 let mut context = state.library.lock().unwrap();
                 let library_id = context.expected_library_id();
                 let generation = context.expected_library_generation();
-                let library = context.library().map_err(|e| e.to_string())?;
+                let library = context.library()?;
                 let asset = library
                     .asset_by_id(&parsed)
                     .cloned()
-                    .ok_or_else(|| "The capture could not be found.".to_string())?;
+                    .ok_or_else(|| anyhow::anyhow!("The capture could not be found"))?;
                 if asset.kind != CaptureKind::Video || asset.trashed_at.is_some() {
-                    return Err("Only active video captures can be exported.".into());
+                    anyhow::bail!("Only active video captures can be exported");
                 }
-                let source = library
-                    .readable_asset_url(&asset)
-                    .map_err(|e| e.to_string())?;
-                let source = std::fs::File::open(source).map_err(|e| e.to_string())?;
+                let source = library.readable_asset_url(&asset)?;
+                let source = std::fs::File::open(source)?;
                 (asset, source, library_id, generation)
             };
-            let source_length = source.metadata().map_err(|error| error.to_string())?.len();
-            crate::video_export::copy_export_source(
+            let source_length = source.metadata()?.len();
+            stage = ExportStage::Snapshot;
+            let snapshot = crate::video_export::prepare_export_source(
                 &mut source,
-                snapshot.as_file_mut(),
                 source_length,
                 &control,
-            )
-            .map_err(|error| error.to_string())?;
+            )?;
             drop(source);
+            stage = ExportStage::Render;
             let (path, width, height, duration) =
                 crate::video_export::export_video_with_annotations_controlled(
-                    snapshot.path(),
+                    &snapshot,
                     &segments,
                     &effects,
                     &annotations,
                     preset,
                     &control,
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
             // RAII also removes the finished temporary export on import failure.
-            let output = tempfile::TempPath::try_from_path(path).map_err(|e| e.to_string())?;
+            let output = tempfile::TempPath::try_from_path(path)?;
+            stage = ExportStage::Save;
             let exported = {
                 let mut context = state.library.lock().unwrap();
                 if context.expected_library_id() != library_id
                     || context.expected_library_generation() != generation
                 {
-                    return Err("The library changed during export. Please retry.".into());
+                    anyhow::bail!("The library changed during export");
                 }
-                control.begin_commit().map_err(|error| error.to_string())?;
+                control.begin_commit()?;
                 control.report(crate::video_export::ExportPhase::Saving, None);
                 context
-                    .library_mut()
-                    .map_err(|e| e.to_string())?
+                    .library_mut()?
                     .import_file(
                         &output,
                         CaptureKind::Video,
@@ -1666,8 +1661,7 @@ pub async fn export_video_copy(
                         height,
                         Some(duration),
                         asset.source_application.clone(),
-                    )
-                    .map_err(|e| e.to_string())?
+                    )?
             };
             emit_library_changed(&app);
             Ok(exported.id.to_string())
@@ -1677,11 +1671,11 @@ pub async fn export_video_copy(
         if control.is_cancelled() {
             Err(crate::video_export::EXPORT_CANCELLED.to_owned())
         } else {
-            result
+            result.map_err(|error| report(stage, error))
         }
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|error| report(ExportStage::Worker, error.into()))?
 }
 
 #[tauri::command]

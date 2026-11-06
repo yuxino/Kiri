@@ -15,6 +15,7 @@ async function pureModule(name) {
 const effects = await pureModule("video-effects");
 const layers = await pureModule("video-layers");
 const project = await pureModule("video-project");
+const exportErrors = await pureModule("video-export-error");
 const source = 'import React from "react";\n' + readFileSync(new URL("../../src/windows/VideoTrimPlayer.tsx", import.meta.url), "utf8");
 
 /** Render real editor handlers while replacing only native/DOM/media boundaries. */
@@ -41,6 +42,7 @@ export function createVideoPlayerHarness(caps, configuration = {}) {
       "../lib/kiri-resource-url.js": { videoResourceCrossOrigin: () => undefined },
       "./VideoTimeInput": { VideoTimeInput: "time-input" },
       "./VideoExportPanel": { VideoExportPanel: "export-panel" },
+      "./video-export-error": exportErrors,
       "./VideoVisibleTime": { VideoVisibleTime: "visible-time" },
       "./useVideoProject": { useVideoProject: value => {
         options = value;

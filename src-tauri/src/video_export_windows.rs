@@ -224,7 +224,7 @@ pub(super) fn platform_export(
                     &profile,
                 )?, &progress.child(0.5, 0.7))?;
             if result != TranscodeFailureReason::None {
-                bail!("Windows cannot preserve annotated video audio: {result:?}");
+                return Err(crate::video_export_failure::WindowsTranscodeFailure(result.0).into());
             }
             with_audio
         } else {
@@ -328,10 +328,8 @@ pub(super) fn platform_export(
                     .PrepareFileTranscodeAsync(&input, &destination, &profile)?, progress)
                     .context("preparing Windows zoom segment")?;
                 if !prepared.CanTranscode()? {
-                    bail!(
-                        "Windows cannot prepare zoom segment: {:?}",
-                        prepared.FailureReason()?
-                    );
+                    return Err(crate::video_export_failure::WindowsTranscodeFailure(
+                        prepared.FailureReason()?.0).into());
                 }
                 let zoom_length = (end - start) as f64 / 10_000_000.0;
                 wait_transcode(prepared.TranscodeAsync()?, &progress.child(
@@ -414,7 +412,7 @@ pub(super) fn platform_export(
         , &progress.child(if zoom_duration > 0.0 {0.5} else {0.0}, 1.0))
         .context("rendering Windows edited composition")?;
     if result != TranscodeFailureReason::None {
-        bail!("Windows cannot export this video: {result:?}");
+        return Err(crate::video_export_failure::WindowsTranscodeFailure(result.0).into());
     }
     let actual = wait_operation(destination.Properties()?.GetVideoPropertiesAsync()?, progress)?;
     Ok((
@@ -454,6 +452,43 @@ fn mask_rectangle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn verify_export_snapshot_lifecycle(source: &Path, directory: &Path) -> Result<tempfile::TempPath> {
+        let original = std::fs::read(source)?;
+        let mut writable = tempfile::Builder::new()
+            .prefix("kiri-old-export-snapshot-")
+            .suffix(".mp4")
+            .tempfile_in(directory)?;
+        super::super::copy_export_source(&mut std::io::Cursor::new(&original), writable.as_file_mut(),
+            original.len() as u64, &super::super::ExportControl::default())?;
+        // Reproduce the old command's still-open writable snapshot. The media
+        // reader denies write sharing even though NamedTempFile permits reads.
+        let error = crate::gif::WindowsVideoReader::open(writable.path()).err()
+            .context("a writable export snapshot unexpectedly allowed a native media reader")?;
+        let sharing_violation = windows::core::HRESULT(0x80070020_u32 as i32);
+        assert!(error.chain().any(|cause| cause.downcast_ref::<windows::core::Error>()
+            .is_some_and(|error| error.code() == sharing_violation)),
+            "expected ERROR_SHARING_VIOLATION, received {error:#}");
+        let closed = writable.into_temp_path();
+        let reader = crate::gif::WindowsVideoReader::open(&closed)?;
+        assert_eq!(reader.dimensions(), (320, 180));
+        assert!(reader.read_frame()?.is_some());
+        drop(reader);
+        drop(closed);
+
+        let snapshot = super::super::prepare_export_source(&mut std::io::Cursor::new(&original),
+            original.len() as u64, &super::super::ExportControl::default())?;
+        let reader = crate::gif::WindowsVideoReader::open(&snapshot)?;
+        assert_eq!(reader.dimensions(), (320, 180));
+        assert!(reader.read_frame()?.is_some());
+        drop(reader);
+        assert_eq!(std::fs::read(&snapshot)?, original);
+        assert_eq!(std::fs::read(source)?, original);
+        std::fs::write(directory.join("export-snapshot-lifecycle.json"), serde_json::to_vec_pretty(
+            &serde_json::json!({"old_write_handle_hresult":"0x80070020", "closed_reader":true,
+                "prepared_reader":true, "bytes_preserved":true}))?)?;
+        Ok(snapshot)
+    }
 
     fn verify_gif_file_paths(source: &Path, directory: &Path) -> Result<()> {
         use image::AnimationDecoder;
@@ -611,6 +646,11 @@ mod tests {
         // Issue #159: canonical library paths must remain file paths, not be
         // interpreted as network URLs by the Media Foundation source resolver.
         verify_gif_file_paths(&source_path, &directory)?;
+
+        // Use the same completed snapshot as export_video_copy for all native
+        // render paths below, rather than only exporting an already-closed fixture.
+        let snapshot = verify_export_snapshot_lifecycle(&source_path, &directory)?;
+        let source_path = snapshot.to_path_buf();
 
         // Exercise both cooperative CPU frame cancellation and the WinRT render
         // operation. The output must be released before the worker returns.

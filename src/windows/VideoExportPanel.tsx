@@ -1,11 +1,12 @@
 import {useEffect,useRef,useState} from "react";
 import {ArrowUpRight,ChevronDown,X} from "lucide-react";
-import {t} from "../i18n";
+import {fmt,t} from "../i18n";
 import {VideoExportSettings} from "./VideoExportSettings";
 import type {VideoExportProgress} from "./video-project";
+import {videoExportFailureCode,videoExportFailureMessage,type VideoExportFailure} from "./video-export-error";
 import "./VideoExportPanel.css";
 
-type Props={preset:"original"|"share"|"small";supportsPresets:boolean;onPreset(value:Props["preset"]):void;sourceSize:{width:number;height:number};duration:number;valid:boolean;busy:boolean;error:boolean;saved:boolean;progress:VideoExportProgress|null;cancelling:boolean;cancelled:boolean;cancelFailed:boolean;onCancel():void;onSave():void;onOpen():void};
+type Props={preset:"original"|"share"|"small";supportsPresets:boolean;onPreset(value:Props["preset"]):void;sourceSize:{width:number;height:number};duration:number;valid:boolean;busy:boolean;error:VideoExportFailure|null;saved:boolean;progress:VideoExportProgress|null;cancelling:boolean;cancelled:boolean;cancelFailed:boolean;onCancel():void;onSave():void;onOpen():void};
 export function VideoExportPanel(props:Props){
   const [open,setOpen]=useState(false),root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null),panel=useRef<HTMLDivElement>(null);
   const progress=props.progress?.progress;
@@ -26,7 +27,8 @@ export function VideoExportPanel(props:Props){
       <div className="kiri-video-export-panel-title"><strong>{t("Export video")}</strong><button type="button" className="kiri-icon-button" aria-label={t("Close")} onClick={()=>{setOpen(false);trigger.current?.focus();}}><X size={14}/></button></div>
       <VideoExportSettings preset={props.preset} supportsPresets={props.supportsPresets} onChange={props.onPreset} sourceSize={props.sourceSize} outputDuration={props.duration} disabled={props.busy}/>
       <p>{t("Your original recording stays unchanged.")}</p>
-      <div className="kiri-video-export-status" role={props.error||props.cancelFailed?"alert":"status"}>{props.busy?busyLabel:props.error?t("Couldn't export the video. Check library access and free disk space, then retry."):props.saved?t("Copy saved to library"):props.cancelled?t("Export cancelled. Your edit is still here."):null}{props.busy&&percent!==null&&!props.cancelling&&<span>{percent}%</span>}</div>
+      <div className="kiri-video-export-status" role={props.error||props.cancelFailed?"alert":"status"}>{props.busy?busyLabel:props.error?t(videoExportFailureMessage(props.error)):props.saved?t("Copy saved to library"):props.cancelled?t("Export cancelled. Your edit is still here."):null}{props.busy&&percent!==null&&!props.cancelling&&<span>{percent}%</span>}</div>
+      {!props.busy&&props.error&&<p>{fmt("Error code: %@",videoExportFailureCode(props.error))}</p>}
       {props.busy&&<div className="kiri-video-export-progress" role="progressbar" aria-label={busyLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent??undefined} data-indeterminate={percent===null}><i style={{width:percent===null?"30%":`${percent}%`}}/></div>}
       {props.busy&&props.cancelFailed&&<p role="alert">{t("Couldn't cancel the export. Try again or wait for it to finish.")}</p>}
       <div className="kiri-video-export-panel-actions">{props.busy?<button type="button" className="kiri-button kiri-button--secondary" disabled={props.cancelling||phase==="saving"} onClick={props.onCancel}>{t(props.cancelling?"Cancelling…":phase==="saving"?"Finishing…":"Cancel export")}</button>:<>
