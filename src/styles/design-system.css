@@ -354,7 +354,8 @@ textarea {
 .library-section-picker__footer { margin-top: auto; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--kiri-surface-border) 65%, transparent); }
 .library-section-picker__button { display: flex; flex-shrink: 0; align-items: center; gap: 11px; width: 100%; min-height: 40px; padding: 9px 10px; box-sizing: border-box; color: var(--kiri-secondary-label); background: transparent; border: 0; border-radius: 7px; font: 400 14px/1.4 var(--kiri-font-ui); text-align: left; cursor: pointer; }
 .library-section-picker__button svg { width: 17px; height: 17px; flex: 0 0 17px; stroke-width: 1.7; }
-.library-section-picker__button:hover:not([data-active]) { color: var(--kiri-label); background: color-mix(in srgb, var(--kiri-label) 3%, transparent); }
+.library-section-picker__button:hover:not([data-active]):not(:disabled) { color: var(--kiri-label); background: color-mix(in srgb, var(--kiri-label) 3%, transparent); }
+.library-section-picker__button:disabled { opacity: .4; cursor: default; }
 .library-section-picker__button[data-active] { color: var(--kiri-label); background: color-mix(in srgb, var(--kiri-label) 5%, transparent); font-weight: 500; }
 .library-section-picker__button[data-active] svg { stroke-width: 1.9; }
 .library-section-picker__button:focus-visible { outline-width: 1.5px; outline-offset: -2px; }

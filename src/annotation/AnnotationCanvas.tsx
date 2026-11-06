@@ -1544,6 +1544,10 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     const deleteRef = useRef<() => void>(() => {});
     undoRef.current = () => {
       if (interactionsDisabled()) return;
+      // Gestures retain the pre-navigation mark and array index. Discard them
+      // before restoring history so a late release cannot overwrite a neighbour.
+      cancelPointerGesture();
+      finishFontAdjustment();
       commitText();
       finishAppearanceAdjustment();
       if (onUndo) { onUndo(); return; }
@@ -1553,6 +1557,8 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
     };
     redoRef.current = () => {
       if (interactionsDisabled()) return;
+      cancelPointerGesture();
+      finishFontAdjustment();
       commitText();
       finishAppearanceAdjustment();
       if (onRedo) { onRedo(); return; }
@@ -1564,16 +1570,13 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
       if (interactionsDisabled()) return;
       const index = editingRef.current?.index ?? selectedIndexRef.current;
       if (index === null && !editingRef.current) return;
+      finishFontAdjustment();
       finishAppearanceAdjustment();
       // Discard the inline draft before removing its saved mark; otherwise a
       // later tool change/export can commit that draft into the next object.
       editingRef.current = null;
       setEditing(null);
-      interactionRef.current = {kind: "none"};
-      calloutClickRef.current = null;
-      blankDoubleClickRef.current = false;
-      setDraft(null);
-      setSelectCursor("default");
+      cancelPointerGesture();
       if (index !== null) history.remove(index);
       selectMark(null);
       syncMarks();
@@ -1782,6 +1785,9 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         redo: () => redoRef.current(),
         clearAnnotations: () => {
           if (interactionsDisabled()) return;
+          cancelPointerGesture();
+          fontAdjustRef.current = null;
+          styleAdjustment.current = null;
           if (history.elements.length === 0 && !editingRef.current) return;
           // Spec §10.1: clear also discards an in-flight text edit.
           editingRef.current = null;
@@ -1829,7 +1835,7 @@ const AnnotationCanvas = forwardRef<AnnotationCanvasHandle, Props>(
         setTextFontSizeLive: (value: number) => setFontLiveRef.current(value),
         endTextFontSizeAdjustment: () => endFontAdjustRef.current(),
       }),
-      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,editCallout,startWatermark,selectMark,cancelInteraction,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
+      [commitText, exportResult, history, interactionsDisabled, syncMarks,editText,editCallout,startWatermark,selectMark,cancelInteraction,cancelPointerGesture,updateSelectionAppearance,updateSelectedCallout,finishAppearanceAdjustment],
     );
 
     const dotMarks = draft && marks.some(mark => mark.id === draft.id)

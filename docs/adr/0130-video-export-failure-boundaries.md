@@ -1,4 +1,4 @@
-# ADR 0129: Video export failure boundaries
+# ADR 0130: Video export failure boundaries
 
 Status: accepted.
 
@@ -39,8 +39,10 @@ copy failures, cancellation and path-free error classification. Real-component
 frontend regressions inject preparation, rendering, saving, cancellation and
 open failures. Windows isolated media tests exercise the old write-sharing
 conflict, the closed snapshot through complex native export, and video import
-through native probing and decoding. These tests require a Windows runtime;
-cross-compilation alone does not establish their result.
+through native probing and decoding. The [Windows Server 2025 CI run](https://github.com/yuxino/Kiri/actions/runs/42211750439/job/127871852962)
+passed all of those runtime regressions (504 tests passed, 4 ignored), including
+the old writable snapshot's `0x80070020` failure and successful decoding after
+closing the handle. Cross-compilation alone is not this runtime evidence.
 
 No desktop capture, installation, permissions, driver or mixed-display
 acceptance is implied. The reporter's exact cause remains unconfirmed without

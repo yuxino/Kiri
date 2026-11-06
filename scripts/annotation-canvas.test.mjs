@@ -319,6 +319,98 @@ function annotation(initialDocument, options = {}) {
 }
 
 const documentWith = marks => ({schemaVersion: 1, canvas: {width: 640, height: 360}, sourcePixels: {width: 640, height: 360}, marks});
+
+for (const action of ["undo", "redo"]) {
+  for (const gesture of ["move", "resize", "endpoint", "rectangle", "pen", "mosaic"]) {
+    test(`${action} cancels an in-flight ${gesture} before changing annotation history`, async () => {
+      const a = {...rectangle, id: 10};
+      const b = gesture === "endpoint"
+        ? {kind: "arrow", id: 20, start: {x: 320, y: 100}, end: {x: 420, y: 180}, color: "white", width: 3}
+        : {...rectangle, id: 20, rect: {...rectangle.rect, x: 320}};
+      const drawing = ["rectangle", "pen", "mosaic"].includes(gesture);
+      const h = annotation(documentWith([a, b]), {selectedMarkId: a.id, tool: drawing ? gesture : "select"});
+      h.ref.current.deleteSelection(); h.component.render();
+      if (action === "redo") { h.ref.current.undo(); h.component.render(); }
+      if (!drawing) {
+        h.pointer("onPointerDown", 360, 132); h.pointer("onPointerUp", 360, 132);
+      }
+      const start = drawing ? {x: 500, y: 240} : gesture === "move" ? {x: 360, y: 132} : {x: 420, y: 180};
+      h.pointer("onPointerDown", start.x, start.y);
+      h.pointer("onPointerMove", start.x + 30, start.y + 25);
+      if (drawing) assert.ok(h.frames.at(-1).options.draft, "new strokes must have a visible uncommitted preview");
+      else assert.notDeepEqual(h.frames.at(-1).marks.find(mark => mark.id === b.id), b,
+        "transforms must replace the mark with a visible uncommitted preview");
+      h.ref.current[action](); h.component.render();
+      const expected = action === "undo" ? [a, b] : [b];
+      assert.deepEqual(h.frames.at(-1).marks, expected);
+      assert.equal(h.frames.at(-1).options.draft, null, "history navigation clears the obsolete preview");
+      const count = h.changes.length;
+      h.pointer("onPointerMove", start.x + 40, start.y + 30);
+      h.pointer("onPointerUp", start.x + 40, start.y + 30);
+      h.pointer("onPointerCancel", start.x + 40, start.y + 30);
+      h.pointer("onLostPointerCapture", start.x + 40, start.y + 30);
+      assert.equal(h.changes.length, count, "late pointer events cannot create a history entry");
+      const saved = await h.ref.current.exportResult();
+      assert.ok(saved, "restored annotations must remain exportable with distinct identities");
+      assert.deepEqual(saved.document.marks, expected);
+      h.ref.current[action === "undo" ? "redo" : "undo"](); h.component.render();
+      assert.deepEqual((await h.ref.current.exportResult()).document.marks, action === "undo" ? [b] : [a, b]);
+      h.ref.current.clearSelection(); h.component.render();
+      h.component.render({...h.props, tool: "rectangle"});
+      h.pointer("onPointerDown", 500, 240); h.pointer("onPointerMove", 560, 290); h.pointer("onPointerUp", 560, 290);
+      assert.equal((await h.ref.current.exportResult()).document.marks.length, (action === "undo" ? 1 : 2) + 1,
+        "a subsequent gesture remains usable after cancellation");
+      h.component.unmount();
+    });
+  }
+}
+
+test("undo during a drag preserves restored annotation identities when the pointer is released directly", async () => {
+  const a = {...rectangle, id: 10}, b = {...rectangle, id: 20, rect: {...rectangle.rect, x: 320}};
+  const h = annotation(documentWith([a, b]), {selectedMarkId: a.id});
+  h.ref.current.deleteSelection(); h.component.render();
+  h.pointer("onPointerDown", 360, 132);
+  h.ref.current.undo(); h.component.render();
+  h.pointer("onPointerUp", 390, 157);
+  assert.deepEqual(h.changes.at(-1).map(mark => mark.id), [10, 20]);
+  assert.deepEqual((await h.ref.current.exportResult())?.document.marks, [a, b]);
+});
+
+for (const initiallyEmpty of [false, true]) test(`clear cancels a new stroke with ${initiallyEmpty ? "no" : "existing"} committed annotations`, async () => {
+  const h = annotation(documentWith(initiallyEmpty ? [] : [rectangle]), {tool: "pen"});
+  h.pointer("onPointerDown", 500, 240); h.pointer("onPointerMove", 550, 280);
+  h.ref.current.clearAnnotations(); h.component.render();
+  assert.equal(h.frames.at(-1).options.draft, null);
+  h.pointer("onPointerUp", 560, 290);
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, []);
+});
+
+test("undo finishes a font slider preview before restoring history and ignores its late release", async () => {
+  const a = {...text, id: 10}, b = {...text, id: 20, rect: {...text.rect, x: 320}};
+  const h = annotation(documentWith([a, b]), {selectedMarkId: a.id});
+  h.ref.current.deleteSelection(); h.component.render();
+  h.pointer("onPointerDown", 360, 60); h.pointer("onPointerUp", 360, 60);
+  h.ref.current.beginTextFontSizeAdjustment(); h.ref.current.setTextFontSizeLive(32); h.component.render();
+  h.ref.current.undo(); h.component.render();
+  assert.deepEqual(h.changes.at(-1), [b], "first undo reverses the live font adjustment");
+  h.ref.current.endTextFontSizeAdjustment(); h.component.render();
+  h.ref.current.undo(); h.component.render();
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [a, b]);
+});
+
+for (const action of ["undo", "redo"]) test(`delegated ${action} cancels pointer previews before requesting external history`, async () => {
+  let calls = 0;
+  const h = annotation(documentWith([rectangle]), {selectedMarkId: rectangle.id,
+    [action === "undo" ? "onUndo" : "onRedo"]: () => calls++});
+  h.pointer("onPointerDown", 150, 140); h.pointer("onPointerMove", 180, 160);
+  h.ref.current[action](); h.component.render();
+  assert.equal(calls, 1);
+  assert.deepEqual(h.frames.at(-1).marks, [rectangle]);
+  h.pointer("onPointerUp", 190, 170);
+  assert.deepEqual(h.changes, []);
+  assert.deepEqual((await h.ref.current.exportResult()).document.marks, [rectangle]);
+});
+
 const inlineEditor = h => nodes(h.component.render()).find(node => node?.type?.name === "TextEditor");
 const blankPress = h => {
   h.pointer("onPointerDown", 550, 310, {detail: 0});

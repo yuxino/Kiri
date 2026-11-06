@@ -102,7 +102,7 @@ export function OcrDialog({ asset, onClose }: { asset: AssetDto; onClose(): void
   </dialog>;
 }
 
-export function TextHistory() {
+export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange?(locked: boolean): void } = {}) {
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<AssetDto[]>([]);
   const [recordsQuery, setRecordsQuery] = useState<string | null>(null);
@@ -115,6 +115,10 @@ export function TextHistory() {
   const [editBase, setEditBase] = useState<{ id: string; text: string; asset: AssetDto } | null>(null);
   const editingRef = useRef(false);
   const savingRef = useRef(false);
+  // Publish changes synchronously: a second click can reach the main sidebar
+  // before React renders disabled navigation. Keep failed drafts mounted.
+  const updateNavigationLock = () => onNavigationLockChange?.(editingRef.current || savingRef.current);
+  useEffect(() => () => onNavigationLockChange?.(false), [onNavigationLockChange]);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState(false);
@@ -163,6 +167,7 @@ export function TextHistory() {
   const finishEditing = () => {
     editingRef.current = false;
     setEditing(false); setEditBase(null);
+    updateNavigationLock();
   };
   const saveCorrection = async (replacement: string | null) => {
     if (!selected || savingRef.current || !selected.ocrText || batch.active) return;
@@ -171,13 +176,14 @@ export function TextHistory() {
     if (replacement !== null && editBase?.id !== selected.id) return;
     const expectedText = replacement === null ? selected.ocrText : editBase!.text;
     savingRef.current = true;
+    updateNavigationLock();
     setSaving(true); setEditError(false);
     try {
       const updated = await api.updateOcrHistoryText(selected.id, expectedText, replacement);
       setRecords((current) => current.map((item) => item.id === updated.id ? updated : item));
       finishEditing();
     } catch { setEditError(true); }
-    finally { savingRef.current = false; setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); updateNavigationLock(); }
   };
   const remove = async () => {
     if (!selected || deleting || batch.active) return;
@@ -222,7 +228,7 @@ export function TextHistory() {
                 <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { if (savingRef.current) return; finishEditing(); setEditError(false); }}><KiriIcon name="xmark" size={14} />{t("Cancel")}</button>
                 <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}><KiriIcon name="checkmark" size={14} />{t("Save")}</button>
               </> : <>
-                <button type="button" className="kiri-button kiri-button--ghost" disabled={saving || deleting || batch.active} onClick={() => { if (savingRef.current || batch.active) return; editingRef.current = true; setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected }); setEditing(true); setEditError(false); }}><KiriIcon name="pencil.tip" size={14} />{t("Edit Text")}</button>
+                <button type="button" className="kiri-button kiri-button--ghost" disabled={saving || deleting || batch.active} onClick={() => { if (savingRef.current || batch.active) return; editingRef.current = true; updateNavigationLock(); setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected }); setEditing(true); setEditError(false); }}><KiriIcon name="pencil.tip" size={14} />{t("Edit Text")}</button>
                 <RecordMoreActions disabled={saving || deleting || batch.active}>
                 {selected.ocrOriginalText != null && <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting || batch.active} onClick={() => void saveCorrection(null)}><KiriIcon name="arrow.uturn.backward" size={14} />{t("Restore Original Text")}</button>}
                 <button type="button" className="kiri-button kiri-button--destructive" disabled={deleting || loading || saving || batch.active} onClick={() => void remove()}><KiriIcon name="trash" size={14} />{t("Move to Trash")}</button>
