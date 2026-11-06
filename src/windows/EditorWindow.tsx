@@ -310,6 +310,8 @@ export function EditorWindow(props: { id: string }) {
         return;
       }
       if (e.key === "Enter" && !e.isComposing) {
+        // Holding Enter after an inline text editor closes must not also save.
+        if (e.repeat) return;
         // Focused controls own Enter (notably export and crop cancellation).
         // Saving here before their native click could persist unintended edits.
         if (e.target instanceof Element && e.target.closest("button,input,select,textarea,[contenteditable]")) return;

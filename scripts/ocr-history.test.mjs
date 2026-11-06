@@ -14,6 +14,142 @@ const button = (tree, text) => {
   return [...nodes(tree), ...nodes(reader?.props.actions)].find((node) => node?.type === "button" && hasText(node, text));
 };
 
+// Render both real components with the same mocked hooks/IPC. Reconcile the
+// history child from the parent's returned tree so leaving Text History runs
+// its cleanup and discards its local hooks, as a real navigation would.
+const workspaceSource = readFileSync(new URL("../src/windows/LibraryWindow.tsx", import.meta.url), "utf8")
+  .replace('import { TextHistory, OcrDialog } from "../ocr/TextHistory";', "") +
+  '\nimport { isTextComposition, setTextComposition } from "../annotation/text-composition.js";\n' +
+  'import { useRecordSelection } from "../components/useRecordSelection";\n' +
+  'import { RecordMoreActions } from "../components/RecordMoreActions";\n' +
+  source.replace(/^import .*$/gm, "");
+
+async function textWorkspace(api = {}) {
+  const harness = createLibraryHarness({ listOcrRecords: async () => [record("one", "original")], ...api }, workspaceSource);
+  const library = harness.mount("LibraryWindow");
+  let history;
+  const render = () => {
+    const tree = library.render();
+    const child = nodes(tree).find(node => node?.type?.name === "TextHistory");
+    if (!child) { history?.unmount(); history = undefined; }
+    else { history ??= harness.mount("TextHistory", child.props); }
+    return { tree, history: history?.render(child.props) };
+  };
+  const navigate = index => {
+    nodes(render().tree).find(node => node?.type?.name === "SegmentedPicker").props.onChange(index);
+    return render();
+  };
+  render(); await settleRequests(); navigate(1); await pause(5); await settleRequests();
+  return {
+    render, navigate, harness,
+    unmount() { history?.unmount(); library.unmount(); },
+    edit(value) {
+      button(render().history, "Edit Text").props.onClick();
+      nodes(render().history).find(node => node?.props?.editor?.type === "textarea").props.editor.props.onChange({ target: { value } });
+    },
+    editor() { return nodes(render().history).find(node => node?.props?.editor?.type === "textarea")?.props.editor; },
+  };
+}
+
+test("main navigation keeps an unsaved OCR correction until explicit cancellation", async () => {
+  const workspace = await textWorkspace();
+  const staleNavigate = nodes(workspace.render().tree).find(node => node?.type?.name === "SegmentedPicker").props.onChange;
+  workspace.edit("keep my correction");
+  staleNavigate(0);
+  assert.equal(workspace.editor()?.props.value, "keep my correction", "even a pre-edit sidebar handler observes the synchronous lock");
+  for (const destination of [0, 2, 3, 4]) {
+    workspace.navigate(destination);
+    assert.equal(workspace.editor()?.props.value, "keep my correction");
+  }
+  const picker = nodes(workspace.render().tree).find(node => node?.type?.name === "SegmentedPicker");
+  const buttons = nodes(picker.type(picker.props)).filter(node => node?.type === "button");
+  assert.equal(buttons.filter(node => node.props.disabled).length, 4);
+  button(workspace.render().history, "Cancel").props.onClick();
+  assert.equal(workspace.navigate(4).history, undefined);
+  workspace.navigate(1); await pause(5); await settleRequests();
+  assert.equal(workspace.editor(), undefined);
+  workspace.unmount();
+});
+
+test("navigation during a failed OCR save retains the submitted draft and error for retry", async () => {
+  const pending = deferred();
+  const changes = [];
+  let attempt = 0;
+  const workspace = await textWorkspace({ updateOcrHistoryText: (...args) => {
+    changes.push(args);
+    return attempt++ ? Promise.resolve(record("one", "keep my correction")) : pending.promise;
+  } });
+  workspace.edit("keep my correction");
+  button(workspace.render().history, "Save").props.onClick();
+  // Directly exercise the handler as well as the rendered disabled state.
+  workspace.navigate(0);
+  assert.equal(workspace.editor()?.props.disabled, true);
+  pending.reject(new Error("index write failed")); await settleRequests();
+  workspace.navigate(1);
+  assert.equal(workspace.editor()?.props.value, "keep my correction");
+  assert.equal(hasText(workspace.render().history, "Couldn't save the text. Reload Text History and try again."), true);
+  workspace.navigate(2);
+  assert.equal(workspace.editor()?.props.value, "keep my correction");
+  button(workspace.render().history, "Save").props.onClick(); await settleRequests();
+  assert.deepEqual(changes, [["one", "original", "keep my correction"], ["one", "original", "keep my correction"]]);
+  assert.equal(workspace.editor(), undefined);
+  assert.equal(workspace.navigate(0).history, undefined);
+  workspace.unmount();
+});
+
+test("successful OCR saving releases main navigation after its pending operation", async () => {
+  const pending = deferred();
+  const workspace = await textWorkspace({ updateOcrHistoryText: () => pending.promise });
+  workspace.edit("saved correction");
+  button(workspace.render().history, "Save").props.onClick();
+  workspace.navigate(4);
+  assert.equal(workspace.editor()?.props.value, "saved correction");
+  pending.resolve(record("one", "saved correction")); await settleRequests();
+  assert.equal(workspace.editor(), undefined);
+  assert.equal(workspace.navigate(4).history, undefined);
+  workspace.unmount();
+});
+
+for (const operation of ["import", "paste"]) test(`a previously started media ${operation} cannot navigate away from an OCR correction`, async () => {
+  const pending = deferred();
+  const workspace = await textWorkspace({ importMedia: () => pending.promise, pasteClipboardImage: () => pending.promise });
+  workspace.navigate(0);
+  button(workspace.render().tree, operation === "import" ? "Import media" : "Paste Image").props.onClick();
+  workspace.navigate(1); await pause(5); await settleRequests();
+  workspace.edit("keep my correction");
+  pending.resolve({ ids: ["imported"], failed: 0 }); await settleRequests();
+  assert.equal(workspace.editor()?.props.value, "keep my correction");
+  workspace.unmount();
+});
+
+test("a media drop during OCR editing cannot start an import that discards the draft", async () => {
+  let imports = 0;
+  const workspace = await textWorkspace({ importMedia: async () => { imports++; return { ids: ["imported"], failed: 0 }; } });
+  workspace.edit("keep my correction");
+  workspace.harness.emit("mediaDrop", { payload: { type: "drop", paths: ["/test/image.png"] } });
+  await settleRequests();
+  assert.equal(imports, 0);
+  assert.equal(workspace.editor()?.props.value, "keep my correction");
+  workspace.unmount();
+});
+
+test("restoring original OCR text only blocks navigation until its request settles", async () => {
+  for (const succeeds of [false, true]) {
+    const pending = deferred();
+    const workspace = await textWorkspace({
+      listOcrRecords: async () => [{ ...record("one", "correction"), ocrOriginalText: "original" }],
+      updateOcrHistoryText: () => pending.promise,
+    });
+    button(workspace.render().history, "Restore Original Text").props.onClick();
+    assert.ok(workspace.navigate(0).history);
+    if (succeeds) pending.resolve(record("one", "original"));
+    else pending.reject(new Error("save failed"));
+    await settleRequests();
+    assert.equal(workspace.navigate(0).history, undefined);
+    workspace.unmount();
+  }
+});
+
 test("an older search response cannot replace the current text history", async () => {
   const first = deferred(), second = deferred();
   const queries = [];

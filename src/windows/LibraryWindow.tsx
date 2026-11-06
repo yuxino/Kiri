@@ -97,6 +97,12 @@ export function LibraryWindow() {
   } | null>(null);
   const [section, setSection] = useState<Section>("library");
   const [destination, setDestination] = useState<Destination>("captures");
+  const [textNavigationLocked, setTextNavigationLocked] = useState(false);
+  const textNavigationLock = useRef(false);
+  const onTextNavigationLockChange = useCallback((locked: boolean) => {
+    textNavigationLock.current = locked;
+    setTextNavigationLocked(locked);
+  }, []);
   const [query, setQuery] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [libraryStatus, setLibraryStatus] = useState<LibraryStatusDto | null>(null);
@@ -931,13 +937,13 @@ export function LibraryWindow() {
   const mediaImporting=useRef(false);
   const [mediaDrop,setMediaDrop]=useState(false);
   const importMedia=useCallback(async(paths?:string[])=>{
-    if(mediaImporting.current||libraryStatus?.availability!=="ready")return;
+    if(mediaImporting.current||textNavigationLock.current||libraryStatus?.availability!=="ready")return;
     mediaImporting.current=true;setMediaImportBusy(true);
     try{
       const result=await api.importMedia(paths);
       if (result.failed) showLocalNotice(fmt("Imported %d files; %d could not be imported.", result.ids.length, result.failed), "exclamationmark.triangle");
       else if (result.ids.length) showLocalNotice(fmt("Imported %d files.", result.ids.length));
-      if(result.ids.length){
+      if(result.ids.length&&!textNavigationLock.current){
         queryRef.current="";showingTrashRef.current=false;
         setQuery("");setSection("library");setDestination("captures");
         setKindFilter("all");setFavoritesOnly(false);setTagFilter(null);setSelection(new Set());
@@ -949,14 +955,16 @@ export function LibraryWindow() {
     finally{mediaImporting.current=false;setMediaImportBusy(false);}
   },[libraryStatus?.availability,refresh,showLocalNotice]);
   const pasteImage=useCallback(async()=>{
-    if(mediaImporting.current||libraryStatus?.availability!=="ready")return;
+    if(mediaImporting.current||textNavigationLock.current||libraryStatus?.availability!=="ready")return;
     mediaImporting.current=true;setMediaImportBusy(true);
     try{
       await api.pasteClipboardImage();
-      queryRef.current="";showingTrashRef.current=false;
-      setQuery("");setSection("library");setDestination("captures");
-      setKindFilter("all");setFavoritesOnly(false);setTagFilter(null);setSelection(new Set());
-      gridScrollRef.current?.scrollTo({top:0});
+      if(!textNavigationLock.current){
+        queryRef.current="";showingTrashRef.current=false;
+        setQuery("");setSection("library");setDestination("captures");
+        setKindFilter("all");setFavoritesOnly(false);setTagFilter(null);setSelection(new Set());
+        gridScrollRef.current?.scrollTo({top:0});
+      }
       showLocalNotice(t("Clipboard image added to Library."));
       await refresh();
     }catch{showLocalNotice(t("Could not paste an image from the clipboard."),"exclamationmark.triangle");}
@@ -1004,7 +1012,9 @@ export function LibraryWindow() {
           { label: t("Settings"), icon: "slider.horizontal.3", notification: updater.hasUpdate ? t("Update available") : undefined },
         ]}
         value={destination === "settings" ? 4 : destination === "qr" ? 2 : destination === "text" ? 1 : section === "library" ? 0 : 3}
+        disabled={textNavigationLocked}
         onChange={(index) => {
+          if (textNavigationLock.current) return;
           clearSelection();
           setMenuFor(null);
           if (index === 4) {
@@ -1372,7 +1382,7 @@ export function LibraryWindow() {
       ) : destination === "qr" ? (
         <QrFavorites />
       ) : destination === "text" ? (
-        <TextHistory />
+        <TextHistory onNavigationLockChange={onTextNavigationLockChange} />
       ) : (
         <React.Suspense
           fallback={
@@ -2597,6 +2607,7 @@ function BatchBarButton(props: {
 function SegmentedPicker(props: {
   options: { label: string; icon: IconName; notification?: string }[];
   value: number;
+  disabled?: boolean;
   onChange(index: number): void;
 }) {
   const buttons = props.options.map((option, index) => (
@@ -2609,6 +2620,7 @@ function SegmentedPicker(props: {
           data-active={props.value === index || undefined}
           aria-pressed={props.value === index}
           aria-current={props.value === index ? "page" : undefined}
+          disabled={props.disabled && props.value !== index}
           onClick={() => props.onChange(index)}
         >
           <KiriIcon name={option.icon} size={16} />

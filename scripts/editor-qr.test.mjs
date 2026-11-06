@@ -36,7 +36,7 @@ function editor(options = {}) {
   };
   const snapshot = { state: "valid", readOnly: options.readOnly ?? false, revisionSha256: "opened-revision", documentJson: JSON.stringify(document) };
   const canvas = {
-    exportResult: async () => { mutations.push("export"); return null; },
+    exportResult: async () => { mutations.push("export"); return options.exportResult?.(document) ?? null; },
     undo: () => mutations.push("undo"), redo: () => mutations.push("redo"),
     deleteSelection: () => mutations.push("delete"),
     // Style/text finalizers have no native/library side effect. The annotation
@@ -48,6 +48,7 @@ function editor(options = {}) {
     scanQr: (...args) => { calls.push(args); return options.scanQr?.(...args) ?? Promise.resolve(scan(args[0], size.width, size.height)); },
     cancelQr: async id => { calls.push(["cancel", id]); },
     getAsset: async () => { mutations.push("getAsset"); return null; },
+    updateAsset: async () => { mutations.push("updateAsset"); return { revisionSha256: "saved-revision", actionSucceeded: true }; },
     takeEditorQrRequest: async () => { const requested = pendingIntent; pendingIntent = false; return requested; },
   };
   const harness = createLibraryHarness({}, editorSource, {
@@ -121,6 +122,46 @@ async function loadedEditor(options) {
   h.component.render();
   return h;
 }
+
+test("holding Enter after committing inline text keeps the saved-image editor open until a fresh press", async () => {
+  const committed = { ...text, text: "committed by Enter" };
+  const h = await loadedEditor({ exportResult: document => ({ png: new Uint8Array([1]), document: { ...document, marks: [committed] } }) });
+  const canvas = find(h.component.render(), "annotation-canvas");
+  canvas.props.onTextDraftChange(committed, text.id, true);
+  h.component.render();
+  h.key("Enter", { target: h.element("textarea") });
+  // The inline editor owns the first keydown and commits its draft. Subsequent
+  // native repeat events target the canvas after that textarea is removed.
+  canvas.props.onDocumentChange([committed]);
+  canvas.props.onTextDraftChange(null, null, false);
+  h.component.render();
+  h.key("Enter", { target: h.element("canvas"), repeat: true });
+  await settleRequests();
+  assert.deepEqual(h.mutations, [], "repeat must neither export, update the asset nor close the editor");
+  assert.equal(find(h.component.render(), "image-close-guard").props.dirty, true);
+
+  h.key("Enter", { target: h.element("canvas"), repeat: false });
+  await settleRequests();
+  assert.deepEqual(h.mutations, ["export", "updateAsset", "closeSaved"], "a later deliberate Enter still saves and closes");
+  h.component.unmount();
+});
+
+test("saved-image Enter leaves IME confirmation and focused controls with their owner", async () => {
+  const h = await loadedEditor();
+  for (const extra of [{ isComposing: true }, { keyCode: 229 }]) {
+    h.key("Enter", { target: h.element("canvas"), ...extra });
+  }
+  const composingTarget = h.element("canvas");
+  textComposition.setTextComposition(composingTarget, true);
+  h.key("Enter", { target: composingTarget, isComposing: false });
+  textComposition.setTextComposition(composingTarget, false);
+  for (const tag of ["textarea", "input", "select", "button", "[contenteditable]"]) {
+    h.key("Enter", { target: h.element(tag), repeat: false });
+  }
+  await settleRequests();
+  assert.deepEqual(h.mutations, []);
+  h.component.unmount();
+});
 
 test("saved-image recognition uses the original stage and exact opened revision without exporting edits", async () => {
   const h = await loadedEditor();
