@@ -261,3 +261,6 @@ development.
 - [ADR 0126: Offline recognition of small Chinese selections](adr/0126-offline-chinese-ocr.md)
 
 - [ADR 0127: Cross-platform local OCR](adr/0127-unified-local-ocr.md)
+
+- [ADR 0129: History navigation and OCR correction safety](adr/0129-history-navigation-and-ocr-draft-safety.md)
+  — cancel stale annotation gestures and retain failed corrections across attempted navigation.
