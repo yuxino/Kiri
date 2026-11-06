@@ -13,6 +13,7 @@ mod dock_settings;
 mod startup_settings;
 mod gif;
 mod video_export;
+mod video_export_failure;
 mod video_project_commands;
 mod media_import;
 mod microphone;

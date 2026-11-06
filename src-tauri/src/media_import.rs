@@ -6,7 +6,7 @@ use std::io::Read;
 use std::path::Path;
 
 pub struct PreparedMedia {
-    pub file: tempfile::NamedTempFile,
+    pub file: tempfile::TempPath,
     pub kind: CaptureKind,
     pub extension: &'static str,
     pub width: i64,
@@ -27,7 +27,8 @@ pub fn prepare_clipboard_png(png: &[u8]) -> Result<PreparedMedia> {
     }
     let source = tempfile::Builder::new().suffix(".png").tempfile()?;
     std::fs::write(source.path(), png)?;
-    prepare(source.path())
+    let source = source.into_temp_path();
+    prepare(&source)
 }
 
 pub fn prepare(path: &Path) -> Result<PreparedMedia> {
@@ -54,7 +55,10 @@ pub fn prepare(path: &Path) -> Result<PreparedMedia> {
         if copied > 8 * 1024 * 1024 * 1024 {
             bail!("Video exceeds 8 GB");
         }
-        let (width, height, duration) = probe_video(file.path())?;
+        // A native media reader may deny write sharing. Finish the snapshot
+        // before probing, retaining only its automatic-cleanup path.
+        let file = file.into_temp_path();
+        let (width, height, duration) = probe_video(&file)?;
         if width <= 0 || height <= 0 || duration.is_none_or(|d| !d.is_finite() || d <= 0.) {
             bail!("Invalid video");
         }
@@ -95,7 +99,7 @@ pub fn prepare(path: &Path) -> Result<PreparedMedia> {
     }
     image.write_with_encoder(encoder)?;
     Ok(PreparedMedia {
-        file,
+        file: file.into_temp_path(),
         kind: CaptureKind::Image,
         extension: "png",
         width: i64::from(image.width()),
@@ -295,7 +299,7 @@ mod tests {
         let imported = prepare(&path).unwrap();
         assert_eq!((imported.width, imported.height), (31, 19));
         assert_eq!(imported.extension, "png");
-        assert!(image::open(imported.file.path()).is_ok());
+        assert!(image::open(&imported.file).is_ok());
         assert_eq!(before, std::fs::read(path).unwrap());
     }
     #[test]
@@ -323,7 +327,7 @@ mod tests {
             }
             let before = std::fs::read(&source).unwrap();
             let imported = prepare(&source).unwrap();
-            let mut decoder = image::ImageReader::open(imported.file.path())
+            let mut decoder = image::ImageReader::open(&imported.file)
                 .unwrap()
                 .with_guessed_format()
                 .unwrap()
@@ -414,5 +418,57 @@ mod tests {
         assert_eq!(imported.kind, CaptureKind::Image);
         assert!(prepare_clipboard_png(b"not an image").is_err());
         assert!(prepare_clipboard_png(&[]).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn video_import_probes_a_closed_snapshot_and_keeps_source() -> Result<()> {
+        use windows::{
+            core::HSTRING,
+            Foundation::TimeSpan,
+            Media::{
+                Editing::{MediaClip, MediaComposition, MediaTrimmingPreference},
+                MediaProperties::{MediaEncodingProfile, VideoEncodingQuality},
+                Transcoding::TranscodeFailureReason,
+            },
+            Storage::StorageFile,
+            Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
+        };
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED) }?;
+        struct Apartment;
+        impl Drop for Apartment {
+            fn drop(&mut self) { unsafe { RoUninitialize(); } }
+        }
+        let _apartment = Apartment;
+        let directory = tempfile::tempdir()?;
+        let image = directory.path().join("import-fixture.png");
+        image::RgbaImage::from_pixel(320, 180, image::Rgba([210, 30, 25, 255])).save(&image)?;
+        let image = StorageFile::GetFileFromPathAsync(&HSTRING::from(image.as_os_str()))?.join()?;
+        let composition = MediaComposition::new()?;
+        composition.Clips()?.Append(&MediaClip::CreateFromImageFileAsync(
+            &image, TimeSpan { Duration: 20_000_000 })?.join()?)?;
+        let path = directory.path().join("视频 import.mp4");
+        std::fs::File::create(&path)?;
+        let destination = StorageFile::GetFileFromPathAsync(&HSTRING::from(path.as_os_str()))?.join()?;
+        let profile = MediaEncodingProfile::CreateMp4(VideoEncodingQuality::HD720p)?;
+        profile.Video()?.SetWidth(320)?;
+        profile.Video()?.SetHeight(180)?;
+        let result = composition.RenderToFileWithProfileAsync(
+            &destination, MediaTrimmingPreference::Precise, &profile)?.join()?;
+        assert_eq!(result, TranscodeFailureReason::None);
+        let original = std::fs::read(&path)?;
+        let imported = prepare(&path)?;
+        assert_eq!(imported.kind, CaptureKind::Video);
+        assert_eq!(imported.extension, "mp4");
+        assert_eq!((imported.width, imported.height), (320, 180));
+        assert!(imported.duration.is_some_and(|duration| (duration - 2.0).abs() < 0.1));
+        assert_eq!(crate::gif::video_dimensions(&imported.file)?, (320, 180));
+        assert_eq!(std::fs::read(&imported.file)?, original);
+        assert_eq!(std::fs::read(&path)?, original);
+        let snapshot = imported.file.to_path_buf();
+        drop(imported);
+        assert!(!snapshot.exists(), "completed import must remove its temporary snapshot");
+        assert_eq!(std::fs::read(&path)?, original);
+        Ok(())
     }
 }

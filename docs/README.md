@@ -28,6 +28,8 @@ Linux QA, and contribution records retain their original language.
 
 ## Current sources of truth
 
+- [`qa/issue-196-video-export.md`](qa/issue-196-video-export.md) — export/import
+  snapshot fixes, error/cancellation regressions and remaining Windows evidence.
 - [`qa/scrolling-capture.md`](qa/scrolling-capture.md) — bidirectional result checks,
   recovery, localized controls and separate native scrolling-capture acceptance.
 - [`qa/shortcut-settings.md`](qa/shortcut-settings.md) — actual settings geometry,
@@ -261,3 +263,6 @@ development.
 - [ADR 0126: Offline recognition of small Chinese selections](adr/0126-offline-chinese-ocr.md)
 
 - [ADR 0127: Cross-platform local OCR](adr/0127-unified-local-ocr.md)
+
+- [ADR 0129: Video export failure boundaries](adr/0129-video-export-failure-boundaries.md)
+  — closed source snapshots, safe diagnostics and retryable export/open/cancel states.

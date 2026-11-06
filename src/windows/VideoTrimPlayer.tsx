@@ -16,6 +16,7 @@ import {VideoPlaybackControls} from "./VideoPlaybackControls";
 import {videoResourceCrossOrigin} from "../lib/kiri-resource-url.js";
 import {VideoTimeInput} from "./VideoTimeInput";
 import {VideoExportPanel} from "./VideoExportPanel";
+import {parseVideoExportFailure,type VideoExportFailure} from "./video-export-error";
 import {VideoVisibleTime} from "./VideoVisibleTime";
 import {useVideoProject} from "./useVideoProject";
 import {sameVideoProjectValue} from "./video-project-save.js";
@@ -112,7 +113,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
   const [preset, setPreset] = useState<"original" | "share" | "small">("original");
   const [exporting, setExporting] = useState(false);
   const busy=exporting||importing;
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<VideoExportFailure|null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [exportProgress,setExportProgress]=useState<VideoExportProgress|null>(null);
   const [cancelling,setCancelling]=useState(false);
@@ -253,7 +254,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
       }
     }
     docRef.current=next; setDoc(next);
-    setSavedId(null); setError(false); previewing.current=false; video.current?.pause();
+    setSavedId(null); setError(null); previewing.current=false; video.current?.pause();
   }
   function undo(redo=false) {
     if(busy || dragBase.current) return;
@@ -263,7 +264,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
     (redo ? history.current.past : history.current.future).push(docRef.current);
     docRef.current=next; setDoc(next); setEffectId(null);setAnnotationRevision(value=>value+1);
     setSelected(index=>Math.min(index,Math.max(0,next.segments.length-1)));
-    setSavedId(null); setError(false); previewing.current=false; video.current?.pause();
+    setSavedId(null); setError(null); previewing.current=false; video.current?.pause();
   }
   function split() {
     if(busy) return;
@@ -506,11 +507,12 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
     if(unsupportedVideoProjectFeatures(projectSnapshot(),capabilities).length)return;
     textDraft.current=null;project.schedule();
     const snapshot=docRef.current;
-    saving.current=true;setExporting(true);setError(false);setSavedId(null);setAnnotating(false);
+    saving.current=true;setExporting(true);setError(null);setSavedId(null);setAnnotating(false);
     const requestId=crypto.randomUUID();exportRequest.current=requestId;exportStarted.current=false;cancelRequested.current=false;
     setExportProgress({requestId,phase:"preparing",progress:null});setCancelling(false);setExportCancelled(false);setCancelFailed(false);
     previewing.current=false;video.current?.pause();setEffectId(null);
     let stop:(()=>void)|undefined;
+    let failureStage:"progress"|"annotations"|"render"="progress";
     try {
       // Register before invoking so even a small, fast export reports its state.
       stop=await getCurrentWindow().listen<VideoExportProgress>("video-export-progress",event=>{
@@ -521,11 +523,13 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
       // Export must start even when WebKit suspends animation frames in a covered window.
       await new Promise<void>(resolve=>setTimeout(resolve,0));
       if(cancelRequested.current){setExportCancelled(true);return;}
+      failureStage="annotations";
       const rasterized=[...rasterizeVideoAnnotations(snapshot.annotations,sourceSize),...rasterizeVideoStickers(snapshot.stickers)];
+      failureStage="render";
       exportStarted.current=true;
       setSavedId(await api.exportVideoCopy(props.id,snapshot.segments,snapshot.effects,rasterized,preset,requestId));
     }
-    catch(reason) {if(String(reason)==="VIDEO_EXPORT_CANCELLED")setExportCancelled(true);else setError(true);}
+    catch(reason) {if(reason==="VIDEO_EXPORT_CANCELLED")setExportCancelled(true);else setError(failureStage==="render"?parseVideoExportFailure(reason):{stage:failureStage,code:"unavailable"});}
     finally {stop?.();exportRequest.current=null;exportStarted.current=false;cancelRequested.current=false;saving.current=false;setExporting(false);setCancelling(false);setExportProgress(null);}
   }
   async function cancelExport(){
@@ -535,7 +539,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
     try{
       const accepted=await api.cancelVideoExport(requestId);
       if(exportRequest.current!==requestId)return;
-      if(!accepted){cancelRequested.current=false;setCancelling(false);setExportProgress({requestId,phase:"saving",progress:null});}
+      if(!accepted){cancelRequested.current=false;setCancelling(false);setCancelFailed(true);}
     }catch{
       if(exportRequest.current===requestId){cancelRequested.current=false;setCancelling(false);setCancelFailed(true);}
     }
@@ -567,7 +571,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
     const existing=new Set(current.annotations.map(item=>item.mark.id));
     const {start,end}=defaultOverlayRange(time,duration);
     const added=marks.filter(mark=>!existing.has(mark.id)).map((mark,index)=>({id:`annotation-${mark.id}`,mark,start,end,layer:nextVideoLayer([...current.effects,...current.annotations,...current.stickers])+index}));
-    if(retained.length+added.length>128){setAnnotationRevision(value=>value+1);setError(true);return;}
+    if(retained.length+added.length>128){setAnnotationRevision(value=>value+1);setError({stage:"annotations",code:"limit"});return;}
     apply({...current,annotations:[...retained,...added]});
     if(added.length){
       setAnnotationId(added[added.length-1].id);
@@ -657,7 +661,7 @@ export function VideoTrimPlayer(props: { id: string; src: string; mediaRevision?
       <div className="kiri-video-header-actions">
         {!editing && props.previewActions}
         {editing&&<div className="kiri-video-project-status" role="status" aria-live="polite">{importing?t("Loading…"):project.state.status==="error"?<button type="button" className="kiri-video-save-retry" onClick={project.retry}>{t("Not saved · Retry")}</button>:t(project.state.status==="saved"?"Edit saved":project.state.status==="saving"||project.state.status==="waiting"?"Saving edit…":"Edits save automatically")}</div>}
-        {editing&&<VideoExportPanel preset={preset} supportsPresets={capabilities.videoExportPresets} onPreset={next=>{if(!capabilities.videoExportPresets&&next!=="original")return;setPreset(next);projectContext.current.preset=next;project.schedule();setSavedId(null);}} sourceSize={sourceSize} duration={total} valid={!importing&&valid&&!unsupportedFeatures.length&&project.state.status!=="blocked"&&project.state.status!=="loading"&&!project.state.error?.includes("SOURCE_CHANGED")} busy={exporting} error={error} saved={!!savedId} progress={exportProgress} cancelling={cancelling} cancelled={exportCancelled} cancelFailed={cancelFailed} onCancel={()=>void cancelExport()} onSave={()=>void saveCopy()} onOpen={()=>{if(savedId)void api.openAsset(savedId).catch(()=>setError(true));}}/>}
+        {editing&&<VideoExportPanel preset={preset} supportsPresets={capabilities.videoExportPresets} onPreset={next=>{if(!capabilities.videoExportPresets&&next!=="original")return;setPreset(next);projectContext.current.preset=next;project.schedule();setSavedId(null);}} sourceSize={sourceSize} duration={total} valid={!importing&&valid&&!unsupportedFeatures.length&&project.state.status!=="blocked"&&project.state.status!=="loading"&&!project.state.error?.includes("SOURCE_CHANGED")} busy={exporting} error={error} saved={!!savedId} progress={exportProgress} cancelling={cancelling} cancelled={exportCancelled} cancelFailed={cancelFailed} onCancel={()=>void cancelExport()} onSave={()=>void saveCopy()} onOpen={()=>{if(savedId){setError(null);void api.openAsset(savedId).catch(()=>setError({stage:"open",code:"unavailable"}));}}}/>}
 
 
         {editing ? <button type="button" className="kiri-button kiri-button--secondary" disabled={busy} onClick={()=>{commitAnnotation.current?.();previewing.current=false;video.current?.pause();setEditing(false);setAnnotating(false);}}>{t("Close editor")}</button>
