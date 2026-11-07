@@ -269,3 +269,6 @@ development.
 
 - [ADR 0130: Video export failure boundaries](adr/0130-video-export-failure-boundaries.md)
   — closed source snapshots, safe diagnostics and retryable export/open/cancel states.
+
+- [ADR 0131: Standard remote OCR URL validation](adr/0131-standard-remote-ocr-urls.md)
+  — conventional HTTP/HTTPS profile validation with explicit per-image consent.

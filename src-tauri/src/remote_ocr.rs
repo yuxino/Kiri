@@ -6,7 +6,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::core::ocr_provider::is_loopback_url;
+use crate::core::ocr_provider::is_local_network_url;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
@@ -18,13 +18,13 @@ const OCR_PROMPT: &str =
 
 /// A deliberately small remote OCR transport for OpenAI-compatible Chat Completions APIs.
 ///
-/// The regular client honors the operating system proxy configuration. The three explicitly
-/// supported local development hosts (`localhost`, `127.0.0.1`, and `::1`) use a separate client
-/// with proxy discovery disabled.
+/// The regular client honors the operating system proxy configuration. Explicit loopback and
+/// RFC 1918 IPv4 literals use a separate client with proxy discovery disabled, keeping local
+/// credentials and image data off configured HTTP proxies.
 #[derive(Clone)]
 pub struct RemoteOcrClient {
     system_proxy_client: Client,
-    loopback_client: Client,
+    local_client: Client,
 }
 
 impl RemoteOcrClient {
@@ -42,14 +42,14 @@ impl RemoteOcrClient {
         let system_proxy_client = common()
             .build()
             .map_err(|_| RemoteOcrError::ClientInitialization)?;
-        let loopback_client = common()
+        let local_client = common()
             .no_proxy()
             .build()
             .map_err(|_| RemoteOcrError::ClientInitialization)?;
 
         Ok(Self {
             system_proxy_client,
-            loopback_client,
+            local_client,
         })
     }
 
@@ -72,7 +72,7 @@ impl RemoteOcrClient {
         let body = build_request_body(model, png);
         let client = match route {
             EndpointRoute::SystemProxy => &self.system_proxy_client,
-            EndpointRoute::LoopbackNoProxy => &self.loopback_client,
+            EndpointRoute::LocalNoProxy => &self.local_client,
         };
 
         let request = client
@@ -129,7 +129,7 @@ fn ensure_ring_crypto_provider() -> Result<(), RemoteOcrError> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EndpointRoute {
     SystemProxy,
-    LoopbackNoProxy,
+    LocalNoProxy,
 }
 
 fn classify_endpoint(endpoint: &Url) -> Result<EndpointRoute, RemoteOcrError> {
@@ -142,11 +142,10 @@ fn classify_endpoint(endpoint: &Url) -> Result<EndpointRoute, RemoteOcrError> {
         return Err(RemoteOcrError::InvalidEndpoint);
     }
 
-    let loopback = is_loopback_url(endpoint);
+    let local = is_local_network_url(endpoint);
     match endpoint.scheme() {
-        "https" if loopback => Ok(EndpointRoute::LoopbackNoProxy),
-        "https" => Ok(EndpointRoute::SystemProxy),
-        "http" if loopback => Ok(EndpointRoute::LoopbackNoProxy),
+        "https" | "http" if local => Ok(EndpointRoute::LocalNoProxy),
+        "https" | "http" => Ok(EndpointRoute::SystemProxy),
         _ => Err(RemoteOcrError::InvalidEndpoint),
     }
 }
@@ -394,20 +393,43 @@ mod tests {
     }
 
     #[test]
-    fn only_explicit_local_hosts_may_use_plain_http_and_bypass_proxy() {
-        assert_eq!(
-            classify_endpoint(&Url::parse("http://127.0.0.1:8080/v1/chat/completions").unwrap()),
-            Ok(EndpointRoute::LoopbackNoProxy)
-        );
-        assert_eq!(
-            classify_endpoint(&Url::parse("https://[::1]/v1/chat/completions").unwrap()),
-            Ok(EndpointRoute::LoopbackNoProxy)
-        );
+    fn routes_standard_http_endpoints_and_bypasses_proxy_for_local_literals() {
+        for endpoint in [
+            "http://127.0.0.1:8080/v1/chat/completions",
+            "https://[::1]/v1/chat/completions",
+            "http://10.0.0.8:8002/v1/chat/completions",
+            "http://172.16.0.8:8002/v1/chat/completions",
+            "http://192.168.96.241:8002/v1/chat/completions",
+            "https://192.168.96.241:8002/v1/chat/completions",
+        ] {
+            assert_eq!(
+                classify_endpoint(&Url::parse(endpoint).unwrap()),
+                Ok(EndpointRoute::LocalNoProxy),
+                "expected a direct local route for {endpoint}"
+            );
+        }
         for endpoint in [
             "http://127.0.0.2:8080/v1/chat/completions",
             "http://foo.localhost:8080/v1/chat/completions",
             "http://[::ffff:127.0.0.1]:8080/v1/chat/completions",
+            "http://[::ffff:192.168.1.1]:8080/v1/chat/completions",
+            "http://192.168.1.1.example.test:8080/v1/chat/completions",
+            "http://169.254.169.254/latest/meta-data",
+            "http://172.32.0.1:8080/v1/chat/completions",
+            "http://api.example.test/v1/chat/completions",
+            "https://api.example.test/v1/chat/completions",
+        ] {
+            assert_eq!(
+                classify_endpoint(&Url::parse(endpoint).unwrap()),
+                Ok(EndpointRoute::SystemProxy),
+                "expected the normal proxy route for {endpoint}"
+            );
+        }
+        for endpoint in [
+            "ftp://example.com/v1/chat/completions",
+            "https://user@example.com/v1/chat/completions",
             "https://example.com/v1/chat/completions?forward=elsewhere",
+            "https://example.com/v1/chat/completions#fragment",
         ] {
             assert_eq!(
                 classify_endpoint(&Url::parse(endpoint).unwrap()),
@@ -415,14 +437,6 @@ mod tests {
                 "unexpectedly accepted {endpoint}"
             );
         }
-        assert_eq!(
-            classify_endpoint(&Url::parse("https://api.example.test/v1/chat/completions").unwrap()),
-            Ok(EndpointRoute::SystemProxy)
-        );
-        assert_eq!(
-            classify_endpoint(&Url::parse("http://api.example.test/v1/chat/completions").unwrap()),
-            Err(RemoteOcrError::InvalidEndpoint)
-        );
     }
 
     #[test]

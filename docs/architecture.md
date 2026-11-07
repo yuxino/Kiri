@@ -610,6 +610,14 @@ Retry action is required for every request. Return performs local OCR for that
 selection. Redirects, automatic retries, provider switching, and upload
 fallbacks are disabled.
 
+Remote profiles accept standard absolute HTTP or HTTPS base URLs on public or
+private networks. The dialog and Rust reject malformed URLs, other schemes,
+userinfo, query parameters, and fragments; the dialog shows a localized field
+error before saving. Loopback and RFC 1918 private IPv4 endpoints bypass system
+proxies for either scheme, while other endpoints follow the normal proxy
+configuration. Plain HTTP leaves the API key and selected image unencrypted in
+transit. See ADR 0131.
+
 Prepared crops are bounded, expire from memory, and are tied to both the active
 capture and profile revision. Provider HTTP requests originate in Rust; the
 WebView CSP does not allow direct provider access.

@@ -42,6 +42,16 @@ function defaultProfileName(provider: OcrProviderPreset): string {
   return provider === "customOpenAi" ? t(name) : name;
 }
 
+function isValidBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
 export function OcrProfileDialog({
   profile,
   busy,
@@ -56,7 +66,9 @@ export function OcrProfileDialog({
   const [baseUrl, setBaseUrl] = useState(profile?.baseUrl ?? defaults.baseUrl);
   const [model, setModel] = useState(profile?.model ?? defaults.model);
   const [apiKey, setApiKey] = useState("");
+  const [baseUrlError, setBaseUrlError] = useState(false);
   const titleId = useId();
+  const baseUrlErrorId = useId();
   const dialogRef = useDialogFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
@@ -77,11 +89,17 @@ export function OcrProfileDialog({
       setName(defaultProfileName(next));
     }
     setBaseUrl(nextDefaults.baseUrl);
+    setBaseUrlError(false);
     setModel(nextDefaults.model);
   };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!isValidBaseUrl(baseUrl)) {
+      setBaseUrlError(true);
+      return;
+    }
+    setBaseUrlError(false);
     const request: SaveOcrProviderProfileRequest = {
       name: name.trim(),
       provider,
@@ -153,15 +171,26 @@ export function OcrProfileDialog({
             <label className="kiri-settings-field kiri-settings-field--wide">
               <span>{t("Base URL")}</span>
               <input
-                type="url"
+                type="text"
+                inputMode="url"
                 value={baseUrl}
-                onChange={(event) => setBaseUrl(event.target.value)}
+                onChange={(event) => {
+                  setBaseUrl(event.target.value);
+                  setBaseUrlError(false);
+                }}
                 placeholder={t("Enter the provider endpoint")}
                 required
                 spellCheck={false}
                 disabled={busy}
+                aria-invalid={baseUrlError}
+                aria-describedby={baseUrlError ? baseUrlErrorId : undefined}
               />
               <small>{t("Kiri automatically appends /chat/completions.")}</small>
+              {baseUrlError && (
+                <small id={baseUrlErrorId} className="kiri-settings-field-error" role="alert">
+                  {t("Enter a valid HTTP or HTTPS Base URL without credentials, query parameters, or fragments.")}
+                </small>
+              )}
             </label>
 
             <label className="kiri-settings-field">

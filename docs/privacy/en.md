@@ -112,6 +112,13 @@ The chosen provider processes the request under its own terms and retention
 policy. Custom profiles send data to the origin shown in Kiri's confirmation
 card; users should only configure endpoints they trust.
 
+Remote profiles accept valid HTTP or HTTPS base URLs on public or private
+networks. Loopback and RFC 1918 private IPv4 endpoints connect directly without
+using a system proxy; other endpoints follow the system proxy configuration.
+Plain HTTP does not encrypt the API key, selected image, or recognized text in
+transit. Use HTTP only with a trusted endpoint on a trusted network; HTTPS is
+recommended elsewhere.
+
 ## Credentials and configuration
 
 API keys are entered inside Kiri and stored in macOS Keychain, Windows

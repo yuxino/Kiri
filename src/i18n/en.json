@@ -257,6 +257,7 @@
   "Base URL": "Base URL",
   "Enter the provider endpoint": "Enter the provider endpoint",
   "Kiri automatically appends /chat/completions.": "Kiri automatically appends /chat/completions.",
+  "Enter a valid HTTP or HTTPS Base URL without credentials, query parameters, or fragments.": "Enter a valid HTTP or HTTPS Base URL without credentials, query parameters, or fragments.",
   "Model": "Model",
   "Enter a model name": "Enter a model name",
   "API Key": "API Key",

@@ -257,6 +257,7 @@
   "Base URL": "기본 URL",
   "Enter the provider endpoint": "서비스 엔드포인트 입력",
   "Kiri automatically appends /chat/completions.": "Kiri가 /chat/completions를 자동으로 추가합니다.",
+  "Enter a valid HTTP or HTTPS Base URL without credentials, query parameters, or fragments.": "자격 증명, 쿼리 매개변수, 프래그먼트가 없는 유효한 HTTP 또는 HTTPS Base URL을 입력하세요.",
   "Model": "모델",
   "Enter a model name": "모델 이름 입력",
   "API Key": "API 키",

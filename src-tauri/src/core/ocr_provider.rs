@@ -392,11 +392,17 @@ fn validate_base_url(value: &str) -> Result<Url, OcrProviderError> {
         return Err(OcrProviderError::InvalidRequest);
     }
     match url.scheme() {
-        "https" => {}
-        "http" if is_loopback_url(&url) => {}
+        "https" | "http" => {}
         _ => return Err(OcrProviderError::InvalidRequest),
     }
     Ok(url)
+}
+
+/// Loopback and RFC 1918 IPv4 literals may use a direct local connection.
+/// Non-loopback hostnames use the normal proxy route, so direct-route
+/// classification never depends on DNS.
+pub fn is_local_network_url(url: &Url) -> bool {
+    is_loopback_url(url) || matches!(url.host(), Some(Host::Ipv4(address)) if address.is_private())
 }
 
 pub fn is_loopback_url(url: &Url) -> bool {
@@ -460,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_stale_revision_and_insecure_remote_http() {
+    fn rejects_stale_revision_and_permits_remote_http() {
         let directory = tempfile::tempdir().unwrap();
         let mut store = OcrProviderStore::open(directory.path()).unwrap();
         let (next, created) = store
@@ -478,13 +484,14 @@ mod tests {
             OcrProviderError::RevisionConflict
         );
 
-        let mut insecure = draft();
-        insecure.base_url = "http://example.com/v1".into();
+        let mut remote = draft();
+        remote.base_url = "http://example.com/v1".into();
+        let (_, profile) = store
+            .plan_save(remote, CredentialMetadataChange::Preserve)
+            .unwrap();
         assert_eq!(
-            store
-                .plan_save(insecure, CredentialMetadataChange::Preserve)
-                .unwrap_err(),
-            OcrProviderError::InvalidRequest
+            profile.endpoint().unwrap().as_str(),
+            "http://example.com/v1/chat/completions"
         );
     }
 
@@ -513,14 +520,38 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_exact_loopback_and_url_smuggling_fields() {
+    fn permits_private_ipv4_http_and_builds_endpoint() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = OcrProviderStore::open(directory.path()).unwrap();
+        for base_url in [
+            "http://10.0.0.8:8002/v1",
+            "http://172.16.0.8:8002/v1",
+            "http://192.168.96.241:8002/v1",
+        ] {
+            let mut request = draft();
+            request.base_url = base_url.into();
+            let (_, profile) = store
+                .plan_save(request, CredentialMetadataChange::Preserve)
+                .unwrap();
+            assert_eq!(profile.base_url, base_url);
+            assert_eq!(
+                profile.endpoint().unwrap().as_str(),
+                format!("{base_url}/chat/completions")
+            );
+            assert!(is_local_network_url(&Url::parse(base_url).unwrap()));
+        }
+    }
+
+    #[test]
+    fn rejects_url_smuggling_fields() {
         let store_dir = tempfile::tempdir().unwrap();
         let store = OcrProviderStore::open(store_dir.path()).unwrap();
         for base_url in [
-            "http://127.0.0.2:11434/v1",
-            "http://foo.localhost:11434/v1",
+            "not-a-url",
+            "ftp://example.com/v1",
             "https://user@example.com/v1",
             "https://example.com/v1?target=other",
+            "https://example.com/v1#fragment",
         ] {
             let mut request = draft();
             request.base_url = base_url.into();
