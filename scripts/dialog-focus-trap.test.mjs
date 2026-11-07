@@ -178,3 +178,46 @@ test("OCR profile Escape preserves IME composition and child-owned keys, then ca
   assert.equal(cancelled, 1, "saving remains protected from dismissal");
   component.unmount();
 });
+
+test("OCR profile validates standard HTTP base URLs before saving", () => {
+  const source = 'import React from "react";\n' + readFileSync(new URL("../src/settings/OcrProfileDialog.tsx", import.meta.url), "utf8");
+  const saved = [];
+  const harness = createLibraryHarness({}, source, {
+    modules: { "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) },
+      "../annotation/text-composition.js": textComposition },
+  });
+  const component = harness.mount("OcrProfileDialog", { profile: null, busy: false, error: null,
+    onCancel() {}, onSave(request) { saved.push(request); } });
+  const submit = () => nodes(component.render()).find(node => node?.type === "form").props
+    .onSubmit({ preventDefault() {} });
+  const changeBaseUrl = (value) => {
+    component.render();
+    nodes(component.render()).find(node => node?.type === "input" && node.props.inputMode === "url")
+      .props.onChange({ target: { value } });
+    component.render();
+  };
+  const error = "Enter a valid HTTP or HTTPS Base URL without credentials, query parameters, or fragments.";
+  for (const value of [
+    "not-a-url",
+    "ftp://example.com/v1",
+    "https://user:password@example.com/v1",
+    "https://example.com/v1?target=other",
+    "https://example.com/v1#fragment",
+  ]) {
+    changeBaseUrl(value);
+    submit();
+    assert.equal(saved.length, 0, `rejected ${value}`);
+    const input = nodes(component.render()).find(node => node?.type === "input" && node.props.inputMode === "url");
+    assert.equal(input.props["aria-invalid"], true);
+    assert.ok(nodes(component.render()).some(node => node?.props?.role === "alert" && nodes(node).includes(error)));
+  }
+  for (const value of ["http://example.com/v1", "http://192.168.96.241:8002/v1"]) {
+    changeBaseUrl(value);
+    submit();
+  }
+  assert.deepEqual(saved.map(request => request.baseUrl), [
+    "http://example.com/v1",
+    "http://192.168.96.241:8002/v1",
+  ]);
+  component.unmount();
+});

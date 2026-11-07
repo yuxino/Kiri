@@ -1236,6 +1236,34 @@ mod tests {
     }
 
     #[test]
+    fn private_network_http_update_preserves_existing_credential() {
+        let directory = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(MemorySecrets::default());
+        let manager = OcrProviderManager::with_secret_store(directory.path(), secrets);
+        let first = manager.save(save_request(Some("secret-value"))).unwrap();
+        let profile = &first.profiles[0];
+        let mut update = save_request(None);
+        update.id = Some(profile.id.clone());
+        update.revision = Some(profile.revision);
+        update.name = "Alibaba Cloud".into();
+        update.provider = OcrProviderPreset::AliyunBailian;
+        update.base_url = "http://192.168.96.241:8002/v1".into();
+        update.model = "qwen3.5-ocr".into();
+
+        let updated = manager.save(update).unwrap();
+        assert_eq!(
+            updated.profiles[0].base_url,
+            "http://192.168.96.241:8002/v1"
+        );
+        assert!(updated.profiles[0].has_api_key);
+        assert_eq!(updated.profiles[0].revision, 2);
+        let resolved = manager
+            .resolve_remote(&updated.profiles[0].id, updated.profiles[0].revision)
+            .unwrap();
+        assert_eq!(resolved.api_key.expose_secret(), "secret-value");
+    }
+
+    #[test]
     fn active_remote_profile_requires_a_system_credential() {
         let directory = tempfile::tempdir().unwrap();
         let secrets = Arc::new(MemorySecrets::default());

@@ -257,6 +257,7 @@
   "Base URL": "基礎 URL",
   "Enter the provider endpoint": "輸入服務商地址",
   "Kiri automatically appends /chat/completions.": "Kiri 會自動附加 /chat/completions。",
+  "Enter a valid HTTP or HTTPS Base URL without credentials, query parameters, or fragments.": "請輸入有效的 HTTP 或 HTTPS 基礎 URL，不要包含帳號密碼、查詢參數或片段。",
   "Model": "模型",
   "Enter a model name": "輸入模型名稱",
   "API Key": "API Key",

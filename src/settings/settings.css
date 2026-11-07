@@ -519,6 +519,14 @@
   line-height: 1.4;
 }
 
+.kiri-settings-field input[aria-invalid="true"] {
+  border-color: var(--kiri-coral);
+}
+
+.kiri-settings-field small.kiri-settings-field-error {
+  color: var(--kiri-coral);
+}
+
 .kiri-settings-key-note {
   margin-top: 10px;
 }
