@@ -1,5 +1,5 @@
 //! Shared persisted language codes and OS locale normalization.
-pub const LANGUAGES: [&str; 7] = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"];
+pub const LANGUAGES: [&str; 8] = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"];
 pub fn is_language(value: &str) -> bool {
     LANGUAGES.contains(&value)
 }
@@ -28,6 +28,7 @@ pub fn language_for_locale(value: &str) -> &'static str {
         "de" => "de",
         "ko" => "ko",
         "fr" => "fr",
+        "ru" => "ru",
         _ => "en",
     }
 }
@@ -48,6 +49,7 @@ pub fn png_filter_label(language: &str) -> &'static str {
         "de" => "PNG-Bild",
         "ko" => "PNG 이미지",
         "fr" => "Image PNG",
+        "ru" => "Изображение PNG",
         _ => "PNG image",
     }
 }
@@ -72,6 +74,7 @@ pub fn shortcut_descriptions(language: &str) -> [&'static str; 3] {
             "Suspendre/Reprendre l’enregistrement",
             "Arrêter l’enregistrement",
         ],
+        "ru" => ["Захват", "Пауза/Продолжить запись", "Остановить запись"],
         _ => ["Capture", "Pause/Resume Recording", "Stop Recording"],
     }
 }
@@ -91,6 +94,7 @@ mod tests {
         assert_eq!(super::preferred_language("invalid", "fr-CA"), "fr");
         assert_eq!(super::png_filter_label("de"), "PNG-Bild");
         assert_eq!(super::png_filter_label("ko"), "PNG 이미지");
+        assert_eq!(super::png_filter_label("ru"), "Изображение PNG");
         assert_eq!(
             super::shortcut_descriptions("fr"),
             [
@@ -98,6 +102,10 @@ mod tests {
                 "Suspendre/Reprendre l’enregistrement",
                 "Arrêter l’enregistrement"
             ]
+        );
+        assert_eq!(
+            super::shortcut_descriptions("ru"),
+            ["Захват", "Пауза/Продолжить запись", "Остановить запись"]
         );
     }
 
@@ -114,6 +122,7 @@ mod tests {
             ("de-AT", "de"),
             ("ko_KR", "ko"),
             ("fr-CA", "fr"),
+            ("ru-RU", "ru"),
             ("ja-JP", "ja"),
             ("es", "en"),
         ] {

@@ -1,6 +1,6 @@
 # Kiri で動画を編集する
 
-[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · **日本語** · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md)
+[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · **日本語** · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md) · [Русский](video-editing.ru.md)
 
 ライブラリで動画を開き、画面上部の「トリミングと書き出し」を選びます。このガイドは現在のソースに対応しています。インストール済みバージョンの操作は更新履歴をご確認ください。
 

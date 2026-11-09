@@ -651,6 +651,7 @@ fn build_tray_menu(
             "de" => ("Aufnahme pausieren / fortsetzen", "Aufnahme beenden"),
             "ko" => ("녹화 일시 정지 / 재개", "녹화 중지"),
             "fr" => ("Suspendre / reprendre l’enregistrement", "Arrêter l’enregistrement"),
+            "ru" => ("Пауза / продолжить запись", "Остановить запись"),
             _ => ("Pause / Resume Recording", "Stop Recording"),
         };
         menu.insert(&MenuItem::with_id(app, "pause-recording", pause_label, true, None::<&str>)?, 2)?;
@@ -880,6 +881,7 @@ fn tray_labels(language: &str) -> (&'static str, &'static str, &'static str) {
         "de" => ("Bibliothek öffnen", "Aufnehmen", "Kiri beenden"),
         "ko" => ("라이브러리 열기", "캡처", "Kiri 종료"),
         "fr" => ("Ouvrir la bibliothèque", "Capturer", "Quitter Kiri"),
+        "ru" => ("Открыть библиотеку", "Захват", "Выйти из Kiri"),
         _ => ("Open Library", "Capture", "Quit Kiri"),
     }
 }

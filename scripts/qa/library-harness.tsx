@@ -174,5 +174,5 @@ Object.assign(window, {
   },
 });
 const language = params.get("language") ?? "en";
-setLanguage((["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"].includes(language) ? language : "en") as KiriLanguage);
+setLanguage((["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"].includes(language) ? language : "en") as KiriLanguage);
 createRoot(document.getElementById("root")!).render(params.has("toast") ? <ToastWindow /> : params.has("pin") ? <PinWindow id="pin-fixture" /> : <LibraryWindow />);

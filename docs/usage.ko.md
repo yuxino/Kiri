@@ -1,6 +1,6 @@
 # Kiri 사용하기
 
-[简体中文](usage.zh-CN.md) · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · **한국어** · [Français](usage.fr.md)
+[简体中文](usage.zh-CN.md) · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · **한국어** · [Français](usage.fr.md) · [Русский](usage.ru.md)
 
 [README로 돌아가기](readme/ko.md)
 
@@ -24,7 +24,7 @@ macOS Dock: ‘설정 → Dock에 표시’는 Dock 아이콘을 즉시 바꾸�
 
 ## 언어
 
-‘설정 → 일반 → 언어’에서 English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, Français를 선택하세요. 선택은 모든 Kiri 창에 즉시 적용되며 다시 시작해도 유지됩니다. 처음에는 시스템 언어를 따릅니다. 인터페이스 언어를 바꿔도 Linux에 설치된 OCR 언어 데이터는 바뀌지 않습니다.
+‘설정 → 일반 → 언어’에서 English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, Français, Русский를 선택하세요. 선택은 모든 Kiri 창에 즉시 적용되며 다시 시작해도 유지됩니다. 처음에는 시스템 언어를 따릅니다. 인터페이스 언어를 바꿔도 Linux에 설치된 OCR 언어 데이터는 바뀌지 않습니다.
 
 ## 캡처
 

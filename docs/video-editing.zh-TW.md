@@ -1,6 +1,6 @@
 # 在 Kiri 中剪輯影片
 
-[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · **繁體中文** · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md)
+[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · **繁體中文** · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md) · [Русский](video-editing.ru.md)
 
 **繁體中文**
 

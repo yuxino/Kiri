@@ -1,6 +1,6 @@
 # Monter une vidéo dans Kiri
 
-[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · **Français**
+[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · **Français** · [Русский](video-editing.ru.md)
 
 Ouvrez une vidéo de la bibliothèque et choisissez « Découper et exporter » au-dessus de l’image. Ce guide décrit le code actuel ; consultez les notes de version pour les commandes disponibles dans votre version installée.
 

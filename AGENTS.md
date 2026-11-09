@@ -58,9 +58,9 @@ Linux. Preserve these decisions:
 - The 3-2-1 countdown is centered and compact; it must not dim the selected
   recording region.
 - User-facing UI supports English, Simplified Chinese, Traditional Chinese,
-  Japanese, German, Korean, and French. It follows the OS preferred language
-  until the user chooses a language in Settings; that choice persists and
-  applies to every open window.
+  Japanese, German, Korean, French, and Russian. It follows the OS preferred
+  language until the user chooses a language in Settings; that choice persists
+  and applies to every open window.
 - Captures stay local. Never add uploads, analytics, accounts, or network
   behavior without an explicit product decision and privacy documentation.
   Recording, merging, thumbnails, and GIF conversion use platform media APIs
@@ -83,7 +83,7 @@ Linux. Preserve these decisions:
 ## Repository map
 
 - `src/` — React frontend: capture overlay, annotation canvas, library,
-  editor, countdown/control/ripple windows, i18n (en/zh-Hans/zh-Hant/ja/de/ko/fr), design tokens.
+  editor, countdown/control/ripple windows, i18n (en/zh-Hans/zh-Hant/ja/de/ko/fr/ru), design tokens.
 - `src-tauri/src/core/` — platform-independent models: geometry, recording
   policy, shortcut model, asset library (byte-compatible with the Swift
   version's `library.json`).
@@ -248,7 +248,7 @@ the separate checklist in `docs/linux.md` and report those limits explicitly.
 
 - All user-facing strings go through `t()`/`fmt()` in `src/i18n`; the English
   string is the key (matching the Swift L10n behavior).
-- Keep all seven dictionaries identical in key set and formatting placeholders.
+- Keep all eight dictionaries identical in key set and formatting placeholders.
 - Keep `README.md` and `docs/readme/*.md` concise product overviews: a short
   introduction, core features, a brief quick start, documentation links, and thanks.
   Integrate new capabilities into existing short bullets only when they change
@@ -256,7 +256,7 @@ the separate checklist in `docs/linux.md` and report those limits explicitly.
   paragraphs. Put detailed controls, edge cases, and troubleshooting in the
   relevant `docs/usage.*.md` or focused guide instead.
 - When the overview changes, update `README.md` and `docs/readme/zh-CN.md`
-  together and keep all seven language overviews equivalent. Minor interaction
+  together and keep all eight language overviews equivalent. Minor interaction
   changes belong in the guides and do not require additions to the README.
 - Record durable interaction changes as a new ADR instead of rewriting old
   history without explanation.

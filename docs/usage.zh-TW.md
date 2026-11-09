@@ -1,6 +1,6 @@
 # 使用 Kiri
 
-[简体中文](usage.zh-CN.md) · [English](usage.md) · **繁體中文** · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md)
+[简体中文](usage.zh-CN.md) · [English](usage.md) · **繁體中文** · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md) · [Русский](usage.ru.md)
 
 [返回 README](readme/zh-TW.md)
 
@@ -24,7 +24,7 @@ macOS Dock：「設定 → 在 Dock 中顯示」可立即切換 Dock 圖示並�
 
 ## 語言
 
-在「設定 → 一般 → 語言」選擇 English、简体中文、繁體中文、日本語、Deutsch、한국어 或 Français。選擇會立即套用到所有 Kiri 視窗，重啟後仍會保留；首次啟動時跟隨系統語言。介面語言不會變更 Linux OCR 已安裝的語言資料。
+在「設定 → 一般 → 語言」選擇 English、简体中文、繁體中文、日本語、Deutsch、한국어、Français 或 Русский。選擇會立即套用到所有 Kiri 視窗，重啟後仍會保留；首次啟動時跟隨系統語言。介面語言不會變更 Linux OCR 已安裝的語言資料。
 
 ## 擷取
 

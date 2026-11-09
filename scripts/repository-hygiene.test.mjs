@@ -270,7 +270,7 @@ test("current Markdown and HTML documentation links resolve inside the repositor
 });
 
 test("translation dictionaries stay aligned and contain no orphaned keys", () => {
-  const languages = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"];
+  const languages = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"];
   const dictionaries = languages.map((language) =>
     JSON.parse(readFileSync(join(repositoryRoot, "src", "i18n", `${language}.json`), "utf8")),
   );

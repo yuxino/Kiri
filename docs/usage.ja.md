@@ -1,6 +1,6 @@
 # Kiri の使い方
 
-[简体中文](usage.zh-CN.md) · [English](usage.md) · [繁體中文](usage.zh-TW.md) · **日本語** · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md)
+[简体中文](usage.zh-CN.md) · [English](usage.md) · [繁體中文](usage.zh-TW.md) · **日本語** · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md) · [Русский](usage.ru.md)
 
 [README に戻る](readme/ja.md)
 
@@ -24,7 +24,7 @@ macOS Dock：「設定 → Dock に表示」でアイコンをすぐに切り替
 
 ## 言語
 
-「設定 → 一般 → 言語」で English、简体中文、繁體中文、日本語、Deutsch、한국어、Français を選べます。選択はすべての Kiri ウィンドウに反映され、再起動後も保持されます。初回はシステム言語に従います。表示言語の変更は、Linux にインストールされた OCR 言語データを変えません。
+「設定 → 一般 → 言語」で English、简体中文、繁體中文、日本語、Deutsch、한국어、Français、Русский を選べます。選択はすべての Kiri ウィンドウに反映され、再起動後も保持されます。初回はシステム言語に従います。表示言語の変更は、Linux にインストールされた OCR 言語データを変えません。
 
 ## 撮影
 
