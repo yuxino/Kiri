@@ -4,7 +4,7 @@
   <p>스크린샷, 문자 인식, 화면 녹화. 캡처한 자료는 컴퓨터에 저장됩니다.</p>
   <p>macOS, Windows, Linux를 지원합니다.</p>
   <p><a href="https://kiri.yuxino.cn">공식 웹사이트</a> · <a href="https://github.com/yuxino/kiri/releases/latest">최신 버전 다운로드</a></p>
-  <p><a href="../../README.md">简体中文</a> · <a href="en.md">English</a> · <a href="zh-TW.md">繁體中文</a> · <a href="ja.md">日本語</a> · <a href="de.md">Deutsch</a> · <strong>한국어</strong> · <a href="fr.md">Français</a></p>
+  <p><a href="../../README.md">简体中文</a> · <a href="en.md">English</a> · <a href="zh-TW.md">繁體中文</a> · <a href="ja.md">日本語</a> · <a href="de.md">Deutsch</a> · <strong>한국어</strong> · <a href="fr.md">Français</a> · <a href="ru.md">Русский</a></p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="Release"></a>
     <a href="https://github.com/yuxino/kiri/actions/workflows/build.yml?query=branch%3Amain"><img src="https://img.shields.io/github/actions/workflow/status/yuxino/kiri/build.yml?style=flat&amp;logo=githubactions&amp;logoColor=white&amp;branch=main&amp;event=push&amp;label=CI" alt="CI"></a>

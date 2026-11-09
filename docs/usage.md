@@ -1,6 +1,6 @@
 # Using Kiri
 
-[简体中文](usage.zh-CN.md) · **English** · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md)
+[简体中文](usage.zh-CN.md) · **English** · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md) · [Русский](usage.ru.md)
 
 [Back to README](readme/en.md)
 
@@ -31,7 +31,7 @@ recoverable deletion; you do not need to empty Trash to delete selected captures
 
 ## Language
 
-Settings → General → Language offers English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, and Français. Your choice applies to every open Kiri window and survives relaunches. On first launch, Kiri follows the system language. UI language choices do not change installed Linux OCR language data.
+Settings → General → Language offers English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, Français, and Русский. Your choice applies to every open Kiri window and survives relaunches. On first launch, Kiri follows the system language. UI language choices do not change installed Linux OCR language data.
 
 ## Capture
 

@@ -1,6 +1,6 @@
 # Edit a video in Kiri
 
-[简体中文](video-editing.zh-CN.md) · **English** · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md)
+[简体中文](video-editing.zh-CN.md) · **English** · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md) · [Русский](video-editing.ru.md)
 
 
 Open a video from the library and choose **Trim & Export** above the picture. This guide describes the current source; check the release notes for the controls available in your installed version.

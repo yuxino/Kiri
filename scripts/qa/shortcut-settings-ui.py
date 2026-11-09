@@ -19,7 +19,7 @@ import urllib.request
 from playwright.async_api import async_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[2]
-LANGUAGES = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"]
+LANGUAGES = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"]
 AGENTS = {
     "macos": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",
     "windows": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36",

@@ -4,7 +4,7 @@
   <p>截图、文字识别和录屏，素材保存在本机。</p>
   <p>支持 macOS、Windows 和 Linux。</p>
   <p><a href="https://kiri.yuxino.cn">官网</a> · <a href="https://github.com/yuxino/kiri/releases/latest">下载最新版本</a></p>
-  <p><strong>简体中文</strong> · <a href="docs/readme/en.md">English</a> · <a href="docs/readme/zh-TW.md">繁體中文</a> · <a href="docs/readme/ja.md">日本語</a> · <a href="docs/readme/de.md">Deutsch</a> · <a href="docs/readme/ko.md">한국어</a> · <a href="docs/readme/fr.md">Français</a></p>
+  <p><strong>简体中文</strong> · <a href="docs/readme/en.md">English</a> · <a href="docs/readme/zh-TW.md">繁體中文</a> · <a href="docs/readme/ja.md">日本語</a> · <a href="docs/readme/de.md">Deutsch</a> · <a href="docs/readme/ko.md">한국어</a> · <a href="docs/readme/fr.md">Français</a> · <a href="docs/readme/ru.md">Русский</a></p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="Release"></a>
     <a href="https://github.com/yuxino/kiri/actions/workflows/build.yml?query=branch%3Amain"><img src="https://img.shields.io/github/actions/workflow/status/yuxino/kiri/build.yml?style=flat&amp;logo=githubactions&amp;logoColor=white&amp;branch=main&amp;event=push&amp;label=CI" alt="CI"></a>

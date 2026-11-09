@@ -109,7 +109,7 @@ the tray and global shortcut remain available when the Dock icon is hidden.
 
 ## Language preferences
 
-The seven dictionaries in `src/i18n/` share English keys and formatting
+The eight dictionaries in `src/i18n/` share English keys and formatting
 placeholders. Settings uses language self-names in a compact selector. The
 backend stores the selected code in `language.json`; saved choices override the
 system locale, including Traditional Chinese locales. A successful save

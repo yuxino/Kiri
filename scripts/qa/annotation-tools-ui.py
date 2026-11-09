@@ -15,7 +15,7 @@ from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get("KIRI_ANNOTATION_QA_OUT", "annotation-tools-review"))
 URL = "http://127.0.0.1:5198/scripts/qa/annotation-tools-harness.html"
-LANGUAGES = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"]
+LANGUAGES = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"]
 
 
 async def rect(page, selector):

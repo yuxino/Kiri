@@ -1,6 +1,6 @@
 # Kiri에서 동영상 편집하기
 
-[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · **한국어** · [Français](video-editing.fr.md)
+[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · **한국어** · [Français](video-editing.fr.md) · [Русский](video-editing.ru.md)
 
 라이브러리에서 동영상을 열고 화면 위의 ‘자르기 및 내보내기’를 선택하세요. 이 안내는 현재 소스의 기능을 설명합니다. 설치한 버전에서 사용할 수 있는 기능은 해당 릴리스 안내를 확인하세요.
 

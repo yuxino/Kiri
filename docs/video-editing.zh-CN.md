@@ -1,6 +1,6 @@
 # 在 Kiri 中剪辑视频
 
-**简体中文** · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md)
+**简体中文** · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · [Deutsch](video-editing.de.md) · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md) · [Русский](video-editing.ru.md)
 
 
 从素材库打开视频，点击画面上方的「剪辑与导出」。本指南说明当前源码中的功能；你安装的版本有哪些操作，请以相应更新记录为准。

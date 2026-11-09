@@ -1,6 +1,6 @@
 # Utiliser Kiri
 
-[简体中文](usage.zh-CN.md) · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · **Français**
+[简体中文](usage.zh-CN.md) · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · **Français** · [Русский](usage.ru.md)
 
 [Retour au README](readme/fr.md)
 
@@ -24,7 +24,7 @@ Dock macOS : Réglages → Afficher dans le Dock modifie immédiatement l’icô
 
 ## Langue
 
-Réglages → Général → Langue propose English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어 et Français. Votre choix s’applique immédiatement à toutes les fenêtres de Kiri et reste mémorisé après un redémarrage. Au premier lancement, Kiri suit la langue du système. Changer la langue d’interface ne change pas les données de langue OCR installées sous Linux.
+Réglages → Général → Langue propose English, 简体中文, 繁體中文, 日本語, Deutsch, 한국어, Français et Русский. Votre choix s’applique immédiatement à toutes les fenêtres de Kiri et reste mémorisé après un redémarrage. Au premier lancement, Kiri suit la langue du système. Changer la langue d’interface ne change pas les données de langue OCR installées sous Linux.
 
 ## Capture
 

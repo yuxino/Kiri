@@ -22,6 +22,7 @@ application or a durable product decision.
 | Deutsch | [Kiri](readme/de.md) | [Deutsch](usage.de.md) | [Deutsch](video-editing.de.md) |
 | 한국어 | [Kiri](readme/ko.md) | [한국어](usage.ko.md) | [한국어](video-editing.ko.md) |
 | Français | [Kiri](readme/fr.md) | [Français](usage.fr.md) | [Français](video-editing.fr.md) |
+| Русский | [Kiri](readme/ru.md) | [Русский](usage.ru.md) | [Русский](video-editing.ru.md) |
 
 The user guides cover the same platform boundaries. Architecture, ADRs, detailed
 Linux QA, and contribution records retain their original language.
@@ -272,3 +273,6 @@ development.
 
 - [ADR 0131: Standard remote OCR URL validation](adr/0131-standard-remote-ocr-urls.md)
   — conventional HTTP/HTTPS profile validation with explicit per-image consent.
+
+- [ADR 0132: Russian as an eighth UI language](adr/0132-russian-ui-language.md)
+  — an eighth complete dictionary using the existing selector, preference, and native labels.

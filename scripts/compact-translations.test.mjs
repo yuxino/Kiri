@@ -6,7 +6,7 @@ import { compactTranslations, compactTranslationsPlugin } from "./compact-transl
 
 test("compacted dictionaries preserve every translation and English alias", () => {
   let canonicalKeys;
-  for (const language of ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"]) {
+  for (const language of ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"]) {
     const dictionary = JSON.parse(readFileSync(new URL(`../src/i18n/${language}.json`, import.meta.url)));
     const keys = Object.keys(dictionary).sort();
     canonicalKeys ??= keys;

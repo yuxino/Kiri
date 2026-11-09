@@ -1,6 +1,6 @@
 # Kiri 使用说明
 
-**简体中文** · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md)
+**简体中文** · [English](usage.md) · [繁體中文](usage.zh-TW.md) · [日本語](usage.ja.md) · [Deutsch](usage.de.md) · [한국어](usage.ko.md) · [Français](usage.fr.md) · [Русский](usage.ru.md)
 
 [返回 README](../README.md)
 
@@ -30,7 +30,7 @@ macOS Dock：设置中的「在 Dock 中显示」会立即切换图标显示，�
 
 ## 语言
 
-在「设置 → 通用 → 语言」中选择 English、简体中文、繁體中文、日本語、Deutsch、한국어 或 Français。选择会应用到每个已打开的 Kiri 窗口，重启后仍会保留；首次启动跟随系统语言。界面语言不会改变 Linux 已安装的 OCR 语言数据。
+在「设置 → 通用 → 语言」中选择 English、简体中文、繁體中文、日本語、Deutsch、한국어、Français 或 Русский。选择会应用到每个已打开的 Kiri 窗口，重启后仍会保留；首次启动跟随系统语言。界面语言不会改变 Linux 已安装的 OCR 语言数据。
 
 ## 截图与录屏
 

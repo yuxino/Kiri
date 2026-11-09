@@ -5,7 +5,7 @@ import test from "node:test";
 import ts from "typescript";
 import { createLibraryHarness, nodes, settleRequests, testAsset } from "./helpers/library-render-harness.mjs";
 
-const languages = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr"];
+const languages = ["en", "zh-Hans", "zh-Hant", "ja", "de", "ko", "fr", "ru"];
 const dictionaries = Object.fromEntries(languages.map(language => [language,
   JSON.parse(readFileSync(new URL(`../src/i18n/${language}.json`, import.meta.url))),
 ]));
@@ -43,7 +43,7 @@ test("locale resolution and live formatting cover every selectable language", ()
     ["en-GB", "en"], ["zh", "zh-Hans"], ["zh-CN", "zh-Hans"],
     ["zh_TW", "zh-Hant"], ["zh-Hant-HK", "zh-Hant"], ["zh-HK", "zh-Hant"],
     ["zh-Hans-TW", "zh-Hans"], ["zh-Hans-HK", "zh-Hans"], ["zh-Hant-CN", "zh-Hant"],
-    ["de-AT", "de"], ["ko_KR", "ko"], ["fr-CA", "fr"], ["ja-JP", "ja"], ["es", "en"],
+    ["de-AT", "de"], ["ko_KR", "ko"], ["fr-CA", "fr"], ["ja-JP", "ja"], ["ru-RU", "ru"], ["es", "en"],
   ]) assert.equal(locale.languageForLocale(input), expected, input);
   let changed = 0;
   const dispose = locale.onLanguageChange(() => changed++);
@@ -55,7 +55,7 @@ test("locale resolution and live formatting cover every selectable language", ()
     assert.equal(locale.fmt("Checking video… %d%", 53.9), dictionaries[language]["Checking video… %d%"].replace("%d", "53"));
   }
   dispose();
-  assert.equal(changed, 6);
+  assert.equal(changed, 7);
   assert.equal(locale.isLanguage("de-DE"), false);
   document.documentElement.lang = "en";
   locale.setLanguage("fr");

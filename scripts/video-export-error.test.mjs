@@ -160,11 +160,11 @@ test("unannotated exports require no annotation canvas, while real annotations s
   assert.deepEqual(stickers.rasterizeVideoStickers([]),[]);
 });
 
-test("real export panel shows stage guidance and safe code in all seven languages",()=>{
+test("real export panel shows stage guidance and safe code in all eight languages",()=>{
   const source='import React from "react";\n'+readFileSync(new URL("../src/windows/VideoExportPanel.tsx",import.meta.url),"utf8");
   const failures=[... ["request","source","snapshot","render","save","worker"].map(stage=>({stage,code:"io_permission_denied"})),
     {stage:"progress",code:"unavailable"},{stage:"annotations",code:"unavailable"},{stage:"open",code:"unavailable"},{stage:"unknown",code:"unknown"}];
-  for(const language of ["en","zh-Hans","zh-Hant","ja","de","ko","fr"]){
+  for(const language of ["en","zh-Hans","zh-Hant","ja","de","ko","fr","ru"]){
     const dictionary=JSON.parse(readFileSync(new URL(`../src/i18n/${language}.json`,import.meta.url),"utf8"));
     for(const failure of failures){
       const message=videoExportFailureMessage(failure);

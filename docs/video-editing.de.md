@@ -1,6 +1,6 @@
 # Ein Video in Kiri bearbeiten
 
-[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · **Deutsch** · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md)
+[简体中文](video-editing.zh-CN.md) · [English](video-editing.md) · [繁體中文](video-editing.zh-TW.md) · [日本語](video-editing.ja.md) · **Deutsch** · [한국어](video-editing.ko.md) · [Français](video-editing.fr.md) · [Русский](video-editing.ru.md)
 
 Öffnen Sie ein Video aus der Bibliothek und wählen Sie „Zuschneiden und exportieren“ oberhalb des Bildes. Dieser Leitfaden beschreibt den aktuellen Quellstand; die Versionshinweise nennen die Funktionen Ihrer installierten Version.
 
