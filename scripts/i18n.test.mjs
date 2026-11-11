@@ -21,7 +21,7 @@ function moduleAt(path, document = { documentElement: { lang: "" } }) {
   return exports;
 }
 
-test("all seven complete dictionaries preserve placeholders and their order", () => {
+test("all eight UI dictionaries preserve placeholders and their order", () => {
   const keys = Object.keys(dictionaries.en);
   const placeholders = text => text.match(/%[@d]|\{\w+\}/g) ?? [];
   for (const language of languages) {
