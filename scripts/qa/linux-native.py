@@ -19,6 +19,7 @@ import time
 import traceback
 
 from PIL import Image, ImageChops, ImageGrab, ImageStat
+from library_native_checks import expected_restored_index
 from linux_desktop_fixture import DesktopFixture, RECORDING_REGION
 from linux_audio_tone import inspect_tone
 from pin_native_checks import annotated_capture_evidence, capture_origin_evidence, pin_content_evidence, pin_lifecycle_evidence, pin_open_log_marker, pin_outline_evidence, proportional_resize_evidence
@@ -482,16 +483,16 @@ def native_batch_trash_acceptance():
     wait_for_control(f"Move to Trash ({len(selected)})")
     screenshot("batch-selected.png")
     click_control(f"Move to Trash ({len(selected)})")
-    wait_for("selected native assets move to recoverable Trash", lambda:
-             all(item.get("trashedAt") is not None for item in assets() if item["id"] in selected))
+    expected = wait_for("selected native assets move to recoverable Trash", lambda:
+                        expected_restored_index(before, assets(), selected))
     if not all((library / "Assets" / item["filename"]).is_file() for item in before if item["id"] in selected):
         raise RuntimeError("Moving to Trash must retain the original media files")
     click_control("Trash")
     click_control("Select captures")
     click_control("Select All")
     click_control(f"Restore ({len(selected)})")
-    wait_for("batch restore returns the original native index", lambda: assets() == before)
-    report["batch_trash"] = {"selected_count":len(selected), "files_preserved":True, "restored_original_index":True}
+    wait_for("batch restore preserves asset metadata and OCR revisions", lambda: assets() == expected)
+    report["batch_trash"] = {"selected_count": len(selected), "files_preserved": True, "restored_asset_metadata": True}
     report["checks"].append("explicit native multi-select and Select All move captures to recoverable Trash and restore unchanged assets")
 
 
