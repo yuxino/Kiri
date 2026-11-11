@@ -60,6 +60,7 @@
 
 .kiri-language-row,
 .kiri-dock-row,
+.kiri-screenshot-ocr-row,
 .kiri-shortcut-row,
 .kiri-storage-row {
   min-height: 64px;
@@ -73,6 +74,7 @@
 
 .kiri-language-row > div:first-child,
 .kiri-dock-copy,
+.kiri-screenshot-ocr-copy,
 .kiri-shortcut-copy,
 .kiri-storage-copy {
   display: flex;
@@ -82,6 +84,7 @@
 
 .kiri-language-row strong,
 .kiri-dock-row strong,
+.kiri-screenshot-ocr-row strong,
 .kiri-shortcut-row strong,
 .kiri-storage-row strong,
 .ocr-engine-copy strong {
@@ -92,6 +95,7 @@
 
 .kiri-language-row span,
 .kiri-dock-copy > span,
+.kiri-screenshot-ocr-copy > span,
 .kiri-shortcut-copy > span,
 .kiri-storage-copy > span,
 .ocr-engine-copy > span:not(.ocr-engine-title-row) {
@@ -100,6 +104,7 @@
   line-height: 1.45;
 }
 
+.kiri-screenshot-ocr-copy,
 .kiri-storage-copy {
   min-width: 0;
 }

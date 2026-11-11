@@ -139,6 +139,7 @@ development.
 - [ADR 0028: Committed OCR selection](adr/0028-ocr-committed-selection.md)
 
 - [ADR 0030: Text history and saved screenshot OCR](adr/0030-ocr-history.md)
+- [ADR 0133: OCR history actions and screenshot text search](adr/0133-ocr-history-and-screenshot-search.md)
 
 - [ADR 0031: Windows update completion](adr/0031-windows-update-relaunch.md)
 

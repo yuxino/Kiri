@@ -79,6 +79,12 @@ pub struct CaptureAsset {
     /// Original recognition retained after a user correction; absent until edited.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub ocr_original_text: Option<String>,
+    /// Revision of the saved image or OCR history text, including Trash transitions.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub ocr_revision: Option<uuid::Uuid>,
+    /// Local search index on regular screenshots. Independent of OCR history.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub indexed_ocr_text: Option<String>,
     /// Saved QR payload; absent in older libraries.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub qr_text: Option<String>,
@@ -130,6 +136,9 @@ impl CaptureAsset {
         if let Some(text) = &self.ocr_text {
             parts.push(text.clone());
         }
+        if let Some(text) = &self.indexed_ocr_text {
+            parts.push(text.clone());
+        }
         if let Some(text) = &self.qr_text {
             parts.push(text.clone());
         }
@@ -153,6 +162,8 @@ mod tests {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: vec![],
             pixel_width: 100,
@@ -178,6 +189,8 @@ mod tests {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: vec![],
             pixel_width: 1920,
@@ -211,6 +224,8 @@ mod tests {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: vec![],
             pixel_width: 10,

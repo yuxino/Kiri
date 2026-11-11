@@ -26,6 +26,8 @@ pub enum AssetLibraryError {
     UnsupportedOcrRecord,
     #[error("the OCR text changed since it was opened")]
     OcrTextChanged,
+    #[error("replacing a correction requires confirmation")]
+    OcrCorrectionNeedsConfirmation,
     #[error("invalid filename")]
     InvalidFilename,
     #[error("a file with that name already exists")]
@@ -65,6 +67,8 @@ pub enum AssetLibraryError {
 pub type Result<T> = std::result::Result<T, AssetLibraryError>;
 
 const ANNOTATION_PROJECT_VERSION: u32 = 1;
+const MAX_OCR_HISTORY_TEXT_BYTES: usize = 1024 * 1024;
+const MAX_INDEXED_OCR_TEXT_BYTES: usize = 32 * 1024;
 
 /// Test-only view of a validated annotation project.
 #[cfg(test)]
@@ -315,7 +319,7 @@ impl AssetLibrary {
     }
 
     pub fn restore_missing_asset(
-        &self,
+        &mut self,
         id: &uuid::Uuid,
         source: &Path,
         proof: &ReplacementFileProof,
@@ -330,8 +334,15 @@ impl AssetLibrary {
         if proof.kind != asset.kind || proof.extension != replacement_file_extension(&asset)? {
             return Err(AssetLibraryError::InvalidReplacementFile);
         }
-        atomic_copy_missing(source, &self.asset_url(&asset), Some(proof))?;
-        Ok(asset)
+        let destination = self.asset_url(&asset);
+        atomic_copy_missing(source, &destination, Some(proof))?;
+        if asset.kind == CaptureKind::Image {
+            if let Err(error) = self.update(id, invalidate_image_ocr) {
+                let _ = std::fs::remove_file(&destination);
+                return Err(error);
+            }
+        }
+        Ok(self.asset_by_id(id).expect("restored asset remains present").clone())
     }
 
     pub fn remove_missing_asset(&mut self, id: &uuid::Uuid) -> Result<()> {
@@ -365,10 +376,17 @@ impl AssetLibrary {
     /// Mirrors `AssetLibrary.search(_:includeTrashed:)`.
     pub fn search(&self, query: &str, include_trashed: bool) -> Vec<CaptureAsset> {
         let normalized = query.trim().to_lowercase();
-        self.all_assets(include_trashed)
-            .into_iter()
-            .filter(|asset| normalized.is_empty() || asset.searchable_text().contains(&normalized))
-            .collect()
+        let mut assets: Vec<_> = self
+            .index
+            .iter()
+            .filter(|asset| {
+                asset.trashed_at.is_some() == include_trashed
+                    && (normalized.is_empty() || asset.searchable_text().contains(&normalized))
+            })
+            .cloned()
+            .collect();
+        assets.sort_by(|a, b| b.created_at.total_cmp(&a.created_at));
+        assets
     }
 
     pub fn asset_by_id(&self, id: &uuid::Uuid) -> Option<&CaptureAsset> {
@@ -412,9 +430,7 @@ impl AssetLibrary {
         text: String,
         source_application: Option<String>,
     ) -> Result<CaptureAsset> {
-        if text.trim().is_empty() || text.len() > 1024 * 1024 {
-            return Err(AssetLibraryError::InvalidOcrText);
-        }
+        validate_history_text(&text)?;
         self.import_data_inner(
             png,
             CaptureKind::Image,
@@ -454,35 +470,102 @@ impl AssetLibrary {
         )
     }
 
-    /// A correction changes only the searchable text; the source PNG is untouched.
-    /// The original recognition is retained on the first edit and cleared on reset.
+    pub(crate) fn ocr_history_record(
+        &self,
+        id: &uuid::Uuid,
+        revision: Option<uuid::Uuid>,
+    ) -> Result<&CaptureAsset> {
+        let asset = self.asset_by_id(id).ok_or(AssetLibraryError::AssetNotFound)?;
+        if asset.kind != CaptureKind::Image || asset.trashed_at.is_some() || asset.ocr_text.is_none() {
+            return Err(AssetLibraryError::UnsupportedOcrRecord);
+        }
+        if asset.ocr_revision != revision {
+            return Err(AssetLibraryError::OcrTextChanged);
+        }
+        Ok(asset)
+    }
+
+    /// The first correction saves the machine result, which remains available
+    /// for restore until a fresh recognition is explicitly accepted.
     pub fn update_ocr_text(
         &mut self,
         id: &uuid::Uuid,
         expected_text: &str,
+        expected_revision: Option<uuid::Uuid>,
         replacement: Option<String>,
     ) -> Result<CaptureAsset> {
-        let current = self.asset_by_id(id).ok_or(AssetLibraryError::AssetNotFound)?;
-        if current.kind != CaptureKind::Image || current.trashed_at.is_some() || current.ocr_text.is_none() {
-            return Err(AssetLibraryError::UnsupportedOcrRecord);
-        }
+        let current = self.ocr_history_record(id, expected_revision)?;
         if current.ocr_text.as_deref() != Some(expected_text) {
             return Err(AssetLibraryError::OcrTextChanged);
         }
         let (next_text, original) = match replacement {
             Some(text) => {
-                if text.trim().is_empty() || text.len() > 1024 * 1024 {
-                    return Err(AssetLibraryError::InvalidOcrText);
-                }
+                validate_history_text(&text)?;
                 (text, current.ocr_original_text.clone().or_else(|| current.ocr_text.clone()))
             }
             None => (current.ocr_original_text.clone().ok_or(AssetLibraryError::UnsupportedOcrRecord)?, None),
         };
+        self.commit_ocr_text(id, next_text, original)
+    }
+
+    pub(crate) fn replace_ocr_recognition(
+        &mut self,
+        id: &uuid::Uuid,
+        expected_revision: Option<uuid::Uuid>,
+        replace_correction: bool,
+        text: String,
+    ) -> Result<Option<CaptureAsset>> {
+        let current = self.ocr_history_record(id, expected_revision)?;
+        if text.trim().is_empty() {
+            return Ok(None);
+        }
+        if current.ocr_original_text.is_some() && !replace_correction {
+            return Err(AssetLibraryError::OcrCorrectionNeedsConfirmation);
+        }
+        validate_history_text(&text)?;
+        self.commit_ocr_text(id, text, None).map(Some)
+    }
+
+    fn commit_ocr_text(
+        &mut self,
+        id: &uuid::Uuid,
+        text: String,
+        original: Option<String>,
+    ) -> Result<CaptureAsset> {
         self.update(id, |asset| {
-            asset.ocr_text = Some(next_text);
+            asset.ocr_text = Some(text);
             asset.ocr_original_text = original;
+            asset.ocr_revision = Some(uuid::Uuid::new_v4());
         })?;
         Ok(self.asset_by_id(id).expect("updated OCR asset remains present").clone())
+    }
+
+    pub(crate) fn index_screenshot_text(
+        &mut self,
+        id: &uuid::Uuid,
+        expected_revision: Option<uuid::Uuid>,
+        mut text: String,
+    ) -> Result<bool> {
+        let Some(asset) = self.asset_by_id(id) else {
+            return Ok(false);
+        };
+        if asset.kind != CaptureKind::Image
+            || asset.trashed_at.is_some()
+            || asset.ocr_text.is_some()
+            || asset.qr_text.is_some()
+            || asset.ocr_revision != expected_revision
+            || asset.indexed_ocr_text.is_some()
+            || text.trim().is_empty()
+        {
+            return Ok(false);
+        }
+        let mut limit = text.len().min(MAX_INDEXED_OCR_TEXT_BYTES);
+        while !text.is_char_boundary(limit) {
+            limit -= 1;
+        }
+        text.truncate(limit);
+        self.update(id, |asset| asset.indexed_ocr_text = Some(text))?;
+        Ok(true)
     }
 
     /// Imports a flattened image together with its immutable clean source and
@@ -920,24 +1003,23 @@ impl AssetLibrary {
             None => self.write_editor_flat_snapshot(&snapshot, rendered)?,
         }
 
-        let Some((pixel_width, pixel_height)) = output_size else {
+        let pixels_changed = snapshot.rendered != rendered;
+        if !pixels_changed && output_size.is_none() {
             return Ok(snapshot.asset);
-        };
-        let position = self
-            .index
-            .iter()
-            .position(|asset| &asset.id == id)
-            .ok_or(AssetLibraryError::AssetNotFound)?;
-        let mut next_index = self.index.clone();
-        next_index[position].pixel_width = pixel_width;
-        next_index[position].pixel_height = pixel_height;
-        if let Err(error) = self.persist_index(&next_index) {
+        }
+        if let Err(error) = self.update(id, |asset| {
+            if let Some((width, height)) = output_size {
+                asset.pixel_width = width;
+                asset.pixel_height = height;
+            }
+            if pixels_changed || output_size.is_some() {
+                invalidate_image_ocr(asset);
+            }
+        }) {
             restore_editor_snapshot(&snapshot, &self.asset_url(&snapshot.asset));
             return Err(error);
         }
-        let updated = next_index[position].clone();
-        self.index = next_index;
-        Ok(updated)
+        Ok(self.asset_by_id(id).expect("saved image remains present").clone())
     }
 
     #[cfg(test)]
@@ -1027,7 +1109,8 @@ impl AssetLibrary {
     }
 
     pub fn move_to_trash(&mut self, id: &uuid::Uuid) -> Result<()> {
-        self.update(id, |asset| asset.trashed_at = Some(now_ms()))
+        let trashed_at = now_ms();
+        self.update(id, |asset| mark_trashed(asset, trashed_at))
     }
 
     pub fn restore(&mut self, id: &uuid::Uuid) -> Result<()> {
@@ -1040,7 +1123,7 @@ impl AssetLibrary {
 
     pub fn batch_move_to_trash(&mut self, ids: &[uuid::Uuid]) -> Result<()> {
         let trashed_at = now_ms();
-        self.batch_update(ids, |asset| asset.trashed_at = Some(trashed_at))
+        self.batch_update(ids, |asset| mark_trashed(asset, trashed_at))
     }
 
     pub fn batch_restore(&mut self, ids: &[uuid::Uuid]) -> Result<()> {
@@ -1468,6 +1551,8 @@ impl AssetLibrary {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: Vec::new(),
             pixel_width,
@@ -1498,6 +1583,8 @@ impl AssetLibrary {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: Vec::new(),
             pixel_width,
@@ -1508,6 +1595,25 @@ impl AssetLibrary {
             trashed_at: None,
         }
     }
+}
+
+fn mark_trashed(asset: &mut CaptureAsset, trashed_at: f64) {
+    asset.trashed_at = Some(trashed_at);
+    if asset.kind == CaptureKind::Image {
+        asset.ocr_revision = Some(uuid::Uuid::new_v4());
+    }
+}
+
+fn invalidate_image_ocr(asset: &mut CaptureAsset) {
+    asset.indexed_ocr_text = None;
+    asset.ocr_revision = Some(uuid::Uuid::new_v4());
+}
+
+fn validate_history_text(text: &str) -> Result<()> {
+    if text.trim().is_empty() || text.len() > MAX_OCR_HISTORY_TEXT_BYTES {
+        return Err(AssetLibraryError::InvalidOcrText);
+    }
+    Ok(())
 }
 
 fn ensure_or_create_directory(path: &Path) -> Result<()> {
@@ -2255,17 +2361,17 @@ mod tests {
         let (_dir, root) = temp_root();
         let mut library = AssetLibrary::open(root.clone()).unwrap();
         let record = library.import_ocr(b"snapshot", 120, 80, "tezt".into(), None).unwrap();
-        let corrected = library.update_ocr_text(&record.id, "tezt", Some("text".into())).unwrap();
+        let corrected = library.update_ocr_text(&record.id, "tezt", record.ocr_revision, Some("text".into())).unwrap();
         assert_eq!(corrected.ocr_original_text.as_deref(), Some("tezt"));
         assert_eq!(library.search("text", false)[0].id, record.id);
         assert!(library.search("tezt", false).is_empty());
-        assert!(matches!(library.update_ocr_text(&record.id, "tezt", Some("stale".into())), Err(AssetLibraryError::OcrTextChanged)));
-        assert!(matches!(library.update_ocr_text(&record.id, "text", Some("  ".into())), Err(AssetLibraryError::InvalidOcrText)));
-        let corrected = library.update_ocr_text(&record.id, "text", Some("text!".into())).unwrap();
+        assert!(matches!(library.update_ocr_text(&record.id, "tezt", record.ocr_revision, Some("stale".into())), Err(AssetLibraryError::OcrTextChanged)));
+        assert!(matches!(library.update_ocr_text(&record.id, "text", corrected.ocr_revision, Some("  ".into())), Err(AssetLibraryError::InvalidOcrText)));
+        let corrected = library.update_ocr_text(&record.id, "text", corrected.ocr_revision, Some("text!".into())).unwrap();
         assert_eq!(corrected.ocr_original_text.as_deref(), Some("tezt"));
         let mut reopened = AssetLibrary::open_existing(root).unwrap();
         assert_eq!(reopened.asset_by_id(&record.id).unwrap().ocr_original_text.as_deref(), Some("tezt"));
-        let restored = reopened.update_ocr_text(&record.id, "text!", None).unwrap();
+        let restored = reopened.update_ocr_text(&record.id, "text!", corrected.ocr_revision, None).unwrap();
         assert_eq!(restored.ocr_text.as_deref(), Some("tezt"));
         assert!(restored.ocr_original_text.is_none());
         assert_eq!(std::fs::read(reopened.asset_url(&record)).unwrap(), b"snapshot");
@@ -2277,9 +2383,99 @@ mod tests {
         let mut library = AssetLibrary::open(root.clone()).unwrap();
         let record = library.import_ocr(b"snapshot", 120, 80, "tezt".into(), None).unwrap();
         library.persist_fail.set(true);
-        assert!(library.update_ocr_text(&record.id, "tezt", Some("text".into())).is_err());
+        assert!(library.update_ocr_text(&record.id, "tezt", record.ocr_revision, Some("text".into())).is_err());
         assert_eq!(library.asset_by_id(&record.id).unwrap().ocr_text.as_deref(), Some("tezt"));
         assert_eq!(AssetLibrary::open_existing(root).unwrap().asset_by_id(&record.id).unwrap().ocr_text.as_deref(), Some("tezt"));
+    }
+
+    #[test]
+    fn rerecognition_requires_confirmation_and_keeps_both_texts_on_empty_or_failed_save() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = library.import_ocr(b"snapshot", 120, 80, "tezt".into(), None).unwrap();
+        let corrected = library.update_ocr_text(&asset.id, "tezt", asset.ocr_revision, Some("corrected".into())).unwrap();
+
+        assert_eq!(library.replace_ocr_recognition(&asset.id, corrected.ocr_revision, true, " \n ".into()).unwrap(), None);
+        assert!(matches!(
+            library.replace_ocr_recognition(&asset.id, corrected.ocr_revision, false, "fresh".into()),
+            Err(AssetLibraryError::OcrCorrectionNeedsConfirmation),
+        ));
+        library.persist_fail.set(true);
+        assert!(library.replace_ocr_recognition(&asset.id, corrected.ocr_revision, true, "fresh".into()).is_err());
+        assert_eq!(library.asset_by_id(&asset.id), Some(&corrected));
+        assert_eq!(AssetLibrary::open_existing(root).unwrap().asset_by_id(&asset.id), Some(&corrected));
+
+        library.persist_fail.set(false);
+        let updated = library.replace_ocr_recognition(&asset.id, corrected.ocr_revision, true, "fresh".into()).unwrap().unwrap();
+        assert_eq!(updated.id, asset.id);
+        assert_eq!(updated.ocr_text.as_deref(), Some("fresh"));
+        assert!(updated.ocr_original_text.is_none());
+        assert_ne!(updated.ocr_revision, corrected.ocr_revision);
+        assert_eq!(std::fs::read(library.asset_url(&asset)).unwrap(), b"snapshot");
+        assert_eq!(library.search("fresh", false).len(), 1);
+        assert!(library.search("corrected", false).is_empty());
+    }
+
+    #[test]
+    fn stale_rerecognition_cannot_overwrite_an_edit_or_a_restored_record() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root).unwrap();
+        let asset = library.import_ocr(b"snapshot", 120, 80, "text".into(), None).unwrap();
+        // Saving the same visible text is still a new revision.
+        let edited = library.update_ocr_text(&asset.id, "text", asset.ocr_revision, Some("text".into())).unwrap();
+        assert!(matches!(
+            library.replace_ocr_recognition(&asset.id, asset.ocr_revision, true, "stale".into()),
+            Err(AssetLibraryError::OcrTextChanged),
+        ));
+        library.move_to_trash(&asset.id).unwrap();
+        assert!(matches!(
+            library.replace_ocr_recognition(&asset.id, edited.ocr_revision, true, "stale".into()),
+            Err(AssetLibraryError::UnsupportedOcrRecord),
+        ));
+        library.restore(&asset.id).unwrap();
+        assert!(matches!(
+            library.replace_ocr_recognition(&asset.id, edited.ocr_revision, true, "stale".into()),
+            Err(AssetLibraryError::OcrTextChanged),
+        ));
+        library.permanently_delete(&asset.id).unwrap();
+        assert!(matches!(
+            library.replace_ocr_recognition(&asset.id, edited.ocr_revision, true, "stale".into()),
+            Err(AssetLibraryError::AssetNotFound),
+        ));
+    }
+
+    #[test]
+    fn screenshot_index_survives_reopen_but_never_creates_history_or_overwrites_an_edit() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = import_test_assets(&mut library, 1).remove(0);
+        let history = library.import_ocr(b"snapshot", 120, 80, "manual".into(), None).unwrap();
+        assert!(!library.index_screenshot_text(&history.id, history.ocr_revision, "background".into()).unwrap());
+        assert!(!library.index_screenshot_text(&asset.id, asset.ocr_revision, "  ".into()).unwrap());
+        assert!(library.index_screenshot_text(&asset.id, asset.ocr_revision, "КИРИ example".into()).unwrap());
+        assert!(!library.index_screenshot_text(&asset.id, asset.ocr_revision, "duplicate".into()).unwrap());
+        drop(library);
+
+        let mut reopened = AssetLibrary::open_existing(root).unwrap();
+        let found = reopened.search("  кири ", false);
+        assert_eq!(found[0].id, asset.id);
+        assert!(found[0].ocr_text.is_none());
+        let snapshot = reopened.load_editor_snapshot(&asset.id).unwrap();
+        reopened.persist_fail.set(true);
+        assert!(reopened.save_editor_snapshot(&asset.id, &snapshot.revision_sha256, b"modified", None).is_err());
+        assert_eq!(reopened.load_editor_snapshot(&asset.id).unwrap(), snapshot);
+        assert_eq!(reopened.search("кири", false).len(), 1);
+
+        reopened.persist_fail.set(false);
+        let edited = reopened.save_editor_snapshot(&asset.id, &snapshot.revision_sha256, b"modified", None).unwrap();
+        assert!(reopened.search("кири", false).is_empty());
+        assert!(!reopened.index_screenshot_text(&asset.id, asset.ocr_revision, "stale".into()).unwrap());
+
+        reopened.batch_move_to_trash(&[asset.id]).unwrap();
+        reopened.restore(&asset.id).unwrap();
+        assert!(!reopened.index_screenshot_text(&asset.id, edited.ocr_revision, "stale".into()).unwrap());
+        reopened.permanently_delete(&asset.id).unwrap();
+        assert!(!reopened.index_screenshot_text(&asset.id, edited.ocr_revision, "stale".into()).unwrap());
     }
 
     #[test]
@@ -2671,7 +2867,8 @@ mod tests {
         let restored = library
             .restore_missing_asset(&asset.id, &replacement, &proof)
             .unwrap();
-        assert_eq!(restored, asset);
+        assert!(restored.ocr_revision.is_some());
+        assert_eq!(CaptureAsset { ocr_revision: asset.ocr_revision, ..restored }, asset);
         assert_eq!(
             std::fs::read(library.asset_url(&asset)).unwrap(),
             b"\x89PNG\r\n\x1a\nrestored"

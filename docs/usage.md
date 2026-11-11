@@ -178,6 +178,20 @@ In Screenshot mode, hover to magnify the original pixels and see their coordinat
 
 Converting a library MP4 to GIF checks video decoding before encoding. Use Cancel during checking or conversion; Cancel all stops multiple jobs. The original video remains. Cancellation is unavailable once the final library save begins.
 
+## Text History and screenshot search
+
+Select a record in Text History to **Move to Trash** or **Recognize Again**.
+The latter uses the record’s source image and the current engine. Kiri asks
+before replacing a correction and before sending the image to a remote
+provider. If OCR finds no text or fails, the previous text stays saved.
+
+**Settings → Text Recognition → Search text in new screenshots** is off by
+default. Turn it on to find newly saved screenshots by the text in them using
+the library search. The built-in model runs on your device. Older and imported
+images can still be recognized manually into Text History. Search may miss
+large images or captures made while the background queue is full. Turning
+the setting off stops new indexing and retains existing search matches.
+
 ## Library and feedback
 
 Use Select Multiple to check items or select all, then move them to Trash; ordinary clicks still open an item. Trash supports batch restore and confirms Empty Trash inside the main window. Renaming updates the actual filename while keeping its type. Copy File in the context menu pastes into a folder; Copy still pastes image pixels.

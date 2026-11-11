@@ -641,6 +641,17 @@ persistence checks the active capture owner while holding the capture lock;
 canceled sessions cannot write late history. Clipboard copying from history is
 separate from overlay completion and does not cancel another capture session.
 
+Text History can move a record to recoverable Trash or recognize its saved
+PNG again with the active engine. The existing expiring request controller
+owns the saved PNG. A profile request still needs a per-image Send action.
+Replacing a correction requires confirmation. Publication checks the library
+generation, file and OCR revision and commits only a nonempty result.
+
+Optional screenshot search indexes new standard and scrolling screenshots
+with a bounded worker using the bundled offline model. Search text is separate
+from `ocrText` on the screenshot asset. Editor changes and file replacement
+invalidate indexed text. See [ADR 0133](adr/0133-ocr-history-and-screenshot-search.md).
+
 ## Recording and GIF flow
 
 Recording preparation offers MP4/GIF, Start, and four inline controls for system

@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { KiriIcon } from "../components/KiriIcons";
+import { api } from "../lib/ipc";
 import { t } from "../i18n";
 import { ocrProviderLabel } from "../ocr/providerLabel";
 import type {
@@ -6,6 +8,57 @@ import type {
   OcrProviderProfileDto,
   OcrProviderSettingsDto,
 } from "../lib/ipc";
+
+export function ScreenshotOcrSetting() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const changing = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    void api.getScreenshotOcrEnabled().then(value => {
+      if (current) setEnabled(value);
+    }, () => {
+      if (current) setError("Couldn't load screenshot text indexing.");
+    });
+    return () => { current = false; };
+  }, [loadAttempt]);
+
+  const change = async () => {
+    if (enabled === null || changing.current) return;
+    changing.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      setEnabled(await api.setScreenshotOcrEnabled(!enabled));
+    } catch {
+      setError("Couldn't change screenshot text indexing.");
+    } finally {
+      changing.current = false;
+      setBusy(false);
+    }
+  };
+
+  return <div className="kiri-settings-card kiri-screenshot-ocr-row" aria-busy={busy || (enabled === null && !error)}>
+    <div className="kiri-screenshot-ocr-copy">
+      <strong>{t("Search text in new screenshots")}</strong>
+      <span id="screenshot-ocr-description">{t("Kiri uses on-device OCR for screenshots saved after you turn this on.")}</span>
+      {error && <span className="kiri-storage-error" role="alert">{t(error)}</span>}
+    </div>
+    {enabled === null && error ? (
+      <button type="button" className="kiri-button kiri-button--secondary"
+        onClick={() => { setError(null); setLoadAttempt(value => value + 1); }}>{t("Retry")}</button>
+    ) : (
+      <button type="button" className="kiri-settings-switch" role="switch"
+        aria-label={t("Search text in new screenshots")} aria-describedby="screenshot-ocr-description"
+        aria-checked={enabled ?? false} disabled={enabled === null || busy} onClick={() => void change()}>
+        <span aria-hidden="true" />
+      </button>
+    )}
+  </div>;
+}
 
 interface OcrSettingsSectionProps {
   settings: OcrProviderSettingsDto;

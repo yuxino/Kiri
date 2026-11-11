@@ -18,7 +18,7 @@ import { DockVisibilityRow } from "./DockVisibilityRow";
 import { StartupSettingsRow } from "./StartupSettingsRow";
 import { SupportLinks } from "./SupportLinks";
 import { ReleaseNotes } from "./ReleaseNotes";
-import { OcrSettingsSection } from "./OcrSettingsSection";
+import { OcrSettingsSection, ScreenshotOcrSetting } from "./OcrSettingsSection";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import "./settings.css";
 
@@ -140,6 +140,7 @@ export function SettingsView({ updater }: { updater: AppUpdater }) {
         {activeTab === "general" && <GeneralSettingsSection />}
         {activeTab === "shortcuts" && <ShortcutsSettings />}
         {activeTab === "ocr" && <>
+        <ScreenshotOcrSetting />
         {operationError && (
           <div className="kiri-settings-alert kiri-settings-alert--error" role="alert">
             {t(operationError)}

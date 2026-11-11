@@ -50,6 +50,7 @@ pub struct AppState {
     pub click_monitor:
         std::sync::Mutex<Option<Box<dyn crate::platform::ClickMonitorHandle + Send>>>,
     pub ocr_providers: Arc<crate::ocr_controller::OcrProviderManager>,
+    pub(crate) screenshot_ocr: crate::screenshot_ocr::ScreenshotOcrIndex,
     pub qr_requests: Arc<crate::qr_controller::QrRequests>,
     pub ocr_requests: Arc<crate::ocr_controller::OcrRequestController>,
     /// One bounded annotation snapshot per live editor window. A save consumes
@@ -591,6 +592,7 @@ impl AppState {
             gif_conversions: Default::default(),
             click_monitor: std::sync::Mutex::new(None),
             ocr_providers,
+            screenshot_ocr: crate::screenshot_ocr::ScreenshotOcrIndex::open(&config_dir),
             qr_requests: Default::default(),
             ocr_requests: Arc::new(crate::ocr_controller::OcrRequestController::default()),
             editor_annotations: Default::default(),
@@ -1236,7 +1238,7 @@ pub fn save_language(app: &AppHandle, language: &str) -> std::io::Result<()> {
 
 // Publish a complete file so a failed write cannot truncate the last saved
 // preference, and concurrent readers never observe partial JSON.
-fn save_preference_at(
+pub(crate) fn save_preference_at(
     path: &std::path::Path,
     value: &(impl Serialize + ?Sized),
 ) -> std::io::Result<()> {
