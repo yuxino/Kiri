@@ -478,10 +478,11 @@ text or styling is changed. See ADRs 0088, 0090 and 0092.
 ## Managed library flow
 
 The main window uses a persistent destination sidebar and a shared workspace
-header for Library, Text History, QR Favorites, Trash and Settings. Contextual
-capture filters and search share a toolbar; batch actions occupy an in-flow row
-above the scrolling grid. Text and QR details consolidate actions with record
-metadata. Settings has General, Shortcuts, Text Recognition, and About tabs;
+header for Library, Text History, QR Favorites, Trash and Settings. Search
+sits beside the capture title, and the filter row has a horizontally
+scrollable tag strip (ADR 0134). Batch actions occupy an in-flow row above the
+scrolling grid. Text and QR details consolidate actions with record metadata.
+Settings has General, Shortcuts, Text Recognition, and About tabs;
 the tab row stays visible while the selected page scrolls (ADR 0110). Container
 queries follow the actual content/section width instead of the overall native
 window width (ADR 0098). This layout does not change capture, editor or native
@@ -497,9 +498,11 @@ guards. A compact shared toolbar keeps batch actions together while preserving
 the reading preview; low-frequency record actions share an overflow menu
 (ADR 0128).
 
-Inline tags preserve failed drafts and display acknowledged changes while the
-library refresh catches up. Shared choice menus, settings modals and video
-controls retain their own keyboard focus and activation boundaries (ADR 0115).
+Inline tag editors commit on Enter or focus leaving the editor. Failed drafts
+survive card remounts and can be retried. Tag edits apply to the current library
+under its lock, and the view refreshes after an acknowledgement (ADR 0134).
+Shared choice menus, settings modals and video controls retain their own
+keyboard focus and activation boundaries (ADR 0115).
 Library snapshots stay bound to their search and Library/Trash scope. OCR
 corrections survive in-view refreshes, and pending sticker imports gate export
 and normal viewer close (ADR 0116).

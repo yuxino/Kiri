@@ -30,6 +30,12 @@ pub enum AssetLibraryError {
     InvalidFilename,
     #[error("a file with that name already exists")]
     FilenameInUse,
+    #[error("tag name is empty")]
+    InvalidTagName,
+    #[error("tag already exists")]
+    TagAlreadyExists,
+    #[error("the tag changed since editing started")]
+    TagChanged,
     #[error("rename was committed, but directory synchronization failed")]
     CommittedRenameSyncFailed,
     #[error("library index contains duplicate asset ids or filenames")]
@@ -63,6 +69,14 @@ pub enum AssetLibraryError {
 }
 
 pub type Result<T> = std::result::Result<T, AssetLibraryError>;
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AssetTagEdit {
+    Add { tag: String },
+    Remove { tag: String },
+    Rename { from: String, to: String },
+}
 
 const ANNOTATION_PROJECT_VERSION: u32 = 1;
 
@@ -1015,15 +1029,52 @@ impl AssetLibrary {
         Ok(())
     }
 
-    pub fn set_tags(&mut self, tags: Vec<String>, id: &uuid::Uuid) -> Result<()> {
-        let mut deduped: Vec<String> = Vec::new();
-        for tag in tags {
-            let trimmed = tag.trim().to_string();
-            if !trimmed.is_empty() && !deduped.iter().any(|t| t.eq_ignore_ascii_case(&trimmed)) {
-                deduped.push(trimmed);
+    pub fn edit_asset_tag(&mut self, id: &uuid::Uuid, edit: AssetTagEdit) -> Result<Vec<String>> {
+        let mut tags = self
+            .asset_by_id(id)
+            .ok_or(AssetLibraryError::AssetNotFound)?
+            .tags
+            .clone();
+        match edit {
+            AssetTagEdit::Add { tag } => tags.push(tag),
+            AssetTagEdit::Remove { tag } => tags.retain(|current| current != &tag),
+            AssetTagEdit::Rename { from, to } => {
+                let to = to.trim();
+                if to.is_empty() {
+                    return Err(AssetLibraryError::InvalidTagName);
+                }
+                let position = tags
+                    .iter()
+                    .position(|tag| tag == &from)
+                    .ok_or(AssetLibraryError::TagChanged)?;
+                if tags
+                    .iter()
+                    .enumerate()
+                    .any(|(index, tag)| index != position && tag.trim().eq_ignore_ascii_case(to))
+                {
+                    return Err(AssetLibraryError::TagAlreadyExists);
+                }
+                tags[position] = to.to_owned();
             }
         }
-        self.update(id, |asset| asset.tags = deduped)
+        self.set_tags(tags, id)
+    }
+
+    fn set_tags(&mut self, tags: Vec<String>, id: &uuid::Uuid) -> Result<Vec<String>> {
+        let mut deduped: Vec<String> = Vec::new();
+        for tag in tags {
+            let trimmed = tag.trim();
+            if !trimmed.is_empty() && !deduped.iter().any(|t| t.eq_ignore_ascii_case(trimmed)) {
+                deduped.push(trimmed.to_owned());
+            }
+        }
+        let current = self
+            .asset_by_id(id)
+            .ok_or(AssetLibraryError::AssetNotFound)?;
+        if current.tags != deduped {
+            self.update(id, |asset| asset.tags.clone_from(&deduped))?;
+        }
+        Ok(deduped)
     }
 
     pub fn move_to_trash(&mut self, id: &uuid::Uuid) -> Result<()> {
@@ -2001,6 +2052,145 @@ fn sync_directory_after_commit(path: &Path, operation: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tag_edits_use_current_tags_and_persist_case_only_renames() {
+        let (_directory, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = library
+            .import_data(
+                b"image",
+                CaptureKind::Image,
+                "png",
+                10,
+                10,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        for tag in [" Project ", "other", "project", "Ä", "ä"] {
+            library
+                .edit_asset_tag(&asset.id, AssetTagEdit::Add { tag: tag.into() })
+                .unwrap();
+        }
+        let tags = library
+            .edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Rename {
+                    from: "Project".into(),
+                    to: " PROJECT ".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(tags, ["PROJECT", "other", "Ä", "ä"]);
+
+        let tags = library
+            .edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Remove {
+                    tag: "other".into(),
+                },
+            )
+            .unwrap();
+        let tags_after_retry = library
+            .edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Remove {
+                    tag: "other".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(tags, ["PROJECT", "Ä", "ä"]);
+        assert_eq!(tags, tags_after_retry);
+        let reopened = AssetLibrary::open_existing(root).unwrap();
+        assert_eq!(reopened.asset_by_id(&asset.id).unwrap().tags, tags);
+    }
+
+    #[test]
+    fn tag_edits_preserve_the_list_after_duplicate_stale_and_failed_renames() {
+        let (_directory, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let asset = library
+            .import_data(
+                b"image",
+                CaptureKind::Image,
+                "png",
+                10,
+                10,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        library
+            .set_tags(vec!["new name".into(), "shared".into()], &asset.id)
+            .unwrap();
+
+        assert!(matches!(
+            library.edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Rename {
+                    from: "old name".into(),
+                    to: "draft".into()
+                }
+            ),
+            Err(AssetLibraryError::TagChanged)
+        ));
+        assert!(matches!(
+            library.edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Rename {
+                    from: "new name".into(),
+                    to: " SHARED ".into()
+                }
+            ),
+            Err(AssetLibraryError::TagAlreadyExists)
+        ));
+        assert!(matches!(
+            library.edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Rename {
+                    from: "new name".into(),
+                    to: " ".into()
+                }
+            ),
+            Err(AssetLibraryError::InvalidTagName)
+        ));
+
+        library.persist_fail.set(true);
+        assert!(matches!(
+            library.edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Rename {
+                    from: "new name".into(),
+                    to: "draft".into()
+                }
+            ),
+            Err(AssetLibraryError::Io(_))
+        ));
+        assert_eq!(
+            library.asset_by_id(&asset.id).unwrap().tags,
+            ["new name", "shared"]
+        );
+        let reopened = AssetLibrary::open_existing(root).unwrap();
+        assert_eq!(
+            reopened.asset_by_id(&asset.id).unwrap().tags,
+            ["new name", "shared"]
+        );
+        library.persist_fail.set(false);
+        let tags = library
+            .edit_asset_tag(
+                &asset.id,
+                AssetTagEdit::Rename {
+                    from: "new name".into(),
+                    to: "draft".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(tags, ["draft", "shared"]);
+    }
 
     #[test]
     fn rename_preserves_annotations_thumbnails_and_recoverable_trash() {

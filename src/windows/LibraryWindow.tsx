@@ -3,7 +3,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {getCurrentWebview} from "@tauri-apps/api/webview";
-import {ImagePlus} from "lucide-react";
+import {ChevronLeft, ChevronRight, ImagePlus} from "lucide-react";
 import { createPortal } from "react-dom";
 import {
   api,
@@ -15,6 +15,7 @@ import {
   onNotice,
   onRecordingSaveJobs,
   type AssetDto,
+  type AssetTagEdit,
   type AssetAvailability,
   type ErrorDto,
   type GifConversionStateDto,
@@ -50,6 +51,14 @@ const SettingsView = React.lazy(() =>
 
 type Section = "library" | "trash";
 type Destination = "captures" | "text" | "qr" | "settings";
+
+type TagDraft = { from: string | null; value: string };
+type TagEditState = {
+  draft: TagDraft | null;
+  busy: boolean;
+  error: string | null;
+};
+const idleTagEdit: TagEditState = { draft: null, busy: false, error: null };
 
 function thumbnailUrl(id: string, revision: number): string {
   return kiriResourceUrl("thumbnail", [id], { v: revision });
@@ -132,6 +141,18 @@ export function LibraryWindow() {
   const [kindFilter, setKindFilter] = useState<"all" | "image" | "video" | "gif">("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // A filter or navigation change can temporarily unmount a card during a save.
+  const [tagEdits, setTagEdits] = useState<Record<string, TagEditState>>({});
+  const pendingTagWrites = useRef(new Set<string>());
+  const setTagEdit = useCallback((id: string, state?: TagEditState) => {
+    setTagEdits(current => {
+      if (state) return { ...current, [id]: state };
+      if (!(id in current)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
   // Ordinary card clicks open directly; explicit Select or a rubber-band
   // gesture enters the recoverable batch workflow.
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -478,6 +499,32 @@ export function LibraryWindow() {
     void refresh();
   }, [refresh]);
 
+  const editAssetTag = async (asset: AssetDto, edit: AssetTagEdit, draft: TagDraft | null) => {
+    if (pendingTagWrites.current.has(asset.id)) return;
+    pendingTagWrites.current.add(asset.id);
+    setTagEdit(asset.id, { draft, busy: true, error: null });
+    try {
+      const tags = await api.editAssetTag(asset.id, edit);
+      setTagEdit(asset.id, edit.kind === "remove" && draft ? { ...idleTagEdit, draft } : undefined);
+      setAssetSnapshot(current => current && {
+        ...current,
+        // Publish the acknowledgement only while the same asset snapshot is
+        // current. A newer library read may already include another tag edit.
+        assets: current.assets.map(item => item.id === asset.id && item.tags === asset.tags
+          ? { ...item, tags }
+          : item),
+      });
+      void refresh();
+    } catch (error) {
+      const message = error === "This tag already exists." || error === "This tag has changed." ||
+        error === "Enter a tag name." ? error : "Couldn't update this item";
+      setTagEdit(asset.id, { draft, busy: false, error: message });
+      if (error === "This tag has changed.") void refresh();
+    } finally {
+      pendingTagWrites.current.delete(asset.id);
+    }
+  };
+
   useEffect(() => {
     void refresh().catch(() => {});
   }, [query, refresh, showingTrash]);
@@ -609,6 +656,8 @@ export function LibraryWindow() {
   const libraryUnavailable =
     loaded && (libraryStatusError || libraryStatus?.availability === "unavailable");
   const libraryMigrating = loaded && libraryStatus?.availability === "migrating";
+  const showCaptureSearch = destination === "captures" &&
+    !libraryStatusError && libraryStatus?.availability === "ready";
 
   const copyCapture = async (id: string, file = false) => {
     try {
@@ -996,6 +1045,13 @@ export function LibraryWindow() {
   return (
     <div
       className="library-root kiri-canvas-surface"
+      onPointerDownCapture={(event) => {
+        // Rubber-band selection and some card actions prevent native blur.
+        // Finish the focused editor when the pointer moves to another control.
+        const focused = document.activeElement as HTMLElement | null;
+        const editor = focused?.closest(".kiri-tag-editor");
+        if (editor && !editor.contains(event.target as Node)) focused?.blur();
+      }}
     >
       {mediaDrop&&<div className="library-media-drop">{t("Drop images or videos to import")}</div>}
       <aside className="library-sidebar">
@@ -1033,7 +1089,8 @@ export function LibraryWindow() {
       </aside>
       <div className="library-workspace">
       <header className={`library-control-panel${destination === "settings" ? " library-control-panel--settings" : destination === "text" || destination === "qr" ? " library-control-panel--records" : ""}`}>
-        <div className="library-control-panel__primary">
+        <div className={`library-control-panel__primary${showCaptureSearch ? " library-control-panel__primary--search" : ""}`}>
+          <div className="library-control-panel__heading">
             <div className="library-control-panel__titles">
               <h1 id="library-page-title" className="library-control-panel__title">
                 {destination === "settings"
@@ -1054,6 +1111,43 @@ export function LibraryWindow() {
                         : fmt(assets.length === 1 ? "%d capture" : "%d captures", assets.length)}
               </span>}
             </div>
+
+            {showCaptureSearch && (
+              <div className="kiri-library-search">
+                <KiriIcon name="magnifyingglass" size={14} />
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  value={query}
+                  aria-label={t("Search captures")}
+                  placeholder={t("Search captures")}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape" && query) {
+                      event.stopPropagation();
+                      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                      event.preventDefault();
+                      setQuery("");
+                    }
+                  }}
+                />
+                {query && (
+                  <button
+                    type="button"
+                    className="kiri-search-clear"
+                    aria-label={t("Clear Search")}
+                    title={t("Clear Search")}
+                    onClick={() => {
+                      setQuery("");
+                      searchInputRef.current?.focus();
+                    }}
+                  >
+                    <KiriIcon name="xmark" size={10} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="library-control-panel__actions">
             {destination === "captures" && libraryStatus?.availability === "ready" && <>
@@ -1089,42 +1183,8 @@ export function LibraryWindow() {
           </div>
         </div>
 
-        {destination === "captures" &&
-          !libraryStatusError &&
-          libraryStatus?.availability === "ready" && (
+        {showCaptureSearch && (
           <div className="library-control-panel__filter-rail">
-            <div className="kiri-library-search">
-                <KiriIcon name="magnifyingglass" size={14} />
-                <input
-                  ref={searchInputRef}
-                  type="search"
-                  value={query}
-                  aria-label={t("Search captures")}
-                  placeholder={t("Search captures")}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape" && query) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setQuery("");
-                    }
-                  }}
-                />
-                {query && (
-                  <button
-                    type="button"
-                    className="kiri-search-clear"
-                    aria-label={t("Clear Search")}
-                    title={t("Clear Search")}
-                    onClick={() => {
-                      setQuery("");
-                      searchInputRef.current?.focus();
-                    }}
-                  >
-                    <KiriIcon name="xmark" size={10} />
-                  </button>
-                )}
-            </div>
             <FilterBar
               kind={kindFilter}
               favoritesOnly={favoritesOnly}
@@ -1359,6 +1419,9 @@ export function LibraryWindow() {
                     onRestoreMissing={() => restoreMissing(asset.id)}
                     onCopy={() => void copyCapture(asset.id)}
                     onFavoriteChanged={(isFavorite) => confirmFavorites([asset.id], isFavorite)}
+                    tagEdit={tagEdits[asset.id] ?? idleTagEdit}
+                    onTagEditChange={(state) => setTagEdit(asset.id, state)}
+                    onEditTag={(edit, draft) => void editAssetTag(asset, edit, draft)}
                     onActionError={(message) => setError({ message, recovery: null })}
                     onOpen={() =>
                       assetAvailability[asset.id] === undefined ||
@@ -1676,6 +1739,9 @@ function AssetCard(props: {
   onRestoreMissing(): Promise<void>;
   onCopy(): void;
   onFavoriteChanged(isFavorite: boolean): void;
+  tagEdit: TagEditState;
+  onTagEditChange(state?: TagEditState): void;
+  onEditTag(edit: AssetTagEdit, draft: TagDraft | null): void;
   onActionError(message: string): void;
 }) {
   const {
@@ -1695,6 +1761,9 @@ function AssetCard(props: {
     onRestoreMissing,
     onCopy,
     onFavoriteChanged,
+    tagEdit,
+    onTagEditChange,
+    onEditTag,
     onActionError,
   } = props;
   const fileSize = formatFileSize(asset.fileSize);
@@ -1806,55 +1875,41 @@ function AssetCard(props: {
   const [titleDraft, setTitleDraft] = useState(asset.title ?? "");
   const titleFinished = useRef(false);
   const renameBusy = useRef(false);
-  const [addingTag, setAddingTag] = useState(false);
-  const [tagDraft, setTagDraft] = useState("");
-  const [tagBusy, setTagBusy] = useState(false);
-  const [tagError, setTagError] = useState(false);
-  const tagMutationLock = useRef(false);
-  const [visibleTags, setVisibleTags] = useState(asset.tags);
-  const confirmedTags = useRef(asset.tags);
-  const awaitingTags = useRef<string[] | null>(null);
-  const incomingTags = useRef(asset.tags);
-  incomingTags.current = asset.tags;
-  const sameTags = (left: string[], right: string[]) =>
-    left.length === right.length && left.every((tag, index) => tag === right[index]);
+  const { draft: tagDraft, busy: tagBusy, error: tagError } = tagEdit;
+  const tagInputRef = useRef<HTMLInputElement>(null);
+  const focusTagInput = useRef(false);
+  const tagComposing = useRef(false);
 
-  useEffect(() => {
-    // A successful command can precede library-changed's asynchronous fetch.
-    // Keep its confirmed list until the parent snapshot catches up with it.
-    if (awaitingTags.current && !sameTags(awaitingTags.current, asset.tags)) return;
-    awaitingTags.current = null;
-    confirmedTags.current = asset.tags;
-    setVisibleTags(asset.tags);
-  }, [asset.tags]);
-
-  const saveTags = async (update: (current: string[]) => string[], finishAdding = false) => {
-    if (tagMutationLock.current) return;
-    // Match AssetLibrary::set_tags before displaying the acknowledged list.
-    const tags: string[] = [];
-    const keys = new Set<string>();
-    for (const candidate of update(confirmedTags.current)) {
-      const tag = candidate.trim();
-      const key = tag.replace(/[A-Z]/g, letter => letter.toLowerCase());
-      if (tag && !keys.has(key)) { tags.push(tag); keys.add(key); }
+  const beginTagEdit = useCallback((from: string | null) => {
+    if (tagBusy) return;
+    if (tagDraft) {
+      tagInputRef.current?.focus();
+      return;
     }
-    tagMutationLock.current = true;
-    setTagBusy(true);
-    setTagError(false);
-    try {
-      await api.setTags(asset.id, tags);
-      confirmedTags.current = tags;
-      awaitingTags.current = sameTags(incomingTags.current, tags) ? null : tags;
-      setVisibleTags(tags);
-      if (finishAdding) {
-        setTagDraft("");
-        setAddingTag(false);
-      }
-    } catch {
-      setTagError(true);
-    } finally {
-      tagMutationLock.current = false;
-      setTagBusy(false);
+    focusTagInput.current = true;
+    onTagEditChange({ ...idleTagEdit, draft: { from, value: from ?? "" } });
+  }, [onTagEditChange, tagBusy, tagDraft]);
+
+  useLayoutEffect(() => {
+    if (!tagDraft || !focusTagInput.current) return;
+    focusTagInput.current = false;
+    tagInputRef.current?.focus();
+    if (tagDraft.from !== null) tagInputRef.current?.select();
+  }, [tagDraft]);
+
+  const commitTagDraft = () => {
+    if (!tagDraft || tagBusy || tagComposing.current) return;
+    const draft = { ...tagDraft, value: tagInputRef.current?.value ?? tagDraft.value };
+    const name = draft.value.trim();
+    if (draft.from === null) {
+      if (name) onEditTag({ kind: "add", tag: name }, draft);
+      else onTagEditChange();
+    } else if (!name) {
+      onTagEditChange({ ...idleTagEdit, draft, error: "Enter a tag name." });
+    } else if (name === draft.from) {
+      onTagEditChange();
+    } else {
+      onEditTag({ kind: "rename", from: draft.from, to: name }, draft);
     }
   };
 
@@ -1885,14 +1940,10 @@ function AssetCard(props: {
 
   // "Add Tag" menu item opens the inline tag input.
   useEffect(() => {
-    const handler = () => {
-      if (tagMutationLock.current) return;
-      setTagError(false);
-      setAddingTag(true);
-    };
+    const handler = () => beginTagEdit(null);
     window.addEventListener(`kiri-addtag:${asset.id}`, handler);
     return () => window.removeEventListener(`kiri-addtag:${asset.id}`, handler);
-  }, [asset.id]);
+  }, [asset.id, beginTagEdit]);
   const previewImageStyle: React.CSSProperties = {
     width: "100%",
     height: "100%",
@@ -1944,6 +1995,7 @@ function AssetCard(props: {
       }}
       onClick={handleClick}
       onContextMenu={(e) => {
+        if ((e.target as HTMLElement).closest(".kiri-tag-editor")) return;
         // Right-click shows the localized action menu at the cursor
         // (same as ⋯), never the webview's system context menu.
         e.preventDefault();
@@ -2318,94 +2370,105 @@ function AssetCard(props: {
             document.body,
           )}
       </div>
-      {/* Tag chips */}
-      {(visibleTags.length > 0 || addingTag || tagError) && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-          {visibleTags.map((tag) => (
-            <span
-              key={tag}
-              title={tag}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                fontSize: 13,
-                fontWeight: 600,
-                color: "var(--kiri-accent)",
-                background: "var(--kiri-accent-soft-alpha-10)",
-                borderRadius: 7,
-                padding: "2px 7px",
-                maxWidth: 90,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {tag}
+      {(asset.tags.length > 0 || tagDraft || tagError) && (
+        <div className="kiri-card-tags">
+          {asset.tags.map((tag) => (
+            <span key={tag} className="kiri-card-tag">
+              <button
+                type="button"
+                className="kiri-tag-rename-button"
+                aria-label={`${t("Rename tag")}: ${tag}`}
+                title={`${t("Rename tag")}: ${tag}`}
+                disabled={tagBusy}
+                onClick={() => beginTagEdit(tag)}
+              >
+                <span>{tag}</span>
+                <KiriIcon name="pencil.tip" size={11} />
+              </button>
               <button
                 type="button"
                 className="kiri-tag-remove-button"
                 aria-label={`${t("Remove tag")}: ${tag}`}
                 title={t("Remove tag")}
                 disabled={tagBusy}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void saveTags(current => current.filter((existing) => existing !== tag));
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEditTag({ kind: "remove", tag }, tagDraft);
                 }}
               >
-                <KiriIcon name="xmark" size={8} />
+                <KiriIcon name="xmark" size={10} />
               </button>
             </span>
           ))}
-          {addingTag && (
-            <input
-              autoFocus
-              value={tagDraft}
-              readOnly={tagBusy}
-              aria-busy={tagBusy || undefined}
-              aria-invalid={tagError || undefined}
-              aria-describedby={tagError ? `kiri-tag-error-${asset.id}` : undefined}
-              aria-label={t("Add tag…")}
-              placeholder={t("Add tag…")}
-              onChange={(event) => setTagDraft(event.target.value)}
-              onBlur={() => {
-                if (!tagMutationLock.current && !tagError) {
-                  setAddingTag(false);
-                  setTagDraft("");
+          {tagDraft && (
+            <div
+              className="kiri-tag-editor"
+              onClick={(event) => event.stopPropagation()}
+              onBlur={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget)) return;
+                // On a composition blur, keep the draft for explicit
+                // confirmation instead of persisting a provisional candidate.
+                if (!tagError && !tagComposing.current) commitTagDraft();
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (tagComposing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (event.key === "Escape" && !tagBusy) {
+                  event.preventDefault();
+                  onTagEditChange();
+                } else if (event.key === "Enter" && event.target === tagInputRef.current) {
+                  event.preventDefault();
+                  if (!event.repeat) commitTagDraft();
                 }
               }}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (e.repeat || tagMutationLock.current) return;
-                  const value = tagDraft.trim();
-                  if (value) void saveTags(current => [...current, value], true);
-                  else setAddingTag(false);
-                } else if (e.key === "Escape" && !tagMutationLock.current) {
-                  e.preventDefault();
-                  setTagDraft("");
-                  setTagError(false);
-                  setAddingTag(false);
-                }
-              }}
-              style={{
-                width: 70,
-                fontSize: 13,
-                fontWeight: 500,
-                color: "var(--kiri-label)",
-                border: "1px solid var(--kiri-accent)",
-                borderRadius: 7,
-                background: "var(--kiri-group-fill)",
-                padding: "2px 6px",
-              }}
-            />
+            >
+              <input
+                ref={tagInputRef}
+                className="kiri-tag-editor__input"
+                value={tagDraft.value}
+                readOnly={tagBusy}
+                aria-busy={tagBusy || undefined}
+                aria-invalid={!!tagError || undefined}
+                aria-describedby={tagError ? `kiri-tag-error-${asset.id}` : undefined}
+                aria-label={t(tagDraft.from === null ? "Add tag…" : "Rename tag")}
+                placeholder={t(tagDraft.from === null ? "Add tag…" : "Rename tag")}
+                onFocus={() => { tagComposing.current = false; }}
+                onChange={(event) => onTagEditChange({
+                  ...idleTagEdit,
+                  draft: { ...tagDraft, value: event.target.value },
+                })}
+                onCompositionStart={() => { tagComposing.current = true; }}
+                onCompositionEnd={() => { tagComposing.current = false; }}
+              />
+              <button
+                type="button"
+                className="kiri-tag-editor__action"
+                aria-label={t("Save")}
+                title={t("Save")}
+                disabled={tagBusy}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={commitTagDraft}
+              >
+                <KiriIcon name="checkmark" size={14} />
+              </button>
+              <button
+                type="button"
+                className="kiri-tag-editor__action"
+                aria-label={t("Cancel")}
+                title={t("Cancel")}
+                disabled={tagBusy}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onTagEditChange()}
+              >
+                <KiriIcon name="xmark" size={14} />
+              </button>
+            </div>
           )}
-          {tagError && <span id={`kiri-tag-error-${asset.id}`} role="alert"
-            style={{ flexBasis: "100%", fontSize: 13, color: "var(--kiri-coral)" }}>
-            {t("Couldn't update this item")}
-          </span>}
+          {tagError && (
+            <span id={`kiri-tag-error-${asset.id}`} className="kiri-tag-error" role="alert">
+              {t(tagError)}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -2507,25 +2570,88 @@ function FilterBar(props: {
         <KiriIcon name={favoritesOnly ? "star.fill" : "star"} size={12} />
         <span>{t("Favorites")}</span>
       </button>
-      <div className="library-tag-filter">
-        {allTags.map((tag) => {
-            const active = tagFilter?.toLowerCase() === tag.toLowerCase();
-            return (
-              <button
-                type="button"
-                key={tag}
-                className="library-tag-filter__chip"
-                data-active={active || undefined}
-                aria-pressed={active}
-                onClick={() => onToggleTag(tag)}
-                title={tag}
-              >
-                <KiriIcon name="tag" size={10} />
-                {tag}
-              </button>
-            );
-          })}
+      {allTags.length > 0 && (
+        <TagFilterRail tags={allTags} activeTag={tagFilter} onToggleTag={onToggleTag} />
+      )}
+    </div>
+  );
+}
+
+function TagFilterRail(props: {
+  tags: string[];
+  activeTag: string | null;
+  onToggleTag(tag: string): void;
+}) {
+  const { tags, activeTag, onToggleTag } = props;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const left = scroller.scrollLeft > 1;
+    const right = scroller.scrollWidth - scroller.clientWidth - scroller.scrollLeft > 1;
+    setEdges(current => current.left === left && current.right === right ? current : { left, right });
+  }, []);
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [measure, tags, activeTag]);
+
+  const overflows = edges.left || edges.right;
+  const scrollTags = (direction: -1 | 1) => {
+    const scroller = scrollRef.current;
+    if (scroller) scroller.scrollBy({ left: direction * (scroller.clientWidth - 16) });
+  };
+
+  return (
+    <div className="library-tag-filter" role="group" aria-label={t("Filter by tag")}>
+      {overflows && (
+        <button
+          type="button"
+          className="library-tag-filter__scroll-button"
+          aria-label={t("Scroll tags left")}
+          title={t("Scroll tags left")}
+          aria-disabled={!edges.left}
+          onClick={() => edges.left && scrollTags(-1)}
+        >
+          <ChevronLeft size={15} aria-hidden="true" />
+        </button>
+      )}
+      <div ref={scrollRef} className="library-tag-filter__scroll" onScroll={measure}>
+        {tags.map((tag) => {
+          const active = activeTag?.toLowerCase() === tag.toLowerCase();
+          return (
+            <button
+              type="button"
+              key={tag}
+              className="library-tag-filter__chip"
+              data-active={active || undefined}
+              aria-pressed={active}
+              onClick={() => onToggleTag(tag)}
+              title={tag}
+            >
+              <KiriIcon name="tag" size={10} />
+              <span>{tag}</span>
+            </button>
+          );
+        })}
       </div>
+      {overflows && (
+        <button
+          type="button"
+          className="library-tag-filter__scroll-button"
+          aria-label={t("Scroll tags right")}
+          title={t("Scroll tags right")}
+          aria-disabled={!edges.right}
+          onClick={() => edges.right && scrollTags(1)}
+        >
+          <ChevronRight size={15} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

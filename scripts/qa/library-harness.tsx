@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { ToastWindow } from "../../src/windows/ToastWindow";
 import { PinWindow } from "../../src/windows/PinWindow";
 import { LibraryWindow } from "../../src/windows/LibraryWindow";
+import type { AssetTagEdit } from "../../src/lib/ipc";
 import { setLanguage, type KiriLanguage } from "../../src/i18n";
 import "../../src/styles/design-system.css";
 
@@ -18,6 +19,9 @@ const savingJobs = params.has("saving") ? [
   { id: "saving-gif", kind: "gif", createdAt: new Date().toISOString(), duration: 8, pixelWidth: 720, pixelHeight: 405 },
 ] : [];
 const workspace = params.has("workspace");
+const tagCount = Number(params.get("tagCount") ?? 0);
+const fixtureTags = Array.from({ length: tagCount }, (_, index) =>
+  index === 0 ? "01 · VeryLongCaptureCategoryForTestingEinAusführlicherNameБезПробелов" : `Tag ${index + 1}`);
 let resolveLateUpdate: (() => void) | undefined;
 const lateUpdate = params.has("lateUpdate") ? new Promise<void>(resolve => { resolveLateUpdate = resolve; }) : null;
 const examples = [
@@ -32,7 +36,7 @@ const assets: unknown[] = workspace || params.has("sizes") || params.has("scroll
   pixelWidth: 3840, pixelHeight: 2160, duration: null, sourceApplication: null,
   trashedAt: null, gifEligible: false, ...examples[index % examples.length],
   isFavorite: index % 3 === 0,
-  ...(workspace ? {kind:"image",title:["Capture toolbar", "Keyboard shortcuts", "Local workflow", "Window selection"][index % 4],tags:["Kiri"],pixelWidth:1440,pixelHeight:900} : {}),
+  ...(workspace ? {kind:"image",title:["Capture toolbar", "Keyboard shortcuts", "Local workflow", "Window selection"][index % 4],tags:params.has("tagCount") ? fixtureTags.filter((_, tagIndex) => tagIndex % 8 === index) : ["Kiri"],pixelWidth:1440,pixelHeight:900} : {}),
 })) : [];
 const recordBase = { kind:"image", filename:"fixture.png", pixelWidth:640, pixelHeight:360, duration:null, sourceApplication:null, isFavorite:false, trashedAt:null, gifEligible:false, tags:[], fileSize:12000, ocrOriginalText:null };
 const textRecords: {id:string;createdAt:number;ocrText:string;ocrOriginalText:string|null;[key:string]:unknown}[] = workspace ? [
@@ -116,7 +120,11 @@ Object.assign(window, {
         case "get_gif_conversion_states": return [];
         case "cancel_gif_conversion": actions.push(command); return true;
         case "get_recording_save_jobs": return [...savingJobs];
-        case "list_assets": return [...assets].filter((asset:any) => !workspace || asset.title.toLowerCase().includes(String(args.query ?? "").toLowerCase()));
+        case "list_assets": {
+          const query = String(args.query ?? "").toLowerCase();
+          return structuredClone(assets.filter((asset: any) =>
+            !workspace || [asset.title, ...asset.tags].some(text => text.toLowerCase().includes(query))));
+        }
         case "list_ocr_records": return textRecords.filter(asset => asset.ocrText.toLowerCase().includes(String(args.query ?? "").toLowerCase()));
         case "list_qr_favorites": return qrRecords.filter(asset => asset.qrText.toLowerCase().includes(String(args.query ?? "").toLowerCase()));
         case "copy_history_text": case "qr_favorite_action": case "reveal_library": actions.push(command); return null;
@@ -154,13 +162,24 @@ Object.assign(window, {
           if (params.has("copyFailure")) throw new Error("Test clipboard unavailable");
           return null;
         case "copy_asset": case "open_editor": case "open_viewer": actions.push(command); return null;
-        case "set_tags": {
+        case "edit_asset_tag": {
           actions.push(command);
           if ((window as unknown as {__qaTagFailure: boolean}).__qaTagFailure) throw new Error("Controlled tag save failure");
           const asset = assets.find((item: any) => item.id === args.id) as {tags: string[]} | undefined;
-          if (asset) asset.tags = args.tags as string[];
+          if (!asset) throw new Error("Unknown fixture asset");
+          const edit = args.edit as AssetTagEdit;
+          const key = (tag: string) => tag.replace(/[A-Z]/g, char => char.toLowerCase());
+          if (edit.kind === "rename") {
+            if (!asset.tags.includes(edit.from)) throw "This tag has changed.";
+            if (asset.tags.some(tag => tag !== edit.from && key(tag) === key(edit.to))) throw "This tag already exists.";
+            asset.tags = asset.tags.map(tag => tag === edit.from ? edit.to : tag);
+          } else if (edit.kind === "remove") {
+            asset.tags = asset.tags.filter(tag => tag !== edit.tag);
+          } else if (!asset.tags.some(tag => key(tag) === key(edit.tag))) {
+            asset.tags = [...asset.tags, edit.tag];
+          }
           emit("library-changed", null);
-          return null;
+          return [...asset.tags];
         }
         case "list_pending_recordings": case "list_text_history": return [];
         case "import_media": actions.push(command); return { ids: [], failed: 0 };
