@@ -18,7 +18,7 @@ function settingsHarness(api, hasUpdate = false) {
       "./StartupSettingsRow": { StartupSettingsRow: "startup-row" },
       "./SupportLinks": { SupportLinks: "support-links" },
       "./ReleaseNotes": { ReleaseNotes: "release-notes" },
-      "./OcrSettingsSection": { OcrSettingsSection: "ocr-settings" },
+      "./OcrSettingsSection": { OcrSettingsSection: "ocr-settings", ScreenshotOcrSetting: "screenshot-ocr-setting" },
       "./useDialogFocusTrap": { useDialogFocusTrap: () => ({ current: null }) },
     },
   });
@@ -82,4 +82,34 @@ test("profile saves still replace the cached OCR settings", async () => {
   h.tab("general"); h.tab("ocr");
   assert.deepEqual(h.ocr().props.settings, result);
   h.component.unmount();
+});
+
+
+test("screenshot OCR setting changes only after persistence and retains the previous value on failure", async () => {
+  const section = 'import React from "react";\n' + readFileSync(new URL("../src/settings/OcrSettingsSection.tsx", import.meta.url), "utf8");
+  const first = deferred();
+  const updates = [];
+  const harness = createLibraryHarness({
+    getScreenshotOcrEnabled: async () => false,
+    setScreenshotOcrEnabled: value => {
+      updates.push(value);
+      return updates.length === 1 ? first.promise : Promise.resolve(value);
+    },
+  }, section, { modules: { "../ocr/providerLabel": { ocrProviderLabel: String } } });
+  const component = harness.mount("ScreenshotOcrSetting");
+  const toggle = () => nodes(component.render()).find(node => node?.props?.role === "switch");
+  assert.equal(toggle().props.disabled, true);
+  await settleRequests();
+  const change = toggle().props.onClick;
+  change(); change();
+  assert.equal(toggle().props["aria-checked"], false);
+  assert.equal(toggle().props.disabled, true);
+  assert.deepEqual(updates, [true]);
+  first.reject(new Error("could not persist")); await settleRequests();
+  assert.equal(toggle().props["aria-checked"], false);
+  assert.ok(nodes(component.render()).includes("Couldn't change screenshot text indexing."));
+  toggle().props.onClick(); await settleRequests();
+  assert.equal(toggle().props["aria-checked"], true);
+  assert.deepEqual(updates, [true, true]);
+  component.unmount();
 });

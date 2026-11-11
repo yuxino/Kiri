@@ -109,6 +109,7 @@ pub struct AssetDto {
     pub title: Option<String>,
     pub ocr_text: Option<String>,
     pub ocr_original_text: Option<String>,
+    pub ocr_revision: Option<uuid::Uuid>,
     pub qr_text: Option<String>,
     pub tags: Vec<String>,
     pub pixel_width: i64,
@@ -161,6 +162,7 @@ pub(crate) fn asset_dto(asset: &CaptureAsset) -> AssetDto {
         title: asset.title.clone(),
         ocr_text: asset.ocr_text.clone(),
         ocr_original_text: asset.ocr_original_text.clone(),
+        ocr_revision: asset.ocr_revision,
         qr_text: asset.qr_text.clone(),
         tags: asset.tags.clone(),
         pixel_width: asset.pixel_width,
@@ -3117,9 +3119,13 @@ fn confirm_capture_inner(
             )
             .map_err(|error| error.to_string()),
     };
+    let import_result = import_result.map(|asset| {
+        let version = crate::ocr_source::OcrImageVersion::new(&context, asset.id, asset.ocr_revision);
+        (asset, version)
+    });
     drop(context);
-    let asset = match import_result {
-        Ok(asset) => asset,
+    let (asset, ocr_version) = match import_result {
+        Ok(saved) => saved,
         Err(error) => {
             if copied {
                 emit_notice_on_monitor(
@@ -3136,6 +3142,9 @@ fn confirm_capture_inner(
         }
     };
     emit_library_changed(app);
+    if png.len() <= crate::ocr_source::MAX_PREPARED_PNG_BYTES {
+        state.screenshot_ocr.enqueue(app, ocr_version);
+    }
     log::info!(
         "confirm_capture: library import complete asset_id={} copied={}",
         asset.id,
@@ -6668,6 +6677,8 @@ mod command_security_tests {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: Vec::new(),
             pixel_width: 10,

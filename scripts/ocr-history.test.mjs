@@ -91,7 +91,7 @@ test("navigation during a failed OCR save retains the submitted draft and error 
   workspace.navigate(2);
   assert.equal(workspace.editor()?.props.value, "keep my correction");
   button(workspace.render().history, "Save").props.onClick(); await settleRequests();
-  assert.deepEqual(changes, [["one", "original", "keep my correction"], ["one", "original", "keep my correction"]]);
+  assert.deepEqual(changes, [["one", "original", "keep my correction", null], ["one", "original", "keep my correction", null]]);
   assert.equal(workspace.editor(), undefined);
   assert.equal(workspace.navigate(0).history, undefined);
   workspace.unmount();
@@ -301,9 +301,9 @@ test("a library refresh cannot rebase an open correction over another window's e
   const changes = [];
   const harness = createLibraryHarness({
     listOcrRecords: async () => [current],
-    updateOcrHistoryText: async (id, expectedText, replacement) => {
-      changes.push([id, expectedText, replacement]);
-      if (expectedText !== current.ocrText) throw new Error("OCR text changed");
+    updateOcrHistoryText: async (id, expectedText, replacement, expectedRevision) => {
+      changes.push([id, expectedText, replacement, expectedRevision]);
+      if (expectedText !== current.ocrText || expectedRevision !== (current.ocrRevision ?? null)) throw new Error("OCR text changed");
       current = { ...current, ocrText: replacement };
       return current;
     },
@@ -314,12 +314,12 @@ test("a library refresh cannot rebase an open correction over another window's e
   const editor = tree => nodes(tree).find(node => node?.props?.editor?.type === "textarea")?.props.editor;
   editor(component.render()).props.onChange({ target: { value: "my correction" } });
   component.render();
-  current = record("ocr-1", "other window's correction");
+  current = { ...record("ocr-1", "other window's correction"), ocrRevision: "different-revision" };
   harness.emit("libraryChanged"); component.render();
   await pause(5); await settleRequests();
   button(component.render(), "Save").props.onClick(); await settleRequests();
   const tree = component.render();
-  assert.deepEqual(changes, [["ocr-1", "original", "my correction"]]);
+  assert.deepEqual(changes, [["ocr-1", "original", "my correction", null]]);
   assert.equal(current.ocrText, "other window's correction");
   assert.equal(editor(tree).props.value, "my correction");
   assert.equal(hasText(tree, "Couldn't save the text. Reload Text History and try again."), true);
@@ -422,7 +422,7 @@ test("a pending OCR save locks further typing and Escape until success or failur
     beforeSave.props.onKeyDown({ key: "Escape", stopPropagation() {}, preventDefault() {} });
     assert.equal(editor().props.disabled, true);
     assert.equal(editor().props.value, "submitted correction");
-    assert.deepEqual(changes, [["one", "original", "submitted correction"]]);
+    assert.deepEqual(changes, [["one", "original", "submitted correction", null]]);
     if (succeeds) pending.resolve(record("one", "submitted correction"));
     else pending.reject(new Error("save failed"));
     await settleRequests();
@@ -434,4 +434,108 @@ test("a pending OCR save locks further typing and Escape until success or failur
     }
     component.unmount();
   }
+});
+
+
+test("a single history record can move directly to Trash and reports a failed attempt", async () => {
+  const first = deferred();
+  const second = deferred();
+  const requests = [];
+  let records = [record("one", "first"), record("two", "second")];
+  const harness = createLibraryHarness({
+    listOcrRecords: async () => records,
+    moveToTrash: id => { requests.push(id); return requests.length === 1 ? first.promise : second.promise; },
+  }, source);
+  const component = harness.mount("TextHistory");
+  component.render(); await pause(5); await settleRequests();
+  const reader = () => nodes(component.render()).find(node => node?.type?.name === "TextReader");
+  const initial = component.render();
+  const initialReader = nodes(initial).find(node => node?.type?.name === "TextReader");
+  const trash = button(initial, "Move to Trash");
+  assert.ok(initialReader.props.actions.props.children.includes(trash), "Trash is visible outside the overflow menu");
+  trash.props.onClick(); trash.props.onClick();
+  assert.deepEqual(requests, ["one"]);
+  first.reject(new Error("write failed")); await settleRequests();
+  assert.equal(reader().props.text, "first");
+  assert.equal(hasText(component.render(), "Couldn't move this text to Trash."), true);
+  button(component.render(), "Move to Trash").props.onClick();
+  records = records.slice(1);
+  second.resolve(); await settleRequests();
+  assert.equal(reader().props.text, "second");
+  assert.equal(hasText(component.render(), "Couldn't move this text to Trash."), false);
+  component.unmount();
+});
+
+const preparedRequest = (requestId, profile = null) => ({
+  requestId, imageWidth: 100, imageHeight: 200, byteLength: 800, profile,
+  engine: profile ? { kind: "profile", profileId: profile.id } : { kind: "local" },
+});
+
+test("recognizing a corrected record asks before replacement and sends only after remote approval", async () => {
+  for (const profile of [null, { id: "remote", name: "Selected provider", origin: "https://ocr.example", model: "chosen", revision: 2 }]) {
+    const starts = [], sends = [], cancellations = [];
+    const pending = deferred();
+    const harness = createLibraryHarness({
+      listOcrRecords: async () => [{ ...record("one", "my correction"), ocrOriginalText: "machine text", ocrRevision: "rev-1" }],
+      prepareOcrHistoryRequest: async (...args) => { starts.push(args); return preparedRequest(String(starts.length), profile); },
+      recognizeOcrHistoryRequest: (...args) => { sends.push(args); return pending.promise; },
+      cancelOcrHistoryRequest: async id => { cancellations.push(id); },
+    }, source);
+    const component = harness.mount("TextHistory");
+    component.render(); await pause(5); await settleRequests();
+    const consent = () => nodes(component.render()).find(node => node?.type?.name === "HistoryRecognitionDialog");
+    const begin = button(component.render(), "Recognize Again");
+    begin.props.onClick(); begin.props.onClick(); await settleRequests();
+    assert.deepEqual(starts, [["one", "rev-1"]]);
+    assert.equal(consent().props.consent.replaceCorrection, true);
+    assert.equal(consent().props.consent.prepared.profile, profile);
+    assert.deepEqual(sends, []);
+    consent().props.onCancel();
+    assert.equal(consent(), undefined);
+    assert.deepEqual(cancellations, ["1"]);
+
+    button(component.render(), "Recognize Again").props.onClick(); await settleRequests();
+    const { onConfirm } = consent().props;
+    onConfirm(); onConfirm();
+    assert.deepEqual(sends, [["2", Boolean(profile), true]]);
+    assert.equal(button(component.render(), "Edit Text").props.disabled, true);
+    pending.resolve(null); await settleRequests();
+    assert.equal(hasText(component.render(), "No text found. The saved text was kept."), true);
+    assert.ok(button(component.render(), "Restore Original Text"));
+    component.unmount();
+  }
+});
+
+test("local rerecognition retries IPC failures and ignores a late list that predates the save", async () => {
+  let current = record("one", "older text");
+  const lateList = deferred();
+  const recognition = deferred();
+  let nextList, calls = 0;
+  const harness = createLibraryHarness({
+    listOcrRecords: () => nextList ?? Promise.resolve([current]),
+    prepareOcrHistoryRequest: async () => preparedRequest("local"),
+    recognizeOcrHistoryRequest: (_id, sendRemote, replaceCorrection) => {
+      assert.equal(sendRemote, false);
+      assert.equal(replaceCorrection, false);
+      return calls++ === 0 ? Promise.reject(new Error("IPC failed")) : recognition.promise;
+    },
+  }, source);
+  const component = harness.mount("TextHistory");
+  component.render(); await pause(5); await settleRequests();
+  button(component.render(), "Recognize Again").props.onClick(); await settleRequests();
+  assert.equal(hasText(component.render(), "Couldn't recognize this text again."), true);
+  component.render(); await pause(5); await settleRequests();
+
+  button(component.render(), "Recognize Again").props.onClick(); await settleRequests();
+  nextList = lateList.promise;
+  harness.emit("libraryChanged"); component.render(); await pause(5);
+  const old = current;
+  current = { ...record("one", "fresh text"), ocrRevision: "rev-2" };
+  recognition.resolve(current); await settleRequests();
+  lateList.resolve([old]); await settleRequests();
+  nextList = null;
+  assert.equal(hasText(component.render(), "older text"), false);
+  assert.equal(hasText(component.render(), "fresh text"), true);
+  assert.equal(hasText(component.render(), "New text saved."), true);
+  component.unmount();
 });

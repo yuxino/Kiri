@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api, mediaUrl, onLibraryChanged, type AssetDto, type OcrRecognitionDto } from "../lib/ipc";
+import { api, mediaUrl, onLibraryChanged, type AssetDto, type OcrRecognitionDto, type PreparedOcrRequestDto } from "../lib/ipc";
 import { KiriIcon } from "../components/KiriIcons";
-import { t } from "../i18n";
+import { fmt, t } from "../i18n";
 import { isTextComposition, setTextComposition } from "../annotation/text-composition.js";
 import { useRecordSelection } from "../components/useRecordSelection";
 import { RecordMoreActions } from "../components/RecordMoreActions";
@@ -102,6 +102,49 @@ export function OcrDialog({ asset, onClose }: { asset: AssetDto; onClose(): void
   </dialog>;
 }
 
+type HistoryRecognition = {
+  requestId: string | null;
+  expectedRevision: string | null;
+  running: boolean;
+};
+type RecognitionConsent = {
+  prepared: PreparedOcrRequestDto;
+  replaceCorrection: boolean;
+};
+
+function HistoryRecognitionDialog({ consent, onConfirm, onCancel }: {
+  consent: RecognitionConsent; onConfirm(): void; onCancel(): void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+  const { profile, imageWidth, imageHeight, byteLength } = consent.prepared;
+  return <dialog ref={dialog} className="text-dialog text-history__consent" aria-labelledby="history-consent-title"
+    onCancel={event => { event.preventDefault(); event.stopPropagation(); onCancel(); }}
+    onKeyDown={event => event.stopPropagation()}>
+    <h2 id="history-consent-title">{t(profile ? "Send image for remote OCR?" : "Replace corrected text?")}</h2>
+    {profile && <>
+      <p>{t("Kiri will send this record's source image.")}</p>
+      <dl>
+        <dt>{t("Profile")}</dt><dd>{profile.name}</dd>
+        <dt>{t("Destination")}</dt><dd>{profile.origin}</dd>
+        <dt>{t("Model")}</dt><dd>{profile.model}</dd>
+        <dt>{t("Image")}</dt><dd>{fmt("%d × %d px", imageWidth, imageHeight)} · {fmt("%d KB", Math.max(1, Math.ceil(byteLength / 1024)))}</dd>
+      </dl>
+    </>}
+    {consent.replaceCorrection && <p>{t("If new text is found, it will replace your corrected text.")}</p>}
+    <div className="record-actions">
+      <button type="button" className="kiri-button kiri-button--secondary" onClick={onCancel} autoFocus>{t("Cancel")}</button>
+      <button type="button" className="kiri-button kiri-button--primary" onClick={onConfirm}>
+        {profile ? fmt("Send to %@", profile.name) : t("Recognize Again")}
+      </button>
+    </div>
+  </dialog>;
+}
+
 export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange?(locked: boolean): void } = {}) {
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<AssetDto[]>([]);
@@ -111,45 +154,75 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
   const [loadError, setLoadError] = useState(false);
   const [mutationError, setMutationError] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const recognitionRef = useRef<HistoryRecognition | null>(null);
+  const recognizeButton = useRef<HTMLButtonElement>(null);
+  const restoreRecognitionFocus = useRef(false);
+  useEffect(() => {
+    if (!recognizing && restoreRecognitionFocus.current) {
+      restoreRecognitionFocus.current = false;
+      recognizeButton.current?.focus();
+    }
+  }, [recognizing]);
+  const [consent, setConsent] = useState<RecognitionConsent | null>(null);
+  const [recognitionFeedback, setRecognitionFeedback] = useState<{ message: string; error?: boolean } | null>(null);
   const [editing, setEditing] = useState(false);
   const [editBase, setEditBase] = useState<{ id: string; text: string; asset: AssetDto } | null>(null);
   const editingRef = useRef(false);
   const savingRef = useRef(false);
   // Publish changes synchronously: a second click can reach the main sidebar
   // before React renders disabled navigation. Keep failed drafts mounted.
-  const updateNavigationLock = () => onNavigationLockChange?.(editingRef.current || savingRef.current);
+  const updateNavigationLock = () => onNavigationLockChange?.(
+    editingRef.current || savingRef.current || deletingRef.current || recognitionRef.current != null,
+  );
   useEffect(() => () => onNavigationLockChange?.(false), [onNavigationLockChange]);
+  useEffect(() => () => {
+    const id = recognitionRef.current?.requestId;
+    recognitionRef.current = null;
+    if (id) void api.cancelOcrHistoryRequest(id).catch(() => {});
+  }, []);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState(false);
   const [revision, setRevision] = useState(0);
+  const recordsRequest = useRef(0);
+  const reloadRecords = () => {
+    ++recordsRequest.current;
+    setRevision(value => value + 1);
+  };
   const search = useRef<HTMLInputElement>(null);
   const visibleRecords = recordsQuery === query ? records : [];
   const batch = useRecordSelection({ query, ids: visibleRecords.map(record => record.id), loading: loading || recordsQuery !== query,
-    disabled: editing || saving || deleting, onDeleted: ids => {
+    disabled: editing || saving || deleting || recognizing, onDeleted: ids => {
       setRecords(current => current.filter(record => !ids.includes(record.id)));
-      setRevision(value => value + 1);
+      reloadRecords();
     } });
   useEffect(() => {
-    const subscription = onLibraryChanged(() => setRevision((value) => value + 1));
+    const subscription = onLibraryChanged(reloadRecords);
     return () => { void subscription.then((dispose) => dispose()).catch(() => {}); };
   }, []);
   useEffect(() => {
-    let current = true;
+    const request = ++recordsRequest.current;
+    const isCurrent = () => request === recordsRequest.current;
     setLoading(true); setLoadError(false);
     const timer = setTimeout(() => {
       void api.listOcrRecords(query).then((items) => {
-        if (!current) return;
+        if (!isCurrent()) return;
         setRecords(items); setRecordsQuery(query);
         setSelectedId((id) => editingRef.current ? id : items.some((item) => item.id === id) ? id : items[0]?.id ?? null);
         setLoading(false);
-      }, () => { if (current) { setLoadError(true); setLoading(false); setRecords([]); } });
+      }, () => { if (isCurrent()) { setLoadError(true); setLoading(false); setRecords([]); } });
     }, query ? 150 : 0);
-    return () => { current = false; clearTimeout(timer); };
+    return () => {
+      if (isCurrent()) ++recordsRequest.current;
+      clearTimeout(timer);
+    };
   }, [query, revision]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!isTextComposition(event) && !editingRef.current && !savingRef.current &&
+      if (!isTextComposition(event) && !editingRef.current && !savingRef.current
+          && !deletingRef.current && !recognitionRef.current &&
           (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
         event.preventDefault(); search.current?.focus();
       }
@@ -170,33 +243,117 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
     updateNavigationLock();
   };
   const saveCorrection = async (replacement: string | null) => {
-    if (!selected || savingRef.current || !selected.ocrText || batch.active) return;
+    if (!selected || savingRef.current || deletingRef.current || recognitionRef.current || !selected.ocrText || batch.active) return;
     // A live library refresh must not silently rebase an in-progress draft over
     // another window's correction. Keep the text the user began editing.
     if (replacement !== null && editBase?.id !== selected.id) return;
     const expectedText = replacement === null ? selected.ocrText : editBase!.text;
+    const expectedRevision = (replacement === null ? selected : editBase!.asset).ocrRevision ?? null;
     savingRef.current = true;
     updateNavigationLock();
     setSaving(true); setEditError(false);
     try {
-      const updated = await api.updateOcrHistoryText(selected.id, expectedText, replacement);
+      const updated = await api.updateOcrHistoryText(selected.id, expectedText, replacement, expectedRevision);
       setRecords((current) => current.map((item) => item.id === updated.id ? updated : item));
       finishEditing();
     } catch { setEditError(true); }
     finally { savingRef.current = false; setSaving(false); updateNavigationLock(); }
   };
+  const actionUnavailable = !selected || loading || recordsQuery !== query || batch.active;
+  const canActOnRecord = () => !actionUnavailable && !editingRef.current && !savingRef.current
+    && !deletingRef.current && !recognitionRef.current;
   const remove = async () => {
-    if (!selected || deleting || batch.active) return;
-    setDeleting(true); setMutationError(false);
-    try { await api.moveToTrash(selected.id); setRevision((value) => value + 1); }
-    catch { setMutationError(true); }
-    finally { setDeleting(false); }
+    if (!selected || !canActOnRecord()) return;
+    deletingRef.current = true;
+    updateNavigationLock();
+    setDeleting(true); setMutationError(false); setRecognitionFeedback(null);
+    try {
+      await api.moveToTrash(selected.id);
+      setRecords(current => current.filter(record => record.id !== selected.id));
+      reloadRecords();
+    } catch { setMutationError(true); }
+    finally { deletingRef.current = false; setDeleting(false); updateNavigationLock(); }
   };
+  const finishRecognition = () => {
+    recognitionRef.current = null;
+    setRecognizing(false);
+    setConsent(null);
+    updateNavigationLock();
+  };
+  const cancelRecognition = () => {
+    const request = recognitionRef.current;
+    if (!request || request.running) return;
+    restoreRecognitionFocus.current = true;
+    finishRecognition();
+    if (request.requestId) void api.cancelOcrHistoryRequest(request.requestId).catch(() => {});
+  };
+  const reportRecognitionError = (error: unknown) => {
+    const message = typeof error === "string" && [
+      "The image or text record changed. Try again.",
+      "The OCR engine changed. Try again.",
+      "Another image is being recognized. Try again shortly.",
+      "Can't read this file.",
+      "The OCR image exceeds the size limit.",
+    ].includes(error) ? error : "Couldn't recognize this text again.";
+    setRecognitionFeedback({ message, error: true });
+  };
+  const runRecognition = async ({ prepared, replaceCorrection }: RecognitionConsent) => {
+    const request = recognitionRef.current;
+    if (!request || request.running || request.requestId !== prepared.requestId) return;
+    request.running = true;
+    setConsent(null);
+    try {
+      const updated = await api.recognizeOcrHistoryRequest(prepared.requestId, Boolean(prepared.profile), replaceCorrection);
+      if (recognitionRef.current !== request) return;
+      if (updated) {
+        setRecords(current => current.map(record =>
+          record.id === updated.id && (record.ocrRevision ?? null) === request.expectedRevision ? updated : record,
+        ));
+        reloadRecords();
+      }
+      setRecognitionFeedback({ message: updated ? "New text saved." : "No text found. The saved text was kept." });
+    } catch (error) {
+      if (recognitionRef.current === request) {
+        // The request may have reached the backend even if IPC did not return.
+        reloadRecords();
+        reportRecognitionError(error);
+      }
+    } finally {
+      if (recognitionRef.current === request) finishRecognition();
+    }
+  };
+  const beginRecognition = async () => {
+    if (!selected || !canActOnRecord()) return;
+    const request: HistoryRecognition = { requestId: null, expectedRevision: selected.ocrRevision ?? null, running: false };
+    recognitionRef.current = request;
+    updateNavigationLock();
+    setRecognizing(true); setMutationError(false); setRecognitionFeedback(null);
+    try {
+      const prepared = await api.prepareOcrHistoryRequest(selected.id, request.expectedRevision);
+      if (recognitionRef.current !== request) {
+        void api.cancelOcrHistoryRequest(prepared.requestId).catch(() => {});
+        return;
+      }
+      request.requestId = prepared.requestId;
+      const next = { prepared, replaceCorrection: selected.ocrOriginalText != null };
+      if (prepared.profile || next.replaceCorrection) setConsent(next);
+      else await runRecognition(next);
+    } catch (error) {
+      if (recognitionRef.current === request) {
+        reportRecognitionError(error);
+        finishRecognition();
+      }
+    }
+  };
+  const recordBusy = saving || deleting || recognizing || batch.active;
   return <section className="text-history" aria-label={t("Text History")} onKeyDown={batch.onKeyDown}>
     <div className="record-workspace-toolbar">
       <label className="text-history__search"><KiriIcon name="magnifyingglass" size={15} />
-        <input ref={search} type="search" value={query} disabled={editing || saving || batch.busy}
-          onChange={(event) => { if (!editingRef.current && !savingRef.current && !batch.busy) setQuery(event.target.value); }}
+        <input ref={search} type="search" value={query} disabled={editing || saving || deleting || recognizing || batch.busy}
+          onChange={(event) => {
+            if (editingRef.current || savingRef.current || deletingRef.current || recognitionRef.current || batch.busy) return;
+            setQuery(event.target.value); setRecognitionFeedback(null); setMutationError(false);
+          }}
           placeholder={t("Search recognized text")} aria-label={t("Search recognized text")} />
       </label>
       {batch.controls}
@@ -207,20 +364,26 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
           {batch.checkbox(record.id)}<span className="record-selection__text"><span className="text-history__excerpt">{record.ocrText}</span>
           <time>{new Date(record.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></span>
         </label> : <button type="button" key={record.id} className="ocr-history__item"
-          aria-current={selectedId === record.id ? "true" : undefined} disabled={editing || saving}
-          onClick={() => { if (editingRef.current || savingRef.current) return; setSelectedId(record.id); setMutationError(false); }}>
+          aria-current={selectedId === record.id ? "true" : undefined} disabled={editing || saving || deleting || recognizing}
+          onClick={() => {
+            if (editingRef.current || savingRef.current || deletingRef.current || recognitionRef.current) return;
+            setSelectedId(record.id); setMutationError(false); setRecognitionFeedback(null);
+          }}>
           <span className="text-history__excerpt">{record.ocrText}</span>
           <time dateTime={new Date(record.createdAt).toISOString()}>{new Date(record.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
         </button>)}
       </div>
     </aside>
     <main className="text-history__detail">
+      {recognizing && !consent && <p className="text-history__feedback" role="status">{t("Recognizing Text…")}</p>}
+      {recognitionFeedback && <p className={recognitionFeedback.error ? "text-history__error" : "text-history__feedback"}
+        role={recognitionFeedback.error ? "alert" : "status"}>{t(recognitionFeedback.message)}</p>}
+      {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
       {loadError && !editing ? <div className="text-history__empty" role="alert"><p>{t("Couldn't load Text History.")}</p><button type="button" className="kiri-button kiri-button--secondary" onClick={() => setRevision((v) => v + 1)}>{t("Retry")}</button></div> :
         selected ? <>
           {loadError && <p role="alert" className="text-history__error">{t("Couldn't load Text History.")}</p>}
-          {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
           {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
-          <TextReader actionsDisabled={batch.active} key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
+          <TextReader actionsDisabled={recordBusy} key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
             heading={<div className="text-history__record-heading">
               <time title={new Date(selected.createdAt).toLocaleString()}>{new Date(selected.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
             </div>}
@@ -228,11 +391,22 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
                 <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { if (savingRef.current) return; finishEditing(); setEditError(false); }}><KiriIcon name="xmark" size={14} />{t("Cancel")}</button>
                 <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}><KiriIcon name="checkmark" size={14} />{t("Save")}</button>
               </> : <>
-                <button type="button" className="kiri-button kiri-button--ghost" disabled={saving || deleting || batch.active} onClick={() => { if (savingRef.current || batch.active) return; editingRef.current = true; updateNavigationLock(); setDraft(selected.ocrText ?? ""); setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected }); setEditing(true); setEditError(false); }}><KiriIcon name="pencil.tip" size={14} />{t("Edit Text")}</button>
-                <RecordMoreActions disabled={saving || deleting || batch.active}>
-                {selected.ocrOriginalText != null && <button type="button" className="kiri-button kiri-button--secondary" disabled={saving || deleting || batch.active} onClick={() => void saveCorrection(null)}><KiriIcon name="arrow.uturn.backward" size={14} />{t("Restore Original Text")}</button>}
-                <button type="button" className="kiri-button kiri-button--destructive" disabled={deleting || loading || saving || batch.active} onClick={() => void remove()}><KiriIcon name="trash" size={14} />{t("Move to Trash")}</button>
-                </RecordMoreActions>
+                <button type="button" className="kiri-button kiri-button--ghost" disabled={recordBusy} onClick={() => {
+                  if (savingRef.current || deletingRef.current || recognitionRef.current || batch.active) return;
+                  editingRef.current = true;
+                  updateNavigationLock();
+                  setDraft(selected.ocrText ?? "");
+                  setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected });
+                  setEditing(true); setEditError(false); setRecognitionFeedback(null); setMutationError(false);
+                }}><KiriIcon name="pencil.tip" size={14} />{t("Edit Text")}</button>
+                {selected.ocrOriginalText != null && <RecordMoreActions disabled={recordBusy}>
+                  <button type="button" className="kiri-button kiri-button--secondary" disabled={recordBusy}
+                    onClick={() => void saveCorrection(null)}><KiriIcon name="arrow.uturn.backward" size={14} />{t("Restore Original Text")}</button>
+                </RecordMoreActions>}
+                <button ref={recognizeButton} type="button" className="kiri-button kiri-button--ghost" disabled={recordBusy || actionUnavailable}
+                  onClick={() => void beginRecognition()}><KiriIcon name="text.viewfinder" size={14} />{t("Recognize Again")}</button>
+                <button type="button" className="kiri-button kiri-button--destructive" disabled={recordBusy || actionUnavailable}
+                  onClick={() => void remove()}><KiriIcon name="trash" size={14} />{t("Move to Trash")}</button>
               </>}
             editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} disabled={saving}
               onChange={(event) => { if (!savingRef.current) setDraft(event.target.value); }}
@@ -250,5 +424,7 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
           {!loading && <p>{t(query ? "Try another word or clear the search." : "Recognize text from your screen or a saved screenshot. It will appear here.")}</p>}
         </div>}
     </main>
+    {consent && <HistoryRecognitionDialog consent={consent}
+      onCancel={cancelRecognition} onConfirm={() => void runRecognition(consent)} />}
   </section>;
 }

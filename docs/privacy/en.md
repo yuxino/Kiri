@@ -2,8 +2,8 @@
 
 Kiri is local-first. Screenshots, recordings, annotations, OCR results, and the
 capture library stay on the device unless the user exports them or explicitly
-sends a selected OCR region to a configured remote provider. Kiri has no
-account system, analytics, advertising, or telemetry.
+sends an OCR selection or a Text History source image to a configured remote
+provider. Kiri has no account system, analytics, advertising, or telemetry.
 
 ## Library storage
 
@@ -90,9 +90,18 @@ library moves and recoverable Trash. Permanently deleting the record removes
 both. Recognizing a saved screenshot uses its saved flattened pixels, not its
 unannotated editing source or unsaved edits. Its text record owns a separate
 snapshot, so deleting the original screenshot does not delete this history.
-History is not sent to remote providers. Local recognition of saved screenshots
-continues if the result dialog is closed. If history cannot be saved, Kiri keeps
-the result visible for copying and reports the save failure.
+Local recognition of saved screenshots continues if its result dialog is closed.
+If history cannot be saved, Kiri keeps the result visible for copying and
+reports the save failure. Recognize Again uses the record’s source image.
+A remote engine receives that PNG only after you confirm the send.
+
+## Screenshot text search
+
+The optional screenshot text search setting is off by default. It uses the
+bundled offline model on new screenshots and stores recognized text with the
+screenshot in the local library index. That text stays with the screenshot
+when the library is moved and through recoverable Trash. Turning off the
+setting stops new indexing. Previously indexed text remains searchable.
 
 ## Optional remote OCR
 
@@ -103,10 +112,10 @@ destination origin, model, and selected image dimensions and size. Only
 activating a visible Send or Retry action sends that selected PNG together with
 a short text-recognition instruction and the configured model name.
 
-Return uses local OCR for that image. A failed remote request is never retried,
-routed to another provider, or uploaded through a fallback automatically. Kiri
-does not send the full capture, the capture library, other screen regions, or
-previous OCR results as part of the request.
+In the capture overlay, Return uses local OCR for that image. After a failed
+remote request, another send requires explicit approval. Each request uses
+only the image described in the confirmation. The capture library, other
+screen regions, and previous OCR results stay local.
 
 The chosen provider processes the request under its own terms and retention
 policy. Custom profiles send data to the origin shown in Kiri's confirmation

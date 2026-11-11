@@ -14,10 +14,13 @@ mod windows_small_text;
 
 /// Tauri resolves resource_dir for both installed packages and Cargo builds.
 pub fn recognize_text(png: &[u8], resources: Option<&Path>) -> Result<String> {
-    let model = resources
-        .ok_or_else(|| anyhow!("OCR resource directory unavailable"))
-        .and_then(|root| paddle::recognize(&root.join("ocr-runtime"), png));
+    let model = recognize_bundled_text(png, resources);
     with_native_fallback(model, compatibility::system_hint, || recognize_native(png))
+}
+
+pub(crate) fn recognize_bundled_text(png: &[u8], resources: Option<&Path>) -> Result<String> {
+    let root = resources.ok_or_else(|| anyhow!("OCR resource directory unavailable"))?;
+    paddle::recognize(&root.join("ocr-runtime"), png)
 }
 
 fn with_native_fallback(

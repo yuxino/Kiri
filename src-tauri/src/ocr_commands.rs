@@ -1,29 +1,43 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use crate::commands::{asset_dto, AssetDto};
 use crate::core::asset::CaptureKind;
 use crate::state::{emit_asset_content_changed, emit_library_changed};
 use serde::Serialize;
-use std::io::Read;
 use tauri::{AppHandle, Manager, WebviewWindow};
 
 use crate::commands::RectDto;
 use crate::core::ocr_provider::OcrEngineRef;
 use crate::ocr_controller::{
-    OcrProviderSettingsDto, OcrRequestOwner, PreparedEngine, PreparedOcrRequestDto,
+    OcrProviderSettingsDto, OcrRequestLease, OcrRequestOwner, PreparedEngine, PreparedOcrRequestDto,
     SaveOcrProviderProfileRequest,
+};
+use crate::ocr_source::{
+    read_saved_ocr_png, OcrImageVersion, SavedOcrSource, MAX_PREPARED_PNG_BYTES, SOURCE_CHANGED,
 };
 use crate::state::AppState;
 
-static HISTORY_OCR_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static HISTORY_OCR_BUSY: AtomicBool = AtomicBool::new(false);
+const HISTORY_OCR_FAILED: &str = "Couldn't recognize this text again.";
+
 struct HistoryOcrPermit;
-impl Drop for HistoryOcrPermit {
-    fn drop(&mut self) {
-        HISTORY_OCR_BUSY.store(false, std::sync::atomic::Ordering::Release);
+impl HistoryOcrPermit {
+    fn acquire() -> Result<Self, String> {
+        HISTORY_OCR_BUSY
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| Self)
+            .map_err(|_| "Another image is being recognized. Try again shortly.".into())
     }
 }
 
-const MAX_PREPARED_PNG_BYTES: usize = 20 * 1024 * 1024;
+impl Drop for HistoryOcrPermit {
+    fn drop(&mut self) {
+        HISTORY_OCR_BUSY.store(false, Ordering::Release);
+    }
+}
 
 #[tauri::command]
 pub async fn get_ocr_provider_settings(
@@ -141,7 +155,7 @@ pub async fn prepare_ocr_request(
         return Err("The active capture overlay changed.".into());
     }
     requests
-        .prepare(owner, cropped.png, cropped.width, cropped.height, engine)
+        .prepare(owner, cropped.png, (cropped.width, cropped.height), engine, None)
         .map_err(|error| error.to_string())
 }
 
@@ -215,7 +229,7 @@ pub async fn recognize_prepared_ocr_remote(
 
     let lookup_id = profile_id.clone();
     let resolved_task = tauri::async_runtime::spawn_blocking(move || {
-        manager.resolve_remote(&lookup_id, profile_revision)
+        manager.resolve_remote(&lookup_id, profile_revision, false)
     });
     let resolved = tokio::select! {
         biased;
@@ -289,7 +303,7 @@ pub fn cancel_prepared_ocr(
         .map_err(|error| error.to_string())
 }
 
-fn require_library_window(window: &WebviewWindow) -> Result<(), String> {
+pub(crate) fn require_library_window(window: &WebviewWindow) -> Result<(), String> {
     if window.label() == "library" {
         Ok(())
     } else {
@@ -568,6 +582,7 @@ pub fn update_ocr_history_text(
     id: String,
     expected_text: String,
     replacement: Option<String>,
+    expected_revision: Option<uuid::Uuid>,
 ) -> Result<AssetDto, String> {
     require_library_window(&window)?;
     let id = uuid::Uuid::parse_str(&id).map_err(|_| "Invalid text history record.".to_string())?;
@@ -576,7 +591,7 @@ pub fn update_ocr_history_text(
     let asset = context
         .library_mut()
         .map_err(|error| error.to_string())?
-        .update_ocr_text(&id, &expected_text, replacement)
+        .update_ocr_text(&id, &expected_text, expected_revision, replacement)
         .map_err(|error| error.to_string())?;
     drop(context);
     emit_library_changed(&app);
@@ -597,18 +612,7 @@ pub async fn recognize_asset_local(
     {
         return Err("Text recognition is unavailable from this window.".into());
     }
-    if HISTORY_OCR_BUSY
-        .compare_exchange(
-            false,
-            true,
-            std::sync::atomic::Ordering::AcqRel,
-            std::sync::atomic::Ordering::Acquire,
-        )
-        .is_err()
-    {
-        return Err("Another image is being recognized. Try again shortly.".into());
-    }
-    let permit = HistoryOcrPermit;
+    let permit = HistoryOcrPermit::acquire()?;
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
         let (png, source, identity) = {
@@ -626,22 +630,7 @@ pub async fn recognize_asset_local(
             let path = library
                 .readable_asset_url(asset)
                 .map_err(|e| e.to_string())?;
-            let mut png = Vec::new();
-            std::fs::File::open(path)
-                .map_err(|_| "Can't read this file.")?
-                .take(MAX_PREPARED_PNG_BYTES as u64 + 1)
-                .read_to_end(&mut png)
-                .map_err(|_| "Can't read this file.")?;
-            if png.len() > MAX_PREPARED_PNG_BYTES {
-                return Err("The OCR image exceeds the size limit.".into());
-            }
-            // Validate dimensions before handing bytes to native image decoders.
-            let decoder = image::codecs::png::PngDecoder::new(std::io::Cursor::new(&png))
-                .map_err(|_| "Can't read this file.")?;
-            let (width, height) = image::ImageDecoder::dimensions(&decoder);
-            if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 64_000_000 {
-                return Err("The OCR image exceeds the size limit.".into());
-            }
+            let png = read_saved_ocr_png(&path)?.bytes;
             (png, asset.source_application.clone(), identity)
         };
         let text = crate::ocr::recognize_text(&png, app.path().resource_dir().ok().as_deref())
@@ -651,6 +640,174 @@ pub async fn recognize_asset_local(
     })
     .await
     .map_err(|_| "Local OCR failed.".to_string())?
+}
+
+#[tauri::command]
+pub async fn prepare_ocr_history_request(
+    window: WebviewWindow,
+    app: AppHandle,
+    id: uuid::Uuid,
+    expected_revision: Option<uuid::Uuid>,
+) -> Result<PreparedOcrRequestDto, String> {
+    require_library_window(&window)?;
+    let permit = HistoryOcrPermit::acquire()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        let state = app.state::<AppState>();
+        let (version, path) = {
+            let mut context = state.library.lock().unwrap();
+            let version = OcrImageVersion::new(&context, id, expected_revision);
+            let library = context.library().map_err(|_| HISTORY_OCR_FAILED)?;
+            let asset = library
+                .ocr_history_record(&id, expected_revision)
+                .map_err(|_| SOURCE_CHANGED)?;
+            (version, library.asset_url(asset))
+        };
+        let (source, png, width, height) = SavedOcrSource::read(version, path)?;
+        let engine = state.ocr_providers.prepared_engine().map_err(|_| HISTORY_OCR_FAILED)?;
+        if !window.is_visible().unwrap_or(false) {
+            return Err("The OCR request was canceled.".into());
+        }
+        state
+            .ocr_requests
+            .prepare(OcrRequestOwner::history(), png, (width, height), engine, Some(source))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| HISTORY_OCR_FAILED.to_string())?
+}
+
+#[tauri::command]
+pub fn cancel_ocr_history_request(
+    window: WebviewWindow,
+    app: AppHandle,
+    request_id: String,
+) -> Result<(), String> {
+    require_library_window(&window)?;
+    app.state::<AppState>()
+        .ocr_requests
+        .cancel(&OcrRequestOwner::history(), &request_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn recognize_ocr_history_request(
+    window: WebviewWindow,
+    app: AppHandle,
+    request_id: String,
+    send_remote: bool,
+    replace_correction: bool,
+) -> Result<Option<AssetDto>, String> {
+    require_library_window(&window)?;
+    let _permit = HistoryOcrPermit::acquire()?;
+    let requests = app.state::<AppState>().ocr_requests.clone();
+    let lease = requests
+        .begin(&OcrRequestOwner::history(), &request_id)
+        .map_err(|error| error.to_string())?;
+    let result = rerecognize_history(&app, &lease, send_remote, replace_correction).await;
+    // Each Send uses a fresh prepared image. Errors never resend automatically.
+    requests.complete(&lease);
+    result
+}
+
+async fn rerecognize_history(
+    app: &AppHandle,
+    lease: &OcrRequestLease,
+    send_remote: bool,
+    replace_correction: bool,
+) -> Result<Option<AssetDto>, String> {
+    let source = lease.history_source.clone().ok_or(HISTORY_OCR_FAILED)?;
+    let state = app.state::<AppState>();
+    let manager = state.ocr_providers.clone();
+    let check_app = app.clone();
+    let check_source = source.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = check_app.state::<AppState>();
+        let mut context = state.library.lock().unwrap();
+        checked_history_library(&mut context, &check_source, replace_correction)?;
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(|_| HISTORY_OCR_FAILED.to_string())??;
+    if lease.cancellation.is_cancelled() {
+        return Err("The OCR request was canceled.".into());
+    }
+
+    let text = match &lease.engine {
+        PreparedEngine::Local if !send_remote => {
+            let png = lease.png.clone();
+            let resources = app.path().resource_dir().ok();
+            tauri::async_runtime::spawn_blocking(move || {
+                if !matches!(manager.prepared_engine(), Ok(PreparedEngine::Local)) {
+                    return Err("The OCR engine changed. Try again.".to_string());
+                }
+                crate::ocr::recognize_text(&png, resources.as_deref())
+                    .map_err(|_| "Local OCR failed.".to_string())
+            })
+            .await
+            .map_err(|_| HISTORY_OCR_FAILED.to_string())??
+        }
+        PreparedEngine::Profile { profile, .. } if send_remote => {
+            let (id, revision) = (profile.id.clone(), profile.revision);
+            let resolved = tauri::async_runtime::spawn_blocking(move || {
+                manager.resolve_remote(&id, revision, true)
+            })
+            .await
+            .map_err(|_| HISTORY_OCR_FAILED.to_string())?
+            .map_err(|error| error.to_string())?;
+            let client = state.remote_ocr().ok_or("Remote OCR is unavailable.")?;
+            let endpoint = resolved.profile.endpoint().map_err(|_| "Remote OCR endpoint is invalid.")?;
+            tokio::select! {
+                biased;
+                _ = lease.cancellation.cancelled() => return Err("The OCR request was canceled.".into()),
+                result = client.recognize(&endpoint, &resolved.profile.model, &resolved.api_key, &lease.png) => {
+                    result.map_err(|error| error.to_string())?
+                }
+            }
+        }
+        _ => return Err(HISTORY_OCR_FAILED.into()),
+    };
+
+    let app = app.clone();
+    let canceled = lease.cancellation.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mut context = state.library.lock().unwrap();
+        let library = checked_history_library(&mut context, &source, replace_correction)?;
+        if canceled.is_cancelled() {
+            return Err("The OCR request was canceled.".into());
+        }
+        let updated = library
+            .replace_ocr_recognition(&source.version.id, source.version.revision, replace_correction, text)
+            .map_err(|_| HISTORY_OCR_FAILED)?;
+        drop(context);
+        if let Some(asset) = updated {
+            emit_library_changed(&app);
+            emit_asset_content_changed(&app, &asset.id);
+            return Ok(Some(asset_dto(&asset)));
+        }
+        Ok(None)
+    })
+    .await
+    .map_err(|_| HISTORY_OCR_FAILED.to_string())?
+}
+
+fn checked_history_library<'a>(
+    context: &'a mut crate::core::library_location::LibraryContext,
+    source: &SavedOcrSource,
+    replace_correction: bool,
+) -> Result<&'a mut crate::core::library::AssetLibrary, String> {
+    if !source.version.matches_library(context) {
+        return Err(SOURCE_CHANGED.into());
+    }
+    let library = context.library_mut().map_err(|_| HISTORY_OCR_FAILED)?;
+    let asset = library
+        .ocr_history_record(&source.version.id, source.version.revision)
+        .map_err(|_| SOURCE_CHANGED)?;
+    if !source.matches(library, asset) || (asset.ocr_original_text.is_some() && !replace_correction) {
+        return Err(SOURCE_CHANGED.into());
+    }
+    Ok(library)
 }
 
 #[tauri::command]

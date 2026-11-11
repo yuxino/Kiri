@@ -75,6 +75,7 @@ export interface AssetDto {
   title: string | null;
   ocrText: string | null;
   ocrOriginalText: string | null;
+  ocrRevision?: string | null;
   qrText: string | null;
   tags: string[];
   pixelWidth: number;
@@ -315,8 +316,16 @@ export const api = {
   listQrFavorites: (query: string) => invoke<AssetDto[]>("list_qr_favorites", { query }),
   qrFavoriteAction: (id: string, action: string) => invoke<void>("qr_favorite_action", { id, action }),
   listOcrRecords: (query: string) => invoke<AssetDto[]>("list_ocr_records", { query }),
-  updateOcrHistoryText: (id: string, expectedText: string, replacement: string | null) =>
-    invoke<AssetDto>("update_ocr_history_text", { id, expectedText, replacement }),
+  updateOcrHistoryText: (id: string, expectedText: string, replacement: string | null, expectedRevision: string | null) =>
+    invoke<AssetDto>("update_ocr_history_text", { id, expectedText, replacement, expectedRevision }),
+  prepareOcrHistoryRequest: (id: string, expectedRevision: string | null) =>
+    invoke<PreparedOcrRequestDto>("prepare_ocr_history_request", { id, expectedRevision }),
+  recognizeOcrHistoryRequest: (requestId: string, sendRemote: boolean, replaceCorrection: boolean) =>
+    invoke<AssetDto | null>("recognize_ocr_history_request", { requestId, sendRemote, replaceCorrection }),
+  cancelOcrHistoryRequest: (requestId: string) =>
+    invoke<void>("cancel_ocr_history_request", { requestId }),
+  getScreenshotOcrEnabled: () => invoke<boolean>("get_screenshot_ocr_enabled"),
+  setScreenshotOcrEnabled: (enabled: boolean) => invoke<boolean>("set_screenshot_ocr_enabled", { enabled }),
   recognizeAssetLocal: (id: string) => invoke<OcrRecognitionDto>("recognize_asset_local", { id }),
   copyHistoryText: (text: string) => invoke<void>("copy_history_text", { text }),
   listAssets: (query: string, showingTrash: boolean) =>

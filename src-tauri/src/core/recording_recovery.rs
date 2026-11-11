@@ -519,6 +519,8 @@ mod tests {
             title: None,
             ocr_text: None,
             ocr_original_text: None,
+            ocr_revision: None,
+            indexed_ocr_text: None,
             qr_text: None,
             tags: Vec::new(),
             pixel_width: 1920,

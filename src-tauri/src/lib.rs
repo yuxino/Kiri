@@ -29,6 +29,8 @@ mod qr_controller;
 mod ocr;
 mod ocr_commands;
 mod ocr_controller;
+mod ocr_source;
+mod screenshot_ocr;
 mod platform;
 mod protocol;
 mod media_playback;
@@ -209,6 +211,9 @@ pub fn run() {
                 // desktop's own permission/configuration dialog.
                 if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
                     portal_shortcuts::cancel_setup(window.app_handle());
+                    if let Some(state) = window.try_state::<AppState>() {
+                        state.ocr_requests.clear_owner(&ocr_controller::OcrRequestOwner::history());
+                    }
                 }
                 if matches!(
                     event,
@@ -296,8 +301,13 @@ pub fn run() {
             qr_commands::qr_action,
             qr_commands::list_qr_favorites,
             qr_commands::qr_favorite_action,
+            screenshot_ocr::get_screenshot_ocr_enabled,
+            screenshot_ocr::set_screenshot_ocr_enabled,
             ocr_commands::list_ocr_records,
             ocr_commands::update_ocr_history_text,
+            ocr_commands::prepare_ocr_history_request,
+            ocr_commands::recognize_ocr_history_request,
+            ocr_commands::cancel_ocr_history_request,
             ocr_commands::recognize_asset_local,
             ocr_commands::copy_history_text,
             ocr_commands::get_ocr_provider_settings,

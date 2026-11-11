@@ -613,11 +613,18 @@ impl OcrProviderManager {
         &self,
         profile_id: &str,
         revision: u64,
+        require_active: bool,
     ) -> Result<ResolvedRemoteProfile, OcrManagerError> {
         let state = self.state.lock().unwrap();
         let ProviderManagerState::Ready { store, .. } = &*state else {
             return Err(OcrManagerError::SettingsUnavailable);
         };
+        if require_active
+            && !matches!(&store.settings().active_engine,
+                OcrEngineRef::Profile { profile_id: active } if active == profile_id)
+        {
+            return Err(OcrManagerError::RevisionConflict);
+        }
         let profile = store
             .profile(profile_id)
             .filter(|profile| profile.revision == revision)
@@ -779,6 +786,13 @@ pub struct OcrRequestOwner {
     pub capture_id: uuid::Uuid,
 }
 
+impl OcrRequestOwner {
+    pub fn history() -> Self {
+        // The resident library has one request slot and no capture session.
+        Self { label: "library".into(), capture_id: uuid::Uuid::nil() }
+    }
+}
+
 impl PreparedEngine {
     fn dto(&self) -> Result<(OcrEngineRef, Option<OcrProfileDisclosureDto>), OcrManagerError> {
         match self {
@@ -811,6 +825,7 @@ struct PendingOcrRequest {
     cancellation: CancellationToken,
     png: Arc<[u8]>,
     engine: PreparedEngine,
+    history_source: Option<crate::ocr_source::SavedOcrSource>,
 }
 
 pub struct OcrRequestLease {
@@ -818,6 +833,7 @@ pub struct OcrRequestLease {
     pub png: Arc<[u8]>,
     pub engine: PreparedEngine,
     pub cancellation: CancellationToken,
+    pub(crate) history_source: Option<crate::ocr_source::SavedOcrSource>,
 }
 
 pub struct OcrRequestController {
@@ -839,10 +855,11 @@ impl OcrRequestController {
         self: &Arc<Self>,
         owner: OcrRequestOwner,
         png: Vec<u8>,
-        image_width: u32,
-        image_height: u32,
+        dimensions: (u32, u32),
         engine: PreparedEngine,
+        history_source: Option<crate::ocr_source::SavedOcrSource>,
     ) -> Result<PreparedOcrRequestDto, OcrRequestError> {
+        let (image_width, image_height) = dimensions;
         if owner.label.is_empty() || png.is_empty() || image_width == 0 || image_height == 0 {
             return Err(OcrRequestError::InvalidRequest);
         }
@@ -867,6 +884,7 @@ impl OcrRequestController {
                 cancellation: CancellationToken::new(),
                 png: png.into(),
                 engine,
+                history_source,
             },
         );
         drop(pending);
@@ -903,6 +921,7 @@ impl OcrRequestController {
             png: request.png.clone(),
             engine: request.engine.clone(),
             cancellation: request.cancellation.clone(),
+            history_source: request.history_source.clone(),
         })
     }
 
@@ -1258,7 +1277,7 @@ mod tests {
         assert!(updated.profiles[0].has_api_key);
         assert_eq!(updated.profiles[0].revision, 2);
         let resolved = manager
-            .resolve_remote(&updated.profiles[0].id, updated.profiles[0].revision)
+            .resolve_remote(&updated.profiles[0].id, updated.profiles[0].revision, false)
             .unwrap();
         assert_eq!(resolved.api_key.expose_secret(), "secret-value");
     }
@@ -1370,11 +1389,11 @@ mod tests {
         let controller = OcrRequestController::with_ttl(Duration::from_secs(30));
         let owner = owner();
         let first = controller
-            .prepare(owner.clone(), vec![1], 1, 1, PreparedEngine::Local)
+            .prepare(owner.clone(), vec![1], (1, 1), PreparedEngine::Local, None)
             .unwrap();
         let lease = controller.begin(&owner, &first.request_id).unwrap();
         let second = controller
-            .prepare(owner.clone(), vec![2], 1, 1, PreparedEngine::Local)
+            .prepare(owner.clone(), vec![2], (1, 1), PreparedEngine::Local, None)
             .unwrap();
         assert!(lease.cancellation.is_cancelled());
         controller.restore_after_failure(&lease);
@@ -1394,7 +1413,7 @@ mod tests {
         let old_owner = owner();
         let new_owner = owner();
         let request = controller
-            .prepare(old_owner.clone(), vec![1], 1, 1, PreparedEngine::Local)
+            .prepare(old_owner.clone(), vec![1], (1, 1), PreparedEngine::Local, None)
             .unwrap();
         assert_eq!(
             controller
@@ -1411,7 +1430,7 @@ mod tests {
         let controller = OcrRequestController::with_ttl(Duration::from_secs(30));
         let owner = owner();
         let request = controller
-            .prepare(owner.clone(), vec![1], 1, 1, PreparedEngine::Local)
+            .prepare(owner.clone(), vec![1], (1, 1), PreparedEngine::Local, None)
             .unwrap();
         let lease = controller.begin(&owner, &request.request_id).unwrap();
         controller.cancel(&owner, &request.request_id).unwrap();
@@ -1428,7 +1447,7 @@ mod tests {
         let controller = OcrRequestController::with_ttl(Duration::ZERO);
         let owner = owner();
         let request = controller
-            .prepare(owner.clone(), vec![1], 1, 1, PreparedEngine::Local)
+            .prepare(owner.clone(), vec![1], (1, 1), PreparedEngine::Local, None)
             .unwrap();
         assert_eq!(
             controller.begin(&owner, &request.request_id).err().unwrap(),
