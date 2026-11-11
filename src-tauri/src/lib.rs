@@ -290,6 +290,7 @@ pub fn run() {
             commands::update_asset,
             commands::rename_asset,
             commands::edit_asset_tag,
+            commands::edit_asset_tags,
             qr_commands::scan_qr,
             qr_commands::cancel_qr,
             qr_commands::qr_action,

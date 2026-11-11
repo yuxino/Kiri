@@ -20,6 +20,8 @@ use crate::core::video_project::{self, VideoProject, VideoProjectError, VideoPro
 pub enum AssetLibraryError {
     #[error("asset not found")]
     AssetNotFound,
+    #[error("tag not found")]
+    TagNotFound,
     #[error("OCR text is empty or exceeds the size limit")]
     InvalidOcrText,
     #[error("this asset is not an active OCR history record")]
@@ -76,6 +78,14 @@ pub enum AssetTagEdit {
     Add { tag: String },
     Remove { tag: String },
     Rename { from: String, to: String },
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AssetTagAction {
+    Add,
+    AddExisting,
+    Remove,
 }
 
 const ANNOTATION_PROJECT_VERSION: u32 = 1;
@@ -1077,6 +1087,57 @@ impl AssetLibrary {
         Ok(deduped)
     }
 
+    pub fn edit_asset_tags(
+        &mut self,
+        ids: &[uuid::Uuid],
+        tag: &str,
+        action: AssetTagAction,
+        showing_trash: bool,
+    ) -> Result<Vec<(uuid::Uuid, Vec<String>)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let tag = tag.trim();
+        if tag.is_empty() {
+            return Err(AssetLibraryError::InvalidTagName);
+        }
+        let in_scope = |asset: &CaptureAsset| {
+            asset.trashed_at.is_some() == showing_trash
+                && (showing_trash || (asset.ocr_text.is_none() && asset.qr_text.is_none()))
+        };
+        let matches = |existing: &str| existing.trim().eq_ignore_ascii_case(tag);
+        let spelling = match action {
+            AssetTagAction::AddExisting => self
+                .index
+                .iter()
+                .filter(|asset| in_scope(asset))
+                .flat_map(|asset| &asset.tags)
+                .find(|existing| matches(existing))
+                .ok_or(AssetLibraryError::TagNotFound)?
+                .trim()
+                .to_owned(),
+            _ => tag.to_owned(),
+        };
+
+        let mut updated = Vec::new();
+        self.batch_update(ids, |asset| {
+            if !in_scope(asset) {
+                return Err(AssetLibraryError::AssetNotFound);
+            }
+            match action {
+                AssetTagAction::Add | AssetTagAction::AddExisting => {
+                    if !asset.tags.iter().any(|existing| matches(existing)) {
+                        asset.tags.push(spelling.clone());
+                    }
+                }
+                AssetTagAction::Remove => asset.tags.retain(|existing| !matches(existing)),
+            }
+            updated.push((asset.id, asset.tags.clone()));
+            Ok(())
+        })?;
+        Ok(updated)
+    }
+
     pub fn move_to_trash(&mut self, id: &uuid::Uuid) -> Result<()> {
         self.update(id, |asset| asset.trashed_at = Some(now_ms()))
     }
@@ -1086,16 +1147,25 @@ impl AssetLibrary {
     }
 
     pub fn batch_set_favorite(&mut self, favorite: bool, ids: &[uuid::Uuid]) -> Result<()> {
-        self.batch_update(ids, |asset| asset.is_favorite = favorite)
+        self.batch_update(ids, |asset| {
+            asset.is_favorite = favorite;
+            Ok(())
+        })
     }
 
     pub fn batch_move_to_trash(&mut self, ids: &[uuid::Uuid]) -> Result<()> {
         let trashed_at = now_ms();
-        self.batch_update(ids, |asset| asset.trashed_at = Some(trashed_at))
+        self.batch_update(ids, |asset| {
+            asset.trashed_at = Some(trashed_at);
+            Ok(())
+        })
     }
 
     pub fn batch_restore(&mut self, ids: &[uuid::Uuid]) -> Result<()> {
-        self.batch_update(ids, |asset| asset.trashed_at = None)
+        self.batch_update(ids, |asset| {
+            asset.trashed_at = None;
+            Ok(())
+        })
     }
 
     /// Atomically removes every requested asset from the persisted index, then
@@ -1194,7 +1264,7 @@ impl AssetLibrary {
     fn batch_update(
         &mut self,
         ids: &[uuid::Uuid],
-        mut mutation: impl FnMut(&mut CaptureAsset),
+        mut mutation: impl FnMut(&mut CaptureAsset) -> Result<()>,
     ) -> Result<()> {
         let requested = self.validated_batch_ids(ids)?;
         if requested.is_empty() {
@@ -1204,8 +1274,11 @@ impl AssetLibrary {
         let mut next_index = self.index.clone();
         for asset in &mut next_index {
             if requested.contains(&asset.id) {
-                mutation(asset);
+                mutation(asset)?;
             }
+        }
+        if next_index == self.index {
+            return Ok(());
         }
         self.persist_index(&next_index)?;
         self.index = next_index;
@@ -3960,6 +4033,106 @@ mod tests {
         let reopened = AssetLibrary::open(root).unwrap();
         assert!(reopened.asset_by_id(&asset.id).is_some());
         assert!(reopened.asset_url(&asset).exists());
+    }
+
+    #[test]
+    fn asset_tag_batches_merge_with_current_metadata_and_preserve_other_tags() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let assets = import_test_assets(&mut library, 3);
+        let [source, first, second] = [assets[0].id, assets[1].id, assets[2].id];
+        library.set_tags(vec!["Project".into()], &source).unwrap();
+        library
+            .set_tags(vec!["Keep".into(), "Ä".into(), "ä".into()], &first)
+            .unwrap();
+        library.set_tags(vec!["PROJECT".into()], &second).unwrap();
+        let files = assets
+            .iter()
+            .map(|asset| std::fs::read(library.asset_url(asset)).unwrap())
+            .collect::<Vec<_>>();
+
+        library.persist_count.set(0);
+        let selection = [first, second, first];
+        let updated = library
+            .edit_asset_tags(&selection, " project ", AssetTagAction::AddExisting, false)
+            .unwrap();
+        assert_eq!(updated.len(), 2);
+        assert_eq!(library.persist_count.get(), 1);
+        assert_eq!(
+            library.asset_by_id(&first).unwrap().tags,
+            ["Keep", "Ä", "ä", "Project"]
+        );
+        assert_eq!(library.asset_by_id(&second).unwrap().tags, ["PROJECT"]);
+
+        library
+            .edit_asset_tags(&selection, "PROJECT", AssetTagAction::AddExisting, false)
+            .unwrap();
+        assert_eq!(library.persist_count.get(), 1, "duplicate drops do not write");
+        // A single-card edit can commit between opening the batch UI and
+        // applying its action. Only the named tag is removed from each asset.
+        library
+            .edit_asset_tags(&[second], " Latest ", AssetTagAction::Add, false)
+            .unwrap();
+        library
+            .edit_asset_tags(&selection, "PROJECT", AssetTagAction::Remove, false)
+            .unwrap();
+        assert_eq!(library.persist_count.get(), 3);
+        library
+            .edit_asset_tags(&selection, "PROJECT", AssetTagAction::Remove, false)
+            .unwrap();
+        assert_eq!(library.persist_count.get(), 3, "removal is retryable");
+
+        let reopened = AssetLibrary::open(root).unwrap();
+        assert_eq!(reopened.asset_by_id(&first).unwrap().tags, ["Keep", "Ä", "ä"]);
+        assert_eq!(reopened.asset_by_id(&second).unwrap().tags, ["Latest"]);
+        assert_eq!(reopened.asset_by_id(&source).unwrap().tags, ["Project"]);
+        for (asset, original) in assets.iter().zip(files) {
+            assert_eq!(std::fs::read(reopened.asset_url(asset)).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn asset_tag_batches_reject_stale_targets_and_keep_index_on_failure() {
+        let (_dir, root) = temp_root();
+        let mut library = AssetLibrary::open(root.clone()).unwrap();
+        let assets = import_test_assets(&mut library, 3);
+        let [first, second, trashed] = [assets[0].id, assets[1].id, assets[2].id];
+        library.set_tags(vec!["Shared".into()], &first).unwrap();
+        library.set_tags(vec!["Shared".into()], &second).unwrap();
+        library.set_tags(vec!["Old".into()], &trashed).unwrap();
+        library.move_to_trash(&trashed).unwrap();
+        let original = std::fs::read(&library.index_url).unwrap();
+        library.persist_count.set(0);
+        assert!(matches!(
+            library.edit_asset_tags(&[first, second], "Old", AssetTagAction::AddExisting, false),
+            Err(AssetLibraryError::TagNotFound)
+        ));
+        assert!(matches!(
+            library.edit_asset_tags(&[first, second], "  ", AssetTagAction::Add, false),
+            Err(AssetLibraryError::InvalidTagName)
+        ));
+        for stale in [trashed, uuid::Uuid::new_v4()] {
+            assert!(matches!(
+                library.edit_asset_tags(&[first, stale], "Shared", AssetTagAction::Remove, false),
+                Err(AssetLibraryError::AssetNotFound)
+            ));
+        }
+        assert_eq!(library.persist_count.get(), 0);
+
+        library.persist_fail.set(true);
+        assert!(matches!(
+            library.edit_asset_tags(&[first, second], "Shared", AssetTagAction::Remove, false),
+            Err(AssetLibraryError::Io(_))
+        ));
+        assert_eq!(std::fs::read(&library.index_url).unwrap(), original);
+        for id in [first, second] {
+            assert_eq!(library.asset_by_id(&id).unwrap().tags, ["Shared"]);
+        }
+        library.persist_fail.set(false);
+        library
+            .edit_asset_tags(&[trashed], "Old", AssetTagAction::Remove, true)
+            .unwrap();
+        assert!(library.asset_by_id(&trashed).unwrap().tags.is_empty());
     }
 
     #[test]

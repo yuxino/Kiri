@@ -279,3 +279,5 @@ development.
 
 - [ADR 0134: Stable library search and inline tag editing](adr/0134-stable-library-search-and-inline-tag-editing.md)
   — search in the capture heading, scrollable tag filters and retryable per-capture tag edits.
+- [ADR 0135: Assign and remove library tags](adr/0135-library-tag-assignment.md)
+  — card drag targets and atomic tag changes for selected captures.

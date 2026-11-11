@@ -272,13 +272,15 @@ async function mountTagCard(apiOverrides = {}, cardOverrides = {}, environment =
   };
 }
 
-test("clicking an inline tag field never opens or selects its parent capture", async () => {
+test("the visible Add tag action and inline field do not open or select the capture", async () => {
   for (const selectionActive of [false, true]) {
     let opens = 0, selections = 0;
     const card = await mountTagCard({}, {
       selectionActive, onOpen: () => opens++, onToggleSelection: () => selections++,
     });
-    card.startAdd();
+    const add = nodes(card.render()).find(node => node?.props?.className === "library-card-tags__add");
+    assert.equal(add?.props["aria-label"], "Add tag…");
+    add.props.onClick(clickControl);
     const tree = card.render();
     assert.ok(tagInput(tree));
     tree.props.onClick({ defaultPrevented: false, target: { closest: selector => selector.includes("input") ? {} : null } });
@@ -496,6 +498,117 @@ test("a delayed tag acknowledgement does not replace a newer library snapshot", 
   refreshReply.resolve([{ ...testAsset, tags: ["Design", "shared"] }]);
   await settleRequests();
   card.unmount();
+});
+
+test("tag dragging targets the visible selection and consumes only the drag's click", async () => {
+  const ids = ["one", "two", "three"];
+  const assets = ids.map((id) => ({ ...testAsset, id, tags: ["Project"] }));
+  const writes = [];
+  const chip = { dataset: { libraryTag: "Project" }, disabled: false };
+  let overChip = true;
+  const harness = createLibraryHarness({
+    listAssets: async () => assets,
+    editAssetTags: async (...args) => { writes.push(args); return []; },
+  }, null, { document: { elementFromPoint: () => overChip ? { closest: () => chip } : null } });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  selectButton(library.render()).props.onClick();
+  assetCards(library.render())[0].props.onToggleSelection();
+  assetCards(library.render())[1].props.onToggleSelection();
+
+  const workspace = { contains: element => element === chip };
+  let captured = false;
+  const source = {
+    dataset: { card: "one" }, isConnected: true,
+    closest: selector => selector === "[data-card]" ? source : null,
+    hasPointerCapture: () => captured,
+    setPointerCapture: () => { captured = true; },
+    releasePointerCapture: () => { captured = false; },
+  };
+  const pointer = { isPrimary: true, button: 0, buttons: 1, pointerType: "mouse",
+    pointerId: 1, clientX: 100, clientY: 200, target: source, currentTarget: workspace };
+  const root = () => library.render().props;
+
+  root().onPointerDownCapture(pointer);
+  root().onPointerMove({ ...pointer, clientY: 196 });
+  root().onPointerUp(pointer);
+  assert.deepEqual(writes, [], "movement below the threshold is an ordinary click");
+  let clicksConsumed = 0;
+  const click = { detail: 1, preventDefault() { clicksConsumed++; }, stopPropagation() {} };
+  root().onClickCapture(click);
+  assert.equal(clicksConsumed, 0);
+
+  root().onPointerDownCapture(pointer);
+  root().onPointerMove({ ...pointer, clientY: 140 });
+  assert.equal(root()["data-tag-dragging"], true);
+  assert.equal(nodes(library.render()).find(node => node?.type?.name === "FilterBar").props.tagDropTarget, "Project");
+  root().onPointerUp({ ...pointer, clientY: 140 });
+  root().onClickCapture(click);
+  await settleRequests();
+  assert.deepEqual(writes, [[["one", "two"], "Project", "addExisting", false]]);
+  assert.equal(clicksConsumed, 1);
+  assert.equal(captured, false);
+
+  source.dataset.card = "three";
+  root().onPointerDownCapture(pointer);
+  root().onPointerMove({ ...pointer, clientY: 140 });
+  root().onPointerUp({ ...pointer, clientY: 140 });
+  await settleRequests();
+  assert.deepEqual(writes.at(-1), [["three"], "Project", "addExisting", false]);
+
+  overChip = false;
+  root().onPointerDownCapture(pointer);
+  root().onPointerMove({ ...pointer, clientY: 140 });
+  root().onPointerUp({ ...pointer, clientY: 140 });
+  root().onPointerDownCapture(pointer);
+  root().onDragStart();
+  overChip = true;
+  root().onPointerMove({ ...pointer, clientY: 140 });
+  root().onPointerUp({ ...pointer, clientY: 140 });
+  assert.equal(writes.length, 2, "off-target and native drag gestures do not tag captures");
+  library.unmount();
+});
+
+test("batch tag editing keeps its exact selection on failure and serializes overlapping edits", async () => {
+  let assets = [
+    { ...testAsset, id: "one", tags: ["Project", "Other"] },
+    { ...testAsset, id: "two", tags: ["project"] },
+  ];
+  const first = deferred();
+  const writes = [];
+  const harness = createLibraryHarness({
+    listAssets: async () => assets,
+    editAssetTags: (...args) => {
+      writes.push(args);
+      if (writes.length === 1) return first.promise;
+      assets = assets.map(asset => ({ ...asset, tags: asset.tags.filter(tag => tag.toLowerCase() !== "project") }));
+      return Promise.resolve(assets);
+    },
+  });
+  const library = harness.mount("LibraryWindow", {});
+  library.render(); await settleRequests();
+  selectButton(library.render()).props.onClick();
+  for (const card of assetCards(library.render())) card.props.onToggleSelection();
+  batchBar(library.render()).props.onManageTags();
+  const dialog = () => nodes(library.render()).find(node => node?.type === "library-tag-dialog").props;
+  assert.equal(dialog().count, 2);
+  assert.deepEqual(dialog().removableTags, ["Other", "Project"]);
+  const result = dialog().onEdit("Project", "remove");
+  await assert.rejects(dialog().onEdit("Other", "remove"));
+  assert.equal(writes.length, 1);
+  first.reject(new Error("controlled write failure"));
+  await assert.rejects(result);
+  assert.equal(dialog().count, 2);
+  assert.equal(batchBar(library.render()).props.count, 2);
+  await dialog().onEdit("Project", "remove");
+  assert.deepEqual(writes, Array.from({ length: 2 }, () => [["one", "two"], "Project", "remove", false]));
+  assert.deepEqual(assetCards(library.render()).map(card => card.props.asset.tags), [["Other"], []]);
+
+  assets = assets.slice(0, 1);
+  harness.emit("libraryChanged");
+  await settleRequests();
+  assert.equal(dialog().canEdit, false, "an externally removed capture cannot silently shrink the target");
+  library.unmount();
 });
 
 test("Select All targets filtered finished assets, keeps text-select shortcuts, and Escape exits empty selection", async () => {

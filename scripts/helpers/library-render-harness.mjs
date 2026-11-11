@@ -207,6 +207,14 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
     "../components/RecordMoreActions": { RecordMoreActions: "record-more" },
     "../components/KiriIcons": { KiriIcon: "icon" },
     "../components/EmptyTrashDialog": { EmptyTrashDialog: "empty-trash-dialog" },
+    "./LibraryTagDialog": { LibraryTagDialog: "library-tag-dialog" },
+    get "./useLibraryTagDrag"() {
+      const hook = { exports: {} };
+      new Function("require", "module", "exports", "window", "document", componentCode(
+        readFileSync(new URL("../../src/windows/useLibraryTagDrag.ts", import.meta.url), "utf8"),
+      ))(name => modules[name], hook, hook.exports, window, document);
+      return hook.exports;
+    },
     "../lib/kiri-resource-url.js": {
       kiriResourceUrl: (route, [id], { v }) => `${route}:${id}?v=${v}`,
     },

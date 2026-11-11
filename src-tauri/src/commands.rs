@@ -15,7 +15,7 @@ use crate::capture::current as capture_backend;
 use crate::core::annotation::{AnnotationAppearance, AnnotationAppearancePatch, AnnotationDocument, AnnotationPixelSize};
 use crate::core::asset::{CaptureAsset, CaptureKind};
 use crate::core::geometry::Rect;
-use crate::core::library::{AssetLibraryError, EditorAnnotationState};
+use crate::core::library::{AssetLibraryError, AssetTagAction, EditorAnnotationState};
 use crate::core::library_location::{
     self, LibraryAvailability, LibraryLocationError, LibraryStatusSnapshot,
 };
@@ -3921,6 +3921,49 @@ pub fn edit_asset_tag(
     drop(context);
     emit_library_changed(&app);
     Ok(tags)
+}
+
+#[derive(Serialize)]
+pub struct AssetTagUpdateDto {
+    id: String,
+    tags: Vec<String>,
+}
+
+/// Applies one tag change against the current index under the library lock.
+#[tauri::command]
+pub async fn edit_asset_tags(
+    app: AppHandle,
+    ids: Vec<String>,
+    tag: String,
+    action: AssetTagAction,
+    showing_trash: bool,
+) -> Result<Vec<AssetTagUpdateDto>, String> {
+    let parsed = parse_ids(&ids)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mut context = state.library.lock().unwrap();
+        let updated = context
+            .library_mut()
+            .map_err(|error| error.to_string())?
+            .edit_asset_tags(&parsed, &tag, action, showing_trash)
+            .map_err(|error| match error {
+                AssetLibraryError::TagNotFound => "This tag no longer exists.".to_string(),
+                _ => error.to_string(),
+            })?;
+        drop(context);
+        if !updated.is_empty() {
+            emit_library_changed(&app);
+        }
+        Ok(updated
+            .into_iter()
+            .map(|(id, tags)| AssetTagUpdateDto {
+                id: id.to_string(),
+                tags,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
