@@ -21,7 +21,8 @@ library index.
   plus button beside their tags. **Manage Tags** in the
   selection toolbar can add a typed name or remove one of the selection's
   existing tags. Creating a tag attaches it to the targeted captures. A failed
-  write preserves the draft or selection for retry.
+  write preserves the draft or selection for retry. Tag suggestions appear
+  after typing so the removal controls are visible when the dialog opens.
 - Edits apply a single tag change against the current index under the library
   lock. A drop validates that the destination tag still exists in the capture
   scope. The operation validates all selected IDs and writes the index once

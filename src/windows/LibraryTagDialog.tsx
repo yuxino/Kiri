@@ -70,7 +70,8 @@ export function LibraryTagDialog({ count, canEdit, existingTags, removableTags, 
       <div className="library-tag-dialog__field">
         <label htmlFor="library-tag-dialog-name">{t("Tag name")}</label>
         <div>
-          <input ref={nameRef} autoFocus id="library-tag-dialog-name" list="library-tag-dialog-options"
+          <input ref={nameRef} autoFocus id="library-tag-dialog-name"
+            list={draft.trim() ? "library-tag-dialog-options" : undefined}
             value={draft} disabled={busy || !canEdit} onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" || event.repeat || event.nativeEvent.isComposing || event.keyCode === 229) return;
