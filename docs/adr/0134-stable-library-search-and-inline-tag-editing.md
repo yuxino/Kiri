@@ -14,7 +14,8 @@ problems.
 - Put search beside the capture heading. The media and favorite filters stay
   in the row below, where the tag strip scrolls horizontally. Scroll buttons
   appear when needed and keyboard focus can reach every tag. Long names
-  truncate visually and retain their full accessible name.
+  truncate visually and retain their full accessible name. Card chips reserve a
+  separate column for removal so WebKit gives short labels their full width.
 - The pencil on a card tag opens its name for editing on that capture. Enter
   and leaving the editor save a valid draft, including clicks on the empty
   grid and on card actions that preserve focus. Escape and Cancel discard the draft. An active

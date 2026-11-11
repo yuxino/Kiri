@@ -1458,7 +1458,8 @@ button:active:not(:disabled) {
 .library-card-tags__add:disabled { opacity: 0.45; cursor: default; }
 
 .kiri-card-tag {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: minmax(0, max-content) 20px;
   align-items: center;
   gap: 1px;
   max-width: 100%;
@@ -1486,15 +1487,25 @@ button:active:not(:disabled) {
 }
 
 .kiri-tag-rename-button {
-  gap: 5px;
+  display: block;
+  position: relative;
+  width: 100%;
   min-width: 0;
-  padding: 0 3px;
+  appearance: none;
+  padding: 0 19px 0 3px;
   font: 600 13px var(--kiri-font-ui);
   text-align: left;
 }
 
-.kiri-tag-rename-button svg { flex-shrink: 0; color: var(--kiri-secondary-label); }
-.kiri-tag-remove-button { flex: 0 0 20px; color: var(--kiri-secondary-label); }
+.kiri-tag-rename-button > span { display: block; }
+.kiri-tag-rename-button svg {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  color: var(--kiri-secondary-label);
+  transform: translateY(-50%);
+}
+.kiri-tag-remove-button { color: var(--kiri-secondary-label); }
 
 .kiri-tag-rename-button:hover:not(:disabled),
 .kiri-tag-remove-button:hover:not(:disabled),
