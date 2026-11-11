@@ -63,6 +63,10 @@ export interface OcrRecognitionDto {
   asset: AssetDto | null;
 }
 
+export type AssetTagEdit =
+  | { kind: "add" | "remove"; tag: string }
+  | { kind: "rename"; from: string; to: string };
+
 export interface AssetDto {
   id: string;
   kind: "image" | "video" | "gif";
@@ -341,8 +345,8 @@ export const api = {
     invoke<void>("set_favorite", { id, favorite }),
   renameAsset: (id: string, title: string) =>
     invoke<void>("rename_asset", { id, title }),
-  setTags: (id: string, tags: string[]) =>
-    invoke<void>("set_tags", { id, tags }),
+  editAssetTag: (id: string, edit: AssetTagEdit) =>
+    invoke<string[]>("edit_asset_tag", { id, edit }),
   moveToTrash: (id: string) => invoke<void>("move_to_trash", { id }),
   restoreAsset: (id: string) => invoke<void>("restore_asset", { id }),
   permanentlyDelete: (id: string) => invoke<void>("permanently_delete", { id }),

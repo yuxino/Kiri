@@ -3898,20 +3898,29 @@ fn rename_asset_inner(app: AppHandle, id: String, title: String) -> Result<(), S
     })
 }
 
-/// Replaces the tag list of a capture (metadata only).
+/// Applies one tag edit to the current library and returns its confirmed tags.
 #[tauri::command]
-pub fn set_tags(app: AppHandle, id: String, tags: Vec<String>) -> Result<(), String> {
+pub fn edit_asset_tag(
+    app: AppHandle,
+    id: String,
+    edit: crate::core::library::AssetTagEdit,
+) -> Result<Vec<String>, String> {
     let parsed = uuid::Uuid::parse_str(&id).map_err(|e| e.to_string())?;
     let state = app.state::<AppState>();
     let mut context = state.library.lock().unwrap();
-    context
+    let tags = context
         .library_mut()
         .map_err(|error| error.to_string())?
-        .set_tags(tags, &parsed)
-        .map_err(|e| e.to_string())?;
+        .edit_asset_tag(&parsed, edit)
+        .map_err(|error| match error {
+            AssetLibraryError::InvalidTagName => "Enter a tag name.".to_string(),
+            AssetLibraryError::TagAlreadyExists => "This tag already exists.".to_string(),
+            AssetLibraryError::TagChanged => "This tag has changed.".to_string(),
+            _ => error.to_string(),
+        })?;
     drop(context);
     emit_library_changed(&app);
-    Ok(())
+    Ok(tags)
 }
 
 #[tauri::command]

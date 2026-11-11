@@ -276,3 +276,6 @@ development.
 
 - [ADR 0132: Russian as an eighth UI language](adr/0132-russian-ui-language.md)
   — an eighth complete dictionary using the existing selector, preference, and native labels.
+
+- [ADR 0134: Stable library search and inline tag editing](adr/0134-stable-library-search-and-inline-tag-editing.md)
+  — search in the capture heading, scrollable tag filters and retryable per-capture tag edits.

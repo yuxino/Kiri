@@ -289,7 +289,7 @@ pub fn run() {
             commands::prepare_asset_annotation,
             commands::update_asset,
             commands::rename_asset,
-            commands::set_tags,
+            commands::edit_asset_tag,
             qr_commands::scan_qr,
             qr_commands::cancel_qr,
             qr_commands::qr_action,
