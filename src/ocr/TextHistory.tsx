@@ -7,8 +7,8 @@ import { useRecordSelection } from "../components/useRecordSelection";
 import { RecordMoreActions } from "../components/RecordMoreActions";
 import "./text-history.css";
 
-export function TextReader({ text, imageId, saved = true, editor, heading, actions, actionsDisabled = false }: {
-  text: string; imageId?: string; saved?: boolean; editor?: ReactNode; heading?: ReactNode; actions?: ReactNode; actionsDisabled?: boolean;
+export function TextReader({ text, imageId, saved = true, editor, heading, actions, feedback, actionsDisabled = false }: {
+  text: string; imageId?: string; saved?: boolean; editor?: ReactNode; heading?: ReactNode; actions?: ReactNode; feedback?: ReactNode; actionsDisabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -34,13 +34,17 @@ export function TextReader({ text, imageId, saved = true, editor, heading, actio
     <div className="record-detail-header">
       {heading ?? <span className="text-reader__caption">{t("Recognized Text")}</span>}
       <div className="record-actions">
-        {!editor && text.trim() && <button type="button" className="kiri-button kiri-button--secondary" disabled={actionsDisabled} onClick={() => void copy()}>
+        {!editor && text.trim() && <button type="button" className="kiri-button kiri-button--secondary record-copy-action"
+          aria-label={t(copied ? "Text Copied" : "Copy Text")} title={t(copied ? "Text Copied" : "Copy Text")}
+          disabled={actionsDisabled} onClick={() => void copy()}>
           <KiriIcon name={copied ? "checkmark" : "doc.on.doc"} size={14} />
-          {t(copied ? "Text Copied" : "Copy Text")}
+          <span className="record-copy-label">{t(copied ? "Text Copied" : "Copy Text")}</span>
+          <span className="record-copy-short" aria-hidden="true">{t(copied ? "Copied" : "Copy")}</span>
         </button>}
         {actions}
       </div>
     </div>
+    {feedback}
     {copyError && <p className="text-history__error" role="alert">{t("Couldn't copy text.")}</p>}
     {!saved && text.trim() && <p className="text-history__error" role="status">{t("History wasn't saved. Copy the text before closing.")}</p>}
     {editor ?? <div className="text-reader__body" tabIndex={0} role="region" aria-label={t("Recognized Text")}>
@@ -145,7 +149,10 @@ function HistoryRecognitionDialog({ consent, onConfirm, onCancel }: {
   </dialog>;
 }
 
-export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange?(locked: boolean): void } = {}) {
+export function TextHistory({ onNavigationLockChange, onNotice }: {
+  onNavigationLockChange?(locked: boolean): void;
+  onNotice?(message: string): void;
+} = {}) {
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<AssetDto[]>([]);
   const [recordsQuery, setRecordsQuery] = useState<string | null>(null);
@@ -271,6 +278,7 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
       await api.moveToTrash(selected.id);
       setRecords(current => current.filter(record => record.id !== selected.id));
       reloadRecords();
+      onNotice?.(t("Moved to Trash"));
     } catch { setMutationError(true); }
     finally { deletingRef.current = false; setDeleting(false); updateNavigationLock(); }
   };
@@ -310,8 +318,10 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
           record.id === updated.id && (record.ocrRevision ?? null) === request.expectedRevision ? updated : record,
         ));
         reloadRecords();
+        onNotice?.(t("New text saved."));
+      } else {
+        setRecognitionFeedback({ message: "No text found. The saved text was kept." });
       }
-      setRecognitionFeedback({ message: updated ? "New text saved." : "No text found. The saved text was kept." });
     } catch (error) {
       if (recognitionRef.current === request) {
         // The request may have reached the backend even if IPC did not return.
@@ -375,38 +385,42 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
       </div>
     </aside>
     <main className="text-history__detail">
-      {recognizing && !consent && <p className="text-history__feedback" role="status">{t("Recognizing Text…")}</p>}
-      {recognitionFeedback && <p className={recognitionFeedback.error ? "text-history__error" : "text-history__feedback"}
-        role={recognitionFeedback.error ? "alert" : "status"}>{t(recognitionFeedback.message)}</p>}
-      {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
       {loadError && !editing ? <div className="text-history__empty" role="alert"><p>{t("Couldn't load Text History.")}</p><button type="button" className="kiri-button kiri-button--secondary" onClick={() => setRevision((v) => v + 1)}>{t("Retry")}</button></div> :
-        selected ? <>
-          {loadError && <p role="alert" className="text-history__error">{t("Couldn't load Text History.")}</p>}
-          {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
+        selected ?
           <TextReader actionsDisabled={recordBusy} key={selected.id} text={selected.ocrText ?? ""} imageId={selected.id}
             heading={<div className="text-history__record-heading">
               <time title={new Date(selected.createdAt).toLocaleString()}>{new Date(selected.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
             </div>}
+            feedback={<>
+              {loadError && <p role="alert" className="text-history__error">{t("Couldn't load Text History.")}</p>}
+              {editError && <p role="alert" className="text-history__error">{t("Couldn't save the text. Reload Text History and try again.")}</p>}
+              {recognizing && !consent && <p className="text-history__feedback" role="status">{t("Recognizing Text…")}</p>}
+              {recognitionFeedback && <p className={recognitionFeedback.error ? "text-history__error" : "text-history__feedback"}
+                role={recognitionFeedback.error ? "alert" : "status"}>{t(recognitionFeedback.message)}</p>}
+              {mutationError && <p role="alert" className="text-history__error">{t("Couldn't move this text to Trash.")}</p>}
+            </>}
             actions={editing ? <>
                 <button type="button" className="kiri-button kiri-button--secondary" disabled={saving} onClick={() => { if (savingRef.current) return; finishEditing(); setEditError(false); }}><KiriIcon name="xmark" size={14} />{t("Cancel")}</button>
                 <button type="button" className="kiri-button kiri-button--primary" disabled={saving || !draft.trim()} onClick={() => void saveCorrection(draft)}><KiriIcon name="checkmark" size={14} />{t("Save")}</button>
               </> : <>
-                <button type="button" className="kiri-button kiri-button--ghost" disabled={recordBusy} onClick={() => {
+                <button type="button" className="kiri-button kiri-button--ghost record-compact-action"
+                  aria-label={t("Edit Text")} title={t("Edit Text")} disabled={recordBusy} onClick={() => {
                   if (savingRef.current || deletingRef.current || recognitionRef.current || batch.active) return;
                   editingRef.current = true;
                   updateNavigationLock();
                   setDraft(selected.ocrText ?? "");
                   setEditBase({ id: selected.id, text: selected.ocrText ?? "", asset: selected });
                   setEditing(true); setEditError(false); setRecognitionFeedback(null); setMutationError(false);
-                }}><KiriIcon name="pencil.tip" size={14} />{t("Edit Text")}</button>
+                }}><KiriIcon name="pencil.tip" size={14} /><span>{t("Edit Text")}</span></button>
                 {selected.ocrOriginalText != null && <RecordMoreActions disabled={recordBusy}>
                   <button type="button" className="kiri-button kiri-button--secondary" disabled={recordBusy}
                     onClick={() => void saveCorrection(null)}><KiriIcon name="arrow.uturn.backward" size={14} />{t("Restore Original Text")}</button>
                 </RecordMoreActions>}
                 <button ref={recognizeButton} type="button" className="kiri-button kiri-button--ghost" disabled={recordBusy || actionUnavailable}
                   onClick={() => void beginRecognition()}><KiriIcon name="text.viewfinder" size={14} />{t("Recognize Again")}</button>
-                <button type="button" className="kiri-button kiri-button--destructive" disabled={recordBusy || actionUnavailable}
-                  onClick={() => void remove()}><KiriIcon name="trash" size={14} />{t("Move to Trash")}</button>
+                <button type="button" className="kiri-button kiri-button--destructive record-compact-action"
+                  aria-label={t("Move to Trash")} title={t("Move to Trash")} disabled={recordBusy || actionUnavailable}
+                  onClick={() => void remove()}><KiriIcon name="trash" size={14} /><span>{t("Move to Trash")}</span></button>
               </>}
             editor={editing ? <textarea autoFocus className="text-reader__editor" value={draft} disabled={saving}
               onChange={(event) => { if (!savingRef.current) setDraft(event.target.value); }}
@@ -419,7 +433,7 @@ export function TextHistory({ onNavigationLockChange }: { onNavigationLockChange
                 if (!savingRef.current) { finishEditing(); setEditError(false); }
               }}
               aria-label={t("Edit recognized text")} maxLength={1024 * 1024} /> : undefined} />
-        </> : <div className="text-history__empty" role="status"><KiriIcon name="text.viewfinder" size={32} />
+        : <div className="text-history__empty" role="status"><KiriIcon name="text.viewfinder" size={32} />
           <h2>{t(loading ? "Loading…" : query ? "No matching text" : "Your text, ready to revisit")}</h2>
           {!loading && <p>{t(query ? "Try another word or clear the search." : "Recognize text from your screen or a saved screenshot. It will appear here.")}</p>}
         </div>}

@@ -1521,7 +1521,7 @@ export function LibraryWindow() {
       ) : destination === "qr" ? (
         <QrFavorites />
       ) : destination === "text" ? (
-        <TextHistory onNavigationLockChange={onTextNavigationLockChange} />
+        <TextHistory onNavigationLockChange={onTextNavigationLockChange} onNotice={showLocalNotice} />
       ) : (
         <React.Suspense
           fallback={

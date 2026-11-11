@@ -19,6 +19,8 @@ const savingJobs = params.has("saving") ? [
   { id: "saving-gif", kind: "gif", createdAt: new Date().toISOString(), duration: 8, pixelWidth: 720, pixelHeight: 405 },
 ] : [];
 const workspace = params.has("workspace");
+let screenshotOcrEnabled = false;
+let pendingOcrRecord: string | null = null;
 const tagCount = Number(params.get("tagCount") ?? 0);
 const fixtureTags = Array.from({ length: tagCount }, (_, index) =>
   index === 0 ? "01 · VeryLongCaptureCategoryForTestingEinAusführlicherNameБезПробелов" : `Tag ${index + 1}`);
@@ -113,6 +115,10 @@ Object.assign(window, {
         case "get_ocr_provider_settings":
           if(params.has("settingsFailure")) throw new Error("Controlled OCR settings load failure");
           return {schemaVersion:1,activeEngine:{kind:"local"},profiles:params.has("profiles") ? [{id:"public-ocr",revision:1,name:"PublicLayoutProfileWithALongNameForWrappingChecks",provider:"customOpenAi",protocol:"openAiChat",baseUrl:"https://example.org/v1",model:"public-model",hasApiKey:false}] : [],warning:null};
+        case "get_screenshot_ocr_enabled": return screenshotOcrEnabled;
+        case "set_screenshot_ocr_enabled":
+          screenshotOcrEnabled = Boolean(args.enabled);
+          return screenshotOcrEnabled;
         case "save_ocr_provider_profile":
           actions.push(command);
           return new Promise((_resolve, reject) => Object.assign(window, {
@@ -135,6 +141,29 @@ Object.assign(window, {
           asset.ocrOriginalText = args.replacement == null ? null : original;
           asset.ocrText = String(args.replacement ?? original);
           return {...asset};
+        }
+        case "prepare_ocr_history_request":
+          pendingOcrRecord = String(args.id);
+          return { requestId: "fixture-ocr", engine: { kind: "local" },
+            imageWidth: 640, imageHeight: 360, byteLength: 12000, profile: null };
+        case "recognize_ocr_history_request": {
+          const asset = textRecords.find(record => record.id === pendingOcrRecord);
+          pendingOcrRecord = null;
+          if (!asset) throw new Error("Unknown OCR fixture record");
+          asset.ocrText = "Updated fixture recognition";
+          asset.ocrOriginalText = null;
+          emit("library-changed", null);
+          return { ...asset };
+        }
+        case "cancel_ocr_history_request":
+          pendingOcrRecord = null;
+          return null;
+        case "move_to_trash": {
+          if (params.has("trashFailure")) throw new Error("Controlled Trash failure");
+          const index = textRecords.findIndex(record => record.id === args.id);
+          if (index >= 0) textRecords.splice(index, 1);
+          emit("library-changed", null);
+          return null;
         }
         case "batch_move_to_trash": {
           actions.push(`${command}:${JSON.stringify(args.ids)}`);

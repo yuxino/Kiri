@@ -7,7 +7,11 @@ import * as viewerState from "../src/windows/viewer-state.js";
 const source = 'import React from "react";\n' + readFileSync(new URL("../src/ocr/TextHistory.tsx", import.meta.url), "utf8");
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const record = (id, text) => ({ ...testAsset, id, ocrText: text });
-const hasText = (tree, text) => nodes(tree).includes(text);
+const hasText = (tree, text) => {
+  const contents = nodes(tree);
+  const reader = contents.find(node => node?.type?.name === "TextReader");
+  return contents.includes(text) || nodes(reader?.props.feedback).includes(text);
+};
 // Text History passes its edit controls to the real reader's toolbar slot.
 const button = (tree, text) => {
   const reader = nodes(tree).find((node) => node?.type?.name === "TextReader");
@@ -520,7 +524,8 @@ test("local rerecognition retries IPC failures and ignores a late list that pred
       return calls++ === 0 ? Promise.reject(new Error("IPC failed")) : recognition.promise;
     },
   }, source);
-  const component = harness.mount("TextHistory");
+  const notices = [];
+  const component = harness.mount("TextHistory", { onNotice: message => notices.push(message) });
   component.render(); await pause(5); await settleRequests();
   button(component.render(), "Recognize Again").props.onClick(); await settleRequests();
   assert.equal(hasText(component.render(), "Couldn't recognize this text again."), true);
@@ -536,6 +541,7 @@ test("local rerecognition retries IPC failures and ignores a late list that pred
   nextList = null;
   assert.equal(hasText(component.render(), "older text"), false);
   assert.equal(hasText(component.render(), "fresh text"), true);
-  assert.equal(hasText(component.render(), "New text saved."), true);
+  assert.equal(hasText(component.render(), "New text saved."), false);
+  assert.deepEqual(notices, ["New text saved."]);
   component.unmount();
 });

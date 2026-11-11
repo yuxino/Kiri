@@ -38,12 +38,19 @@ export function QrDetails({ code, action, saved = false, removable = false, auto
   };
   const controls = code.text ? (
     <div className={removable ? "record-actions" : "qr-actions"}>
-      {removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || disabled} onClick={() => void run("copy")}><Copy size={14} aria-hidden="true"/>{t("Copy Text")}</button>}
+      {removable && <button type="button" className="kiri-button kiri-button--secondary record-copy-action"
+        aria-label={t("Copy Text")} title={t("Copy Text")} disabled={busy || disabled} onClick={() => void run("copy")}>
+        <Copy size={14} aria-hidden="true" />
+        <span className="record-copy-label">{t("Copy Text")}</span>
+        <span className="record-copy-short" aria-hidden="true">{t("Copy")}</span>
+      </button>}
       {code.url && <button type="button" className={`kiri-button ${removable ? "kiri-button--ghost" : "kiri-button--primary"}`} disabled={busy || disabled} onClick={() => void run("open")}><ExternalLink size={14} aria-hidden="true"/>{t("Open Link")}</button>}
       {!removable && <button type="button" className={`kiri-button ${code.url ? "kiri-button--secondary" : "kiri-button--primary"}`} disabled={busy || disabled} onClick={() => void run("copy")}><Copy size={14}/>{t("Copy Text")}</button>}
       {!removable && <button type="button" className="kiri-button kiri-button--secondary" disabled={busy || autoSaving || disabled} onClick={() => void run(favorite ? "unfavorite" : "favorite")}><Star size={14} fill={favorite ? "currentColor" : "none"}/>{t(autoSaving ? "Saving…" : favorite ? "Remove Favorite" : "Save QR Code")}</button>}
       {removable && <>
-        <button type="button" className="kiri-button kiri-button--ghost" disabled={busy || disabled} onClick={() => void run("copyImage")}><QrCode size={14} aria-hidden="true"/>{t("Copy QR Image")}</button>
+        <button type="button" className="kiri-button kiri-button--ghost record-compact-action" disabled={busy || disabled}
+          aria-label={t("Copy QR Image")} title={t("Copy QR Image")}
+          onClick={() => void run("copyImage")}><QrCode size={14} aria-hidden="true"/><span>{t("Copy QR Image")}</span></button>
         <RecordMoreActions disabled={busy || disabled}><button type="button" className="kiri-button kiri-button--destructive" disabled={busy || disabled} onClick={() => void run("remove")}><Trash2 size={14} aria-hidden="true"/>{t("Move to Trash")}</button></RecordMoreActions>
       </>}
     </div>

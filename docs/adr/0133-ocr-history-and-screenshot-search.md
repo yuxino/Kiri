@@ -11,6 +11,11 @@ The detail pane offers **Move to Trash** directly. It uses recoverable library
 Trash and reports failures in the detail pane. The record and its PNG snapshot
 move together.
 
+The detail actions use the same layout as QR Favorites. Narrow detail panes
+keep secondary actions compact with accessible names and tooltips. Progress and
+retry feedback appear below the actions. Successful changes use the workspace
+toast.
+
 **Recognize Again** reads the saved source snapshot with the active OCR
 engine. A corrected record requires explicit approval to replace the correction.
 A remote profile requires a separate per-image Send action that names the

@@ -2,7 +2,7 @@
   --record-list-width: clamp(240px, 34%, 300px);
   display: grid; grid-template-columns: var(--record-list-width) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); flex: 1; min-height: 0; color: var(--kiri-label); }
 .text-history__sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--kiri-surface-border); }
-.text-history__search { display: flex; align-items: center; gap: 9px; margin: 0; flex: 0 1 250px; min-width: 160px; padding: 0 10px; min-height: 32px; box-sizing: border-box; border: 1px solid transparent; background: var(--kiri-group-fill); border-radius: 6px; color: var(--kiri-secondary-label); }
+.text-history__search { display: flex; align-items: center; gap: 9px; margin: 0; flex: 0 1 280px; min-width: 160px; padding: 0 10px; min-height: 32px; box-sizing: border-box; border: 1px solid transparent; background: var(--kiri-group-fill); border-radius: 6px; color: var(--kiri-secondary-label); }
 .text-history__search:focus-within { outline: 2px solid var(--kiri-label); outline-offset: 2px; }
 .text-history__search input { background: transparent; color: var(--kiri-label); border: 0; outline: 0; width: 100%; min-width: 0; font: inherit; font-size: 13px; }
 .text-history__list { overflow: auto; flex: 1; min-height: 0; padding: 10px 8px; }
@@ -73,11 +73,21 @@
 .record-more[open] > summary { background: var(--kiri-group-fill); }
 .record-more__menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; min-width: 180px; max-width: min(260px, 65vw); padding: 4px; background: var(--kiri-elevated); border: 1px solid var(--kiri-surface-border); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
 .record-more__menu .kiri-button { display: flex; width: 100%; justify-content: flex-start; text-align: left; border-color: transparent; }
+.record-copy-short { display: none; }
+@container (max-width: 460px) {
+  .record-detail-header > .record-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
+  .record-actions > .record-compact-action { width: 32px; padding: 0; }
+  .record-actions > .record-compact-action > span { display: none; }
+  .record-copy-label { display: none; }
+  .record-copy-short { display: inline; }
+}
+@container (max-width: 400px) {
+  .record-actions > .record-copy-action { width: 32px; padding: 0; }
+  .record-copy-short { display: none; }
+}
 @media (max-width: 850px) {
   .text-history { --record-list-width: 240px; }
   .record-workspace-toolbar { gap: 8px; }
   .record-workspace-toolbar:has([data-selecting]) .text-history__search { display: none; }
-  .record-workspace-toolbar .text-history__search { flex-basis: 180px; }
   .text-history__detail { padding-inline: 18px; }
-  .text-history__detail .record-actions { margin-left: 0; justify-content: flex-start; }
 }
