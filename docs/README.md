@@ -276,3 +276,6 @@ development.
 
 - [ADR 0132: Russian as an eighth UI language](adr/0132-russian-ui-language.md)
   — an eighth complete dictionary using the existing selector, preference, and native labels.
+
+- [ADR 0135: Assign and remove library tags](adr/0135-library-tag-assignment.md)
+  — card drag targets and atomic tag changes for selected captures.

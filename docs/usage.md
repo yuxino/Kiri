@@ -182,6 +182,8 @@ Converting a library MP4 to GIF checks video decoding before encoding. Use Cance
 
 Use Select Multiple to check items or select all, then move them to Trash; ordinary clicks still open an item. Trash supports batch restore and confirms Empty Trash inside the main window. Renaming updates the actual filename while keeping its type. Copy File in the context menu pastes into a folder; Copy still pastes image pixels.
 
+Click **Add tag…** on a capture to enter a tag name, or drag the card onto a visible tag to assign it. Dragging a checked card tags the selected captures together. Use **Manage Tags** in the selection toolbar to add a tag by name or remove a specific tag from the selection.
+
 When reporting a problem, use Settings → About → Copy Info for app, system and display information. It excludes captures, credentials and personal paths.
 
 Settings → About also offers Open Folder for settings and logs, plus a GitHub link. On Windows, the folder menu includes error logs and the system temporary folder; opening a folder does not delete anything.

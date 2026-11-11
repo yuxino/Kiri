@@ -18,6 +18,7 @@ const savingJobs = params.has("saving") ? [
   { id: "saving-gif", kind: "gif", createdAt: new Date().toISOString(), duration: 8, pixelWidth: 720, pixelHeight: 405 },
 ] : [];
 const workspace = params.has("workspace");
+const tagFixture = params.has("tags");
 let resolveLateUpdate: (() => void) | undefined;
 const lateUpdate = params.has("lateUpdate") ? new Promise<void>(resolve => { resolveLateUpdate = resolve; }) : null;
 const examples = [
@@ -32,7 +33,8 @@ const assets: unknown[] = workspace || params.has("sizes") || params.has("scroll
   pixelWidth: 3840, pixelHeight: 2160, duration: null, sourceApplication: null,
   trashedAt: null, gifEligible: false, ...examples[index % examples.length],
   isFavorite: index % 3 === 0,
-  ...(workspace ? {kind:"image",title:["Capture toolbar", "Keyboard shortcuts", "Local workflow", "Window selection"][index % 4],tags:["Kiri"],pixelWidth:1440,pixelHeight:900} : {}),
+  ...(workspace ? {kind:"image",title:["Capture toolbar", "Keyboard shortcuts", "Local workflow", "Window selection"][index % 4],
+    tags:tagFixture ? [["Project", "Keep"], ["Keep"], [], ["Other"]][index % 4] : ["Kiri"],pixelWidth:1440,pixelHeight:900} : {}),
 })) : [];
 const recordBase = { kind:"image", filename:"fixture.png", pixelWidth:640, pixelHeight:360, duration:null, sourceApplication:null, isFavorite:false, trashedAt:null, gifEligible:false, tags:[], fileSize:12000, ocrOriginalText:null };
 const textRecords: {id:string;createdAt:number;ocrText:string;ocrOriginalText:string|null;[key:string]:unknown}[] = workspace ? [
@@ -154,13 +156,26 @@ Object.assign(window, {
           if (params.has("copyFailure")) throw new Error("Test clipboard unavailable");
           return null;
         case "copy_asset": case "open_editor": case "open_viewer": actions.push(command); return null;
-        case "set_tags": {
-          actions.push(command);
+        case "edit_asset_tags": {
+          actions.push(`${command}:${JSON.stringify(args)}`);
           if ((window as unknown as {__qaTagFailure: boolean}).__qaTagFailure) throw new Error("Controlled tag save failure");
-          const asset = assets.find((item: any) => item.id === args.id) as {tags: string[]} | undefined;
-          if (asset) asset.tags = args.tags as string[];
+          const key = (tag: string) => tag.trim().replace(/[A-Z]/g, letter => letter.toLowerCase());
+          const tag = String(args.tag).trim();
+          const hasTag = (tags: string[]) => tags.some(existing => key(existing) === key(tag));
+          const selected = assets.filter((asset: any) => (args.ids as string[]).includes(asset.id)) as {id: string; tags: string[]}[];
+          if (args.action === "addExisting" && !assets.some((asset: any) => hasTag(asset.tags))) {
+            throw "This tag no longer exists.";
+          }
+          for (const asset of selected) {
+            if (args.action === "remove") asset.tags = asset.tags.filter(existing => key(existing) !== key(tag));
+            else if (!hasTag(asset.tags)) asset.tags = [...asset.tags, tag];
+          }
           emit("library-changed", null);
-          return null;
+          return selected.map(({id, tags}) => ({id, tags}));
+        }
+        case "export_selected_assets": {
+          actions.push(`${command}:${JSON.stringify(args.ids)}`);
+          return { exported: (args.ids as string[]).length, failed: [] };
         }
         case "list_pending_recordings": case "list_text_history": return [];
         case "import_media": actions.push(command); return { ids: [], failed: 0 };

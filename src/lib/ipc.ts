@@ -302,6 +302,8 @@ export function isEditorRevisionMismatch(error: unknown): boolean {
 export interface QrCodeDto { index: number; corners: [number, number][]; text: string | null; url: string | null; host: string | null; suspicious: boolean; }
 export interface QrScanDto { requestId: string; imageUrl: string; width: number; height: number; codes: QrCodeDto[]; }
 
+export type AssetTagAction = "add" | "addExisting" | "remove";
+
 export const api = {
   scanQr: (requestId: string, selection: RectDto | null, assetId: string | null, expectedRevisionSha256?: string) => invoke<QrScanDto>("scan_qr", { requestId, selection, assetId, expectedRevisionSha256 }),
   cancelQr: (requestId: string) => invoke<void>("cancel_qr", { requestId }),
@@ -343,6 +345,8 @@ export const api = {
     invoke<void>("rename_asset", { id, title }),
   setTags: (id: string, tags: string[]) =>
     invoke<void>("set_tags", { id, tags }),
+  editAssetTags: (ids: string[], tag: string, action: AssetTagAction, showingTrash: boolean) =>
+    invoke<Pick<AssetDto, "id" | "tags">[]>("edit_asset_tags", { ids, tag, action, showingTrash }),
   moveToTrash: (id: string) => invoke<void>("move_to_trash", { id }),
   restoreAsset: (id: string) => invoke<void>("restore_asset", { id }),
   permanentlyDelete: (id: string) => invoke<void>("permanently_delete", { id }),

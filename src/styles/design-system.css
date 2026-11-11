@@ -479,6 +479,21 @@ textarea {
     0 1px 3px rgba(0, 0, 0, 0.045);
 }
 
+.library-tag-filter__chip[data-drop-active] {
+  color: var(--kiri-elevated);
+  background: var(--kiri-label);
+  box-shadow: none;
+}
+
+.library-root[data-tag-dragging] {
+  user-select: none;
+}
+
+.library-root[data-tag-dragging] .library-asset-card,
+.library-root[data-tag-dragging] .library-tag-filter__chip {
+  cursor: grabbing;
+}
+
 @media (max-width: 900px) {
   .library-root { --kiri-space-page: 20px; }
   .library-sidebar { padding: 22px 10px 12px; }
@@ -1348,6 +1363,51 @@ button:active:not(:disabled) {
   transform: none;
 }
 
+.library-asset-card { cursor: default; }
+
+.library-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.library-card-tags__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  max-width: 100%;
+  padding: 3px 7px;
+  color: var(--kiri-secondary-label);
+  background: transparent;
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 7px;
+  font: 500 13px/1.3 var(--kiri-font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.library-card-tags__add svg { flex: none; }
+.library-card-tags__add:hover:not(:disabled) {
+  color: var(--kiri-label);
+  background: var(--kiri-accent-soft-alpha-10);
+}
+.library-card-tags__add:disabled { opacity: 0.45; cursor: default; }
+
+.library-card-tags__input {
+  width: min(100%, 12rem);
+  min-height: 26px;
+  box-sizing: border-box;
+  padding: 3px 7px;
+  color: var(--kiri-label);
+  background: var(--kiri-group-fill);
+  border: 1px solid var(--kiri-accent);
+  border-radius: 7px;
+  font: 500 13px/1.3 var(--kiri-font-ui);
+}
+
 .kiri-tag-remove-button {
   width: 16px;
   height: 16px;
@@ -1557,3 +1617,26 @@ button:active:not(:disabled) {
 .kiri-confirm-dialog .kiri-confirm-dialog__error { margin-top: 16px; color: var(--kiri-coral); }
 .kiri-confirm-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .kiri-confirm-dialog .kiri-button { min-height: 36px; font-size: 14px; }
+
+.library-tag-dialog__field {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+.library-tag-dialog__field > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.library-tag-dialog__field input,
+.library-tag-dialog__field select {
+  min-width: 0;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  color: var(--kiri-label);
+  background: var(--kiri-card);
+  border: 1px solid var(--kiri-surface-border);
+  border-radius: 7px;
+  font: inherit;
+}

@@ -15,6 +15,7 @@ import {
   onNotice,
   onRecordingSaveJobs,
   type AssetDto,
+  type AssetTagAction,
   type AssetAvailability,
   type ErrorDto,
   type GifConversionStateDto,
@@ -43,6 +44,8 @@ import {
 import { canCopyCaptureOnKeyDown } from "./viewer-copy-shortcut.js";
 
 import { gifConversionLabel } from "./gif-conversion";
+import { LibraryTagDialog } from "./LibraryTagDialog";
+import { useLibraryTagDrag } from "./useLibraryTagDrag";
 
 const SettingsView = React.lazy(() =>
   import("../settings/SettingsView").then((module) => ({ default: module.SettingsView })),
@@ -53,6 +56,23 @@ type Destination = "captures" | "text" | "qr" | "settings";
 
 function thumbnailUrl(id: string, revision: number): string {
   return kiriResourceUrl("thumbnail", [id], { v: revision });
+}
+
+// Match the persisted tag identity without folding non-ASCII characters.
+function libraryTagKey(tag: string): string {
+  return tag.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+function collectLibraryTags(assets: AssetDto[], currentTag: string | null = null): string[] {
+  const tags = new Map<string, string>();
+  if (currentTag) tags.set(libraryTagKey(currentTag), currentTag);
+  for (const asset of assets) {
+    for (const tag of asset.tags) {
+      const key = libraryTagKey(tag);
+      if (key && !tags.has(key)) tags.set(key, tag.trim());
+    }
+  }
+  return [...tags.values()].sort((a, b) => a.localeCompare(b));
 }
 
 /** Groups assets by calendar day, newest group first. */
@@ -137,6 +157,7 @@ export function LibraryWindow() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
+  const [batchTagIds, setBatchTagIds] = useState<Set<string> | null>(null);
   const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
   const batchMutationLock = useRef(false);
   const [exportBusy, setExportBusy] = useState(false);
@@ -165,9 +186,10 @@ export function LibraryWindow() {
   // View-layer filters shared by Library and Trash, applied on top of the
   // backend text search.
   const filteredAssets = useMemo(() => {
+    const filterKey = tagFilter && libraryTagKey(tagFilter);
     return assets.filter((asset) => {
       if (favoritesOnly && !asset.isFavorite) return false;
-      if (tagFilter && !asset.tags.some((tag) => tag.toLowerCase() === tagFilter.toLowerCase())) {
+      if (filterKey && !asset.tags.some((tag) => libraryTagKey(tag) === filterKey)) {
         return false;
       }
       if (kindFilter === "all") return true;
@@ -385,6 +407,7 @@ export function LibraryWindow() {
   // assets that are no longer visible.
   useEffect(() => {
     clearSelection();
+    setBatchTagIds(null);
   }, [section, destination, query, kindFilter, favoritesOnly, tagFilter]);
 
   // Each filter/navigation change starts with the first matching capture.
@@ -450,7 +473,7 @@ export function LibraryWindow() {
       // can temporarily hide tagged assets without removing their category.
       if (!searchQuery) {
         setTagFilter((current) => current && !list.some((asset) =>
-          asset.tags.some((tag) => tag.toLowerCase() === current.toLowerCase())) ? null : current);
+          asset.tags.some((tag) => libraryTagKey(tag) === libraryTagKey(current))) ? null : current);
       }
       setPendingRecordingCount(pending.length);
       setAssetAvailability({});
@@ -477,6 +500,29 @@ export function LibraryWindow() {
     // acknowledged value for cards/filters and invalidate all older reads.
     void refresh();
   }, [refresh]);
+
+  const editAssetTags = async (ids: string[], tag: string, action: AssetTagAction) => {
+    if (batchMutationLock.current || exportBusy) throw new Error("Library action in progress");
+    batchMutationLock.current = true;
+    setBatchBusy(true);
+    try {
+      const updates = await api.editAssetTags(ids, tag, action, showingTrash);
+      const tagsById = new Map(updates.map(({ id, tags }) => [id, tags]));
+      setAssetSnapshot((current) => current && {
+        ...current,
+        assets: current.assets.map((asset) => {
+          const tags = tagsById.get(asset.id);
+          return tags ? { ...asset, tags } : asset;
+        }),
+      });
+    } finally {
+      // Invalidate older list replies and reconcile stale tags or assets even
+      // when a mutation was rejected.
+      void refresh();
+      batchMutationLock.current = false;
+      setBatchBusy(false);
+    }
+  };
 
   useEffect(() => {
     void refresh().catch(() => {});
@@ -589,16 +635,7 @@ export function LibraryWindow() {
 
   // Filtering is case-insensitive, so present one chip per matching category.
   // Keep the selected chip visible while searching even if no result has it.
-  const allTags = useMemo(() => {
-    const tags = new Map<string, string>();
-    if (tagFilter) tags.set(tagFilter.toLowerCase(), tagFilter);
-    for (const asset of assets) {
-      for (const tag of asset.tags) {
-        if (!tags.has(tag.toLowerCase())) tags.set(tag.toLowerCase(), tag);
-      }
-    }
-    return [...tags.values()].sort((a, b) => a.localeCompare(b));
-  }, [assets, tagFilter]);
+  const allTags = useMemo(() => collectLibraryTags(assets, tagFilter), [assets, tagFilter]);
 
   const hasActiveFilter =
     query.trim().length > 0 || kindFilter !== "all" || favoritesOnly || tagFilter !== null;
@@ -993,9 +1030,34 @@ export function LibraryWindow() {
     return()=>{disposed=true;stop?.();};
   },[importMedia]);
 
+  const { targetTag, cancel: cancelTagDrag, rootProps: tagDragProps } = useLibraryTagDrag(
+    destination === "captures" && !showingTrash && allTags.length > 0 &&
+      !batchBusy && !exportBusy && !batchTagIds && !mediaDrop,
+    (id) => {
+      if (!visibleAssetIds.has(id)) return [];
+      return selection.has(id) ? selectionIds : [id];
+    },
+    (ids, tag) => {
+      if (!ids.every((id) => visibleAssetIds.has(id))) {
+        setError({ message: "The selection changed. Select the captures again.", recovery: null });
+        return;
+      }
+      void editAssetTags(ids, tag, "addExisting")
+        .then(() => showLocalNotice(t("Saved")))
+        .catch((reason) => setError({
+          message: reason === "This tag no longer exists." ? reason : "Couldn't complete this action",
+          recovery: null,
+        }));
+    },
+  );
+  useLayoutEffect(() => {
+    cancelTagDrag();
+  }, [cancelTagDrag, section, destination, query, kindFilter, favoritesOnly, tagFilter]);
+
   return (
     <div
       className="library-root kiri-canvas-surface"
+      {...tagDragProps}
     >
       {mediaDrop&&<div className="library-media-drop">{t("Drop images or videos to import")}</div>}
       <aside className="library-sidebar">
@@ -1132,7 +1194,8 @@ export function LibraryWindow() {
               allTags={allTags}
               onChangeKind={setKindFilter}
               onToggleFavorites={() => setFavoritesOnly((value) => !value)}
-              onToggleTag={(tag) => setTagFilter((current) => (current?.toLowerCase() === tag.toLowerCase() ? null : tag))}
+              onToggleTag={(tag) => setTagFilter((current) => (current && libraryTagKey(current) === libraryTagKey(tag) ? null : tag))}
+              tagDropTarget={targetTag}
             />
 
           </div>
@@ -1187,7 +1250,8 @@ export function LibraryWindow() {
           allFavorites={selectionIds.length > 0 && selectionIds.every((id) => assets.find((a) => a.id === id)?.isFavorite)}
           busy={exportBusy || batchBusy}
           onExport={() => {
-            if (exportBusy) return;
+            if (batchMutationLock.current || exportBusy) return;
+            batchMutationLock.current = true;
             setExportBusy(true); setExportFailures([]); setExportError(false);
             void api.exportSelectedAssets(selectionIds).then((result) => {
               if (!result) return;
@@ -1195,7 +1259,15 @@ export function LibraryWindow() {
               setExportFailures(result.failed);
               const failed = new Set(result.failed);
               setSelection(new Set(assets.filter((asset) => failed.has(asset.filename)).map((asset) => asset.id)));
-            }).catch(() => setExportError(true)).finally(() => setExportBusy(false));
+            }).catch(() => setExportError(true)).finally(() => {
+              batchMutationLock.current = false;
+              setExportBusy(false);
+            });
+          }}
+          onManageTags={() => {
+            if (batchMutationLock.current) return;
+            closeMenu();
+            setBatchTagIds(new Set(selectionIds));
           }}
           onRestore={() => {
             void performBatch(() => api.batchRestore(selectionIds), t("Restored to Library"), "Couldn't complete this action");
@@ -1341,6 +1413,7 @@ export function LibraryWindow() {
                     selectionActive={selectionMode || selectionIds.length > 0}
                     selectionBusy={batchBusy || exportBusy}
                     onToggleSelection={() => toggleSelection(asset.id)}
+                    onEditTag={(tag, action) => editAssetTags([asset.id], tag, action)}
                     registerRef={(el) => {
                       if (el) cardElsRef.current.set(asset.id, el);
                       else cardElsRef.current.delete(asset.id);
@@ -1411,6 +1484,18 @@ export function LibraryWindow() {
           clearSelection();
           await refresh();
         }}
+      />}
+      {batchTagIds && <LibraryTagDialog
+        count={batchTagIds.size}
+        canEdit={[...batchTagIds].every((id) => visibleAssetIds.has(id))}
+        existingTags={allTags}
+        removableTags={collectLibraryTags(filteredAssets.filter((asset) => batchTagIds.has(asset.id)))}
+        currentTag={tagFilter}
+        onEdit={async (tag, action) => {
+          await editAssetTags([...batchTagIds], tag, action);
+          showLocalNotice(t("Saved"));
+        }}
+        onClose={() => setBatchTagIds(null)}
       />}
       {ocrAsset && <OcrDialog key={ocrAsset.id} asset={ocrAsset} onClose={() => setOcrAsset(null)} />}
 
@@ -1671,6 +1756,7 @@ function AssetCard(props: {
   selectionActive: boolean;
   selectionBusy?: boolean;
   onToggleSelection?(): void;
+  onEditTag(tag: string, action: AssetTagAction): Promise<void>;
   registerRef(el: HTMLDivElement | null): void;
   onAvailability(availability: AssetAvailability): void;
   onRestoreMissing(): Promise<void>;
@@ -1688,8 +1774,9 @@ function AssetCard(props: {
     onOpen,
     selected,
     selectionActive,
-    selectionBusy,
+    selectionBusy = false,
     onToggleSelection,
+    onEditTag,
     registerRef,
     onAvailability,
     onRestoreMissing,
@@ -1811,42 +1898,14 @@ function AssetCard(props: {
   const [tagBusy, setTagBusy] = useState(false);
   const [tagError, setTagError] = useState(false);
   const tagMutationLock = useRef(false);
-  const [visibleTags, setVisibleTags] = useState(asset.tags);
-  const confirmedTags = useRef(asset.tags);
-  const awaitingTags = useRef<string[] | null>(null);
-  const incomingTags = useRef(asset.tags);
-  incomingTags.current = asset.tags;
-  const sameTags = (left: string[], right: string[]) =>
-    left.length === right.length && left.every((tag, index) => tag === right[index]);
-
-  useEffect(() => {
-    // A successful command can precede library-changed's asynchronous fetch.
-    // Keep its confirmed list until the parent snapshot catches up with it.
-    if (awaitingTags.current && !sameTags(awaitingTags.current, asset.tags)) return;
-    awaitingTags.current = null;
-    confirmedTags.current = asset.tags;
-    setVisibleTags(asset.tags);
-  }, [asset.tags]);
-
-  const saveTags = async (update: (current: string[]) => string[], finishAdding = false) => {
-    if (tagMutationLock.current) return;
-    // Match AssetLibrary::set_tags before displaying the acknowledged list.
-    const tags: string[] = [];
-    const keys = new Set<string>();
-    for (const candidate of update(confirmedTags.current)) {
-      const tag = candidate.trim();
-      const key = tag.replace(/[A-Z]/g, letter => letter.toLowerCase());
-      if (tag && !keys.has(key)) { tags.push(tag); keys.add(key); }
-    }
+  const saveTag = async (tag: string, action: "add" | "remove") => {
+    if (tagMutationLock.current || selectionBusy) return;
     tagMutationLock.current = true;
     setTagBusy(true);
     setTagError(false);
     try {
-      await api.setTags(asset.id, tags);
-      confirmedTags.current = tags;
-      awaitingTags.current = sameTags(incomingTags.current, tags) ? null : tags;
-      setVisibleTags(tags);
-      if (finishAdding) {
+      await onEditTag(tag, action);
+      if (action === "add") {
         setTagDraft("");
         setAddingTag(false);
       }
@@ -1964,7 +2023,6 @@ function AssetCard(props: {
         transform: "none",
         boxShadow: selected ? "0 0 0 2px var(--kiri-accent-alpha-18)" : "none",
         transition: "transform 0.18s ease-out, box-shadow 0.18s ease-out, border-color 0.18s ease-out",
-        cursor: "default",
       }}
     >
       {selectionActive && <input type="checkbox" checked={selected} disabled={selectionBusy}
@@ -2319,9 +2377,8 @@ function AssetCard(props: {
           )}
       </div>
       {/* Tag chips */}
-      {(visibleTags.length > 0 || addingTag || tagError) && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-          {visibleTags.map((tag) => (
+      <div className="library-card-tags">
+          {asset.tags.map((tag) => (
             <span
               key={tag}
               title={tag}
@@ -2347,17 +2404,17 @@ function AssetCard(props: {
                 className="kiri-tag-remove-button"
                 aria-label={`${t("Remove tag")}: ${tag}`}
                 title={t("Remove tag")}
-                disabled={tagBusy}
+                disabled={tagBusy || selectionBusy}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void saveTags(current => current.filter((existing) => existing !== tag));
+                  void saveTag(tag, "remove");
                 }}
               >
                 <KiriIcon name="xmark" size={8} />
               </button>
             </span>
           ))}
-          {addingTag && (
+          {addingTag ? (
             <input
               autoFocus
               value={tagDraft}
@@ -2367,6 +2424,7 @@ function AssetCard(props: {
               aria-describedby={tagError ? `kiri-tag-error-${asset.id}` : undefined}
               aria-label={t("Add tag…")}
               placeholder={t("Add tag…")}
+              className="library-card-tags__input"
               onChange={(event) => setTagDraft(event.target.value)}
               onBlur={() => {
                 if (!tagMutationLock.current && !tagError) {
@@ -2381,7 +2439,7 @@ function AssetCard(props: {
                   e.preventDefault();
                   if (e.repeat || tagMutationLock.current) return;
                   const value = tagDraft.trim();
-                  if (value) void saveTags(current => [...current, value], true);
+                  if (value) void saveTag(value, "add");
                   else setAddingTag(false);
                 } else if (e.key === "Escape" && !tagMutationLock.current) {
                   e.preventDefault();
@@ -2390,24 +2448,22 @@ function AssetCard(props: {
                   setAddingTag(false);
                 }
               }}
-              style={{
-                width: 70,
-                fontSize: 13,
-                fontWeight: 500,
-                color: "var(--kiri-label)",
-                border: "1px solid var(--kiri-accent)",
-                borderRadius: 7,
-                background: "var(--kiri-group-fill)",
-                padding: "2px 6px",
-              }}
             />
+          ) : (
+            <button type="button" className="library-card-tags__add" disabled={selectionBusy}
+              onClick={() => {
+                setTagError(false);
+                setAddingTag(true);
+              }}>
+              <KiriIcon name="tag" size={11} />
+              {t("Add tag…")}
+            </button>
           )}
           {tagError && <span id={`kiri-tag-error-${asset.id}`} role="alert"
             style={{ flexBasis: "100%", fontSize: 13, color: "var(--kiri-coral)" }}>
             {t("Couldn't update this item")}
           </span>}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -2459,6 +2515,7 @@ function FilterBar(props: {
   favoritesOnly: boolean;
   tagFilter: string | null;
   allTags: string[];
+  tagDropTarget: string | null;
   onChangeKind(kind: "all" | "image" | "video" | "gif"): void;
   onToggleFavorites(): void;
   onToggleTag(tag: string): void;
@@ -2468,6 +2525,7 @@ function FilterBar(props: {
     favoritesOnly,
     tagFilter,
     allTags,
+    tagDropTarget,
     onChangeKind,
     onToggleFavorites,
     onToggleTag,
@@ -2509,13 +2567,15 @@ function FilterBar(props: {
       </button>
       <div className="library-tag-filter">
         {allTags.map((tag) => {
-            const active = tagFilter?.toLowerCase() === tag.toLowerCase();
+            const active = tagFilter !== null && libraryTagKey(tagFilter) === libraryTagKey(tag);
             return (
               <button
                 type="button"
                 key={tag}
                 className="library-tag-filter__chip"
                 data-active={active || undefined}
+                data-library-tag={tag}
+                data-drop-active={tagDropTarget === tag || undefined}
                 aria-pressed={active}
                 onClick={() => onToggleTag(tag)}
                 title={tag}
@@ -2536,13 +2596,14 @@ function BatchActionBar(props: {
   allFavorites: boolean;
   busy: boolean;
   onExport(): void;
+  onManageTags(): void;
   onRestore(): void;
   onDelete(): void;
   onMoveToTrash(): void;
   onToggleFavorite(): void;
   onClear(): void;
 }) {
-  const { count, showingTrash, allFavorites, busy, onExport, onRestore, onDelete, onMoveToTrash, onToggleFavorite, onClear } = props;
+  const { count, showingTrash, allFavorites, busy, onExport, onManageTags, onRestore, onDelete, onMoveToTrash, onToggleFavorite, onClear } = props;
   const countLabel = t("Selected {n}").replace("{n}", String(count));
   return (
     <div className="library-batch-bar" role="toolbar" aria-label={countLabel}>
@@ -2563,6 +2624,7 @@ function BatchActionBar(props: {
       ) : (
         <>
           <BatchBarButton icon="folder" label={t("Export Selected")} onClick={onExport} disabled={busy} />
+          <BatchBarButton icon="tag" label={t("Manage Tags")} onClick={onManageTags} disabled={busy} />
           <BatchBarButton icon="trash" label={t("Move to Trash ({n})").replace("{n}", String(count))} disabled={busy} onClick={onMoveToTrash} />
           <BatchBarButton
             icon={allFavorites ? "star.fill" : "star"}
