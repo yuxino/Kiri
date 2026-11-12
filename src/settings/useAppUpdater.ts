@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
+import { check, type Update } from "./resumableUpdater";
 import { api } from "../lib/ipc";
 
 const UPDATE_CHECK_CACHE_MS = 6 * 60 * 60 * 1000;
@@ -26,7 +26,7 @@ type UpdateState =
   | ({ kind: "installing"; isWindows: boolean } & UpdateDetails)
   | ({ kind: "readyToRestart" } & UpdateDetails)
   | ({ kind: "relaunching" } & UpdateDetails)
-  | ({ kind: "error"; action: UpdateAction; details?: UpdateDetails });
+  | ({ kind: "error"; action: UpdateAction; details?: UpdateDetails; downloaded?: number; total?: number });
 
 function updateDetails(update: Update): UpdateDetails {
   return {
@@ -127,13 +127,13 @@ export function useAppUpdater() {
     }
     operationRef.current = true;
     const details = updateDetails(update);
-    let downloaded = 0;
-    let total: number | undefined;
-    setUpdateState({ kind: "downloading", downloaded, ...details });
+    let downloaded = updateState.kind === "error" ? updateState.downloaded ?? 0 : 0;
+    let total = updateState.kind === "error" ? updateState.total : undefined;
+    setUpdateState({ kind: "downloading", downloaded, total, ...details });
     try {
       await update.download((event) => {
         if (event.event === "Started") {
-          downloaded = 0;
+          downloaded = event.data.downloaded;
           total = event.data.contentLength;
         } else if (event.event === "Progress") {
           downloaded += event.data.chunkLength;
@@ -142,10 +142,16 @@ export function useAppUpdater() {
           return;
         }
         setUpdateState({ kind: "downloading", downloaded, total, ...details });
-      }, { timeout: 120_000 });
+      });
       setUpdateState({ kind: "downloaded", ...details });
-    } catch {
-      setUpdateState({ kind: "error", action: "download", details });
+    } catch (error) {
+      // Only native cache metadata establishes resumable progress. Signature
+      // failures and invalidated artifacts return zero, never an install action.
+      const partial = error as { downloaded?: unknown; total?: unknown } | null;
+      downloaded = typeof partial?.downloaded === "number" && Number.isFinite(partial.downloaded)
+        ? Math.max(0, partial.downloaded) : 0;
+      total = typeof partial?.total === "number" && partial.total > 0 ? partial.total : undefined;
+      setUpdateState({ kind: "error", action: "download", details, downloaded, total });
     } finally {
       finishOperation();
     }
@@ -163,7 +169,7 @@ export function useAppUpdater() {
     const details = updateDetails(update);
     setUpdateState({ kind: "installing", isWindows, ...details });
     try {
-      await update.install({ restartAfterInstall: true });
+      await update.install();
       if (!isWindows) setUpdateState({ kind: "readyToRestart", ...details });
     } catch {
       setUpdateState({ kind: "error", action: "install", details });

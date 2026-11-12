@@ -898,5 +898,7 @@
   "Select records": "Sélectionner",
   "Select record": "Sélectionner une entrée",
   "Deselect All": "Tout désélectionner",
-  "Couldn't move these records to Trash. Try again.": "Impossible de déplacer ces entrées vers la corbeille. Réessayez."
+  "Couldn't move these records to Trash. Try again.": "Impossible de déplacer ces entrées vers la corbeille. Réessayez.",
+  "Resume Download": "Reprendre le téléchargement",
+  "Download interrupted. %@ saved.": "Téléchargement interrompu. %@ conservés."
 }

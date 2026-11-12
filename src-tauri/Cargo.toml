@@ -41,6 +41,7 @@ dirs = "6"
 log = "0.4"
 env_logger = "0.11"
 base64 = "0.22"
+minisign-verify = "0.2.5"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls-no-provider", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 secrecy = "0.10"

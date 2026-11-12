@@ -898,5 +898,7 @@
   "Select records": "기록 선택",
   "Select record": "기록 선택",
   "Deselect All": "모두 선택 해제",
-  "Couldn't move these records to Trash. Try again.": "기록을 휴지통으로 이동하지 못했습니다. 다시 시도해 주세요."
+  "Couldn't move these records to Trash. Try again.": "기록을 휴지통으로 이동하지 못했습니다. 다시 시도해 주세요.",
+  "Resume Download": "다운로드 계속",
+  "Download interrupted. %@ saved.": "다운로드가 중단되었습니다. %@ 저장됨."
 }

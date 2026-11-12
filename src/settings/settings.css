@@ -679,7 +679,7 @@
 .kiri-version-number { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--kiri-secondary-label); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .kiri-version-target { color: var(--kiri-label); font-weight: 500; }
 .kiri-version-arrow { color: var(--kiri-disabled-label); }
-.kiri-update-status { display: flex; align-items: flex-start; gap: 7px; color: var(--kiri-secondary-label); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.kiri-update-status { min-height: 20px; display: flex; align-items: flex-start; gap: 7px; color: var(--kiri-secondary-label); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
 .kiri-update-status > svg, .kiri-update-status > .kiri-settings-spinner { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 2px; }
 .kiri-update-status[role="alert"] { color: var(--kiri-coral); }
 .kiri-update-actions { max-width: 100%; }

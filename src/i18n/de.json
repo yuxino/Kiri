@@ -898,5 +898,7 @@
   "Select records": "Einträge auswählen",
   "Select record": "Eintrag auswählen",
   "Deselect All": "Auswahl aufheben",
-  "Couldn't move these records to Trash. Try again.": "Diese Einträge konnten nicht in den Papierkorb verschoben werden. Versuche es erneut."
+  "Couldn't move these records to Trash. Try again.": "Diese Einträge konnten nicht in den Papierkorb verschoben werden. Versuche es erneut.",
+  "Resume Download": "Download fortsetzen",
+  "Download interrupted. %@ saved.": "Download unterbrochen. %@ gespeichert."
 }

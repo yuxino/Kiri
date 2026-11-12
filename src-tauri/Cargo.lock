@@ -3168,6 +3168,7 @@ dependencies = [
  "keyring",
  "libpulse-binding",
  "log",
+ "minisign-verify",
  "moxcms",
  "objc2",
  "objc2-app-kit",

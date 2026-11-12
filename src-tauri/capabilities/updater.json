@@ -5,8 +5,6 @@
   "windows": ["library"],
   "permissions": [
     "updater:allow-check",
-    "updater:allow-download",
-    "updater:allow-install",
     "process:allow-restart"
   ]
 }

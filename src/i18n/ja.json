@@ -898,5 +898,7 @@
   "Select records": "選択",
   "Select record": "記録を選択",
   "Deselect All": "選択をすべて解除",
-  "Couldn't move these records to Trash. Try again.": "記録をゴミ箱に移動できませんでした。もう一度お試しください。"
+  "Couldn't move these records to Trash. Try again.": "記録をゴミ箱に移動できませんでした。もう一度お試しください。",
+  "Resume Download": "ダウンロードを再開",
+  "Download interrupted. %@ saved.": "ダウンロード中断。%@ 保存済み。"
 }

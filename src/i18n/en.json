@@ -898,5 +898,7 @@
   "Select records": "Select records",
   "Select record": "Select record",
   "Deselect All": "Deselect All",
-  "Couldn't move these records to Trash. Try again.": "Couldn't move these records to Trash. Try again."
+  "Couldn't move these records to Trash. Try again.": "Couldn't move these records to Trash. Try again.",
+  "Resume Download": "Resume Download",
+  "Download interrupted. %@ saved.": "Download interrupted. %@ saved."
 }

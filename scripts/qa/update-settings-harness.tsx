@@ -42,6 +42,7 @@ const makeState = (kind: string): UpdateState => {
     case "unknownDownload": return {kind: "downloading", ...details, downloaded: 37 * 1024 ** 2};
     case "installing": return {kind, ...details, isWindows};
     case "error": return {kind, action: "install", details};
+    case "interrupted": return {kind: "error", action: "download", details, downloaded: 37 * 1024 ** 2, total: 62 * 1024 ** 2};
     default: throw new Error(`Unknown update QA state: ${kind}`);
   }
 };

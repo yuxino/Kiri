@@ -282,6 +282,9 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
       open: "Couldn't open the update page. Try again.",
     };
     status = t(errors[updateState.action]);
+    if (updateState.action === "download" && updateState.downloaded) {
+      status = fmt("Download interrupted. %@ saved.", `${(updateState.downloaded / 1024 / 1024).toFixed(1)} MB`);
+    }
   }
 
   const details = stateDetails(updateState);
@@ -316,7 +319,7 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
             : updateState.kind === "available"
               ? t("Download Update")
               : updateState.kind === "error"
-                ? t("Retry")
+                ? t(updateState.action === "download" && updateState.downloaded ? "Resume Download" : "Retry")
                 : t("Check for Updates");
 
   return (
@@ -352,11 +355,11 @@ function AboutSettingsSection({ updater }: { updater: AppUpdater }) {
                   : busy && <span className="kiri-settings-spinner" aria-hidden="true" />}
               <span>{status}</span>
             </span>
-            {updateState.kind === "downloading" && (
+            {(updateState.kind === "downloading" || (updateState.kind === "error" && updateState.action === "download" && !!updateState.downloaded)) && (
               <progress
                 className="kiri-update-progress"
                 max={updateState.total}
-                value={updateState.total ? Math.min(updateState.downloaded, updateState.total) : undefined}
+                value={updateState.total ? Math.min(updateState.downloaded ?? 0, updateState.total) : undefined}
                 aria-label={t("Update download progress")}
               />
             )}

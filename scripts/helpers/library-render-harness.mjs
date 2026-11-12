@@ -154,6 +154,7 @@ export function createLibraryHarness(apiOverrides = {}, componentSource = null, 
       onFocusChanged: subscribe("libraryFocus"),
     }) },
     "@tauri-apps/plugin-updater": { check: apiOverrides.check ?? (async () => null) },
+    "./resumableUpdater": { check: apiOverrides.check ?? (async () => null) },
     "@tauri-apps/plugin-process": { relaunch: apiOverrides.relaunch ?? (async () => {}) },
     get "../settings/useAppUpdater"() {
       const hook = { exports: {} };

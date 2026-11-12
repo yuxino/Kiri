@@ -898,5 +898,7 @@
   "Select records": "Выбрать записи",
   "Select record": "Выбрать запись",
   "Deselect All": "Снять выделение",
-  "Couldn't move these records to Trash. Try again.": "Не удалось переместить эти записи в корзину. Повторите попытку."
+  "Couldn't move these records to Trash. Try again.": "Не удалось переместить эти записи в корзину. Повторите попытку.",
+  "Resume Download": "Продолжить загрузку",
+  "Download interrupted. %@ saved.": "Загрузка прервана. Сохранено %@."
 }

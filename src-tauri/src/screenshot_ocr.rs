@@ -59,7 +59,7 @@ impl ScreenshotOcrIndex {
 
     pub(crate) fn enqueue(&self, app: &AppHandle, image: OcrImageVersion) {
         let epoch = self.epoch.load(Ordering::Acquire);
-        if epoch % 2 == 0 {
+        if epoch.is_multiple_of(2) {
             return;
         }
         let sender = self.jobs.get_or_init(|| {

@@ -898,5 +898,7 @@
   "Select records": "多选",
   "Select record": "选择记录",
   "Deselect All": "取消全选",
-  "Couldn't move these records to Trash. Try again.": "无法将这些记录移到回收站，请重试。"
+  "Couldn't move these records to Trash. Try again.": "无法将这些记录移到回收站，请重试。",
+  "Resume Download": "继续下载",
+  "Download interrupted. %@ saved.": "下载中断，已保留 %@。"
 }
