@@ -12,12 +12,14 @@ test("downloads and installs remain separate signed user actions", () => {
   const ipc = read("src/lib/ipc.ts");
   const rust = read("src-tauri/src/updates.rs");
   const lib = read("src-tauri/src/lib.rs");
+  const transport = read("src/settings/resumableUpdater.ts");
 
-  assert.match(settings, /from "@tauri-apps\/plugin-updater"/);
+  assert.match(transport, /from "@tauri-apps\/plugin-updater"/);
   assert.match(settings, /await check\(/);
   assert.match(settings, /await update\.download\(/);
   assert.match(settings, /event\.event === "Progress"/);
-  assert.match(settings, /await update\.install\(\{ restartAfterInstall: true \}\)/);
+  assert.match(settings, /await update\.install\(\)/);
+  assert.match(rust, /restart_after_install\(true\)/);
   assert.match(settings, /await relaunch\(\)/);
   assert.match(settings, /update\.body/);
   assert.doesNotMatch(settings, /downloadAndInstall/);
@@ -46,7 +48,7 @@ test("updater configuration is fixed, HTTPS-only, and least-privileged", () => {
   assert.deepEqual(capability.windows, ["library"]);
   assert.deepEqual(
     capability.permissions.filter((permission) => permission.startsWith("updater:")),
-    ["updater:allow-check", "updater:allow-download", "updater:allow-install"],
+    ["updater:allow-check"],
   );
   assert.equal(capability.permissions.includes("process:allow-restart"), true);
   assert.equal(packageJson.dependencies["@tauri-apps/plugin-updater"], "^2.11.0");
@@ -85,7 +87,7 @@ function updaterHarness(windows = true, portable = false, linux = false, options
   let restarts = 0;
   const update = { version: '9.9.9', currentVersion: '1.5.0', body: 'Release notes',
     close: async () => { closes++; },
-    download: callback => { downloads++; progress = callback; return pending.promise; },
+    download: callback => { downloads++; progress = callback; return options.download ? options.download(downloads) : pending.promise; },
     install: async options => { installs.push(options); },
   };
   const settings = read('src/settings/SettingsView.tsx');
@@ -121,7 +123,7 @@ test('Windows download reports bytes and cannot install until verification succe
   await settleRequests();
   h.button().props.onClick(); await settleRequests();
   h.button().props.onClick();
-  h.progress({ event: 'Started', data: { contentLength: 4 * 1024 * 1024 } });
+  h.progress({ event: 'Started', data: { downloaded: 0, contentLength: 4 * 1024 * 1024 } });
   h.progress({ event: 'Progress', data: { chunkLength: 1024 * 1024 } });
   assert.ok(nodes(h.render()).includes('Downloading… 25% · 1.0 MB / 4.0 MB'));
   const progress = nodes(h.render()).find(node => node?.type === 'progress');
@@ -133,7 +135,7 @@ test('Windows download reports bytes and cannot install until verification succe
   h.pending.resolve(); await settleRequests();
   assert.ok(nodes(h.button()).includes('Install and Restart'));
   h.button().props.onClick(); await settleRequests();
-  assert.deepEqual(h.installs, [{ restartAfterInstall: true }]);
+  assert.deepEqual(h.installs, [undefined]);
   assert.equal(h.restarts(), 0, 'Windows installer owns the restart');
 });
 
@@ -142,7 +144,7 @@ test('unknown download size stays indeterminate and failed verification never en
   h.button();
   await settleRequests();
   h.button().props.onClick(); await settleRequests(); h.button().props.onClick();
-  h.progress({ event: 'Started', data: {} });
+  h.progress({ event: 'Started', data: { downloaded: 0 } });
   h.progress({ event: 'Progress', data: { chunkLength: 1024 * 1024 } });
   assert.ok(nodes(h.render()).includes('Downloading… 1.0 MB'));
   assert.equal(nodes(h.render()).find(node => node?.type === 'progress').props.value, undefined);
@@ -150,6 +152,56 @@ test('unknown download size stays indeterminate and failed verification never en
   h.pending.reject(new Error('invalid signature')); await settleRequests();
   assert.ok(nodes(h.render()).includes("Couldn't download the update. Try again."));
   assert.deepEqual(h.installs, []);
+});
+
+test('interrupted downloads retain native progress and resume explicitly without rechecking', async () => {
+  const first = deferred(), retry = deferred();
+  const h = updaterHarness(false, false, false, { download: count => count === 1 ? first.promise : retry.promise });
+  h.render(); await settleRequests();
+  h.button().props.onClick(); await settleRequests(); h.button().props.onClick();
+  h.progress({ event: 'Started', data: { downloaded: 0, contentLength: 4 * 1024 ** 2 } });
+  h.progress({ event: 'Progress', data: { chunkLength: 1024 ** 2 } });
+  first.reject({ downloaded: 1024 ** 2, total: 4 * 1024 ** 2 }); await settleRequests();
+  assert.ok(nodes(h.render()).includes('Download interrupted. 1.0 MB saved.'));
+  assert.ok(nodes(h.button()).includes('Resume Download'));
+  assert.equal(nodes(h.render()).find(node => node?.type === 'progress').props.value, 1024 ** 2);
+  assert.deepEqual(h.installs, []);
+  h.focus(); await settleRequests(); assert.equal(h.checks(), 1);
+  const resume = h.button().props.onClick;
+  resume(); resume(); assert.equal(h.downloads(), 2);
+  h.progress({ event: 'Started', data: { downloaded: 1024 ** 2, contentLength: 4 * 1024 ** 2 } });
+  h.progress({ event: 'Progress', data: { chunkLength: 1024 ** 2 } });
+  assert.ok(nodes(h.render()).includes('Downloading… 50% · 2.0 MB / 4.0 MB'));
+  h.progress({ event: 'Finished' }); assert.equal(h.button().props.disabled, true);
+  retry.resolve(); await settleRequests();
+  assert.ok(nodes(h.button()).includes('Install Update'));
+  assert.deepEqual(h.installs, []);
+  h.unmount(); await settleRequests(); assert.equal(h.closes(), 1);
+});
+
+test('a native restart from zero replaces resumed progress and verification failure clears it', async () => {
+  const h = updaterHarness();
+  h.render(); await settleRequests();
+  h.button().props.onClick(); await settleRequests(); h.button().props.onClick();
+  h.progress({ event: 'Started', data: { downloaded: 3 * 1024 ** 2, contentLength: 4 * 1024 ** 2 } });
+  assert.ok(nodes(h.render()).includes('Downloading… 75% · 3.0 MB / 4.0 MB'));
+  h.progress({ event: 'Started', data: { downloaded: 0, contentLength: 4 * 1024 ** 2 } });
+  assert.ok(nodes(h.render()).includes('Downloading… 0% · 0.0 MB / 4.0 MB'));
+  h.progress({ event: 'Finished' });
+  h.pending.reject({ downloaded: 0, total: null }); await settleRequests();
+  assert.ok(nodes(h.button()).includes('Retry'));
+  assert.ok(!nodes(h.render()).some(node => node?.type === 'progress'));
+  assert.deepEqual(h.installs, []);
+  h.unmount();
+});
+
+test('closing the panel during a download releases its verified resource after completion', async () => {
+  const h = updaterHarness();
+  h.render(); await settleRequests();
+  h.button().props.onClick(); await settleRequests(); h.button().props.onClick();
+  h.unmount(); assert.equal(h.closes(), 0);
+  h.pending.resolve(); await settleRequests();
+  assert.equal(h.closes(), 1); assert.deepEqual(h.installs, []);
 });
 
 test('macOS installation still waits for its explicit restart action', async () => {

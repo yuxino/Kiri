@@ -814,14 +814,19 @@ The configured endpoint and updater public key are compiled into Kiri; release
 notes can supply display text but never an executable path, alternate endpoint,
 or public key.
 
-Download, install, and macOS restart remain separate visible actions. Download progress
-uses the plugin's actual byte events and stays indeterminate when the server
-does not provide a length. The downloaded platform archive must pass minisign
+Download, install, and macOS restart remain separate visible actions. A bounded
+native download cache retains interrupted bytes for explicit retry, including
+after restarting Kiri. HTTP Range resumes the same artifact; a full response
+replaces the prefix. Connection/read-idle timeouts allow slow downloads to keep
+making progress. Actual byte events include cached progress and stay
+indeterminate when the server does not provide a length. The downloaded platform archive must pass minisign
 verification before the UI reaches its install-ready state. On macOS,
 installation returns to Settings and a further explicit action relaunches the
 app. On Windows, installation launches the passive NSIS updater and exits Kiri;
 the interface does not promise an in-app restart step. The fixed GitHub
-Releases page is exposed only as recovery after an updater failure.
+Releases page is exposed only as recovery after an updater failure. The official
+plugin still owns discovery and installation; the app verifies the cached bytes
+again before passing them to the installer. See ADR 0136.
 
 Release packaging creates a signed Universal macOS updater archive and a
 signed Windows NSIS installer. `latest.json` maps both macOS architectures to
