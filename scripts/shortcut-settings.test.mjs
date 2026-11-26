@@ -709,3 +709,19 @@ test("long native key labels size the entire column and retain its width while e
     ui.page.unmount(); await tick();
   }
 });
+
+test("Print Screen is recorded from keyup when the webview omits keydown, and only once otherwise", async () => {
+  const ui = harness(); await tick(); await begin(ui, "ocr");
+  recorder(ui.page.render(), "ocr").props.onKeyUp(key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true }));
+  await tick();
+  assert.ok(ui.calls.some((call) => JSON.stringify(call).includes("PrintScreen")));
+  const count = () => ui.calls.filter((call) => JSON.stringify(call).includes("PrintScreen")).length;
+  const before = count();
+  await begin(ui, "library");
+  const handler = recorder(ui.page.render(), "library").props;
+  handler.onKeyDown(key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true }));
+  await tick();
+  handler.onKeyUp(key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true }));
+  await tick();
+  assert.equal(count() - before, 1);
+});

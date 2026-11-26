@@ -182,8 +182,23 @@ export function ShortcutsSettings() {
     }
   };
 
+  // Windows WebView2 reports Print Screen only as keyup. Accept that keyup when
+  // no keydown preceded it, so platforms that send both record it once.
+  const printScreenDown = useRef(false);
+  const recordPrintScreenUp = (event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) => {
+    if (event.code !== "PrintScreen") return;
+    const sawDown = printScreenDown.current;
+    printScreenDown.current = false;
+    if (sawDown || editingRef.current !== action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const modifiers = [event.ctrlKey && "Control", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Super"].filter(Boolean);
+    acceptRecordedShortcut(action, [...modifiers, "PrintScreen"].join("+"));
+  };
+
   const recordKey = (event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) => {
     if (editingRef.current !== action) return;
+    if (event.code === "PrintScreen") printScreenDown.current = true;
     if (event.repeat || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.key === "Process"
       || /^(Control|Shift|Alt|Meta|AltGraph|Fn)$/.test(event.key) || /^(Control|Shift|Alt|Meta)(Left|Right)$/.test(event.code)) return;
     const modified = event.ctrlKey || event.altKey || event.metaKey;
@@ -277,7 +292,7 @@ export function ShortcutsSettings() {
                           aria-label={fmt("Edit shortcut for %@: %@", t(title), pending?.label ?? setting.label ?? t("Not set"))}
                           aria-describedby={`${descriptionId}${isEditing ? " shortcut-recording-instruction" : ""}${rowError || pending || setting.status === "occupied" ? ` shortcut-feedback-${action}` : ""}`}
                           aria-pressed={isEditing} onClick={(event) => void beginEditing(action, event.currentTarget)}
-                          onKeyDown={(event) => recordKey(event, action)}>
+                          onKeyDown={(event) => recordKey(event, action)} onKeyUp={(event) => recordPrintScreenUp(event, action)}>
                           <span className="kiri-shortcut-value">
                             {pending ? <span className="kiri-shortcut-chord">{pending.label}</span> : isEditing
                               ? <span className="kiri-shortcut-listening">{t("Press shortcut…")}</span>
