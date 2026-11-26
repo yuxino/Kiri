@@ -84,7 +84,14 @@ pub fn run() {
                         bindings.release(shortcut);
                         return;
                     }
-                    let Some(action) = bindings.press(shortcut) else { return; };
+                    let Some(action) = bindings.press(shortcut) else {
+                        if bindings.press_editing_print_screen(shortcut) {
+                            let _ = app.emit_to("library", "shortcut-recorded", serde_json::json!({
+                                "shortcut": shortcut.to_string(),
+                            }));
+                        }
+                        return;
+                    };
                     if bindings.is_editing() {
                         // Keep all native registrations owned during editing. A
                         // registered action reports its key instead of running.
@@ -223,6 +230,7 @@ pub fn run() {
                 ) {
                     if let Some(bindings) = window.try_state::<shortcut_settings::ShortcutBindings>() {
                         bindings.set_library_focused(false);
+                        shortcut_settings::sync_editing_capture(window.app_handle());
                     }
                 }
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {

@@ -6349,6 +6349,7 @@ pub fn set_shortcut_editing(window: WebviewWindow, editing: bool) -> Result<(), 
         bindings.set_library_focused(true);
     }
     bindings.set_editing(editing);
+    crate::shortcut_settings::sync_editing_capture(window.app_handle());
     Ok(())
 }
 

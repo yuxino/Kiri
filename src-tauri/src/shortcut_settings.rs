@@ -120,6 +120,8 @@ pub struct ShortcutBindings {
     pressed_ids: [AtomicU64; 6],
     editing: AtomicBool,
     library_focused: AtomicBool,
+    editing_print_screen: AtomicBool,
+    editing_print_screen_pressed: AtomicBool,
     recording_active: AtomicBool,
     recording_epoch: AtomicU64,
 }
@@ -131,6 +133,8 @@ impl ShortcutBindings {
             current: Mutex::new(bindings),
             editing: AtomicBool::new(false),
             library_focused: AtomicBool::new(false),
+            editing_print_screen: AtomicBool::new(false),
+            editing_print_screen_pressed: AtomicBool::new(false),
             recording_active: AtomicBool::new(false),
             recording_epoch: AtomicU64::new(0),
         }
@@ -161,7 +165,22 @@ impl ShortcutBindings {
         self.pressed_ids[action.index()].store(id, Ordering::Release);
         Some(action)
     }
+    pub fn press_editing_print_screen(&self, shortcut: &Shortcut) -> bool {
+        if !self.is_editing()
+            || !self.editing_print_screen.load(Ordering::Acquire)
+            || *shortcut != bare_print_screen()
+        {
+            return false;
+        }
+        !self
+            .editing_print_screen_pressed
+            .swap(true, Ordering::AcqRel)
+    }
     pub fn release(&self, shortcut: &Shortcut) {
+        if *shortcut == bare_print_screen() {
+            self.editing_print_screen_pressed
+                .store(false, Ordering::Release);
+        }
         let id = shortcut_id(Some(*shortcut));
         for pressed in &self.pressed_ids {
             let _ = pressed.compare_exchange(id, 0, Ordering::AcqRel, Ordering::Acquire);
@@ -192,6 +211,53 @@ impl ShortcutBindings {
         self.recording_epoch.fetch_add(1, Ordering::AcqRel);
         true
     }
+}
+fn bare_print_screen() -> Shortcut {
+    Shortcut::new(None, Code::PrintScreen)
+}
+// On Windows 11, pressing an unregistered Print Screen launches Snipping Tool
+// before WebView2 finishes recording. Temporarily claiming VK_SNAPSHOT while
+// the recorder is active intercepts bare Print Screen cleanly and releases it
+// immediately on cancel, blur, dismissal, or before saving a replacement.
+#[cfg(any(target_os = "windows", test))]
+fn sync_editing_print_screen(state: &ShortcutBindings, registrar: &impl Registrar) {
+    let key = bare_print_screen();
+    if state.is_editing() {
+        if !state.editing_print_screen.load(Ordering::Acquire) && !registrar.is_registered(key) {
+            if registrar.register(key).is_ok() {
+                state.editing_print_screen.store(true, Ordering::Release);
+                state
+                    .editing_print_screen_pressed
+                    .store(false, Ordering::Release);
+            }
+        }
+    } else {
+        release_editing_print_screen(state, registrar);
+    }
+}
+fn release_editing_print_screen(state: &ShortcutBindings, registrar: &impl Registrar) {
+    if state.editing_print_screen.swap(false, Ordering::AcqRel) {
+        state
+            .editing_print_screen_pressed
+            .store(false, Ordering::Release);
+        let key = bare_print_screen();
+        if registrar.is_registered(key) {
+            let _ = registrar.unregister(key);
+        }
+    }
+}
+pub fn sync_editing_capture(app: &AppHandle) {
+    #[cfg(target_os = "windows")]
+    {
+        if system_managed() {
+            return;
+        }
+        let state = app.state::<ShortcutBindings>();
+        let _active = state.current.lock().unwrap();
+        sync_editing_print_screen(&state, &NativeRegistrar(app));
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = app;
 }
 fn shortcut_id(shortcut: Option<Shortcut>) -> u64 {
     shortcut.map_or(0, |shortcut| u64::from(shortcut.id()) + 1)
@@ -640,6 +706,7 @@ pub fn replace(app: &AppHandle, action: ShortcutAction, value: Option<&str>) -> 
     let candidate = value.map(parse).transpose()?;
     let state = app.state::<ShortcutBindings>();
     let mut active = state.current.lock().unwrap();
+    release_editing_print_screen(&state, &NativeRegistrar(app));
     let updated = active.with(action, candidate)?;
     let previous = active.get(action);
     let dir = app
@@ -1306,5 +1373,36 @@ mod tests {
         let registrar = FakeRegistrar::default();
         assert!(!reconcile_recording_scope(&state, &registrar));
         assert!(registrar.operations.borrow().is_empty());
+    }
+
+    #[test]
+    fn editing_print_screen_claims_only_when_unowned_suppresses_repeat_and_releases() {
+        let state = ShortcutBindings::new(Bindings::default());
+        let registrar = FakeRegistrar::default();
+        let prtsc = bare_print_screen();
+
+        state.set_library_focused(true);
+        state.set_editing(true);
+        sync_editing_print_screen(&state, &registrar);
+        assert!(registrar.is_registered(prtsc));
+        assert!(state.press_editing_print_screen(&prtsc));
+        assert!(!state.press_editing_print_screen(&prtsc));
+        state.release(&prtsc);
+        assert!(state.press_editing_print_screen(&prtsc));
+
+        state.set_library_focused(false);
+        sync_editing_print_screen(&state, &registrar);
+        assert!(!registrar.is_registered(prtsc));
+        assert!(!state.press_editing_print_screen(&prtsc));
+
+        // If an action already owns PrintScreen, editing must never unregister it.
+        registrar.register(prtsc).unwrap();
+        state.set_library_focused(true);
+        state.set_editing(true);
+        sync_editing_print_screen(&state, &registrar);
+        assert!(!state.press_editing_print_screen(&prtsc));
+        state.set_editing(false);
+        sync_editing_print_screen(&state, &registrar);
+        assert!(registrar.is_registered(prtsc));
     }
 }
