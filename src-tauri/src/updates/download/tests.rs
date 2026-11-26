@@ -45,6 +45,7 @@ fn streaming_server(responses: Vec<&'static str>, chunk_delay: Option<Duration>)
                 }
             };
             socket.set_nonblocking(false).unwrap();
+            socket.set_nodelay(true).unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
