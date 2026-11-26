@@ -725,3 +725,15 @@ test("Print Screen is recorded from keyup when the webview omits keydown, and on
   await tick();
   assert.equal(count() - before, 1);
 });
+
+test("a Print Screen keydown whose keyup was lost does not suppress the next keyup-only recording", async () => {
+  const ui = harness(); await tick(); await begin(ui, "ocr");
+  const pr = key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true });
+  recorder(ui.page.render(), "ocr").props.onKeyDown(pr);
+  await tick();
+  // Accepting the keydown ended editing before its keyup could arrive.
+  await begin(ui, "ocr");
+  const before = ui.calls.filter((c) => JSON.stringify(c).includes("PrintScreen")).length;
+  recorder(ui.page.render(), "ocr").props.onKeyUp(pr); await tick();
+  assert.equal(ui.calls.filter((c) => JSON.stringify(c).includes("PrintScreen")).length - before, 1);
+});

@@ -75,8 +75,10 @@ export function ShortcutsSettings() {
   const editorGeneration = useRef(0);
   const subscription = useRef<Promise<() => void> | null>(null);
   const settingsVersion = useRef(0);
+  const printScreenDown = useRef(false);
   const stopEditing = useCallback(() => {
     ++editorGeneration.current;
+    printScreenDown.current = false;
     if (editingRef.current) setError(null);
     editingRef.current = null;
     setEditing(null);
@@ -184,7 +186,6 @@ export function ShortcutsSettings() {
 
   // Windows WebView2 reports Print Screen only as keyup. Accept that keyup when
   // no keydown preceded it, so platforms that send both record it once.
-  const printScreenDown = useRef(false);
   const recordPrintScreenUp = (event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) => {
     if (event.code !== "PrintScreen") return;
     const sawDown = printScreenDown.current;
