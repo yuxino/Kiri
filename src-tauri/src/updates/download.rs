@@ -240,7 +240,7 @@ async fn receive(
                 });
                 continue;
             }
-            let total = match response.status() {
+            let (total, response_end) = match response.status() {
                 StatusCode::OK => {
                     // A server may ignore Range, or If-Range may identify a new
                     // representation. Never append its full body to old bytes.
@@ -248,7 +248,7 @@ async fn receive(
                         cache.reset()?;
                         offset = 0;
                     }
-                    response.content_length()
+                    (response.content_length(), None)
                 }
                 StatusCode::PARTIAL_CONTENT if offset > 0 => {
                     let range = response
@@ -259,13 +259,14 @@ async fn receive(
                     match range {
                         Some((start, end, total))
                             if start == offset
-                                && end == total - 1
                                 && cache.partial.total.is_none_or(|previous| previous == total)
                                 && response
                                     .content_length()
-                                    .is_none_or(|length| length == total - start) =>
+                                    .is_none_or(|length| length == end - start + 1) =>
                         {
-                            Some(total)
+                            // A server may return only part of the requested range.
+                            // Keep that verified progress for the next explicit resume.
+                            (Some(total), Some(end + 1))
                         }
                         _ => {
                             cache.reset()?;
@@ -306,7 +307,10 @@ async fn receive(
                 let next = offset
                     .checked_add(chunk.len() as u64)
                     .ok_or_else(|| anyhow::anyhow!("package overflow"))?;
-                if next > MAX_PACKAGE_BYTES || total.is_some_and(|total| next > total) {
+                if next > MAX_PACKAGE_BYTES
+                    || total.is_some_and(|total| next > total)
+                    || response_end.is_some_and(|end| next > end)
+                {
                     drop(file);
                     cache.reset()?;
                     anyhow::bail!("oversized update package");
@@ -318,7 +322,10 @@ async fn receive(
                 });
             }
             file.sync_all()?;
-            if offset == 0 || total.is_some_and(|total| offset != total) {
+            if offset == 0
+                || response_end.is_some_and(|end| offset != end)
+                || total.is_some_and(|total| offset != total)
+            {
                 anyhow::bail!("incomplete update package");
             }
             cache.partial.complete = true;

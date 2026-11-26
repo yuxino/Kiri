@@ -160,6 +160,44 @@ async fn interrupted_download_reopens_cache_and_requests_only_remaining_bytes() 
 }
 
 #[tokio::test]
+async fn partial_range_responses_preserve_progress_and_resume_from_the_new_offset() {
+    let (key, signature) = fixture();
+    let server = server(vec![
+        INTERRUPTED,
+        "HTTP/1.1 206 Partial Content\r\nContent-Length: 1\r\nContent-Range: bytes 2-2/4\r\nConnection: close\r\n\r\ns",
+        "HTTP/1.1 206 Partial Content\r\nContent-Length: 1\r\nContent-Range: bytes 3-3/4\r\nConnection: close\r\n\r\nt",
+    ]);
+    let cache = tempfile::tempdir().unwrap();
+    let artifact = artifact(&server.url, &signature);
+    assert_eq!(
+        download(&client(), cache.path(), &artifact, &key, |_| {})
+            .await
+            .unwrap_err()
+            .downloaded,
+        2
+    );
+    assert_eq!(
+        download(&client(), cache.path(), &artifact, &key, |_| {})
+            .await
+            .unwrap_err()
+            .downloaded,
+        3,
+        "a valid 206 response need not extend to the end of the file"
+    );
+    assert_eq!(fs::read(cache.path().join("package.part")).unwrap(), b"tes");
+    assert_eq!(
+        download(&client(), cache.path(), &artifact, &key, |_| {})
+            .await
+            .unwrap(),
+        b"test"
+    );
+    server.task.join().unwrap();
+    let requests = server.requests.lock().unwrap();
+    assert!(requests[1].contains("range: bytes=2-\r\n"));
+    assert!(requests[2].contains("range: bytes=3-\r\n"));
+}
+
+#[tokio::test]
 async fn server_ignoring_range_replaces_prefix_instead_of_appending() {
     let (key, signature) = fixture();
     let server = server(vec![INTERRUPTED, FULL]);

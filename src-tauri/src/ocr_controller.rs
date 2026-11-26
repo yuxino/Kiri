@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex, Weak,
+};
 use std::time::{Duration, Instant};
 
 use secrecy::{ExposeSecret, SecretString};
@@ -838,6 +841,7 @@ pub struct OcrRequestLease {
 
 pub struct OcrRequestController {
     pending: Mutex<HashMap<String, PendingOcrRequest>>,
+    history_generation: AtomicU64,
     ttl: Duration,
 }
 
@@ -845,6 +849,7 @@ impl Default for OcrRequestController {
     fn default() -> Self {
         Self {
             pending: Mutex::new(HashMap::new()),
+            history_generation: AtomicU64::new(0),
             ttl: PENDING_TTL,
         }
     }
@@ -859,6 +864,40 @@ impl OcrRequestController {
         engine: PreparedEngine,
         history_source: Option<crate::ocr_source::SavedOcrSource>,
     ) -> Result<PreparedOcrRequestDto, OcrRequestError> {
+        self.prepare_inner(owner, png, dimensions, engine, history_source, None)
+    }
+
+    pub fn history_generation(&self) -> u64 {
+        self.history_generation.load(Ordering::Acquire)
+    }
+
+    pub fn prepare_history(
+        self: &Arc<Self>,
+        png: Vec<u8>,
+        dimensions: (u32, u32),
+        engine: PreparedEngine,
+        history_source: Option<crate::ocr_source::SavedOcrSource>,
+        expected_generation: u64,
+    ) -> Result<PreparedOcrRequestDto, OcrRequestError> {
+        self.prepare_inner(
+            OcrRequestOwner::history(),
+            png,
+            dimensions,
+            engine,
+            history_source,
+            Some(expected_generation),
+        )
+    }
+
+    fn prepare_inner(
+        self: &Arc<Self>,
+        owner: OcrRequestOwner,
+        png: Vec<u8>,
+        dimensions: (u32, u32),
+        engine: PreparedEngine,
+        history_source: Option<crate::ocr_source::SavedOcrSource>,
+        expected_history_generation: Option<u64>,
+    ) -> Result<PreparedOcrRequestDto, OcrRequestError> {
         let (image_width, image_height) = dimensions;
         if owner.label.is_empty() || png.is_empty() || image_width == 0 || image_height == 0 {
             return Err(OcrRequestError::InvalidRequest);
@@ -867,6 +906,11 @@ impl OcrRequestController {
         let byte_length = png.len();
         let (engine_dto, profile) = engine.dto().map_err(|_| OcrRequestError::InvalidRequest)?;
         let mut pending = self.pending.lock().unwrap();
+        if expected_history_generation
+            .is_some_and(|generation| generation != self.history_generation())
+        {
+            return Err(OcrRequestError::Canceled);
+        }
         purge_expired(&mut pending, self.ttl);
         pending.retain(|_, request| {
             let keep = request.owner != owner;
@@ -956,6 +1000,11 @@ impl OcrRequestController {
     }
 
     pub fn clear_owner(&self, owner: &OcrRequestOwner) {
+        if owner == &OcrRequestOwner::history() {
+            // Invalidate history preparation that has not registered its request yet.
+            // The pending lock orders the generation check with this cleanup.
+            self.history_generation.fetch_add(1, Ordering::AcqRel);
+        }
         self.pending.lock().unwrap().retain(|_, request| {
             let keep = &request.owner != owner;
             if !keep {
@@ -969,6 +1018,7 @@ impl OcrRequestController {
     fn with_ttl(ttl: Duration) -> Arc<Self> {
         Arc::new(Self {
             pending: Mutex::new(HashMap::new()),
+            history_generation: AtomicU64::new(0),
             ttl,
         })
     }
@@ -976,6 +1026,8 @@ impl OcrRequestController {
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
 pub enum OcrRequestError {
+    #[error("The OCR request was canceled.")]
+    Canceled,
     #[error("prepared OCR request is invalid")]
     InvalidRequest,
     #[error("prepared OCR request was not found or expired")]
@@ -1439,6 +1491,49 @@ mod tests {
         assert_eq!(
             controller.begin(&owner, &request.request_id).err().unwrap(),
             OcrRequestError::NotFound
+        );
+    }
+
+    #[test]
+    fn history_close_rejects_preparation_that_finishes_after_cleanup() {
+        let controller = OcrRequestController::with_ttl(Duration::from_secs(30));
+        let owner = OcrRequestOwner::history();
+        let stale_generation = controller.history_generation();
+
+        // CloseRequested clears registered requests before the resident window hides.
+        // A preparation already reading the image must not register after that cleanup.
+        controller.clear_owner(&owner);
+        assert_eq!(
+            controller
+                .prepare_history(
+                    vec![1],
+                    (1, 1),
+                    PreparedEngine::Local,
+                    None,
+                    stale_generation,
+                )
+                .err()
+                .unwrap(),
+            OcrRequestError::Canceled
+        );
+        assert!(controller.pending.lock().unwrap().is_empty());
+
+        // A later preparation after reopening the library uses the new generation.
+        let current_request = controller
+            .prepare_history(
+                vec![2],
+                (1, 1),
+                PreparedEngine::Local,
+                None,
+                controller.history_generation(),
+            )
+            .unwrap();
+        assert_eq!(
+            &*controller
+                .begin(&owner, &current_request.request_id)
+                .unwrap()
+                .png,
+            &[2]
         );
     }
 

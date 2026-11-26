@@ -654,6 +654,7 @@ pub async fn prepare_ocr_history_request(
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
         let state = app.state::<AppState>();
+        let history_generation = state.ocr_requests.history_generation();
         let (version, path) = {
             let mut context = state.library.lock().unwrap();
             let version = OcrImageVersion::new(&context, id, expected_revision);
@@ -670,7 +671,13 @@ pub async fn prepare_ocr_history_request(
         }
         state
             .ocr_requests
-            .prepare(OcrRequestOwner::history(), png, (width, height), engine, Some(source))
+            .prepare_history(
+                png,
+                (width, height),
+                engine,
+                Some(source),
+                history_generation,
+            )
             .map_err(|error| error.to_string())
     })
     .await
