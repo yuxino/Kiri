@@ -710,20 +710,28 @@ test("long native key labels size the entire column and retain its width while e
   }
 });
 
-test("Print Screen is recorded from keyup when the webview omits keydown, and only once otherwise", async () => {
+test("Print Screen saves directly from keyup when the webview omits keydown, and only once otherwise", async () => {
   const ui = harness(); await tick(); await begin(ui, "ocr");
-  recorder(ui.page.render(), "ocr").props.onKeyUp(key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true }));
+  recorder(ui.page.render(), "ocr").props.onKeyUp(key({ key: "PrintScreen", code: "PrintScreen" }));
   await tick();
-  assert.ok(ui.calls.some((call) => JSON.stringify(call).includes("PrintScreen")));
-  const count = () => ui.calls.filter((call) => JSON.stringify(call).includes("PrintScreen")).length;
-  const before = count();
+  assert.deepEqual(ui.calls, [["ocr", "PrintScreen"]]);
+  assert.equal(applyButton(ui.page.render(), "ocr"), undefined);
+
+  await begin(ui, "ocr");
+  recorder(ui.page.render(), "ocr").props.onKeyUp(key({ key: "PrintScreen", code: "", shiftKey: true }));
+  await tick();
+  assert.deepEqual(ui.calls.at(-1), ["ocr", "Shift+PrintScreen"]);
+  assert.equal(applyButton(ui.page.render(), "ocr"), undefined);
+
+  const before = ui.calls.length;
   await begin(ui, "library");
   const handler = recorder(ui.page.render(), "library").props;
   handler.onKeyDown(key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true }));
   await tick();
   handler.onKeyUp(key({ key: "PrintScreen", code: "PrintScreen", ctrlKey: true }));
   await tick();
-  assert.equal(count() - before, 1);
+  assert.equal(ui.calls.length - before, 1);
+  assert.deepEqual(ui.calls.at(-1), ["library", "Control+PrintScreen"]);
 });
 
 test("a Print Screen keydown whose keyup was lost does not suppress the next keyup-only recording", async () => {
@@ -733,7 +741,16 @@ test("a Print Screen keydown whose keyup was lost does not suppress the next key
   await tick();
   // Accepting the keydown ended editing before its keyup could arrive.
   await begin(ui, "ocr");
-  const before = ui.calls.filter((c) => JSON.stringify(c).includes("PrintScreen")).length;
+  const before = ui.calls.length;
   recorder(ui.page.render(), "ocr").props.onKeyUp(pr); await tick();
-  assert.equal(ui.calls.filter((c) => JSON.stringify(c).includes("PrintScreen")).length - before, 1);
+  assert.equal(ui.calls.length - before, 1);
+  assert.deepEqual(ui.calls.at(-1), ["ocr", "Control+PrintScreen"]);
+});
+
+test("native Print Screen recording ignores a trailing WebView keyup", async () => {
+  const ui = harness(); await tick(); await begin(ui, "capture");
+  ui.emit({ shortcut: "PrintScreen", action: "capture" });
+  recorder(ui.page.render(), "capture").props.onKeyUp(key({ key: "PrintScreen", code: "PrintScreen" }));
+  await tick();
+  assert.deepEqual(ui.calls, [["capture", "PrintScreen"]]);
 });

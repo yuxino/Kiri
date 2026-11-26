@@ -29,7 +29,7 @@ function needsSingleKeyConfirmation(shortcut: string) {
   const parts = shortcut.split("+");
   const code = parts.pop() ?? "";
   return !parts.some((part) => /^(control|ctrl|alt|super|meta|command)$/i.test(part))
-    && !/^(F([1-9]|1\d|2[0-4])|AudioVolume\w+|Media\w+)$/i.test(code);
+    && !/^(F([1-9]|1\d|2[0-4])|PrintScreen|AudioVolume\w+|Media\w+)$/i.test(code);
 }
 
 function candidateLabel(shortcut: string) {
@@ -140,7 +140,10 @@ export function ShortcutsSettings() {
     void setEditingInterception(false).catch(() => {});
     subscription.current = onShortcutRecorded(({ shortcut }) => {
       const action = editingRef.current;
-      if (action) acceptRecordedShortcut(action, shortcut);
+      if (action) {
+        if (/(?:^|\+)PrintScreen$/i.test(shortcut)) printScreenDown.current = true;
+        acceptRecordedShortcut(action, shortcut);
+      }
     });
     void subscription.current.catch(() => {});
     const settingsSubscription = onShortcutSettingsChanged((next) => {
@@ -187,10 +190,11 @@ export function ShortcutsSettings() {
   // Windows WebView2 reports Print Screen only as keyup. Accept that keyup when
   // no keydown preceded it, so platforms that send both record it once.
   const recordPrintScreenUp = (event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) => {
-    if (event.code !== "PrintScreen") return;
+    if (event.code !== "PrintScreen" && event.key !== "PrintScreen") return;
     const sawDown = printScreenDown.current;
     printScreenDown.current = false;
-    if (sawDown || editingRef.current !== action) return;
+    if (sawDown || editingRef.current !== action
+      || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.key === "Process") return;
     event.preventDefault();
     event.stopPropagation();
     const modifiers = [event.ctrlKey && "Control", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Super"].filter(Boolean);
@@ -199,7 +203,8 @@ export function ShortcutsSettings() {
 
   const recordKey = (event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) => {
     if (editingRef.current !== action) return;
-    if (event.code === "PrintScreen") printScreenDown.current = true;
+    const isPrintScreen = event.code === "PrintScreen" || event.key === "PrintScreen";
+    if (isPrintScreen) printScreenDown.current = true;
     if (event.repeat || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.key === "Process"
       || /^(Control|Shift|Alt|Meta|AltGraph|Fn)$/.test(event.key) || /^(Control|Shift|Alt|Meta)(Left|Right)$/.test(event.code)) return;
     const modified = event.ctrlKey || event.altKey || event.metaKey;
@@ -210,12 +215,13 @@ export function ShortcutsSettings() {
     event.preventDefault();
     event.stopPropagation();
     if (event.key === "Escape" && !modified && !event.shiftKey) { void stopEditing(); return; }
-    if (!event.code || event.code === "Unidentified") {
+    const code = isPrintScreen ? "PrintScreen" : event.code;
+    if (!code || code === "Unidentified") {
       setError({ action, message: "This key is not supported as a shortcut." });
       return;
     }
     const modifiers = [event.ctrlKey && "Control", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Super"].filter(Boolean);
-    const shortcut = [...modifiers, event.code].join("+");
+    const shortcut = [...modifiers, code].join("+");
     acceptRecordedShortcut(action, shortcut);
   };
 

@@ -271,7 +271,25 @@ try:
                 raise RuntimeError("Confirmed Space binding was not persisted")
             open_mode("{SPACE}", "Screenshot", "Space")
             report["checks"].append("explicitly confirmed Space persists and dispatches through the native hotkey")
+
+            # Windows WebView2 delivers Print Screen (VK_SNAPSHOT) only as keyup.
+            # Verify recording, persistence, native dispatch, and re-confirming.
             begin_recording("Screenshot", "Space")
+            keyboard.send_keys("{PRTSC}")
+            idle("Screenshot", "Print Screen")
+            wait_absent(re.escape("Use this key"))
+            if json.loads((config / "shortcuts.json").read_text(encoding="utf-8"))["bindings"]["capture"] != "PrintScreen":
+                raise RuntimeError("Print Screen binding was not persisted")
+            open_mode("{PRTSC}", "Screenshot", "Print Screen")
+            report["checks"].append("bare Print Screen saves from keyup without confirmation, persists, and dispatches through the native hotkey")
+
+            begin_recording("Screenshot", "Print Screen")
+            keyboard.send_keys("{PRTSC}")
+            idle("Screenshot", "Print Screen")
+            assert_no_capture()
+            report["checks"].append("recording an already-registered Print Screen confirms it without capture")
+
+            begin_recording("Screenshot", "Print Screen")
             keyboard.send_keys("^%k")
             idle("Screenshot", capture_custom)
 
