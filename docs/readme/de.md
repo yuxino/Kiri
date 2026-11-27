@@ -28,7 +28,7 @@
 - MP4 mit optionalem Systemton und Mikrofon aufnehmen oder als GIF ohne Ton speichern.
 - Clips eines Videos kürzen und umordnen, dann eine neue MP4-Datei exportieren.
 - Lokale Aufnahmen suchen, mit Tags versehen, favorisieren und exportieren; versehentlich Gelöschtes aus dem Papierkorb wiederherstellen.
-- Globale Tastenkürzel direkt in den Einstellungen festlegen, deaktivieren oder zurücksetzen; Aufnahmesteuerungen gelten nur während einer Aufnahme ([Wayland nutzt Desktop-Einstellungen](../linux.md)).
+- Globale Tastenkürzel direkt in den Einstellungen festlegen, deaktivieren oder zurücksetzen; unter Windows lässt sich Print Screen (allein oder mit Zusatztasten) direkt erfassen; Aufnahmesteuerungen gelten nur während einer Aufnahme ([Wayland nutzt Desktop-Einstellungen](../linux.md)).
 - Unter Einstellungen → Allgemein lässt sich der Start bei der Anmeldung aktivieren. Er ist standardmäßig aus und startet Kiri im Hintergrund, ohne die Bibliothek zu öffnen.
 
 ## Erste Schritte
@@ -43,7 +43,7 @@
 
 Vielen Dank an alle, die Code schreiben, Probleme melden, Kiri ausprobieren oder teilen.
 
-Besonderer Dank gilt [@kerwin2046](https://github.com/kerwin2046) für die [erste Linux-Unterstützung](https://github.com/yuxino/kiri/pull/20), [@LLLin000](https://github.com/LLLin000) für die [Korrektur der Screenshot-Ausrichtung bei Windows-Textskalierung](https://github.com/yuxino/kiri/pull/61) und [@AlexZander85](https://github.com/AlexZander85) für die [russische Übersetzung der Oberfläche](https://github.com/yuxino/kiri/pull/204).
+Besonderer Dank gilt [@kerwin2046](https://github.com/kerwin2046) für die [erste Linux-Unterstützung](https://github.com/yuxino/kiri/pull/20), [@LLLin000](https://github.com/LLLin000) für die [Korrektur der Screenshot-Ausrichtung bei Windows-Textskalierung](https://github.com/yuxino/kiri/pull/61), [@AlexZander85](https://github.com/AlexZander85) für die [russische Übersetzung der Oberfläche](https://github.com/yuxino/kiri/pull/204) und [@tiger8888](https://github.com/tiger8888) für die Meldung des [Problems mit der PrintScreen-Taste unter Windows](https://github.com/yuxino/kiri/issues/209).
 
 Danke auch an die Communitys von [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), [NodeLoc](https://www.nodeloc.com/) für Rückmeldungen und Weiterempfehlungen.
 

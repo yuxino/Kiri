@@ -28,7 +28,7 @@
 - Record MP4 with optional system audio and microphone, or save a silent GIF.
 - Trim and reorder clips from one video, then export a new MP4.
 - Search, tag, favorite and export local captures, with Trash for accidental deletions.
-- Set, disable or restore global shortcuts directly in Settings; recording controls are active only while recording ([Wayland uses desktop settings](../linux.md)).
+- Set, disable or restore global shortcuts directly in Settings; on Windows, Print Screen (alone or with modifiers) can be recorded directly; recording controls are active only while recording ([Wayland uses desktop settings](../linux.md)).
 - Enable Start at login in Settings → General when needed. It is off by default and starts Kiri in the background without opening the library.
 
 ## Get started
@@ -43,7 +43,7 @@
 
 Thank you to everyone who writes code, reports issues, tries Kiri, or shares it.
 
-Special thanks to [@kerwin2046](https://github.com/kerwin2046) for [initial Linux support](https://github.com/yuxino/kiri/pull/20), [@LLLin000](https://github.com/LLLin000) for [Windows text-scaling capture alignment](https://github.com/yuxino/kiri/pull/61), and [@AlexZander85](https://github.com/AlexZander85) for [Russian UI translation](https://github.com/yuxino/kiri/pull/204).
+Special thanks to [@kerwin2046](https://github.com/kerwin2046) for [initial Linux support](https://github.com/yuxino/kiri/pull/20), [@LLLin000](https://github.com/LLLin000) for [Windows text-scaling capture alignment](https://github.com/yuxino/kiri/pull/61), [@AlexZander85](https://github.com/AlexZander85) for [Russian UI translation](https://github.com/yuxino/kiri/pull/204), and [@tiger8888](https://github.com/tiger8888) for reporting the [Windows Print Screen shortcut issue](https://github.com/yuxino/kiri/issues/209).
 
 Thanks also to the [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), [NodeLoc](https://www.nodeloc.com/) communities for their feedback and sharing.
 

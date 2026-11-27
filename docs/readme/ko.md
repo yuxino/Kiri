@@ -28,7 +28,7 @@
 - 시스템 소리와 마이크를 선택하여 MP4로 녹화하거나 소리 없는 GIF로 저장합니다.
 - 한 동영상의 클립을 자르고 순서를 바꾼 뒤 새 MP4로 내보냅니다.
 - 로컬 자료를 검색하고 태그와 즐겨찾기를 지정하거나 내보냅니다. 잘못 삭제한 자료는 휴지통에서 복원할 수 있습니다.
-- 설정에서 키를 눌러 전역 단축키를 지정하거나 해제하고 기본값으로 복원합니다. 녹화 제어 키는 녹화 중에만 작동합니다([Wayland는 데스크톱에서 설정](../linux.md)).
+- 설정에서 키를 눌러 전역 단축키를 지정하거나 해제하고 기본값으로 복원합니다. Windows에서는 Print Screen(단독 또는 조합)을 바로 등록할 수 있습니다. 녹화 제어 키는 녹화 중에만 작동합니다([Wayland는 데스크톱에서 설정](../linux.md)).
 - 설정 → 일반에서 로그인 시 시작을 직접 켤 수 있습니다. 기본값은 꺼짐이며, 로그인할 때 라이브러리를 열지 않고 백그라운드에서 시작합니다.
 
 ## 시작하기
@@ -43,7 +43,7 @@
 
 코드를 작성하고, 문제를 신고하고, Kiri를 사용하거나 공유해 주신 모든 분께 감사합니다.
 
-[초기 Linux 지원](https://github.com/yuxino/kiri/pull/20)을 제공한 [@kerwin2046](https://github.com/kerwin2046), [Windows 텍스트 배율에 따른 캡처 정렬](https://github.com/yuxino/kiri/pull/61)을 수정한 [@LLLin000](https://github.com/LLLin000), 그리고 [러시아어 UI 번역](https://github.com/yuxino/kiri/pull/204)을 제공한 [@AlexZander85](https://github.com/AlexZander85)께 특별히 감사드립니다.
+[초기 Linux 지원](https://github.com/yuxino/kiri/pull/20)을 제공한 [@kerwin2046](https://github.com/kerwin2046), [Windows 텍스트 배율에 따른 캡처 정렬](https://github.com/yuxino/kiri/pull/61)을 수정한 [@LLLin000](https://github.com/LLLin000), [러시아어 UI 번역](https://github.com/yuxino/kiri/pull/204)을 제공한 [@AlexZander85](https://github.com/AlexZander85), 그리고 [Windows Print Screen 단축키 문제](https://github.com/yuxino/kiri/issues/209)를 신고한 [@tiger8888](https://github.com/tiger8888)께 특별히 감사드립니다.
 
 의견을 주고 공유해 주신 [V2EX](https://www.v2ex.com/) · [LINUX DO](https://linux.do/) · [Appinn](https://www.appinn.com/) · [NodeLoc](https://www.nodeloc.com/) 커뮤니티 여러분께도 감사합니다.
 

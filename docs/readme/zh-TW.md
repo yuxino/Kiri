@@ -28,7 +28,7 @@
 - 錄製 MP4，可選系統音訊與麥克風；也能儲存為無聲 GIF。
 - 裁切、重新排列同一部影片的片段，再匯出新的 MP4。
 - 搜尋、加標籤、加入收藏與匯出本機素材，誤刪可從垃圾桶還原。
-- 在設定中直接錄入、停用或還原全域快捷鍵；錄影控制按鍵僅在錄影時生效（[Wayland 由桌面管理](../linux.md)）。
+- 在設定中直接錄入、停用或還原全域快捷鍵，Windows 上 Print Screen（單獨或組合）可直接錄入；錄影控制按鍵僅在錄影時生效（[Wayland 由桌面管理](../linux.md)）。
 - 可在「設定 → 一般」手動開啟登入時啟動，預設關閉；登入後在背景執行，不開啟素材庫。
 
 ## 開始使用
@@ -43,7 +43,7 @@
 
 感謝每一位寫程式、回報問題、試用與分享的朋友。
 
-特別感謝 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支援](https://github.com/yuxino/kiri/pull/20)、[@LLLin000](https://github.com/LLLin000) 修復 [Windows 文字縮放下的截圖對齊](https://github.com/yuxino/kiri/pull/61)，以及 [@AlexZander85](https://github.com/AlexZander85) 提供 [俄語介面翻譯](https://github.com/yuxino/kiri/pull/204)。
+特別感謝 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支援](https://github.com/yuxino/kiri/pull/20)、[@LLLin000](https://github.com/LLLin000) 修復 [Windows 文字縮放下的截圖對齊](https://github.com/yuxino/kiri/pull/61)，[@AlexZander85](https://github.com/AlexZander85) 提供 [俄語介面翻譯](https://github.com/yuxino/kiri/pull/204)，以及 [@tiger8888](https://github.com/tiger8888) 回報 [Windows Print Screen 快捷鍵問題](https://github.com/yuxino/kiri/issues/209)。
 
 也感謝 [V2EX](https://www.v2ex.com/)、[LINUX DO](https://linux.do/)、[Appinn](https://www.appinn.com/)、[NodeLoc](https://www.nodeloc.com/) 社群朋友的回饋與分享。
 
