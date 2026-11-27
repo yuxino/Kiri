@@ -1,13 +1,10 @@
 <div align="center">
-  <img src="../../src-tauri/icons/128x128.png" width="112" alt="Kiri">
+  <img src="../../src-tauri/icons/128x128.png" width="96" alt="Kiri">
   <h1>Kiri</h1>
   <p>スクリーンショット、文字認識、画面録画。データはこのコンピューターに保存されます。</p>
-  <p>macOS、Windows、Linux に対応。</p>
-  <p><a href="https://kiri.yuxino.cn">公式サイト</a> · <a href="https://github.com/yuxino/kiri/releases/latest">最新版をダウンロード</a></p>
-  <p><a href="../../README.md">简体中文</a> · <a href="en.md">English</a> · <a href="zh-TW.md">繁體中文</a> · <strong>日本語</strong> · <a href="de.md">Deutsch</a> · <a href="ko.md">한국어</a> · <a href="fr.md">Français</a> · <a href="ru.md">Русский</a></p>
   <p>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/github/v/release/yuxino/kiri?style=flat&amp;logo=github&amp;logoColor=white" alt="Release"></a>
-    <a href="https://github.com/yuxino/kiri/releases"><img src="https://img.shields.io/github/downloads/yuxino/kiri/total?style=flat&amp;labelColor=665478&amp;color=8b8196" alt="総ダウンロード数"></a>
+    <a href="https://github.com/yuxino/kiri/releases"><img src="https://img.shields.io/github/downloads/yuxino/kiri/total?style=flat&amp;labelColor=6d4cb5&amp;color=9f7aea" alt="総ダウンロード数"></a>
     <a href="https://github.com/yuxino/kiri/actions/workflows/build.yml?query=branch%3Amain"><img src="https://img.shields.io/github/actions/workflow/status/yuxino/kiri/build.yml?style=flat&amp;logo=githubactions&amp;logoColor=white&amp;branch=main&amp;event=push&amp;label=CI" alt="CI"></a>
     <a href="../../LICENSE"><img src="https://img.shields.io/github/license/yuxino/kiri?style=flat&amp;logo=opensourceinitiative&amp;logoColor=white" alt="MIT"></a>
   </p>
@@ -16,6 +13,8 @@
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/badge/Windows-x64-0078D4?style=flat&amp;logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDBoMTF2MTFIMHptMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwem0xMyAwaDExdjExSDEzeiIvPjwvc3ZnPg%3D%3D&amp;logoColor=white" alt="Windows x64"></a>
     <a href="https://github.com/yuxino/kiri/releases/latest"><img src="https://img.shields.io/badge/Linux-x86__64-FCC624?style=flat&amp;logo=linux&amp;logoColor=white" alt="Linux x86_64"></a>
   </p>
+  <p><a href="https://github.com/yuxino/kiri/releases/latest"><strong>最新版をダウンロード</strong></a> · <a href="https://kiri.yuxino.cn">公式サイト</a> · <a href="../usage.ja.md">使い方</a></p>
+  <p><a href="../../README.md">简体中文</a> · <a href="en.md">English</a> · <a href="zh-TW.md">繁體中文</a> · <strong>日本語</strong> · <a href="de.md">Deutsch</a> · <a href="ko.md">한국어</a> · <a href="fr.md">Français</a> · <a href="ru.md">Русский</a></p>
 </div>
 
 ![Kiri](../assets/readme-preview.png)
