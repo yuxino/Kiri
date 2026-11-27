@@ -28,7 +28,7 @@
 - システム音声やマイクを含む MP4、または音声なしの GIF を録画できます。
 - 一つの動画のクリップを切り取り、並べ替えて新しい MP4 として書き出せます。
 - ローカルデータの検索、タグ付け、お気に入り登録、書き出し。誤って削除したデータはゴミ箱から復元できます。
-- 設定でキーを押してグローバルショートカットを登録・無効化・初期化できます。録画の操作キーは録画中のみ有効です（[Wayland はデスクトップ側で設定](../linux.md)）。
+- 設定でキーを押してグローバルショートカットを登録・無効化・初期化できます。Windows では Print Screen（単独または組み合わせ）を直接登録できます。録画の操作キーは録画中のみ有効です（[Wayland はデスクトップ側で設定](../linux.md)）。
 - 「設定 → 一般」でログイン時の起動を有効にできます。初期設定はオフで、ログイン時はライブラリを開かずにバックグラウンドで起動します。
 
 ## はじめに
@@ -43,7 +43,7 @@
 
 コードの提供、不具合の報告、試用や共有をしてくださる皆さんに感謝します。
 
-[Linux の初期対応](https://github.com/yuxino/kiri/pull/20)を提供した [@kerwin2046](https://github.com/kerwin2046)、[Windows の文字拡大時の撮影位置](https://github.com/yuxino/kiri/pull/61)を修正した [@LLLin000](https://github.com/LLLin000)、そして[ロシア語 UI 翻訳](https://github.com/yuxino/kiri/pull/204)を提供した [@AlexZander85](https://github.com/AlexZander85) に特に感謝します。
+[Linux の初期対応](https://github.com/yuxino/kiri/pull/20)を提供した [@kerwin2046](https://github.com/kerwin2046)、[Windows の文字拡大時の撮影位置](https://github.com/yuxino/kiri/pull/61)を修正した [@LLLin000](https://github.com/LLLin000)、[ロシア語 UI 翻訳](https://github.com/yuxino/kiri/pull/204)を提供した [@AlexZander85](https://github.com/AlexZander85)、そして [Windows の Print Screen ショートカットの問題](https://github.com/yuxino/kiri/issues/209)を報告した [@tiger8888](https://github.com/tiger8888) に特に感謝します。
 
 フィードバックや共有をしてくださった [V2EX](https://www.v2ex.com/)、[LINUX DO](https://linux.do/)、[Appinn](https://www.appinn.com/)、[NodeLoc](https://www.nodeloc.com/) の皆さんにも感謝します。
 

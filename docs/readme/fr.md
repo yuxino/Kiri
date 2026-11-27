@@ -28,7 +28,7 @@
 - Enregistrez un MP4 avec le son du système et le microphone en option, ou un GIF sans son.
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.
 - Recherchez, étiquetez, ajoutez aux favoris et exportez vos captures locales ; récupérez les suppressions accidentelles dans la corbeille.
-- Définissez, désactivez ou rétablissez les raccourcis globaux dans les réglages ; les commandes d’enregistrement ne sont actives que pendant celui-ci ([Wayland utilise les réglages du bureau](../linux.md)).
+- Définissez, désactivez ou rétablissez les raccourcis globaux dans les réglages ; sous Windows, la touche Print Screen (seule ou combinée) peut être enregistrée directement ; les commandes d’enregistrement ne sont actives que pendant celui-ci ([Wayland utilise les réglages du bureau](../linux.md)).
 - Activez le lancement à la connexion dans Réglages → Général si nécessaire. Désactivé par défaut, il démarre Kiri en arrière-plan sans ouvrir la bibliothèque.
 
 ## Premiers pas
@@ -43,7 +43,7 @@
 
 Merci à toutes les personnes qui écrivent du code, signalent des problèmes, essaient Kiri ou le partagent.
 
-Merci en particulier à [@kerwin2046](https://github.com/kerwin2046) pour la [prise en charge initiale de Linux](https://github.com/yuxino/kiri/pull/20), à [@LLLin000](https://github.com/LLLin000) pour la [correction de l’alignement des captures avec la mise à l’échelle du texte Windows](https://github.com/yuxino/kiri/pull/61), et à [@AlexZander85](https://github.com/AlexZander85) pour la [traduction russe de l’interface](https://github.com/yuxino/kiri/pull/204).
+Merci en particulier à [@kerwin2046](https://github.com/kerwin2046) pour la [prise en charge initiale de Linux](https://github.com/yuxino/kiri/pull/20), à [@LLLin000](https://github.com/LLLin000) pour la [correction de l’alignement des captures avec la mise à l’échelle du texte Windows](https://github.com/yuxino/kiri/pull/61), à [@AlexZander85](https://github.com/AlexZander85) pour la [traduction russe de l’interface](https://github.com/yuxino/kiri/pull/204), et à [@tiger8888](https://github.com/tiger8888) pour le signalement du [problème de raccourci Print Screen sous Windows](https://github.com/yuxino/kiri/issues/209).
 
 Merci également aux communautés [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), [NodeLoc](https://www.nodeloc.com/) pour leurs retours et leurs partages.
 
