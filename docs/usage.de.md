@@ -18,9 +18,13 @@ macOS benötigt die Berechtigung für Bildschirm- und Systemaudioaufnahme. Klick
 
 Linux: Wayland-Aufnahme unterstützt einen angeschlossenen Bildschirm. MP4-Aufnahmen können Systemton und Mikrofon über den lokalen PulseAudio- oder PipeWire-Dienst enthalten. Klickmarkierungen sind noch nicht verfügbar. Gespeicherte Videos unterstützen einfache Schnitte und MP4-Export; erweiterte Videoeffekte sind nicht verfügbar. Einrichtung und Aufnahmesteuerung stehen im [Linux-Leitfaden](linux.md).
 
-Updates: macOS und installierte Windows-Versionen verwenden Einstellungen → Über Kiri → Nach Updates suchen. Linux und Windows Portable benötigen ein neues Paket von Releases. Einstellungen und Aufnahmen der Portable-Version bleiben im Windows-Benutzerprofil.
+Updates: macOS und installierte Windows-Versionen prüfen beim Öffnen des Hauptfensters auf Updates. Das Label „Update“ neben Einstellungen weist auf eine neuere Version hin; laden und installieren Sie sie unter Einstellungen → Über Kiri. Sie können auch manuell prüfen. Bei unterbrochenen In-App-Downloads unter macOS und installierten Windows-Versionen bleiben bereits geladene Daten auch nach einem Neustart erhalten und lassen sich über **Download fortsetzen** weiterführen; fertige Pakete werden vor der Installation weiterhin signaturgeprüft. Linux und Windows Portable benötigen ein neues Paket von Releases. Einstellungen und Aufnahmen der Portable-Version bleiben im Windows-Benutzerprofil.
 
 macOS Dock: Einstellungen → Im Dock anzeigen schaltet das Dock-Symbol sofort um und merkt sich die Wahl. Tray und Aufnahme-Tastenkürzel bleiben auch ohne Dock-Symbol verfügbar.
+
+## Aufnahmen endgültig löschen
+
+Wählen Sie im Menü einer Aufnahme **Endgültig löschen** oder markieren Sie mehrere Einträge und klicken Sie in der Leiste über dem Raster auf **Endgültig löschen (Anzahl)**. Die rote Aktion verlangt eine Bestätigung und lässt sich nicht rückgängig machen. **In den Papierkorb** bleibt für wiederherstellbares Löschen erhalten; zum Entfernen ausgewählter Aufnahmen müssen Sie den Papierkorb nicht leeren.
 
 ## Sprache
 
@@ -32,7 +36,41 @@ Drücken Sie ⇧⌘A auf macOS oder Shift+Ctrl+A auf Windows / Linux X11 und wä
 
 Unter macOS, Windows und Linux öffnet die Kiri-Programmdatei mit `--capture`, `--record`, `--ocr` oder `--library` die Bereichsauswahl für Screenshots, die Bereichsauswahl für Aufnahmen, die Texterkennung beziehungsweise das Hauptfenster, auch wenn Kiri noch nicht läuft.
 
-Wählen Sie Screenshot, Aufnahme oder OCR. Die Screenshot-Leiste bietet auch QR-Erkennung. Enter bestätigt einen Screenshot; Esc bricht ab. Screenshots landen in der Zwischenablage und lokalen Bibliothek. Unter macOS, Windows und X11 können Sie in Einstellungen → Tastenkürzel ein Tastenfeld anklicken und die gewünschte Taste drücken, die Belegung löschen oder zurücksetzen. Aufnahmesteuerungen sind nur während einer Aufnahme aktiv.
+Wählen Sie Screenshot, Aufnahme oder OCR. Die Screenshot-Leiste bietet auch QR-Erkennung. Enter bestätigt einen Screenshot; Esc bricht ab. Screenshots landen in der Zwischenablage und lokalen Bibliothek.
+
+Im OCR-Modus startet das Loslassen der Maustaste die Texterkennung für den gewählten Bereich. **Text kopieren** kopiert das gesamte Ergebnis und schließt das Overlay. Für einen Ausschnitt markieren Sie den Text und drücken Ctrl+C oder ⌘C. Wählen Sie **Bereich neu auswählen**, um einen anderen Ausschnitt zu testen, auch nach einem leeren Ergebnis. Das Panel zeigt an, ob das Ergebnis im Textverlauf gespeichert wurde.
+
+Bildschirmauswahlen und gespeicherte Screenshots verwenden unter macOS, Windows und Linux das mitgelieferte Modell Baidu PP-OCRv6 small. Einrichtung oder Modelldownload sind nicht nötig. Findet das Modell keinen Text, kann Kiri lokal erneut prüfen; unter macOS und Windows hilft dabei auch eine passende System-Erkennungssprache für Schriften wie Koreanisch. Wird ein Leistensymbol als Zeichen erkannt, markieren Sie nur den Text.
+
+### Tastenkürzel
+
+Einstellungen → Tastenkürzel bündelt globale Tastenkürzel und die Tastenübersicht in der App. Unter macOS, Windows und X11 klicken Sie in das Tastenfeld einer Aktion und drücken die gewünschte Taste oder Kombination. Funktionstasten F1–F24, Print Screen, Medientasten sowie Kombinationen mit Control, Alt/Option oder Command/Windows werden direkt gespeichert, sofern sie unterstützt und verfügbar sind (unter Windows wird Print Screen allein oder mit Zusatztasten direkt ohne Schreib-Warnung gespeichert). Andere Einzeltasten oder reine Shift-Kombinationen zeigen eine Vorschau und erfordern **Taste verwenden**, da sie auch Eingaben oder Navigation in anderen Apps beeinflussen; bei Aufnahmesteuerungen gilt diese Wirkung nur während einer Aufnahme. Die bisherige Belegung bleibt bis zum Erfolg erhalten.
+
+Unter macOS benötigen gewöhnliche Tastenkürzel keine Eingabeüberwachung. Medientasten nutzen einen abfangenden Event-Tap und setzen eine bestehende Bedienungshilfen-Freigabe voraus. Fehlt sie, meldet Kiri einen Fehler und behält die alte Belegung bei, ohne ein Freigabe-Popup auszulösen oder Berechtigungen zu ändern.
+
+Esc bricht ab. Tab oder Shift+Tab verlässt die Aufzeichnung; bei einer ausstehenden Taste führt Tab zur Bestätigungsschaltfläche. Esc und Tab selbst können zusammen mit Control, Alt/Option oder Command/Windows gespeichert werden. Reine Modifikatortasten setzen keine Belegung. Löschen entfernt eine Belegung; geänderte oder geleerte Zeilen bieten direkt **Standard wiederherstellen**.
+
+Die vier **Startaktionen** bleiben aktiv, solange Kiri läuft:
+
+| Aktion | macOS | Windows / Linux X11 |
+| --- | --- | --- |
+| Screenshot | ⇧⌘A | Shift+Ctrl+A |
+| Aufnehmen | ⌥⇧⌘R | Alt+Shift+Ctrl+R |
+| Text erkennen | ⌥⇧⌘O | Alt+Shift+Ctrl+O |
+| Hauptfenster anzeigen | ⌥⇧⌘L | Alt+Shift+Ctrl+L |
+
+Die zwei Aktionen **Während der Aufnahme** funktionieren während laufender Aufnahmen (auch im Pause-Zustand) über alle Anwendungen hinweg:
+
+| Aktion | macOS | Windows / Linux X11 |
+| --- | --- | --- |
+| Aufnahme pausieren / fortsetzen | ⌥⇧⌘P | Alt+Shift+Ctrl+P |
+| Aufnahme beenden und speichern | ⌥⇧⌘S | Alt+Shift+Ctrl+S |
+
+Kiri registriert diese beiden nativen Belegungen beim Start einer Aufnahme und gibt sie wieder frei, sobald das Beenden beginnt oder die Aufnahme fehlschlägt. Im Leerlauf, bei der Bereichswahl und im Countdown reservieren sie keine Tasten. Ist ein Aufnahme-Kürzel nicht verfügbar, läuft die Aufnahme weiter und Kiri meldet das Problem; nutzen Sie dann die schwebenden Steuerelemente unter macOS/Windows oder das Tray-Menü und wählen Sie anschließend unter Einstellungen → Tastenkürzel eine andere Kombination.
+
+Aufnehmen und Text erkennen öffnen die Bereichswahl im jeweiligen Modus. Eine Aufnahme wartet weiterhin auf Start und Countdown; Remote-OCR verlangt weiterhin eine Bestätigung. Ihre vorhandene Screenshot-Kombination bleibt erhalten; stimmt sie mit einer neuen Vorgabe überein, startet die neue Aktion ohne Belegung. Eine doppelte oder nicht verfügbare Ersetzung lässt die bisherige Belegung unverändert. Die Registrierung erkennt nicht jedes interne Kürzel anderer Apps; wählen Sie bei Konflikten eine andere Kombination.
+
+Unter Wayland verwaltet weiterhin der Desktop die Tasten. Hinterlegen Sie `kiri --capture`, `kiri --record`, `kiri --ocr` oder `kiri --library` in den Tastatureinstellungen des Desktops und `kiri --toggle-recording-pause` sowie `kiri --stop-recording` für Aufnahmen. Die optionale Portal-Einrichtung behält ihre Aktionen für Aufnahme, Pause/Fortsetzen und Stopp. Die Aufnahmebefehle wirken nur auf eine laufende Aufnahme, doch kann der Desktop ihre Tasten im Leerlauf reserviert halten; Kiri kann desktopverwaltete Belegungen zwischen Aufnahmen nicht freigeben.
 
 Klicken Sie vor der Auswahl eines Zeichenwerkzeugs auf die Schieberegler der Screenshot-Leiste, um Breite und Höhe am Auswahlrand zu bearbeiten. Werte sind Ausgabepixel, auch bei Retina. Enter oder Verlassen eines Feldes übernimmt den Wert. Esc verwirft die Eingabe; ein zweites Esc bricht die Aufnahme ab. Pfeiltasten ändern um ein Pixel, mit Shift um zehn. Ein erneuter Klick verbirgt die Werte. Nach Beginn der Anmerkungen steuern die Schieberegler deren Aussehen.
 
@@ -45,6 +83,8 @@ Wenn bei der ersten Aufnahme auf GNOME Wayland kein Berechtigungsdialog erschein
 Die Aufnahmevorbereitung bietet MP4 / GIF, Start und vier nebeneinanderliegende Symbole: Systemton, Mikrofon, Mauszeiger und Klickmarkierungen. Start löst immer einen Countdown von drei Sekunden aus; GIF-Aufnahmen sind ohne Ton. Das Panel passt sich an Auswahl und Bildschirmränder an.
 
 Der kleine Pfeil neben dem Mikrofon öffnet die Auswahl der verfügbaren Eingabegeräte, ohne das Standardgerät des Systems zu ändern. Ist das gewählte Gerät nicht verfügbar oder wird es getrennt, meldet Kiri einen Fehler, statt unbemerkt zu einem anderen Mikrofon zu wechseln.
+
+Unter macOS und Windows folgen die Aufnahmesteuerelemente der Auswahl und weichen Bildschirmrändern aus, ohne den Tastaturfokus zu übernehmen. Ziehen verschiebt das aktuelle Panel; die nächste Aufnahme richtet es wieder an der neuen Auswahl aus. Pausieren erhält die bereits aufgenommene Zeit, Fortsetzen zählt weiter. Nutzen Sie die festgelegten Aufnahme-Kürzel, die Steuertasten oder das Tray-Menü. Es gibt keine fest eingebauten Space/Esc-Einzeltasten für die Aufnahme; eine ausdrücklich als Aufnahme-Kürzel bestätigte Einzeltaste folgt dieser Belegung. Eine fokussierte Schaltfläche unterstützt weiterhin normales Auslösen per Space/Enter. Esc bricht weiterhin Erfassung und Countdown ab. Ältere Windows-Versionen zeigen eventuell weiterhin den systemeigenen Vollbild-Rahmen. Linux nutzt native X11-Kürzel, desktopverwaltete Wayland-Kürzel, Tray-Aktionen oder Befehle.
 
 ## Scrollaufnahmen
 
@@ -96,9 +136,17 @@ Im Screenshot-Modus zeigt die Lupe beim Bewegen des Mauszeigers die ursprünglic
 
 Beim Konvertieren einer gespeicherten MP4-Datei prüft Kiri zuerst die Video-Dekodierung und beginnt dann mit der GIF-Kodierung. Prüfung und Konvertierung lassen sich abbrechen; mehrere Aufgaben können gemeinsam abgebrochen werden. Das Originalvideo bleibt erhalten. Sobald das abschließende Speichern in der Bibliothek beginnt, ist kein Abbruch mehr möglich.
 
+## Textverlauf und Screenshot-Suche
+
+Wählen Sie im Textverlauf einen Eintrag für **In den Papierkorb** oder **Erneut erkennen**. Letzteres nutzt das Quellbild des Eintrags und das aktuelle OCR-Verfahren. Kiri fragt nach, bevor eine Korrektur ersetzt oder das Bild an einen Remote-Anbieter gesendet wird. Findet OCR keinen Text oder schlägt fehl, bleibt der bisherige Text erhalten.
+
+**Einstellungen → Texterkennung → Text in neuen Screenshots suchen** ist standardmäßig aus. Aktivieren Sie die Option, um neu gespeicherte Screenshots über die Bibliothekssuche anhand ihres Textinhalts zu finden. Das integrierte Modell läuft lokal auf Ihrem Gerät. Ältere und importierte Bilder lassen sich weiterhin manuell in den Textverlauf erkennen. Große Bilder oder Aufnahmen bei voller Hintergrund-Warteschlange werden unter Umständen nicht indiziert. Ausschalten stoppt die neue Indizierung und behält vorhandene Treffer bei.
+
 ## Bibliothek und Rückmeldungen
 
 Mit der Mehrfachauswahl können Sie einzelne oder alle Einträge in den Papierkorb verschieben; normale Klicks öffnen sie weiterhin. Der Papierkorb bietet gemeinsames Wiederherstellen und eine Bestätigung im Hauptfenster vor dem Leeren. Umbenennen ändert auch den Dateinamen und erhält den Dateityp. Datei kopieren im Kontextmenü fügt Dateien in Ordner ein; Kopieren fügt weiterhin das Bild ein.
+
+Klicken Sie auf einer Karte auf **Tag hinzufügen…**, um einen Tag einzugeben, oder ziehen Sie die Karte zum Zuweisen auf ein sichtbares Tag. Das Ziehen einer markierten Karte versieht die ausgewählten Aufnahmen gemeinsam mit diesem Tag. Über **Tags verwalten** in der Auswahlleiste fügen Sie ein Tag per Name hinzu oder entfernen ein bestimmtes Tag aus der Auswahl.
 
 Für Fehlermeldungen lassen sich unter Einstellungen → Über App-, System- und Bildschirmdaten kopieren. Aufnahmen, Zugangsdaten und persönliche Pfade sind nicht enthalten.
 

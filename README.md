@@ -18,7 +18,7 @@
 
 - 截取窗口或区域，添加文字、箭头和马赛克，也能把截图置顶作参考。保存后可放大查看并继续编辑。
 - 上下自由滚动并拼成长截图，返回已截内容不会重复拼接（macOS、Windows、Linux X11）。
-- 用本地 OCR 提取图片里的文字，识别二维码。
+- 用内置离线 OCR 提取图片里的文字，支持文字历史、可选截图文字搜索和二维码识别。
 - 录制 MP4，可选系统声音和麦克风；也可保存为无声 GIF。
 - 裁切、重排同一视频的片段，导出新的 MP4。
 - 搜索、打标签、收藏和导出本地素材，误删可从回收站恢复。
@@ -37,7 +37,7 @@
 
 感谢每一位写代码、提问题、试用和分享的朋友 (๑•̀ㅂ•́)و✧
 
-特别感谢 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支持](https://github.com/yuxino/kiri/pull/20)，以及 [@LLLin000](https://github.com/LLLin000) 修复 [Windows 文字缩放下的截图对齐](https://github.com/yuxino/kiri/pull/61)。
+特别感谢 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支持](https://github.com/yuxino/kiri/pull/20)，[@LLLin000](https://github.com/LLLin000) 修复 [Windows 文字缩放下的截图对齐](https://github.com/yuxino/kiri/pull/61)，以及 [@AlexZander85](https://github.com/AlexZander85) 提供 [俄语界面支持](https://github.com/yuxino/kiri/pull/204)。
 
 也感谢 [V2EX](https://www.v2ex.com/)、[LINUX DO](https://linux.do/)、[Appinn](https://www.appinn.com/)、[NodeLoc](https://www.nodeloc.com/) 社区朋友的反馈与分享。
 

@@ -18,7 +18,7 @@
 
 - ウィンドウや範囲を撮影し、文字、矢印、モザイクを追加。画像を最前面に固定して参照できます。保存後も拡大表示して編集できます。
 - 上下に自由にスクロールして長い画像を撮影できます。撮影済みの場所に戻っても重複しません（macOS、Windows、Linux X11）。
-- ローカル OCR で画像の文字を抽出し、QR コードを読み取れます。
+- 内蔵のオフライン OCR で画像の文字を抽出し、テキスト履歴やスクリーンショットの文字検索（任意）、QR コードの読み取りに対応します。
 - システム音声やマイクを含む MP4、または音声なしの GIF を録画できます。
 - 一つの動画のクリップを切り取り、並べ替えて新しい MP4 として書き出せます。
 - ローカルデータの検索、タグ付け、お気に入り登録、書き出し。誤って削除したデータはゴミ箱から復元できます。
@@ -37,7 +37,7 @@
 
 コードの提供、不具合の報告、試用や共有をしてくださる皆さんに感謝します。
 
-[Linux の初期対応](https://github.com/yuxino/kiri/pull/20)を提供した [@kerwin2046](https://github.com/kerwin2046)、[Windows の文字拡大時の撮影位置](https://github.com/yuxino/kiri/pull/61)を修正した [@LLLin000](https://github.com/LLLin000) に特に感謝します。
+[Linux の初期対応](https://github.com/yuxino/kiri/pull/20)を提供した [@kerwin2046](https://github.com/kerwin2046)、[Windows の文字拡大時の撮影位置](https://github.com/yuxino/kiri/pull/61)を修正した [@LLLin000](https://github.com/LLLin000)、そして[ロシア語 UI 翻訳](https://github.com/yuxino/kiri/pull/204)を提供した [@AlexZander85](https://github.com/AlexZander85) に特に感謝します。
 
 フィードバックや共有をしてくださった [V2EX](https://www.v2ex.com/)、[LINUX DO](https://linux.do/)、[Appinn](https://www.appinn.com/)、[NodeLoc](https://www.nodeloc.com/) の皆さんにも感謝します。
 

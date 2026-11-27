@@ -18,9 +18,13 @@ macOS nécessite l’autorisation d’enregistrement de l’écran et de l’aud
 
 Linux : la capture Wayland prend en charge un seul écran connecté. L’enregistrement MP4 peut inclure le son du système et le microphone via le service audio local PulseAudio ou PipeWire. Les indicateurs de clic sont indisponibles. Les vidéos enregistrées permettent des coupes simples et l’export MP4 ; les effets vidéo avancés sont indisponibles. Consultez le [guide Linux](linux.md) pour la configuration et les commandes d’enregistrement.
 
-Mises à jour : les versions macOS et Windows installées utilisent Réglages → À propos → Rechercher des mises à jour. Les utilisateurs Linux et Windows Portable téléchargent un nouveau paquet depuis Releases. Les réglages et captures Portable restent dans le profil utilisateur Windows.
+Mises à jour : les versions installées sous macOS et Windows recherchent les mises à jour à l’ouverture du panneau principal. Un libellé « Mise à jour » à côté des réglages signale une nouvelle version ; utilisez Réglages → À propos pour la télécharger et l’installer. Vous pouvez aussi vérifier manuellement. Les téléchargements interrompus dans l’application sur macOS et Windows (version installée) conservent leurs données même après un redémarrage et proposent **Reprendre le téléchargement** ; les paquets terminés restent vérifiés par signature avant l’installation. Les utilisateurs Linux et Windows Portable téléchargent un nouveau paquet depuis Releases. Les réglages et captures Portable restent dans le profil utilisateur Windows.
 
 Dock macOS : Réglages → Afficher dans le Dock modifie immédiatement l’icône et mémorise votre choix. Le menu de la barre des menus et le raccourci de capture restent disponibles quand elle est masquée.
+
+## Supprimer définitivement des captures
+
+Dans le menu d’une capture, choisissez **Supprimer définitivement**, ou sélectionnez plusieurs éléments puis cliquez sur **Supprimer définitivement (nombre)** dans la barre au-dessus de la grille. L’action rouge demande confirmation et est irréversible. **Mettre à la corbeille** reste disponible pour une suppression récupérable ; vous n’avez pas besoin de vider la corbeille pour supprimer les captures sélectionnées.
 
 ## Langue
 
@@ -32,7 +36,41 @@ Appuyez sur ⇧⌘A sous macOS ou Shift+Ctrl+A sous Windows / Linux X11, puis s�
 
 Sous macOS, Windows et Linux, l’exécutable Kiri accepte aussi `--capture`, `--record`, `--ocr` et `--library` pour ouvrir respectivement la sélection de capture d’écran, la sélection d’enregistrement, la reconnaissance de texte et la fenêtre principale, que Kiri soit déjà lancé ou non.
 
-Choisissez Capture d’écran, Enregistrer ou OCR. La barre de capture propose aussi la reconnaissance QR. Entrée confirme une capture ; Échap annule. Les captures vont dans le presse-papiers et la bibliothèque locale. Sous macOS, Windows et X11, cliquez sur un champ dans Réglages → Raccourcis et appuyez sur la touche voulue ; vous pouvez aussi effacer ou rétablir une attribution. Les commandes d’enregistrement ne sont actives que pendant celui-ci.
+Choisissez Capture d’écran, Enregistrer ou OCR. La barre de capture propose aussi la reconnaissance QR. Entrée confirme une capture ; Échap annule. Les captures vont dans le presse-papiers et la bibliothèque locale.
+
+En mode OCR, relâchez le pointeur pour reconnaître la zone sélectionnée. **Copier le texte** copie tout le résultat et ferme la superposition. Pour copier une partie du texte, sélectionnez-le puis appuyez sur Ctrl+C ou ⌘C. Choisissez **Choisir une autre zone** pour essayer une autre zone, y compris après un résultat vide. Le panneau indique si le résultat a été enregistré dans l’historique du texte.
+
+Les sélections d’écran et les captures enregistrées utilisent le modèle intégré Baidu PP-OCRv6 small sur macOS, Windows et Linux. Aucune configuration ni aucun téléchargement de modèle n’est nécessaire. Kiri peut réessayer localement lorsque le modèle ne trouve pas de texte ; sous macOS et Windows, une langue de reconnaissance système adaptée peut aussi aider pour des écritures comme le coréen. Si une icône de barre d’outils apparaît comme un caractère, sélectionnez uniquement le texte.
+
+### Raccourcis
+
+Réglages → Raccourcis réunit les raccourcis globaux et l’aide-mémoire des touches dans l’application. Sous macOS, Windows et X11, cliquez sur le champ d’une action et appuyez sur la touche ou combinaison souhaitée. Les touches de fonction F1–F24, Print Screen, les touches multimédias et les combinaisons avec Control, Alt/Option ou Command/Windows s’enregistrent directement lorsqu’elles sont prises en charge et disponibles (sous Windows, Print Screen seul ou avec modificateurs s’enregistre directement sans avertissement de touche de saisie). Les autres touches simples ou combinaisons avec Maj uniquement affichent un aperçu et demandent **Utiliser cette touche**, car elles affectent aussi la saisie ou la navigation dans d’autres applications ; pour les commandes d’enregistrement, cet effet ne dure que pendant l’enregistrement. L’ancienne attribution reste en place tant que la modification n’a pas réussi.
+
+Sous macOS, les raccourcis ordinaires ne nécessitent pas la surveillance des entrées. Les raccourcis avec touches multimédias utilisent une interception d’événements et exigent l’autorisation d’accessibilité existante. Si elle manque, Kiri signale une erreur et conserve l’ancienne attribution sans afficher de demande d’autorisation ni modifier vos permissions.
+
+Échap annule. Tab ou Maj+Tab quitte l’enregistrement ; avec une touche en attente, Tab permet d’atteindre le bouton de confirmation. Échap et Tab peuvent eux-mêmes être enregistrés s’ils sont combinés avec Control, Alt/Option ou Command/Windows. Appuyer uniquement sur des modificateurs ne crée pas de raccourci. Effacer supprime une attribution, et les lignes modifiées ou effacées proposent directement **Rétablir la valeur par défaut**.
+
+Les quatre **actions de lancement** restent disponibles tant que Kiri est en cours d’exécution :
+
+| Action | macOS | Windows / Linux X11 |
+| --- | --- | --- |
+| Capture d’écran | ⇧⌘A | Shift+Ctrl+A |
+| Enregistrer | ⌥⇧⌘R | Alt+Shift+Ctrl+R |
+| Reconnaître le texte | ⌥⇧⌘O | Alt+Shift+Ctrl+O |
+| Afficher la fenêtre principale | ⌥⇧⌘L | Alt+Shift+Ctrl+L |
+
+Les deux actions **Pendant l’enregistrement** fonctionnent dans les autres applications pendant un enregistrement, y compris en pause :
+
+| Action | macOS | Windows / Linux X11 |
+| --- | --- | --- |
+| Suspendre/Reprendre l’enregistrement | ⌥⇧⌘P | Alt+Shift+Ctrl+P |
+| Arrêter et sauvegarder l’enregistrement | ⌥⇧⌘S | Alt+Shift+Ctrl+S |
+
+Kiri enregistre ces deux raccourcis natifs au début de l’enregistrement et les libère lorsque l’arrêt commence ou en cas d’échec. Ils ne réservent pas de touches lorsque Kiri est inactif, pendant la sélection ou le compte à rebours. Si un raccourci d’enregistrement est indisponible, l’enregistrement continue et Kiri signale le problème ; utilisez les commandes flottantes sous macOS/Windows ou le menu de la barre d’état pour suspendre ou arrêter, puis choisissez une autre combinaison dans Réglages → Raccourcis.
+
+Enregistrer et Reconnaître le texte ouvrent la sélection de zone dans le mode correspondant. L’enregistrement attend toujours Démarrer et le compte à rebours ; l’OCR distant demande toujours confirmation. Votre combinaison existante pour les captures est conservée ; si elle coïncide avec une nouvelle valeur par défaut, cette nouvelle action démarre non attribuée. Un remplacement en doublon ou indisponible laisse l’ancienne attribution intacte. L’enregistrement système ne détecte pas tous les raccourcis internes d’autres applications ; choisissez une autre combinaison si l’une gêne votre flux de travail.
+
+Sous Wayland, les touches restent gérées par le bureau. Attribuez `kiri --capture`, `kiri --record`, `kiri --ocr` ou `kiri --library` dans les réglages clavier de votre bureau, et `kiri --toggle-recording-pause` ainsi que `kiri --stop-recording` pour les commandes d’enregistrement. La configuration Portal facultative conserve ses actions Capturer, Suspendre/Reprendre et Arrêter. Ces commandes d’enregistrement n’agissent que sur un enregistrement en cours, mais le bureau peut garder leurs touches réservées lorsque Kiri est inactif ; Kiri ne peut pas libérer les raccourcis gérés par le bureau entre deux enregistrements.
 
 Avant de choisir un outil d’annotation, cliquez sur les curseurs de la barre de capture pour afficher les champs de largeur et de hauteur aux bords de la sélection. Les valeurs utilisent les pixels de sortie, y compris sur Retina. Entrée ou quitter un champ applique sa valeur ; Échap ignore la saisie, et un deuxième Échap annule la capture. Les flèches ajustent d’un pixel, ou de dix avec Maj. Cliquez à nouveau sur les curseurs pour masquer les champs. Après le début de l’annotation, ils règlent son apparence.
 
@@ -45,6 +83,8 @@ Sous GNOME Wayland, si la première capture n’affiche pas de demande d’autor
 Le panneau de préparation propose MP4 / GIF, Démarrer et quatre icônes côte à côte : son du système, microphone, pointeur et indicateurs de clic. Le démarrage lance toujours un compte à rebours de trois secondes ; les GIF sont sans son. Le panneau s’adapte à la sélection et aux bords de l’écran.
 
 La petite flèche à côté du microphone permet de choisir un périphérique d’entrée réel sans modifier celui par défaut du système. Si le périphérique choisi est indisponible ou déconnecté, Kiri affiche une erreur au lieu de changer de microphone silencieusement.
+
+Sous macOS et Windows, les commandes d’enregistrement suivent la sélection et évitent les bords de l’écran sans prendre le focus clavier. Glisser déplace le panneau en cours ; la capture suivante le replace selon la nouvelle sélection. La pause conserve la durée déjà enregistrée et la reprise la poursuit. Utilisez les raccourcis d’enregistrement configurés, les boutons de commande ou le menu de la barre d’état. Il n’existe pas de touches simples Espace/Échap intégrées pour l’enregistrement ; une touche simple explicitement confirmée comme raccourci d’enregistrement suit cette attribution. Un bouton explicitement ciblé conserve son activation normale par Espace/Entrée. Échap continue d’annuler la capture et le compte à rebours. Les anciennes versions de Windows peuvent encore afficher la bordure système plein écran. Linux utilise les raccourcis natifs X11, les raccourcis Wayland gérés par le bureau, les actions de la barre d’état ou les commandes.
 
 ## Captures défilantes
 
@@ -96,9 +136,17 @@ En mode Capture, survolez l’écran pour agrandir les pixels d’origine et voi
 
 Pour convertir un MP4 de la bibliothèque en GIF, Kiri vérifie d’abord le décodage vidéo, puis commence l’encodage GIF. Vous pouvez annuler pendant la vérification ou la conversion, et annuler plusieurs tâches ensemble. La vidéo d’origine reste conservée. L’annulation est indisponible dès que l’enregistrement final dans la bibliothèque commence.
 
+## Historique du texte et recherche dans les captures
+
+Sélectionnez un élément dans l’historique du texte pour le **Mettre à la corbeille** ou **Relancer l’OCR**. Cette action utilise l’image source de l’élément et le moteur actuel. Kiri demande confirmation avant de remplacer une correction et avant d’envoyer l’image à un fournisseur distant. Si l’OCR ne trouve aucun texte ou échoue, le texte précédent reste enregistré.
+
+**Réglages → Reconnaissance de texte → Chercher du texte dans les nouvelles captures** est désactivé par défaut. Activez-le pour retrouver les nouvelles captures enregistrées par le texte qu’elles contiennent via la recherche de la bibliothèque. Le modèle intégré s’exécute sur votre appareil. Les images plus anciennes ou importées peuvent toujours être reconnues manuellement dans l’historique du texte. La recherche peut manquer les images très grandes ou les captures réalisées lorsque la file d’attente en arrière-plan est pleine. Désactiver l’option arrête la nouvelle indexation tout en conservant les correspondances déjà indexées.
+
 ## Bibliothèque et retours
 
 La sélection multiple permet de cocher des éléments ou de tout sélectionner pour les déplacer dans la corbeille ; un clic ordinaire les ouvre toujours. La corbeille permet une restauration groupée et demande confirmation dans la fenêtre principale avant d’être vidée. Renommer modifie aussi le nom du fichier en gardant son type. Copier le fichier dans le menu contextuel sert à coller dans un dossier ; Copier colle toujours l’image.
+
+Cliquez sur **Ajouter une étiquette…** sur une capture pour saisir un nom d’étiquette, ou faites glisser la carte sur une étiquette visible pour l’appliquer. Faire glisser une carte cochée étiquette ensemble les captures sélectionnées. Utilisez **Gérer les étiquettes** dans la barre de sélection pour ajouter une étiquette par nom ou retirer une étiquette précise de la sélection.
 
 Pour signaler un problème, copiez les informations de l’application, du système et des écrans depuis Réglages → À propos. Les captures, identifiants et chemins personnels sont exclus.
 

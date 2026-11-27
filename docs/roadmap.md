@@ -19,7 +19,7 @@ history.
 - [x] Local library with search, favorites, and recoverable trash
 - [x] Direct-open library cards with rubber-band-only batch selection
 - [x] Clipboard-first screenshot completion with focus restoration
-- [x] Local OCR (macOS Vision, Windows.Media.Ocr)
+- [x] Local OCR (bundled offline Baidu PP-OCRv6 small, with macOS Vision and Windows.Media.Ocr local recovery)
 - [x] Region recording (SCK / WGC) with native H.264 + AAC pipelines
 - [x] Optional system audio, pointer, and click highlights
 - [x] Neutral, non-dimming 3-2-1 countdown and multi-segment recording pipeline
@@ -72,7 +72,7 @@ See [Linux setup and acceptance](linux.md) for installation and verification det
 - [ ] Installed supported-desktop Portal shortcut acceptance (#47)
 - [x] Region recording via ScreenCast/PipeWire and system GStreamer, with optional MP4 audio and silent GIF output
 - [x] Recording controls through the tray and commands, without a captured floating panel
-- [x] Offline Tesseract OCR using system English, Simplified Chinese, and Japanese data
+- [x] Bundled offline Baidu PP-OCRv6 small OCR with system Tesseract (`eng`, `chi_sim`, `jpn`) local fallback
 - [x] Secret Service credentials for remote OCR profiles
 - [x] `.deb` configuration and Ubuntu build, install, and isolated X11 CI workflow
 - [x] Verified Linux CI candidate: Rust/media checks, `.deb` installation, and X11 capture, clipboard, OCR, recording, and persistence ([Ubuntu/X11 evidence](https://github.com/yuxino/kiri/actions/runs/36295511436/job/108553499500))
@@ -89,13 +89,24 @@ See [Linux setup and acceptance](linux.md) for installation and verification det
 - [ ] AppImage packaging and desktop acceptance
 - [ ] Signed Linux updater artifacts
 
+### Desktop workspace additions (v1.6)
+
+- [x] Configurable 6-action global shortcuts (4 launch + 2 recording-only) with bare-key confirmation and direct Windows `Print Screen` support
+- [x] Free bidirectional scrolling capture with original-pixel preview and one-step pinning (macOS, Windows, Linux X11)
+- [x] Zoomable saved-image editor, readable zoomable pinned references, numbered callouts, directional label bubbles, and editable tiled watermarks
+- [x] Opt-in Start at login in Settings → General (off by default)
+- [x] Text History actions (Move to Trash, Recognize Again) and opt-in local screenshot text search
+- [x] Inline card tag editing, drag-to-tag, and batch Manage Tags
+- [x] Standard HTTP/HTTPS remote OCR URLs (including private/LAN endpoints with explicit per-image consent)
+- [x] Resumable signed in-app update downloads across restarts (macOS and installed Windows)
+
 ## Later
 
-- [ ] Blur annotation
+- [x] Blur and pixel mosaic annotations (freehand, rectangle, ellipse) in screenshots and videos
 - [ ] Full-display recording
 - [x] Thumbnail video timeline with draggable clip edges, split/delete, undo/redo, and non-destructive library copies
 - [x] Timed zoom regions and opaque privacy masks in preview and native MP4 export
-- [x] Native MP4 export size presets and explicit five-second microphone checks
+- [x] Native MP4 export size presets and explicit recording microphone selection
 - [x] Local video projects with autosave, reopen-to-resume, and protected close
 - [x] Native video export progress and cancellation before final library saving
 - [ ] Multiple video and image sources in one editable timeline

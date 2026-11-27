@@ -18,7 +18,7 @@
 
 - Fenster oder Bereiche aufnehmen, Text, Pfeile und Mosaik hinzufügen und Screenshots als schwebende Referenzen anheften. Nach dem Speichern vergrößern und weiterbearbeiten.
 - Nach oben oder unten scrollen und einen langen Screenshot erstellen; bereits erfasste Bereiche werden nicht doppelt hinzugefügt (macOS, Windows, Linux X11).
-- Text mit lokalem OCR aus Bildern kopieren und QR-Codes lesen.
+- Text mit integriertem Offline-OCR aus Bildern kopieren, den Textverlauf nutzen, optional Text in neuen Screenshots suchen und QR-Codes lesen.
 - MP4 mit optionalem Systemton und Mikrofon aufnehmen oder als GIF ohne Ton speichern.
 - Clips eines Videos kürzen und umordnen, dann eine neue MP4-Datei exportieren.
 - Lokale Aufnahmen suchen, mit Tags versehen, favorisieren und exportieren; versehentlich Gelöschtes aus dem Papierkorb wiederherstellen.
@@ -37,7 +37,7 @@
 
 Vielen Dank an alle, die Code schreiben, Probleme melden, Kiri ausprobieren oder teilen.
 
-Besonderer Dank gilt [@kerwin2046](https://github.com/kerwin2046) für die [erste Linux-Unterstützung](https://github.com/yuxino/kiri/pull/20) und [@LLLin000](https://github.com/LLLin000) für die [Korrektur der Screenshot-Ausrichtung bei Windows-Textskalierung](https://github.com/yuxino/kiri/pull/61).
+Besonderer Dank gilt [@kerwin2046](https://github.com/kerwin2046) für die [erste Linux-Unterstützung](https://github.com/yuxino/kiri/pull/20), [@LLLin000](https://github.com/LLLin000) für die [Korrektur der Screenshot-Ausrichtung bei Windows-Textskalierung](https://github.com/yuxino/kiri/pull/61) und [@AlexZander85](https://github.com/AlexZander85) für die [russische Übersetzung der Oberfläche](https://github.com/yuxino/kiri/pull/204).
 
 Danke auch an die Communitys von [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), [NodeLoc](https://www.nodeloc.com/) für Rückmeldungen und Weiterempfehlungen.
 

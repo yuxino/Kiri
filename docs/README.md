@@ -50,16 +50,16 @@ Linux QA, and contribution records retain their original language.
 - [Security](../SECURITY.md) — reporting vulnerabilities.
 - [`windows-capture-incident.md`](windows-capture-incident.md) — current
   Windows screenshot lifecycle failure, diagnostics, and native retest gate.
-- [`releases/v1.6.6.md`](releases/v1.6.6.md) — lighter recorded click highlight
-  and Windows text scaling correction.
-- [`releases/v1.4.12.md`](releases/v1.4.12.md) — preview recovery and consistent
-  history updates after removing missing files.
-- [`releases/v1.4.11.md`](releases/v1.4.11.md) — capture reliability, preview
-  synchronization, and smaller application resources.
-- [`releases/v1.4.9.md`](releases/v1.4.9.md) — first signed-updater release
-  notes and one-time bootstrap instructions.
+- [`releases/v1.6.44.md`](releases/v1.6.44.md) — latest bilingual release notes
+  (full history in `docs/releases/`, starting from
+  [`releases/v1.4.9.md`](releases/v1.4.9.md)).
 
 ## Decision records
+
+Completed implementation plans and the former Swift migration specifications
+are intentionally not kept in the working tree. Git history and release tags
+preserve them without letting obsolete paths or constraints guide current
+development.
 
 - [`adr/0003-manual-region-selection.md`](adr/0003-manual-region-selection.md)
   — quiet single-outline window selection.
@@ -111,174 +111,249 @@ Linux QA, and contribution records retain their original language.
 - [`adr/0025-signed-user-initiated-updates.md`](adr/0025-signed-user-initiated-updates.md)
   — separately confirmed signed checks, downloads, installation, and
   platform-accurate restart behavior.
+- [`adr/0026-recording-countdown-readiness.md`](adr/0026-recording-countdown-readiness.md)
+  — visible, cancellable recording countdown readiness.
+- [`adr/0027-compact-countdown.md`](adr/0027-compact-countdown.md)
+  — compact countdown surface.
+- [`adr/0028-ocr-committed-selection.md`](adr/0028-ocr-committed-selection.md)
+  — committed OCR selection.
+- [`adr/0029-macos-fullscreen-shortcut-overlay.md`](adr/0029-macos-fullscreen-shortcut-overlay.md)
+  — preserve the frontmost macOS full-screen Space for shortcut capture.
+- [`adr/0030-ocr-history.md`](adr/0030-ocr-history.md)
+  — text history and saved screenshot OCR.
+- [`adr/0031-windows-update-relaunch.md`](adr/0031-windows-update-relaunch.md)
+  — Windows update completion and relaunch behavior.
+- [`adr/0032-localized-kiri-installer.md`](adr/0032-localized-kiri-installer.md)
+  — localized Kiri installer.
+- [`adr/0033-shared-installer-source.md`](adr/0033-shared-installer-source.md)
+  — shared installer source.
+- [`adr/0034-local-video-trimming-and-input-check.md`](adr/0034-local-video-trimming-and-input-check.md)
+  — local video trimming and microphone checks (historical microphone-test entry
+  superseded by ADR 0105).
+- [`adr/0035-video-timeline-and-timed-effects.md`](adr/0035-video-timeline-and-timed-effects.md)
+  — video timeline and timed effects.
+- [`adr/0036-video-annotation-tracks-and-playback.md`](adr/0036-video-annotation-tracks-and-playback.md)
+  — video annotation tracks and playback controls.
+- [`adr/0037-video-effect-styles-and-export-controls.md`](adr/0037-video-effect-styles-and-export-controls.md)
+  — styled video effects and consistent export controls.
+- [`adr/0038-output-timeline-and-clip-speed.md`](adr/0038-output-timeline-and-clip-speed.md)
+  — output timeline, clip order and local speed.
+- [`adr/0039-direct-annotation-and-local-media.md`](adr/0039-direct-annotation-and-local-media.md)
+  — direct annotation, stickers and local media import.
+- [`adr/0040-playback-scrubbing.md`](adr/0040-playback-scrubbing.md)
+  — consistent playback scrubbing.
+- [`adr/0041-single-canvas-video-editing.md`](adr/0041-single-canvas-video-editing.md)
+  — single-canvas video editing.
+- [`adr/0042-readable-tools-and-layer-order.md`](adr/0042-readable-tools-and-layer-order.md)
+  — readable tools and explicit layer order.
+- [`adr/0043-editable-video-annotation-objects.md`](adr/0043-editable-video-annotation-objects.md)
+  — editable video annotation objects.
+- [`adr/0044-video-editing-completion-and-selection.md`](adr/0044-video-editing-completion-and-selection.md)
+  — completing an edit without losing the user's place.
+- [`adr/0045-local-video-projects-and-cancellable-export.md`](adr/0045-local-video-projects-and-cancellable-export.md)
+  — local video projects and cancellable export.
+- [`adr/0046-configurable-capture-shortcut.md`](adr/0046-configurable-capture-shortcut.md)
+  — configurable native capture shortcut.
+- [`adr/0047-macos-fullscreen-space-parents.md`](adr/0047-macos-fullscreen-space-parents.md)
+  — native panel parents for full-screen capture windows.
+- [`adr/0048-windows-extract-and-run-release.md`](adr/0048-windows-extract-and-run-release.md)
+  — Windows extract-and-run release.
+- [`adr/0049-linux-screenshot-mvp.md`](adr/0049-linux-screenshot-mvp.md)
+  — historical initial Linux screenshot scope, superseded by ADR 0051.
+- [`adr/0050-linux-wayland-grim-and-hyprland-shortcut.md`](adr/0050-linux-wayland-grim-and-hyprland-shortcut.md)
+  — historical Hyprland implementation, superseded where noted.
+- [`adr/0051-ubuntu-linux-capture-boundaries.md`](adr/0051-ubuntu-linux-capture-boundaries.md)
+  — current Ubuntu Linux platform, shortcut, recording, and packaging contract.
+- [`adr/0052-gnome-screenshot-consent-recovery.md`](adr/0052-gnome-screenshot-consent-recovery.md)
+  — ambiguous first-use GNOME denial and safe retry guidance.
+- [`adr/0053-direct-line-adjustment.md`](adr/0053-direct-line-adjustment.md)
+  — direct adjustment of selected lines.
+- [`adr/0054-red-click-highlight.md`](adr/0054-red-click-highlight.md)
+  — high-contrast recorded click highlight.
+- [`adr/0055-editable-ocr-history.md`](adr/0055-editable-ocr-history.md)
+  — editable OCR history with original text.
+- [`adr/0056-batch-library-export.md`](adr/0056-batch-library-export.md)
+  — copy selected library items to a folder.
+- [`adr/0057-clipboard-image-import.md`](adr/0057-clipboard-image-import.md)
+  — explicit clipboard image import.
+- [`adr/0058-pinned-screenshot-reference.md`](adr/0058-pinned-screenshot-reference.md)
+  — pinned screenshot reference windows.
 - [`adr/0059-lightweight-recorded-click-highlight.md`](adr/0059-lightweight-recorded-click-highlight.md)
   — reduce the recorded click ring's visual weight while retaining its red cue.
+- [`adr/0060-image-text-editing-and-close.md`](adr/0060-image-text-editing-and-close.md)
+  — image text editing and unsaved close.
+- [`adr/0061-local-qr-recognition-and-favorites.md`](adr/0061-local-qr-recognition-and-favorites.md)
+  — local QR recognition and favorites.
+- [`adr/0062-qr-multi-contrast-results.md`](adr/0062-qr-multi-contrast-results.md)
+  — merge QR results across contrast thresholds.
 - [`adr/0063-qr-center-markers-and-supported-geometry.md`](adr/0063-qr-center-markers-and-supported-geometry.md)
   — explicit center-marker selection and validation of QR finder geometry.
 - [`adr/0064-direct-qr-selection-and-opening.md`](adr/0064-direct-qr-selection-and-opening.md)
-  — original-region QR markers, automatic saving of selected codes and direct opening.
+  — original-region QR markers, automatic saving of selected codes and direct
+  opening.
 - [`adr/0065-recording-save-status-and-file-copy.md`](adr/0065-recording-save-status-and-file-copy.md)
-  — visible background recording saves and native file copying from the library and viewer.
+  — visible background recording saves and native file copying from the library
+  and viewer.
 - [`adr/0066-persistent-macos-dock-visibility.md`](adr/0066-persistent-macos-dock-visibility.md)
   — an immediate macOS Dock switch remembered across launches.
 - [`adr/0067-bounded-local-qr-recovery.md`](adr/0067-bounded-local-qr-recovery.md)
   — bounded overlapping scans recover codes beyond full-image decoder limits.
 - [`adr/0068-qr-markers-in-saved-image-editor.md`](adr/0068-qr-markers-in-saved-image-editor.md)
   — saved-image recognition uses the original editor surface and preserves drafts.
-
 - [`adr/0069-image-fidelity-and-linux-media-playback.md`](adr/0069-image-fidelity-and-linux-media-playback.md)
-  — transparent PNG editing, color conversion, shared styling and bounded Linux playback.
-
-Completed implementation plans and the former Swift migration specifications
-are intentionally not kept in the working tree. Git history and release tags
-preserve them without letting obsolete paths or constraints guide current
-development.
-
-- [ADR 0027: Compact countdown](adr/0027-compact-countdown.md)
-
-- [ADR 0028: Committed OCR selection](adr/0028-ocr-committed-selection.md)
-
-- [ADR 0030: Text history and saved screenshot OCR](adr/0030-ocr-history.md)
-- [ADR 0133: OCR history actions and screenshot text search](adr/0133-ocr-history-and-screenshot-search.md)
-
-- [ADR 0031: Windows update completion](adr/0031-windows-update-relaunch.md)
-
-- [ADR 0032: Localized Kiri installer](adr/0032-localized-kiri-installer.md)
-- [ADR 0033: Shared installer source](adr/0033-shared-installer-source.md)
-
-- [0034 — Local video trimming and microphone checks](adr/0034-local-video-trimming-and-input-check.md) — the historical microphone-test entry is superseded by ADR 0105.
-
-- [0035 — Video timeline and timed effects](adr/0035-video-timeline-and-timed-effects.md)
-
-- [0036 — Video annotation tracks and playback controls](adr/0036-video-annotation-tracks-and-playback.md)
-
-- [0041 — Single-canvas video editing](adr/0041-single-canvas-video-editing.md)
-- [0042 — Readable tools and explicit layer order](adr/0042-readable-tools-and-layer-order.md)
-- [0043 — Editable video annotation objects](adr/0043-editable-video-annotation-objects.md)
-- [0044 — Completing an edit without losing the user's place](adr/0044-video-editing-completion-and-selection.md)
-- [0045 — Local video projects and cancellable export](adr/0045-local-video-projects-and-cancellable-export.md)
-
-- [0047 — Native panel parents for full-screen capture windows](adr/0047-macos-fullscreen-space-parents.md)
-- [ADR 0049: Linux screenshot MVP and staged recording](adr/0049-linux-screenshot-mvp.md) — historical initial scope, superseded by ADR 0051.
-- [ADR 0050: Linux Wayland grim stills and Hyprland shortcut](adr/0050-linux-wayland-grim-and-hyprland-shortcut.md) — historical Hyprland implementation, superseded where noted.
-- [ADR 0051: Ubuntu Linux capture boundaries](adr/0051-ubuntu-linux-capture-boundaries.md) — current platform, shortcut, recording, and packaging contract.
-- [ADR 0052: GNOME screenshot consent recovery](adr/0052-gnome-screenshot-consent-recovery.md) — ambiguous first-use denial and safe retry guidance.
-- [ADR 0053: Direct adjustment of selected lines](adr/0053-direct-line-adjustment.md)
-- [ADR 0054: High-contrast recorded click highlight](adr/0054-red-click-highlight.md)
-- [ADR 0055: Editable OCR history with original text](adr/0055-editable-ocr-history.md)
-- [ADR 0056: Copy selected library items to a folder](adr/0056-batch-library-export.md)
-- [ADR 0057: Explicit clipboard image import](adr/0057-clipboard-image-import.md)
-- [ADR 0058: Pinned screenshot reference windows](adr/0058-pinned-screenshot-reference.md)
-- [ADR 0060: Image text editing and unsaved close](adr/0060-image-text-editing-and-close.md)
-- [ADR 0061: Local QR recognition and favorites](adr/0061-local-qr-recognition-and-favorites.md)
-- [ADR 0062: Merge QR results across contrast thresholds](adr/0062-qr-multi-contrast-results.md)
-
-- [ADR 0074: Linux basic video export](adr/0074-linux-basic-video-export.md) — normal-speed cuts, source audio, bounded native processing and independent capability gates.
-- [ADR 0073: Linux recording audio](adr/0073-linux-recording-audio.md) — local sound sources, a shared media clock and real-device acceptance limits.
-- [ADR 0075: Wayland GlobalShortcuts Portal](adr/0075-wayland-global-shortcuts-portal.md) — explicit setup, truthful bindings and command fallbacks.
-- [ADR 0070: File size on library asset cards](adr/0070-library-asset-file-size.md)
-
-- [ADR 0071: Library navigation and floating feedback](adr/0071-library-navigation-and-floating-feedback.md)
-- [ADR 0072: Live annotation transform preview](adr/0072-live-annotation-transform-preview.md)
-- [ADR 0076: Inline capture size controls](adr/0076-inline-capture-size-controls.md)
-- [ADR 0077: Quick screenshot completion and pinning](adr/0077-quick-screenshot-completion-and-pin.md)
-- [ADR 0078: Cancellable GIF conversion and video validation](adr/0078-cancellable-gif-video-validation.md)
-- [ADR 0079: Seven languages and a shared preference](adr/0079-seven-language-preferences.md)
-- [ADR 0080: Pinned macOS release signing](adr/0080-pinned-macos-release-signing.md)
-- [ADR 0081: Direct capture toolbar pin](adr/0081-direct-capture-toolbar-pin.md)
-- [ADR 0082: Screenshot hover color picker](adr/0082-screenshot-hover-color-picker.md)
-- [ADR 0083: Editable numbered screenshot callouts](adr/0083-numbered-screenshot-callouts.md)
-- [ADR 0084: Directional label bubbles](adr/0084-directional-label-bubbles.md)
-- [ADR 0085: Edit numbered callout descriptions on the canvas](adr/0085-inline-callout-text-editing.md)
-- [ADR 0086: Managed library file actions](adr/0086-library-file-actions.md)
-- [ADR 0087: Keep capture controls clear of the mode selector](adr/0087-capture-hud-layout.md)
-- [ADR 0088: Annotation properties and local text watermarks](adr/0088-annotation-properties-and-watermarks.md)
-- [ADR 0089: Anchored labels and direct callout dragging](adr/0089-anchored-labels-and-direct-callout-drag.md)
-- [ADR 0090: Reliable annotation re-editing and tiled watermarks](adr/0090-annotation-reediting-and-tiled-watermarks.md)
-- [ADR 0091: Direct text annotation toolbar buttons](adr/0091-direct-text-annotation-toolbar.md)
-- [ADR 0092: Finish editing and clear selection before the next placement](adr/0092-finish-text-edit-before-placement.md)
-- [ADR 0093: Consistent annotation selection and deletion](adr/0093-annotation-selection-and-deletion.md)
-
-- [`adr/0094-screenshot-ocr-and-annotation-layer-order.md`](adr/0094-screenshot-ocr-and-annotation-layer-order.md) — screenshot-toolbar OCR and creation-order annotation compositing.
-- [`adr/0095-macos-pinned-image-movement.md`](adr/0095-macos-pinned-image-movement.md) — pointer-based macOS reference movement across asynchronous WebView IPC.
-
-- [ADR 0096: Capture-origin reference placement](adr/0096-capture-origin-pin-placement.md)
-- [ADR 0097: Explicit library batch selection](adr/0097-explicit-library-batch-selection.md)
-
-- [ADR 0098: Unified main-window workspace](adr/0098-unified-main-window-workspace.md) — shared navigation and responsive settings layout.
-
-- [ADR 0099: Panel-open update discovery](adr/0099-panel-open-update-discovery.md) — cached version checks and a Settings notification; downloads and installs remain explicit.
-
-- [ADR 0100: In-window Empty Trash confirmation](adr/0100-in-window-empty-trash-confirmation.md) — main-WebView modal, safe focus and single-flight deletion.
-
-- [ADR 0101: Tray activation, support information and pin boundaries](adr/0101-tray-support-information-and-pin-frame.md) — Windows left-click activation, explicit support-info copying and a persistent neutral pin outline.
-
-- [ADR 0102: Visible recording startup failures](adr/0102-visible-recording-startup-failures.md) — session-safe failure cards and optional Windows capture-border capability checks.
-
-- [ADR 0103: Annotation tool double-click completion](adr/0103-annotation-tool-double-click-completion.md)
-
-- [ADR 0104: Windows recording active time](adr/0104-windows-recording-active-time.md) — keep static footage duration and exclude pauses.
-
-- [ADR 0105: Recording controls follow the selected region](adr/0105-adaptive-recording-controls.md) — adaptive preparation and recording controls, explicit microphone selection, and native acceptance requirements.
-
-- [ADR 0106: macOS floating panels participate in capture hover selection](adr/0106-floating-window-hover.md) — include eligible floating panels while preserving frontmost-window selection.
-
-- [ADR 0108: Support folder and project links](adr/0108-support-folder-and-project-links.md) — explicit shortcuts to existing folders and the GitHub project from About.
-
-- [ADR 0109: Direct library permanent deletion](adr/0109-direct-library-permanent-deletion.md) — confirmed single and batch deletion without a Trash detour.
-
-- [ADR 0110: Shortcut settings and visible tool keys](adr/0110-shortcut-settings-and-visible-tool-keys.md) — four launch actions and two recording-only shortcuts, visible editing and default-reset controls, contextual key references, and shared annotation controls.
-
-- [ADR 0111: Supported shortcut keys and explicit confirmation](adr/0111-supported-shortcut-keys-and-confirmation.md) — native-library-supported keys, confirmation for bare and Shift-only typing/navigation keys, and consistent browser/native recording.
-
-- [ADR 0112: Free bidirectional scrolling capture](adr/0112-free-bidirectional-scroll-capture.md) — natural up/down scrolling, verified original-pixel strips, explicit partial saving and platform limits.
-
-- [ADR 0113: Contextual image editor and zoom](adr/0113-contextual-image-editor-and-zoom.md)
-
-- [`adr/0114-opt-in-login-startup.md`](adr/0114-opt-in-login-startup.md) — opt-in system login startup and resident launch behavior.
-- [ADR 0115: Control focus and retryable library tags](adr/0115-control-focus-and-retryable-library-tags.md) — keyboard ownership, modal navigation and acknowledged tag updates.
-- [ADR 0116: Pending library and editor actions](adr/0116-pending-library-and-editor-actions.md) — scoped library loading, explicit failures, correction drafts and pending sticker imports.
-
+  — transparent PNG editing, color conversion, shared styling and bounded Linux
+  playback.
+- [`adr/0070-library-asset-file-size.md`](adr/0070-library-asset-file-size.md)
+  — file size on library asset cards.
+- [`adr/0071-library-navigation-and-floating-feedback.md`](adr/0071-library-navigation-and-floating-feedback.md)
+  — library navigation and floating feedback.
+- [`adr/0072-live-annotation-transform-preview.md`](adr/0072-live-annotation-transform-preview.md)
+  — live annotation transform preview.
+- [`adr/0073-linux-recording-audio.md`](adr/0073-linux-recording-audio.md)
+  — local sound sources, a shared media clock and real-device acceptance limits.
+- [`adr/0074-linux-basic-video-export.md`](adr/0074-linux-basic-video-export.md)
+  — normal-speed cuts, source audio, bounded native processing and independent
+  capability gates.
+- [`adr/0075-wayland-global-shortcuts-portal.md`](adr/0075-wayland-global-shortcuts-portal.md)
+  — explicit setup, truthful bindings and command fallbacks.
+- [`adr/0076-inline-capture-size-controls.md`](adr/0076-inline-capture-size-controls.md)
+  — inline capture size controls.
+- [`adr/0077-quick-screenshot-completion-and-pin.md`](adr/0077-quick-screenshot-completion-and-pin.md)
+  — quick screenshot completion and pinning.
+- [`adr/0077-streaming-gif-conversion-feedback.md`](adr/0077-streaming-gif-conversion-feedback.md)
+  — streaming GIF conversion and operation feedback.
+- [`adr/0078-cancellable-gif-video-validation.md`](adr/0078-cancellable-gif-video-validation.md)
+  — cancellable GIF conversion and video validation.
+- [`adr/0079-seven-language-preferences.md`](adr/0079-seven-language-preferences.md)
+  — seven languages and a shared preference (expanded to eight languages by ADR
+  0132).
+- [`adr/0080-pinned-macos-release-signing.md`](adr/0080-pinned-macos-release-signing.md)
+  — pinned macOS release signing.
+- [`adr/0081-direct-capture-toolbar-pin.md`](adr/0081-direct-capture-toolbar-pin.md)
+  — direct capture toolbar pin.
+- [`adr/0082-screenshot-hover-color-picker.md`](adr/0082-screenshot-hover-color-picker.md)
+  — screenshot hover color picker.
+- [`adr/0083-numbered-screenshot-callouts.md`](adr/0083-numbered-screenshot-callouts.md)
+  — editable numbered screenshot callouts.
+- [`adr/0084-directional-label-bubbles.md`](adr/0084-directional-label-bubbles.md)
+  — directional label bubbles.
+- [`adr/0085-inline-callout-text-editing.md`](adr/0085-inline-callout-text-editing.md)
+  — edit numbered callout descriptions on the canvas.
+- [`adr/0086-library-file-actions.md`](adr/0086-library-file-actions.md)
+  — managed library file actions.
+- [`adr/0087-capture-hud-layout.md`](adr/0087-capture-hud-layout.md)
+  — keep capture controls clear of the mode selector.
+- [`adr/0088-annotation-properties-and-watermarks.md`](adr/0088-annotation-properties-and-watermarks.md)
+  — annotation properties and local text watermarks.
+- [`adr/0089-anchored-labels-and-direct-callout-drag.md`](adr/0089-anchored-labels-and-direct-callout-drag.md)
+  — anchored labels and direct callout dragging.
+- [`adr/0090-annotation-reediting-and-tiled-watermarks.md`](adr/0090-annotation-reediting-and-tiled-watermarks.md)
+  — reliable annotation re-editing and tiled watermarks.
+- [`adr/0091-direct-text-annotation-toolbar.md`](adr/0091-direct-text-annotation-toolbar.md)
+  — direct text annotation toolbar buttons.
+- [`adr/0092-finish-text-edit-before-placement.md`](adr/0092-finish-text-edit-before-placement.md)
+  — finish editing and clear selection before the next placement.
+- [`adr/0093-annotation-selection-and-deletion.md`](adr/0093-annotation-selection-and-deletion.md)
+  — consistent annotation selection and deletion.
+- [`adr/0094-screenshot-ocr-and-annotation-layer-order.md`](adr/0094-screenshot-ocr-and-annotation-layer-order.md)
+  — screenshot-toolbar OCR and creation-order annotation compositing.
+- [`adr/0095-macos-pinned-image-movement.md`](adr/0095-macos-pinned-image-movement.md)
+  — pointer-based macOS reference movement across asynchronous WebView IPC.
+- [`adr/0096-capture-origin-pin-placement.md`](adr/0096-capture-origin-pin-placement.md)
+  — capture-origin reference placement.
+- [`adr/0097-explicit-library-batch-selection.md`](adr/0097-explicit-library-batch-selection.md)
+  — explicit library batch selection.
+- [`adr/0098-unified-main-window-workspace.md`](adr/0098-unified-main-window-workspace.md)
+  — unified main-window workspace and responsive settings layout.
+- [`adr/0099-panel-open-update-discovery.md`](adr/0099-panel-open-update-discovery.md)
+  — cached version checks and a Settings notification; downloads and installs
+  remain explicit.
+- [`adr/0100-in-window-empty-trash-confirmation.md`](adr/0100-in-window-empty-trash-confirmation.md)
+  — main-WebView modal, safe focus and single-flight deletion.
+- [`adr/0101-tray-support-information-and-pin-frame.md`](adr/0101-tray-support-information-and-pin-frame.md)
+  — Windows left-click activation, explicit support-info copying and a persistent
+  neutral pin outline.
+- [`adr/0102-visible-recording-startup-failures.md`](adr/0102-visible-recording-startup-failures.md)
+  — session-safe failure cards and optional Windows capture-border capability
+  checks.
+- [`adr/0103-annotation-tool-double-click-completion.md`](adr/0103-annotation-tool-double-click-completion.md)
+  — annotation tool double-click completion.
+- [`adr/0104-windows-recording-active-time.md`](adr/0104-windows-recording-active-time.md)
+  — keep static footage duration and exclude pauses.
+- [`adr/0105-adaptive-recording-controls.md`](adr/0105-adaptive-recording-controls.md)
+  — adaptive preparation and recording controls, explicit microphone selection,
+  and native acceptance requirements.
+- [`adr/0106-floating-window-hover.md`](adr/0106-floating-window-hover.md)
+  — include eligible macOS floating panels while preserving frontmost-window
+  selection.
+- [`adr/0107-windows-capture-visibility-and-pin-drag.md`](adr/0107-windows-capture-visibility-and-pin-drag.md)
+  — synchronize Windows capture visibility and pin movement.
+- [`adr/0108-support-folder-and-project-links.md`](adr/0108-support-folder-and-project-links.md)
+  — explicit shortcuts to existing folders and the GitHub project from About.
+- [`adr/0109-direct-library-permanent-deletion.md`](adr/0109-direct-library-permanent-deletion.md)
+  — confirmed single and batch deletion without a Trash detour.
+- [`adr/0110-shortcut-settings-and-visible-tool-keys.md`](adr/0110-shortcut-settings-and-visible-tool-keys.md)
+  — four launch actions and two recording-only shortcuts, visible editing and
+  default-reset controls, contextual key references, and shared annotation
+  controls.
+- [`adr/0111-supported-shortcut-keys-and-confirmation.md`](adr/0111-supported-shortcut-keys-and-confirmation.md)
+  — native-library-supported keys, confirmation for bare and Shift-only
+  typing/navigation keys, and consistent browser/native recording.
+- [`adr/0112-free-bidirectional-scroll-capture.md`](adr/0112-free-bidirectional-scroll-capture.md)
+  — natural up/down scrolling, verified original-pixel strips, explicit partial
+  saving and platform limits.
+- [`adr/0113-contextual-image-editor-and-zoom.md`](adr/0113-contextual-image-editor-and-zoom.md)
+  — contextual image editor and zoom.
+- [`adr/0114-opt-in-login-startup.md`](adr/0114-opt-in-login-startup.md)
+  — opt-in system login startup and resident launch behavior.
+- [`adr/0115-control-focus-and-retryable-library-tags.md`](adr/0115-control-focus-and-retryable-library-tags.md)
+  — keyboard ownership, modal navigation and acknowledged tag updates.
+- [`adr/0116-pending-library-and-editor-actions.md`](adr/0116-pending-library-and-editor-actions.md)
+  — scoped library loading, explicit failures, correction drafts and pending
+  sticker imports.
 - [`adr/0117-windows-scroll-guide-fallback.md`](adr/0117-windows-scroll-guide-fallback.md)
   — preserve Windows scrolling capture with an incompatible region guide hidden.
-
-- [ADR 0118: System-command Linux OCR](adr/0118-system-command-linux-ocr.md)
+- [`adr/0118-system-command-linux-ocr.md`](adr/0118-system-command-linux-ocr.md)
   — let the distribution manage Tesseract and Leptonica compatibility.
-
-- [ADR 0119: Readable pinned screenshots and scrolling-capture pinning](adr/0119-readable-pinned-screenshots-and-scroll-pin.md)
-  — independent reference zoom and scrolling, plus one-step pinning after a complete scrolling capture.
-
-- [ADR 0120: Readable update notes](adr/0120-readable-update-notes.md)
+- [`adr/0119-readable-pinned-screenshots-and-scroll-pin.md`](adr/0119-readable-pinned-screenshots-and-scroll-pin.md)
+  — independent reference zoom and scrolling, plus one-step pinning after a
+  complete scrolling capture.
+- [`adr/0120-readable-update-notes.md`](adr/0120-readable-update-notes.md)
   — compact update actions and safely formatted, language-aware release notes.
-
-- [ADR 0121: Failure recovery and action ownership](adr/0121-failure-recovery-and-action-ownership.md)
+- [`adr/0121-failure-recovery-and-action-ownership.md`](adr/0121-failure-recovery-and-action-ownership.md)
   — retryable screenshot saving, query-owned QR actions and temporary GIF cleanup.
-
-- [ADR 0122: Preserve local state during recovery](adr/0122-preserve-local-state-during-recovery.md)
-  — acknowledged favorites, atomic preferences, library recovery notifications and preserved video drafts.
-
-- [ADR 0124: Continuous screenshot annotation and explicit completion](adr/0124-continuous-screenshot-annotation.md)
-  — consecutive shape drawing, text-only confirmation, content-preserving right-click and stable properties.
-
-- [ADR 0125: Bounded Windows small-text OCR recovery](adr/0125-windows-small-text-ocr-recovery.md)
-
-- [ADR 0126: Offline recognition of small Chinese selections](adr/0126-offline-chinese-ocr.md)
-
-- [ADR 0127: Cross-platform local OCR](adr/0127-unified-local-ocr.md)
-
-- [ADR 0129: History navigation and OCR correction safety](adr/0129-history-navigation-and-ocr-draft-safety.md)
-  — cancel stale annotation gestures and retain failed corrections across attempted navigation.
-
-- [ADR 0130: Video export failure boundaries](adr/0130-video-export-failure-boundaries.md)
-  — closed source snapshots, safe diagnostics and retryable export/open/cancel states.
-
-- [ADR 0131: Standard remote OCR URL validation](adr/0131-standard-remote-ocr-urls.md)
+- [`adr/0122-preserve-local-state-during-recovery.md`](adr/0122-preserve-local-state-during-recovery.md)
+  — acknowledged favorites, atomic preferences, library recovery notifications
+  and preserved video drafts.
+- [`adr/0124-continuous-screenshot-annotation.md`](adr/0124-continuous-screenshot-annotation.md)
+  — consecutive shape drawing, text-only confirmation, content-preserving
+  right-click and stable properties.
+- [`adr/0125-windows-small-text-ocr-recovery.md`](adr/0125-windows-small-text-ocr-recovery.md)
+  — bounded Windows small-text OCR recovery.
+- [`adr/0126-offline-chinese-ocr.md`](adr/0126-offline-chinese-ocr.md)
+  — offline recognition of small Chinese selections.
+- [`adr/0127-unified-local-ocr.md`](adr/0127-unified-local-ocr.md)
+  — cross-platform local OCR with bundled PP-OCRv6 small.
+- [`adr/0128-text-and-qr-batch-selection.md`](adr/0128-text-and-qr-batch-selection.md)
+  — batch selection for Text History and QR Favorites.
+- [`adr/0129-history-navigation-and-ocr-draft-safety.md`](adr/0129-history-navigation-and-ocr-draft-safety.md)
+  — cancel stale annotation gestures and retain failed corrections across
+  attempted navigation.
+- [`adr/0130-video-export-failure-boundaries.md`](adr/0130-video-export-failure-boundaries.md)
+  — closed source snapshots, safe diagnostics and retryable export/open/cancel
+  states.
+- [`adr/0131-standard-remote-ocr-urls.md`](adr/0131-standard-remote-ocr-urls.md)
   — conventional HTTP/HTTPS profile validation with explicit per-image consent.
-
-- [ADR 0132: Russian as an eighth UI language](adr/0132-russian-ui-language.md)
-  — an eighth complete dictionary using the existing selector, preference, and native labels.
-
-- [ADR 0134: Stable library search and inline tag editing](adr/0134-stable-library-search-and-inline-tag-editing.md)
-  — search in the capture heading, scrollable tag filters and retryable per-capture tag edits.
-- [ADR 0135: Assign and remove library tags](adr/0135-library-tag-assignment.md)
+- [`adr/0132-russian-ui-language.md`](adr/0132-russian-ui-language.md)
+  — an eighth complete dictionary using the existing selector, preference, and
+  native labels.
+- [`adr/0133-ocr-history-and-screenshot-search.md`](adr/0133-ocr-history-and-screenshot-search.md)
+  — OCR history actions and screenshot text search.
+- [`adr/0134-stable-library-search-and-inline-tag-editing.md`](adr/0134-stable-library-search-and-inline-tag-editing.md)
+  — search in the capture heading, scrollable tag filters and retryable
+  per-capture tag edits.
+- [`adr/0135-library-tag-assignment.md`](adr/0135-library-tag-assignment.md)
   — card drag targets and atomic tag changes for selected captures.
+- [`adr/0136-resumable-update-downloads.md`](adr/0136-resumable-update-downloads.md)
+  — resume interrupted signed update downloads across restarts with explicit
+  verification.

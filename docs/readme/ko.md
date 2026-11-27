@@ -18,7 +18,7 @@
 
 - 창이나 영역을 캡처하고 텍스트, 화살표, 모자이크를 추가합니다. 스크린샷을 떠 있는 참고 이미지로 고정할 수 있습니다. 저장 후에도 확대하여 확인하고 계속 편집할 수 있습니다.
 - 위아래로 자유롭게 스크롤해 긴 스크린샷을 만듭니다. 이미 캡처한 곳으로 돌아가도 중복으로 추가되지 않습니다(macOS, Windows, Linux X11).
-- 로컬 OCR로 이미지 속 문자를 추출하고 QR 코드를 읽습니다.
+- 내장 오프라인 OCR로 이미지 속 문자를 추출하고, 글자 기록과 선택적 새 스크린샷 문자 검색, QR 코드 인식을 지원합니다.
 - 시스템 소리와 마이크를 선택하여 MP4로 녹화하거나 소리 없는 GIF로 저장합니다.
 - 한 동영상의 클립을 자르고 순서를 바꾼 뒤 새 MP4로 내보냅니다.
 - 로컬 자료를 검색하고 태그와 즐겨찾기를 지정하거나 내보냅니다. 잘못 삭제한 자료는 휴지통에서 복원할 수 있습니다.
@@ -37,7 +37,7 @@
 
 코드를 작성하고, 문제를 신고하고, Kiri를 사용하거나 공유해 주신 모든 분께 감사합니다.
 
-[초기 Linux 지원](https://github.com/yuxino/kiri/pull/20)을 제공한 [@kerwin2046](https://github.com/kerwin2046)와 [Windows 텍스트 배율에 따른 캡처 정렬](https://github.com/yuxino/kiri/pull/61)을 수정한 [@LLLin000](https://github.com/LLLin000)에게 특별히 감사드립니다.
+[초기 Linux 지원](https://github.com/yuxino/kiri/pull/20)을 제공한 [@kerwin2046](https://github.com/kerwin2046), [Windows 텍스트 배율에 따른 캡처 정렬](https://github.com/yuxino/kiri/pull/61)을 수정한 [@LLLin000](https://github.com/LLLin000), 그리고 [러시아어 UI 번역](https://github.com/yuxino/kiri/pull/204)을 제공한 [@AlexZander85](https://github.com/AlexZander85)께 특별히 감사드립니다.
 
 의견을 주고 공유해 주신 [V2EX](https://www.v2ex.com/) · [LINUX DO](https://linux.do/) · [Appinn](https://www.appinn.com/) · [NodeLoc](https://www.nodeloc.com/) 커뮤니티 여러분께도 감사합니다.
 

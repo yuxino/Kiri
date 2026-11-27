@@ -421,8 +421,10 @@ sound settings. Microphone records the current unmuted non-monitor input. If
 the default input is itself an output monitor, select a real input before
 recording. Devices are pinned for each segment; disconnecting or rerouting a
 source stops recording with an error rather than silently changing devices.
-Resuming rechecks the current defaults. The five-second microphone check uses
-the same source selection and inspects PCM in memory only.
+Resuming rechecks the current defaults. The recording preparation panel no longer
+exposes a standalone five-second microphone test entry (ADR 0105); the backend
+explicit microphone check inspects PCM in memory only for its remaining test
+and synthetic audio verification harnesses.
 
 The default tests inject tones into the real installed GStreamer
 encoder/mixer/muxer and decode the resulting tracks. They do not establish

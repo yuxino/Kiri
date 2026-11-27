@@ -18,7 +18,7 @@ macOS needs Screen & System Audio Recording permission; click highlights also ne
 
 Linux: Wayland capture supports one connected display. MP4 recording supports system audio and microphone through the local PulseAudio or PipeWire audio service. Click highlights remain unavailable. Saved videos support basic cuts and MP4 export; advanced video effects are unavailable. See the [Linux guide](linux.md) for setup and recording controls.
 
-Updates: macOS and Windows installer builds check when you open the main panel. A New update label beside Settings indicates a newer version; use Settings → About to download and install it. You can also check manually. Linux and Windows Portable users download a new package from Releases. Portable settings and captures stay in the Windows user profile.
+Updates: macOS and Windows installer builds check when you open the main panel. A New update label beside Settings indicates a newer version; use Settings → About to download and install it. You can also check manually. Interrupted in-app downloads on macOS and installed Windows builds retain their downloaded data across restarts and offer **Resume Download**; completed packages remain signature-verified before installation. Linux and Windows Portable users download a new package from Releases. Portable settings and captures stay in the Windows user profile.
 
 macOS Dock: Settings → Show in Dock controls the Dock icon immediately and remembers your choice. The tray and capture shortcut remain available when it is hidden.
 
@@ -57,8 +57,8 @@ through as a character, select just the text.
 
 Settings → Shortcuts brings global shortcuts and the in-app key reference together.
 On macOS, Windows, and X11, click an action's key field and press the key or
-combination you want. Function keys F1–F24, media keys, and combinations containing
-Control, Alt/Option, or Command/Windows save directly when supported and available.
+combination you want. Function keys F1–F24, Print Screen, media keys, and combinations containing
+Control, Alt/Option, or Command/Windows save directly when supported and available (on Windows, bare or modified Print Screen records directly without a typing-key warning).
 Other bare keys or Shift-only combinations show a preview and require **Use this
 key**, because they also affect typing or navigation in other apps. For recording
 controls, that effect lasts only while recording. The old binding remains until

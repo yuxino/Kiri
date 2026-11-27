@@ -18,7 +18,7 @@
 
 - 擷取視窗或區域，加入文字、箭頭與馬賽克，也能將截圖置頂作為參考。儲存後可放大檢視並繼續編輯。
 - 上下自由捲動並拼成長截圖，返回已擷取內容不會重複拼接（macOS、Windows、Linux X11）。
-- 使用本機 OCR 擷取圖片中的文字，辨識 QR Code。
+- 使用內建離線 OCR 擷取圖片中的文字，支援文字歷史、可選截圖文字搜尋與辨識 QR Code。
 - 錄製 MP4，可選系統音訊與麥克風；也能儲存為無聲 GIF。
 - 裁切、重新排列同一部影片的片段，再匯出新的 MP4。
 - 搜尋、加標籤、加入收藏與匯出本機素材，誤刪可從垃圾桶還原。
@@ -37,7 +37,7 @@
 
 感謝每一位寫程式、回報問題、試用與分享的朋友。
 
-特別感謝 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支援](https://github.com/yuxino/kiri/pull/20)，以及 [@LLLin000](https://github.com/LLLin000) 修復 [Windows 文字縮放下的截圖對齊](https://github.com/yuxino/kiri/pull/61)。
+特別感謝 [@kerwin2046](https://github.com/kerwin2046) 提供 [Linux 初始支援](https://github.com/yuxino/kiri/pull/20)、[@LLLin000](https://github.com/LLLin000) 修復 [Windows 文字縮放下的截圖對齊](https://github.com/yuxino/kiri/pull/61)，以及 [@AlexZander85](https://github.com/AlexZander85) 提供 [俄語介面翻譯](https://github.com/yuxino/kiri/pull/204)。
 
 也感謝 [V2EX](https://www.v2ex.com/)、[LINUX DO](https://linux.do/)、[Appinn](https://www.appinn.com/)、[NodeLoc](https://www.nodeloc.com/) 社群朋友的回饋與分享。
 

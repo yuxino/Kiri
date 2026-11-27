@@ -65,9 +65,12 @@ Kiri requests the fixed public
 `github.com/yuxino/kiri/releases/latest/download/latest.json` manifest over
 HTTPS. If a newer release exists, Kiri displays its version and release notes.
 It does not download anything until the user clicks **Download Update**, and it
-does not install anything until the user clicks **Install Update**. The official
-Tauri updater verifies the downloaded archive against Kiri's embedded public
-key before the interface enables installation. macOS restarts only after a
+does not install anything until the user clicks **Install Update**. If a
+download is interrupted, a bounded application cache retains the partial package
+so the user can explicitly choose **Resume Download** (including after
+restarting Kiri); obsolete or invalid-signature cached data is discarded. The
+official Tauri updater verifies the downloaded archive against Kiri's embedded
+public key before the interface enables installation. macOS restarts only after a
 further explicit click; on Windows, the installer closes Kiri and completes the
 update. A fixed Releases-page link is shown only as recovery after a failure.
 

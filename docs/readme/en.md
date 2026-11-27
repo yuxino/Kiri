@@ -18,7 +18,7 @@
 
 - Capture a window or region, add text, arrows or mosaic, and pin screenshots as floating references. Zoom and continue editing after saving.
 - Scroll up or down to build a long screenshot; revisiting captured content does not add it twice (macOS, Windows, Linux X11).
-- Extract text with local OCR and read QR codes.
+- Extract text with built-in offline OCR, keep Text History, optionally search text in new screenshots, and read QR codes.
 - Record MP4 with optional system audio and microphone, or save a silent GIF.
 - Trim and reorder clips from one video, then export a new MP4.
 - Search, tag, favorite and export local captures, with Trash for accidental deletions.
@@ -37,7 +37,7 @@
 
 Thank you to everyone who writes code, reports issues, tries Kiri, or shares it.
 
-Special thanks to [@kerwin2046](https://github.com/kerwin2046) for [initial Linux support](https://github.com/yuxino/kiri/pull/20), and [@LLLin000](https://github.com/LLLin000) for [Windows text-scaling capture alignment](https://github.com/yuxino/kiri/pull/61).
+Special thanks to [@kerwin2046](https://github.com/kerwin2046) for [initial Linux support](https://github.com/yuxino/kiri/pull/20), [@LLLin000](https://github.com/LLLin000) for [Windows text-scaling capture alignment](https://github.com/yuxino/kiri/pull/61), and [@AlexZander85](https://github.com/AlexZander85) for [Russian UI translation](https://github.com/yuxino/kiri/pull/204).
 
 Thanks also to the [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), [NodeLoc](https://www.nodeloc.com/) communities for their feedback and sharing.
 

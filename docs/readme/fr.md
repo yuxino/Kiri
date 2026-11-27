@@ -18,7 +18,7 @@
 
 - Capturez une fenêtre ou une zone, ajoutez du texte, des flèches ou une mosaïque, et épinglez les images comme références flottantes. Zoomez et poursuivez les retouches après l’enregistrement.
 - Faites défiler vers le haut ou le bas pour créer une longue capture ; revenir sur une zone capturée ne l’ajoute pas deux fois (macOS, Windows, Linux X11).
-- Extrayez le texte avec la reconnaissance locale et lisez les codes QR.
+- Extrayez le texte avec l’OCR hors ligne intégré, conservez l’historique du texte, recherchez en option du texte dans les nouvelles captures et lisez les codes QR.
 - Enregistrez un MP4 avec le son du système et le microphone en option, ou un GIF sans son.
 - Coupez et réorganisez les clips d’une même vidéo, puis exportez un nouveau MP4.
 - Recherchez, étiquetez, ajoutez aux favoris et exportez vos captures locales ; récupérez les suppressions accidentelles dans la corbeille.
@@ -37,7 +37,7 @@
 
 Merci à toutes les personnes qui écrivent du code, signalent des problèmes, essaient Kiri ou le partagent.
 
-Merci en particulier à [@kerwin2046](https://github.com/kerwin2046) pour la [prise en charge initiale de Linux](https://github.com/yuxino/kiri/pull/20), et à [@LLLin000](https://github.com/LLLin000) pour la [correction de l’alignement des captures avec la mise à l’échelle du texte Windows](https://github.com/yuxino/kiri/pull/61).
+Merci en particulier à [@kerwin2046](https://github.com/kerwin2046) pour la [prise en charge initiale de Linux](https://github.com/yuxino/kiri/pull/20), à [@LLLin000](https://github.com/LLLin000) pour la [correction de l’alignement des captures avec la mise à l’échelle du texte Windows](https://github.com/yuxino/kiri/pull/61), et à [@AlexZander85](https://github.com/AlexZander85) pour la [traduction russe de l’interface](https://github.com/yuxino/kiri/pull/204).
 
 Merci également aux communautés [V2EX](https://www.v2ex.com/), [LINUX DO](https://linux.do/), [Appinn](https://www.appinn.com/), [NodeLoc](https://www.nodeloc.com/) pour leurs retours et leurs partages.
 
